@@ -1,7 +1,7 @@
 import { Home, Save, ArrowLeft, MapPin, Maximize, Building } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getTenantContextForModule, getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import type { Prisma } from "@prisma/client";
 
 export default async function NovoImovelPage() {
@@ -19,7 +19,7 @@ export default async function NovoImovelPage() {
 
   async function createRealEstate(formData: FormData) {
     "use server";
-    const { prisma } = await getTenantContextForModuleEdit("CADASTROS");
+    const { prisma } = await getTenantContextForModuleOperation("CADASTROS", "create");
     
     const municipalInsc = formData.get("municipalInsc") as string;
     const propertyType = formData.get("propertyType") as string;

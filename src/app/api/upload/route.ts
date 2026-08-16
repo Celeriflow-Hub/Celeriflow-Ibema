@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AccessError, getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { AccessError, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { uploadFile } from "@/lib/platform/blob";
 
 export const runtime = "nodejs";
@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
-    await getTenantContextForModuleEdit("DOCUMENTOS");
+    await getTenantContextForModuleOperation("DOCUMENTOS", "create");
     const form = await request.formData();
     const file = form.get("file");
 

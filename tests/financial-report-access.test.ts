@@ -26,7 +26,7 @@ test("only the explicit Financeiro report permission allows consolidated interna
   })), true);
 });
 
-test("the report permission requires Financeiro edit access", () => {
+test("the report permission is independent from Financeiro CRUD access", () => {
   const user = userWithPermissions({
     acesso: "operacional",
     modules: {
@@ -34,7 +34,7 @@ test("the report permission requires Financeiro edit access", () => {
     },
   });
 
-  assert.equal(canIssueFinancialReports(user), false);
+  assert.equal(canIssueFinancialReports(user), true);
 });
 
 test("the system administrator retains report issuance access", () => {

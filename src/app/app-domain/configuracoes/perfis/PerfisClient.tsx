@@ -58,6 +58,7 @@ const ACTIONS_LABELS: { key: Exclude<PermissionKey, "showDashboardCard">; label:
   { key: "create", label: "Criar" },
   { key: "update", label: "Editar" },
   { key: "delete", label: "Excluir" },
+  { key: "issueReports", label: "Emitir relatórios" },
 ];
 
 const emptyPermission = (): ModulePermission => ({
@@ -125,7 +126,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
             create: !blocked && permission.create === true,
             update: !blocked && permission.update === true,
             delete: !blocked && permission.delete === true,
-            issueReports: !blocked && moduleItem.code === "FINANCEIRO" && permission.issueReports === true,
+            issueReports: !blocked && permission.issueReports === true,
           };
         }
         return { accessLevel: parsed.acesso === "total" ? "total" : "operacional", map };
@@ -196,7 +197,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
         ...prev,
         permissionsMap: {
           ...prev.permissionsMap,
-          [moduleCode]: blocked ? { ...current, blocked, create: false, update: false, delete: false } : { ...current, blocked },
+          [moduleCode]: blocked ? { ...current, blocked, create: false, update: false, delete: false, issueReports: false } : { ...current, blocked },
         },
       };
     });
@@ -205,10 +206,10 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
   const toggleAllModuleActions = (moduleCode: string) => {
     setFormData((prev) => {
       const current = prev.permissionsMap[moduleCode] || emptyPermission();
-      const allSelected = !current.blocked && current.showDashboardCard && current.create && current.update && current.delete;
+      const allSelected = !current.blocked && current.showDashboardCard && current.create && current.update && current.delete && current.issueReports;
       const updated = allSelected
         ? emptyPermission()
-        : { showDashboardCard: true, blocked: false, create: true, update: true, delete: true, issueReports: false };
+        : { showDashboardCard: true, blocked: false, create: true, update: true, delete: true, issueReports: true };
       return {
         ...prev,
         permissionsMap: { ...prev.permissionsMap, [moduleCode]: updated },
@@ -220,7 +221,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
     const newMap: Record<string, ModulePermission> = {};
     MODULES_LIST.forEach((m) => {
       if (preset === "FULL") {
-        newMap[m.code] = { showDashboardCard: true, blocked: false, create: true, update: true, delete: true, issueReports: false };
+        newMap[m.code] = { showDashboardCard: true, blocked: false, create: true, update: true, delete: true, issueReports: true };
       } else if (preset === "READ_ONLY") {
         newMap[m.code] = { showDashboardCard: true, blocked: false, create: false, update: false, delete: false, issueReports: false };
       } else {
@@ -541,7 +542,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
                              </label>
                            </div>
                             {!permission.blocked ? (
-                             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                              {ACTIONS_LABELS.map((act) => {
                                const isChecked = permission[act.key];
                               return (
@@ -563,22 +564,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
                                 </label>
                              );
                               })}
-                              {moduleItem.code === "FINANCEIRO" && (
-                                <label className={`flex items-center gap-2 p-2 rounded-lg border text-xs font-medium cursor-pointer transition-all ${
-                                  permission.issueReports
-                                    ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800 text-indigo-900 dark:text-indigo-200"
-                                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                                }`}>
-                                  <input
-                                    type="checkbox"
-                                    checked={permission.issueReports}
-                                    onChange={() => toggleAction(moduleItem.code, "issueReports")}
-                                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
-                                  />
-                                  <span>Emitir relatórios internos consolidados</span>
-                                </label>
-                              )}
-                            </div>
+                             </div>
                            ) : (
                              <p className="text-xs text-rose-700 dark:text-rose-300">Módulo bloqueado: as permissões operacionais ficam indisponíveis até o desbloqueio.</p>
                            )}

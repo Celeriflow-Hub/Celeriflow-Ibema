@@ -1,10 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 
-async function getConfigurationPrisma() {
-  const context = await getTenantContextForModuleEdit("CONFIGURACOES");
+async function getConfigurationPrisma(operation: ModuleOperation) {
+  const context = await getTenantContextForModuleOperation("CONFIGURACOES", operation);
   if (!context.user.role.toLowerCase().includes("administrador")) {
     throw new Error("Somente administradores podem parametrizar processos.");
   }
@@ -16,8 +16,8 @@ function optionalId(formData: FormData, name: string) {
 }
 
 export async function saveProcessType(formData: FormData): Promise<void> {
-  const prisma = await getConfigurationPrisma();
   const id = optionalId(formData, "id");
+  const prisma = await getConfigurationPrisma(id ? "update" : "create");
   const name = String(formData.get("name") || "").trim();
   if (!name) throw new Error("Informe o nome do Tipo de Processo.");
 
@@ -38,8 +38,8 @@ export async function saveProcessType(formData: FormData): Promise<void> {
 }
 
 export async function saveSubject(formData: FormData): Promise<void> {
-  const prisma = await getConfigurationPrisma();
   const id = optionalId(formData, "id");
+  const prisma = await getConfigurationPrisma(id ? "update" : "create");
   const name = String(formData.get("name") || "").trim();
   const processTypeId = String(formData.get("processTypeId") || "");
   if (!name || !processTypeId) throw new Error("Informe o Assunto e o Tipo de Processo.");
@@ -62,8 +62,8 @@ export async function saveSubject(formData: FormData): Promise<void> {
 }
 
 export async function saveProcessWorkflowStage(formData: FormData): Promise<void> {
-  const prisma = await getConfigurationPrisma();
   const id = optionalId(formData, "id");
+  const prisma = await getConfigurationPrisma(id ? "update" : "create");
   const processTypeId = String(formData.get("processTypeId") || "");
   const subjectId = optionalId(formData, "subjectId");
   const departmentId = String(formData.get("departmentId") || "");
@@ -91,7 +91,7 @@ export async function saveProcessWorkflowStage(formData: FormData): Promise<void
 }
 
 export async function deleteProcessWorkflowStage(formData: FormData): Promise<void> {
-  const prisma = await getConfigurationPrisma();
+  const prisma = await getConfigurationPrisma("delete");
   const id = String(formData.get("id") || "");
   if (!id) throw new Error("Etapa nao informada.");
   await prisma.processWorkflowStage.delete({ where: { id } });

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { financialReportFilename, generateInternalReportDataset, isFinancialReportType, isReportFormat, isReportMonth, reportDatasetCsv, reportRequiresMonth, savePublicFinancialReportSnapshot } from "@/lib/financeiro/report-delivery";
 import { generateReportPdf } from "@/lib/financeiro/report-export";
 import { ensureFinancialGedFolder, saveFinancialFileToGed } from "@/lib/financeiro/ged";
-import { AccessError, canIssueFinancialReports, getTenantContextForModuleEdit, isSystemAdministrator } from "@/lib/platform/tenant-context";
+import { AccessError, getTenantContextForModuleOperation, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 import { revalidatePath } from "next/cache";
 
@@ -11,11 +11,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
-    if (!canIssueFinancialReports(context.user)) {
-      // Accounting entries and revenue are currently consolidated, so unit-scoped users must not receive this export.
-      throw new AccessError("A emissão de relatórios consolidados é restrita ao administrador do sistema.", 403);
-    }
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "issueReports");
 
     const financialYearId = request.nextUrl.searchParams.get("financialYearId");
     const reportType = request.nextUrl.searchParams.get("reportType");

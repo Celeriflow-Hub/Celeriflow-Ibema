@@ -51,6 +51,8 @@ type ModuleProfilePermission = {
   issueReports: boolean;
 };
 
+export type ModuleOperation = "create" | "update" | "delete" | "issueReports";
+
 function parseRolePermissions(value: string | null | undefined): RolePermissions | null {
   if (!value) return null;
 
@@ -130,6 +132,23 @@ export function canEditModule(user: AppContext["user"], moduleCode: string) {
   return user.modulePermissions.some(
     (permission) => permission.code === codeUpper && permission.canEdit,
   );
+}
+
+export function canPerformModuleOperation(
+  user: AppContext["user"],
+  moduleCode: string,
+  operation: ModuleOperation,
+) {
+  if (isSystemAdministrator(user)) return true;
+
+  const codeUpper = moduleCode.toUpperCase();
+  const rolePermissions = parseRolePermissions(user.permissions);
+  const permission = getModuleProfilePermission(rolePermissions, codeUpper);
+  if (permission) return !permission.blocked && permission[operation];
+
+  // Profiles created before the granular matrix keep their existing CRUD access.
+  // Report issuance remains opt-in because legacy profiles never stored it safely.
+  return operation === "issueReports" ? false : canEditModule(user, codeUpper);
 }
 
 export function isSystemAdministrator(user: AppContext["user"]) {
@@ -262,6 +281,17 @@ export async function getTenantContextForModuleEdit(moduleCode: string): Promise
   const context = await getTenantContextForModule(moduleCode);
   if (!canEditModule(context.user, moduleCode)) {
     throw new AccessError(`Acesso de edição negado ao módulo ${moduleCode}.`, 403);
+  }
+  return context;
+}
+
+export async function getTenantContextForModuleOperation(
+  moduleCode: string,
+  operation: ModuleOperation,
+): Promise<AppContext> {
+  const context = await getTenantContextForModule(moduleCode);
+  if (!canPerformModuleOperation(context.user, moduleCode, operation)) {
+    throw new AccessError(`Acesso negado para ${operation} no módulo ${moduleCode}.`, 403);
   }
   return context;
 }

@@ -36,7 +36,7 @@ function normalizePermissions(value: string | undefined) {
       create: !blocked && item.create === true,
       update: !blocked && item.update === true,
       delete: !blocked && item.delete === true,
-      issueReports: !blocked && code === "FINANCEIRO" && item.issueReports === true,
+      issueReports: !blocked && item.issueReports === true,
     };
   }
   return JSON.stringify({

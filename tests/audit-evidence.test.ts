@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { auditEventTypes, writeAuditEvent } from "../src/lib/platform/audit-evidence.ts";
 import { prisma } from "../src/lib/prisma.ts";
-import { canEditModule, canShowDashboardCard, canUseInactiveModule, canViewModule, isModuleBlockedForUser, isSystemAdministrator } from "../src/lib/platform/tenant-context.ts";
+import { canEditModule, canPerformModuleOperation, canShowDashboardCard, canUseInactiveModule, canViewModule, isModuleBlockedForUser, isSystemAdministrator } from "../src/lib/platform/tenant-context.ts";
 
 test("persists payload-free audit evidence with only actor, event, and target identifiers", async () => {
   let data: unknown;
@@ -99,6 +99,23 @@ test("applies dashboard visibility, blocking, and operational module permissions
   assert.equal(isModuleBlockedForUser(profile, "COMPRAS"), true);
   assert.equal(canViewModule(profile, "COMPRAS"), false);
   assert.equal(canEditModule(profile, "COMPRAS"), false);
+});
+
+test("requires the exact module operation for profiles using the granular matrix", () => {
+  const profile = {
+    role: "Operador",
+    permissions: JSON.stringify({
+      modules: {
+        CADASTROS: { showDashboardCard: true, blocked: false, create: true, update: false, delete: false, issueReports: true },
+      },
+    }),
+    modulePermissions: [],
+  } as Parameters<typeof canPerformModuleOperation>[0];
+
+  assert.equal(canPerformModuleOperation(profile, "CADASTROS", "create"), true);
+  assert.equal(canPerformModuleOperation(profile, "CADASTROS", "update"), false);
+  assert.equal(canPerformModuleOperation(profile, "CADASTROS", "delete"), false);
+  assert.equal(canPerformModuleOperation(profile, "CADASTROS", "issueReports"), true);
 });
 
 test("allows non-POC profiles to use modules released in their permission matrix", () => {

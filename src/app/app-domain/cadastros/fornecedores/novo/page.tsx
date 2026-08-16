@@ -1,7 +1,7 @@
 import { Truck, Save, ArrowLeft, User, List } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getTenantContextForModule, getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import type { Prisma } from "@prisma/client";
 
 export default async function NovoFornecedorPage() {
@@ -16,7 +16,7 @@ export default async function NovoFornecedorPage() {
 
   async function createSupplier(formData: FormData) {
     "use server";
-    const { prisma } = await getTenantContextForModuleEdit("CADASTROS");
+    const { prisma } = await getTenantContextForModuleOperation("CADASTROS", "create");
     
     const supplierType = formData.get("supplierType") as string;
     const personId = formData.get("personId") as string;

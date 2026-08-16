@@ -29,6 +29,5 @@ export function canIssueFinancialReports(user: FinancialReportAccessUser) {
 
   const permission = financeiro as Record<string, unknown>;
   return permission.blocked !== true
-    && permission.issueReports === true
-    && (permission.create === true || permission.update === true || permission.delete === true);
+    && permission.issueReports === true;
 }

@@ -1,7 +1,7 @@
 "use server";
 
 import { FinanceError, createPayment as createOfficialPayment, updatePaymentStatus as updateOfficialPaymentStatus } from "@/lib/financeiro";
-import { assertBudgetUnitAccess, getTenantContextForModuleEdit, type AppContext } from "@/lib/platform/tenant-context";
+import { assertBudgetUnitAccess, getTenantContextForModuleOperation, type AppContext, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
 type ActionResult = { error?: string };
@@ -46,7 +46,7 @@ export async function createPayment(data: {
   retentionRuleIds?: string[];
 }): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const commitment = await assertCommitmentAccess(context, data.commitmentId);
     await assertBankAccountAccess(context, data.bankAccountId);
     const payment = await createOfficialPayment(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, data);
@@ -102,7 +102,8 @@ export async function cancelPayment(id: string): Promise<ActionResult> {
 export async function updatePaymentStatus(id: string, status: string): Promise<ActionResult> {
   try {
     if (status === "Paga") throw new FinanceError("A baixa do pagamento ocorre exclusivamente após a confirmação do Banco Virtual.");
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const operation: ModuleOperation = status === "Cancelada" ? "delete" : "update";
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", operation);
     const payment = await context.prisma.payment.findUnique({ where: { id }, select: { commitmentId: true } });
     if (!payment) throw new FinanceError("Pagamento não encontrado.");
     const commitment = await assertCommitmentAccess(context, payment.commitmentId);
@@ -119,7 +120,7 @@ export async function updatePaymentStatus(id: string, status: string): Promise<A
 
 export async function reversePaymentAction(paymentId: string, justification: string): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "delete");
     const payment = await context.prisma.payment.findUnique({ where: { id: paymentId }, select: { commitmentId: true } });
     if (!payment) throw new FinanceError("Pagamento não encontrado.");
     const commitment = await assertCommitmentAccess(context, payment.commitmentId);
@@ -137,7 +138,7 @@ export async function reversePaymentAction(paymentId: string, justification: str
 
 export async function settleWithholdingPayableAction(withholdingPayableId: string, bankAccountId: string, receiptDocumentId: string): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const payable = await context.prisma.withholdingPayable.findUnique({
       where: { id: withholdingPayableId },
       select: { retention: { select: { payment: { select: { commitmentId: true } } } } },

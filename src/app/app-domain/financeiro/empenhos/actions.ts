@@ -1,7 +1,7 @@
 "use server";
 
 import { FinanceError, cancelCommitment as cancelOfficialCommitment, createCommitment as createOfficialCommitment } from "@/lib/financeiro";
-import { assertBudgetUnitAccess, getTenantContextForModuleEdit, type AppContext } from "@/lib/platform/tenant-context";
+import { assertBudgetUnitAccess, getTenantContextForModuleOperation, type AppContext } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
 type ActionResult = { error?: string };
@@ -59,7 +59,7 @@ export async function createCommitment(data: {
   fundedDebtId?: string;
 }): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const appropriation = await context.prisma.budgetAppropriation.findUnique({
       where: { id: data.appropriationId },
       select: { budgetUnitId: true },
@@ -100,7 +100,7 @@ export async function updateCommitment(_id: string, _data: {
 
 export async function cancelCommitment(id: string): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "delete");
     const commitment = await assertCommitmentAccess(context, id);
     await cancelOfficialCommitment(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, id);
     revalidatePath("/financeiro/empenhos");

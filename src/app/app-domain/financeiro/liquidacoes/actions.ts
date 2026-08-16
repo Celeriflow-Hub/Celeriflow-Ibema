@@ -1,7 +1,7 @@
 "use server";
 
 import { FinanceError, cancelSettlement as cancelOfficialSettlement, createSettlement as createOfficialSettlement } from "@/lib/financeiro";
-import { assertBudgetUnitAccess, getTenantContextForModuleEdit, type AppContext } from "@/lib/platform/tenant-context";
+import { assertBudgetUnitAccess, getTenantContextForModuleOperation, type AppContext } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
 type ActionResult = { error?: string };
@@ -39,7 +39,7 @@ export async function createSettlement(data: {
   retentionRuleIds?: string[];
 }): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const commitment = await assertCommitmentAccess(context, data.commitmentId);
     await createOfficialSettlement(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, data);
     revalidatePath("/financeiro/liquidacoes");
@@ -53,7 +53,7 @@ export async function createSettlement(data: {
 
 export async function cancelSettlement(id: string): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "delete");
     const settlement = await context.prisma.settlement.findUnique({ where: { id }, select: { commitmentId: true } });
     if (!settlement) throw new FinanceError("Liquidação não encontrada.");
     const commitment = await assertCommitmentAccess(context, settlement.commitmentId);

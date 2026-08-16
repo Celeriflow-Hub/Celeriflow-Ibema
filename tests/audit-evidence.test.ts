@@ -118,6 +118,21 @@ test("requires the exact module operation for profiles using the granular matrix
   assert.equal(canPerformModuleOperation(profile, "CADASTROS", "issueReports"), true);
 });
 
+test("does not allow financial cancellations from the create permission", () => {
+  const profile = {
+    role: "Operador Financeiro",
+    permissions: JSON.stringify({
+      modules: {
+        FINANCEIRO: { showDashboardCard: true, blocked: false, create: true, update: false, delete: false, issueReports: false },
+      },
+    }),
+    modulePermissions: [],
+  } as Parameters<typeof canPerformModuleOperation>[0];
+
+  assert.equal(canPerformModuleOperation(profile, "FINANCEIRO", "create"), true);
+  assert.equal(canPerformModuleOperation(profile, "FINANCEIRO", "delete"), false);
+});
+
 test("allows non-POC profiles to use modules released in their permission matrix", () => {
   const regularProfile = {
     role: "Gestor",

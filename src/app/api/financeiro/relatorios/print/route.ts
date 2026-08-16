@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AccessError, assertBudgetUnitAccess, getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
+import { AccessError, assertBudgetUnitAccess, getTenantContextForModuleOperation, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import {
   generateCommitmentPrintHtml,
   generateSettlementPrintHtml,
@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
-    const context = await getTenantContextForModule("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "issueReports");
     const documentType = request.nextUrl.searchParams.get("type");
     const id = request.nextUrl.searchParams.get("id");
 

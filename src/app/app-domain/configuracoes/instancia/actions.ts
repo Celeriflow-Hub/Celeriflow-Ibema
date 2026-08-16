@@ -2,6 +2,7 @@
 
 import { getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
 import { parseInstanceConfigurationValues } from "@/lib/platform/instance-configuration";
+import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -53,13 +54,11 @@ export async function saveInstanceConfiguration(rawInput: unknown): Promise<Acti
           },
           update: { valor: value },
         });
-        await tx.auditEvent.create({
-          data: {
-            actorUsuarioId: context.user.id,
-            eventType: "INSTANCE_CONFIGURATION_CHANGED",
-            targetType: "INSTANCE_CONFIGURATION",
-            targetId: `${instance.id}:${key}`,
-          },
+        await writeAuditEvent(tx, {
+          actorUsuarioId: context.user.id,
+          eventType: auditEventTypes.instanceConfigurationChanged,
+          targetType: "INSTANCE_CONFIGURATION",
+          targetId: `${instance.id}:${key}`,
         });
       }
     });

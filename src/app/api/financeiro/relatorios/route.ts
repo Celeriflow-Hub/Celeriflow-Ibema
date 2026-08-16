@@ -1,21 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { financialReportFilename, generateInternalReportDataset, isFinancialReportType, isReportFormat, isReportMonth, reportDatasetCsv, reportRequiresMonth, savePublicFinancialReportSnapshot } from "@/lib/financeiro/report-delivery";
+import { financialReportFilename, isFinancialReportType, isReportMonth, reportDatasetCsv, reportRequiresMonth } from "@/lib/financeiro/report-delivery";
 import { generateReportPdf } from "@/lib/financeiro/report-export";
-import { ensureFinancialGedFolder, saveFinancialFileToGed } from "@/lib/financeiro/ged";
-import { AccessError, getTenantContextForModuleOperation, isSystemAdministrator } from "@/lib/platform/tenant-context";
-import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
-import { revalidatePath } from "next/cache";
+import { AccessError } from "@/lib/platform/tenant-context";
+import { executeReport, isReportFormat, writeReportIssuanceAudit } from "@/lib/reports/report-engine";
+import { getRegisteredReportDefinition } from "@/lib/reports/registry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
-    const context = await getTenantContextForModuleOperation("FINANCEIRO", "issueReports");
-
     const financialYearId = request.nextUrl.searchParams.get("financialYearId");
     const reportType = request.nextUrl.searchParams.get("reportType");
-    const format = request.nextUrl.searchParams.get("format") ?? "CSV";
+    const formatParameter = request.nextUrl.searchParams.get("format") ?? "CSV";
+    const format = formatParameter.toLowerCase();
     if (!financialYearId || !isFinancialReportType(reportType) || !isReportFormat(format)) {
       return NextResponse.json({ error: "Selecione um exercício, tipo de relatório e formato válidos." }, { status: 400 });
     }
@@ -25,65 +23,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Informe um mês válido para o relatório selecionado." }, { status: 400 });
     }
 
-    const financialYear = await context.prisma.financialYear.findUnique({
-      where: { id: financialYearId },
-      select: { id: true, year: true },
-    });
-    if (!financialYear) throw new AccessError("Exercício financeiro não encontrado.", 404);
-
-    const dataset = await generateInternalReportDataset(context.prisma, reportType, financialYear.id, financialYear.year, { month });
-    const csv = reportDatasetCsv(dataset);
-    let snapshot: Awaited<ReturnType<typeof savePublicFinancialReportSnapshot>> = null;
-    let snapshotError: string | undefined;
-    if (isSystemAdministrator(context.user)) {
-      try {
-        snapshot = await savePublicFinancialReportSnapshot(context.prisma, {
-          reportType,
-          financialYearId: financialYear.id,
-          year: financialYear.year,
-          csv: csv.csv,
-        });
-      } catch (error) {
-        // The internal export remains available when optional public publication is unavailable.
-        snapshotError = error instanceof Error ? error.message : "Falha desconhecida ao publicar snapshot público.";
-        console.error("Erro ao publicar snapshot público de relatório financeiro:", error);
-      }
+    const execution = await executeReport(
+      getRegisteredReportDefinition("finance.internal"),
+      { financialYearId, reportType, month },
+      format,
+    );
+    const dataset = execution.dataset.report;
+    if (format === "preview") {
+      return NextResponse.json({ reportKey: execution.key, format, dataset }, {
+        headers: { "Cache-Control": "no-store" },
+      });
     }
-    const body = format === "CSV" ? csv.csv : await generateReportPdf(dataset);
-    const contentType = format === "CSV"
+
+    const body = format === "csv" ? reportDatasetCsv(dataset).csv : await generateReportPdf(dataset);
+    const contentType = format === "csv"
       ? "text/csv; charset=utf-8"
       : "application/pdf";
-    const filename = financialReportFilename(reportType, financialYear.year, format);
-    const gedDocument = format === "CSV" && snapshot
-      ? { documentId: snapshot.documentId, folderId: await ensureFinancialGedFolder(context.prisma) }
-      : await saveFinancialFileToGed(context.prisma, {
-          title: `${dataset.title} - ${financialYear.year}`,
-          documentType: `FINANCEIRO:RELATORIO:${reportType}`,
-          filename,
-          content: body,
-          contentType,
-        });
-    revalidatePath("/documentos/ged");
-    revalidatePath("/documentos");
-
-    await context.prisma.financialAuditLog.create({
-      data: {
-        action: "ISSUE",
-        entityType: "FinancialReport",
-        entityId: `${reportType}:${financialYear.id}`,
-        financialYearId: financialYear.id,
-        payload: { reportType, format, rowCount: csv.rowCount, gedDocumentId: gedDocument.documentId, publicSnapshot: snapshot, publicSnapshotError: snapshotError },
-        authorUsuarioId: context.user.id,
-        authorEmployeeId: context.user.employeeId,
-      },
-    });
-
-    await writeAuditEvent(context.prisma, {
-      actorUsuarioId: context.user.id,
-      eventType: auditEventTypes.financialReportExport,
-      targetType: "FINANCIAL_REPORT",
-      targetId: `${reportType}:${financialYear.id}`,
-    });
+    const filename = financialReportFilename(reportType, dataset.year, format === "csv" ? "CSV" : "PDF");
+    await writeReportIssuanceAudit(execution);
 
     return new NextResponse(body as unknown as BodyInit, {
       headers: {

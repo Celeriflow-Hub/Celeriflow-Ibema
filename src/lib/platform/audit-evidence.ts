@@ -1,19 +1,20 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 export const auditEventTypes = {
   sessionLogin: "SESSION_LOGIN",
   sessionLogout: "SESSION_LOGOUT",
   documentDownload: "DOCUMENT_DOWNLOAD",
   financialReportExport: "FINANCIAL_REPORT_EXPORT",
+  reportIssued: "REPORT_ISSUED",
   pageView: "PAGE_VIEW",
   uiInteraction: "UI_INTERACTION",
   formSubmit: "FORM_SUBMIT",
   instanceConfigurationChanged: "INSTANCE_CONFIGURATION_CHANGED",
 } as const;
 
-type AuditEventType = (typeof auditEventTypes)[keyof typeof auditEventTypes];
+export type AuditEventType = (typeof auditEventTypes)[keyof typeof auditEventTypes];
 
-type AuditEventInput = {
+export type AuditEventInput = {
   actorUsuarioId: string;
   eventType: AuditEventType;
   targetType: string;
@@ -21,7 +22,7 @@ type AuditEventInput = {
 };
 
 // Deliberately persist only stable identifiers; request bodies, URLs, IPs, and report data are excluded.
-export async function writeAuditEvent(prisma: PrismaClient, input: AuditEventInput) {
+export async function writeAuditEvent(prisma: PrismaClient | Prisma.TransactionClient, input: AuditEventInput) {
   await prisma.auditEvent.create({
     data: {
       actorUsuarioId: input.actorUsuarioId,

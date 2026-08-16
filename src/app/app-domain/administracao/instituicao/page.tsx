@@ -1,0 +1,20 @@
+import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { InstitutionForm } from "./InstitutionForm";
+
+export const dynamic = "force-dynamic";
+
+export default async function InstituicaoPage() {
+  const { prisma } = await getTenantContextForModule("ADMINISTRACAO");
+  const institution = await prisma.institution.findFirst();
+
+  return (
+    <div className="max-w-4xl">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Prefeitura / Entidade Principal</h1>
+        <p className="text-slate-500 mt-1">Configure os dados institucionais exibidos em relatórios técnicos e documentos gerados pelo sistema.</p>
+      </div>
+
+      <InstitutionForm institution={institution} />
+    </div>
+  );
+}

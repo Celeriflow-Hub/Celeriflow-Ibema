@@ -1,0 +1,104 @@
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { buttonVariants } from "@/components/ui/button"
+import { Plus } from "lucide-react"
+import Link from "next/link"
+import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { LicencaRowActions } from "./LicencaRowActions"
+import { format } from "date-fns"
+import { LicencasFilters } from "./LicencasFilters"
+import type { Prisma } from "@prisma/client";
+
+export default async function LicencasPage({ searchParams }: { searchParams: Promise<{ q?: string, status?: string }> }) {
+  const { prisma } = await getTenantContextForModule("RH");
+  const { q, status } = await searchParams;
+
+  const whereClause: Prisma.LeaveWhereInput = {};
+  if (q) {
+    whereClause.employee = { name: { contains: q, mode: 'insensitive' } };
+  }
+  if (status && status !== 'all') {
+    whereClause.status = status;
+  }
+
+  const leaves = await prisma.leave.findMany({
+    where: whereClause,
+    take: 20,
+    orderBy: { startDate: 'desc' },
+    include: {
+      employee: true
+    }
+  })
+
+  return (
+    <div className="flex-1 space-y-4 p-8 pt-6">
+      <div className="flex items-center justify-between space-y-2">
+        <h2 className="text-3xl font-bold tracking-tight">Licenças e Afastamentos</h2>
+        <div className="flex items-center space-x-2">
+          <Link href="/rh/licencas/novo" className={buttonVariants()}>
+            <Plus className="mr-2 h-4 w-4" />
+            Registrar Licença
+          </Link>
+        </div>
+      </div>
+
+      <LicencasFilters />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Histórico de Afastamentos</CardTitle>
+          <CardDescription>
+            Controle de licenças médicas, prêmio, sem vencimento e outros afastamentos.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border overflow-x-auto max-h-[600px] overflow-y-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-muted text-muted-foreground border-b sticky top-0 z-10 shadow-sm">
+                <tr>
+                  <th className="font-medium p-2 px-4 whitespace-nowrap">Servidor</th>
+                  <th className="font-medium p-2 whitespace-nowrap">Tipo</th>
+                  <th className="font-medium p-2 whitespace-nowrap">Período</th>
+                  <th className="font-medium p-2 whitespace-nowrap">Status</th>
+                  <th className="font-medium p-2 px-4 text-right whitespace-nowrap">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaves.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="text-center p-8 text-muted-foreground">
+                      Nenhuma licença registrada.
+                    </td>
+                  </tr>
+                ) : (
+                  leaves.map((leave) => (
+                    <tr key={leave.id} className="border-b last:border-0 hover:bg-muted/50">
+                      <td className="p-2 px-4 font-medium whitespace-nowrap">{leave.employee?.name}</td>
+                      <td className="p-2 whitespace-nowrap">{leave.type}</td>
+                      <td className="p-2 text-muted-foreground whitespace-nowrap">
+                        {format(new Date(leave.startDate), 'dd/MM/yyyy')} a <br />
+                        {format(new Date(leave.endDate), 'dd/MM/yyyy')}
+                      </td>
+                      <td className="p-2 whitespace-nowrap">
+                        <Badge variant="outline" className={
+                          leave.status === 'Ativa' ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
+                          leave.status === 'Encerrada' ? "bg-slate-100 text-slate-500" :
+                          leave.status === 'Cancelada' ? "bg-red-100 text-red-700 border-red-200" : ""
+                        }>
+                          {leave.status}
+                        </Badge>
+                      </td>
+                      <td className="p-2 px-4 text-right whitespace-nowrap">
+                        <LicencaRowActions leave={leave} />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

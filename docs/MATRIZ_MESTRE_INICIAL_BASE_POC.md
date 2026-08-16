@@ -1,5 +1,7 @@
 # Matriz Mestre Inicial - Base Reutilizável e POC
 
+> Esta matriz detalha o backlog dos Ciclos 1 e 2. A cobertura integral do TR foi concluída em `docs/MATRIZ_MESTRE_POC_CICLO_0_COMPLETA.md`.
+
 **Data-base:** 16 de agosto de 2026  
 **Escopo:** requisitos P0/P1 dos Ciclos 0, 1 e 2 da evolução da base reutilizável.  
 **Referências:** `PLANO_MELHORIA_CELERIFLOW_POC_DIVINO_SAO_LOURENCO.md`, `Divino_Sao_Lourenco_POC_Requisitos_Sistema.md` e `PLANEJAMENTO_EVOLUCAO_BASE_REUTILIZAVEL.md`.

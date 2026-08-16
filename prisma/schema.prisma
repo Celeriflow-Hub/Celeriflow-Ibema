@@ -5692,8 +5692,24 @@ model ConfiguracaoInstancia {
   dominio        String?
   status         String  @default("Ativa") // Ativa, Suspensa, ManutenÃ§Ã£o
 
+  parametros ConfiguracaoParametroInstancia[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model ConfiguracaoParametroInstancia {
+  id                      String                @id @default(cuid())
+  configuracaoInstanciaId String
+  configuracaoInstancia   ConfiguracaoInstancia @relation(fields: [configuracaoInstanciaId], references: [id], onDelete: Cascade)
+  chave                   String
+  valor                   Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([configuracaoInstanciaId, chave])
+  @@index([configuracaoInstanciaId])
 }
 
 model ConfiguracaoModulo {

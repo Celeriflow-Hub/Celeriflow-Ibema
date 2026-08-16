@@ -1,90 +1,66 @@
-import React from "react";
-import { getTenantContextForModule } from "@/lib/platform/tenant-context";
-import { Building2, Save } from "lucide-react";
+import { Building2, ExternalLink } from "lucide-react";
+import Link from "next/link";
+import { getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
+import { getInstanceConfigurationDefaults, type InstanceConfigurationValues } from "@/lib/platform/instance-configuration";
+import { InstanceConfigurationForm } from "./InstanceConfigurationForm";
+
+export const dynamic = "force-dynamic";
+
+function getInitialValues(parameters: { chave: string; valor: unknown }[]): InstanceConfigurationValues {
+  const values = getInstanceConfigurationDefaults();
+  for (const parameter of parameters) {
+    if (parameter.chave === "WORKFLOW_DEFAULT_SLA_DAYS" && typeof parameter.valor === "number") values.WORKFLOW_DEFAULT_SLA_DAYS = parameter.valor;
+    if (parameter.chave === "DOCUMENT_DEFAULT_RETENTION_MONTHS" && typeof parameter.valor === "number") values.DOCUMENT_DEFAULT_RETENTION_MONTHS = parameter.valor;
+    if (parameter.chave === "NOTIFICATION_DEFAULT_PRIORITY" && ["BAIXA", "NORMAL", "ALTA"].includes(String(parameter.valor))) values.NOTIFICATION_DEFAULT_PRIORITY = parameter.valor as InstanceConfigurationValues["NOTIFICATION_DEFAULT_PRIORITY"];
+    if (parameter.chave === "REPORT_INCLUDE_EMISSION_METADATA" && typeof parameter.valor === "boolean") values.REPORT_INCLUDE_EMISSION_METADATA = parameter.valor;
+  }
+  return values;
+}
 
 export default async function InstanciaPage() {
-  const { prisma } = await getTenantContextForModule("CONFIGURACOES");
-  const instancia = await prisma.configuracaoInstancia.findFirst();
+  const { prisma, user } = await getTenantContextForModule("CONFIGURACOES");
+  const instance = await prisma.configuracaoInstancia.findFirst({
+    orderBy: { createdAt: "asc" },
+    include: {
+      parametros: {
+        select: { chave: true, valor: true },
+      },
+    },
+  });
 
   return (
-    <div className="flex-1 p-8">
-      <div className="flex justify-between items-center mb-8">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-gray-600 dark:text-gray-300">
-            <Building2 className="h-6 w-6" />
+    <div className="flex-1 p-5 sm:p-8">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="rounded-xl bg-slate-100 p-3 text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+            <Building2 className="h-7 w-7" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Instância da Prefeitura</h1>
-            <p className="text-gray-500 dark:text-gray-400">Dados oficiais e configuração principal do sistema</p>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Instância do sistema</h1>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Parâmetros operacionais reutilizáveis da prefeitura configurada nesta instalação.</p>
           </div>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors">
-          <Save className="h-4 w-4" />
-          Salvar Alterações
-        </button>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-6 border-b border-gray-100 dark:border-gray-700 pb-4">
-          Informações Gerais
-        </h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Nome da Prefeitura</label>
-            <input 
-              type="text" 
-              defaultValue={instancia?.nomePrefeitura || "Prefeitura Municipal"}
-              className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-gray-500/20"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">CNPJ</label>
-            <input 
-              type="text" 
-              defaultValue={instancia?.cnpj || ""}
-              placeholder="00.000.000/0001-00"
-              className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-gray-500/20"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Município</label>
-            <input 
-              type="text" 
-              defaultValue={instancia?.municipio || ""}
-              className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-gray-500/20"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Estado (UF)</label>
-            <select className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-gray-500/20">
-              <option value="">Selecione...</option>
-              <option value="SP" selected={instancia?.uf === "SP"}>São Paulo (SP)</option>
-              <option value="RJ" selected={instancia?.uf === "RJ"}>Rio de Janeiro (RJ)</option>
-              <option value="MG" selected={instancia?.uf === "MG"}>Minas Gerais (MG)</option>
-              {/* more options... */}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Domínio/URL</label>
-            <input 
-              type="text" 
-              defaultValue={instancia?.dominio || ""}
-              placeholder="ex: cidade.sp.gov.br"
-              className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-gray-500/20"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Status da Instância</label>
-            <input 
-              type="text" 
-              defaultValue={instancia?.status || "Ativa"}
-              disabled
-              className="w-full px-4 py-2 rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800 text-sm text-gray-500 cursor-not-allowed"
-            />
-          </div>
-        </div>
+      <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/40">
+        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Dados institucionais e identidade visual</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Nome, CNPJ, brasão e contatos são administrados separadamente para evitar duas fontes de verdade.</p>
+        <Link href="/administracao/instituicao" className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-700 hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-indigo-200">
+          Abrir dados da instituição <ExternalLink className="h-4 w-4" />
+        </Link>
       </div>
+
+      {!isSystemAdministrator(user) ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+          Os parâmetros operacionais desta instância são gerenciados pelo administrador do sistema.
+        </div>
+      ) : !instance ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200">
+          Nenhuma instância operacional foi encontrada. Crie e aprove a instância inicial antes de configurar parâmetros comuns.
+        </div>
+      ) : (
+        <InstanceConfigurationForm instanceId={instance.id} initialValues={getInitialValues(instance.parametros)} />
+      )}
     </div>
   );
 }

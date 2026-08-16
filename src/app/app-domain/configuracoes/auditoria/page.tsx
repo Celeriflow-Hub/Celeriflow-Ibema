@@ -11,6 +11,7 @@ const eventLabels: Record<string, string> = {
   PAGE_VIEW: "Visualizou página",
   UI_INTERACTION: "Interagiu com controle",
   FORM_SUBMIT: "Enviou formulário",
+  INSTANCE_CONFIGURATION_CHANGED: "Alterou parâmetro da instância",
 };
 
 function describeTarget(event: { eventType: string; targetType: string; targetId: string }) {
@@ -23,6 +24,7 @@ function describeTarget(event: { eventType: string; targetType: string; targetId
   if (event.targetType === "SESSION") return "Sessão autenticada";
   if (event.targetType === "DOCUMENT") return "Documento protegido";
   if (event.targetType === "FINANCIAL_REPORT") return "Relatório financeiro";
+  if (event.targetType === "INSTANCE_CONFIGURATION") return "Parâmetro operacional da instância";
   return event.targetType;
 }
 

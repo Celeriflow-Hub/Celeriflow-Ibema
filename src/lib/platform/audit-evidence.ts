@@ -8,6 +8,7 @@ export const auditEventTypes = {
   pageView: "PAGE_VIEW",
   uiInteraction: "UI_INTERACTION",
   formSubmit: "FORM_SUBMIT",
+  instanceConfigurationChanged: "INSTANCE_CONFIGURATION_CHANGED",
 } as const;
 
 type AuditEventType = (typeof auditEventTypes)[keyof typeof auditEventTypes];

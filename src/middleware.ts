@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// ATENÇÃO: O proxy roda no Edge Runtime — NÃO importar módulos Node.js aqui.
-// O nome do cookie precisa ser mantido em sincronia com session.ts manualmente.
+// ATENÇÃO: O middleware roda no Edge Runtime — NÃO importar módulos Node.js aqui.
 const SESSION_COOKIE_NAME = "celeriflow_session";
 
 export const config = {
@@ -18,34 +17,33 @@ export const config = {
   ],
 };
 
-export function proxy(req: NextRequest) {
+export default function middleware(req: NextRequest) {
   const url = req.nextUrl;
-
-  // A aplicacao atende somente o painel principal neste ambiente single-tenant.
   const hostname = (req.headers.get("host") || "").toLowerCase().split(":")[0];
-  const appDomain = "app.celeriflow.com.br";
 
-  const isAppSubdomain =
-    hostname === appDomain ||
-    hostname === "app.localhost";
+  // Domínio que deve apontar direto para o sistema interno (dashboard)
+  const systemDomain = "divinosaolourenco.celeriflow.com.br";
 
-  // A pasta interna nunca deve ser exposta, inclusive no dominio do painel.
+  const isSystemDomain = hostname === systemDomain || hostname === "app.localhost" || hostname.includes("vercel.app");
+
+  // Se o usuário tentar acessar a pasta interna via URL, reescreve ou redireciona
   if (url.pathname.startsWith("/app-domain")) {
-    return NextResponse.redirect(new URL("/", req.url));
+    const newUrl = url.pathname.replace("/app-domain", "") || "/";
+    return NextResponse.redirect(new URL(newUrl, req.url));
   }
 
-  // Se o usuário estiver acessando via subdomínio app
-  if (isAppSubdomain) {
+  // Se for o domínio do sistema ou Vercel app, faz o rewrite (redirecionamento invisível) para /app-domain
+  if (isSystemDomain) {
     const internalPath = url.pathname === "/" ? "/login" : url.pathname;
     const newPath = `/app-domain${internalPath}`;
 
     // Redireciona para /login se não há sessão e não está já na página de login
     const hasSession = req.cookies.has(SESSION_COOKIE_NAME);
-    if (!hasSession && internalPath !== "/login") {
+    if (!hasSession && internalPath !== "/login" && !internalPath.startsWith("/login")) {
       return NextResponse.redirect(new URL("/login", req.url));
     }
 
-    // Reescrita invisível: app.celeriflow.com.br/dashboard → /app-domain/dashboard
+    // Reescrita invisível: domínio -> /app-domain/...
     return NextResponse.rewrite(new URL(newPath, req.url));
   }
 

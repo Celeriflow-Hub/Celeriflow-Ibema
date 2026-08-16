@@ -1,7 +1,7 @@
 "use server";
 
 import { recordStockMovement, StockServiceError, type StockMovementKind } from "@/lib/patrimonio/stock-service";
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -42,7 +42,8 @@ async function registerMovement(kind: StockMovementKind, data: {
   if (!parsed.data.reason) return { error: "Informe a justificativa da movimentação." };
 
   try {
-    const context = await getTenantContextForModuleEdit("PATRIMONIO");
+    const operation = kind === "ENTRY" ? "create" : kind === "EXIT" ? "delete" : "update";
+    const context = await getTenantContextForModuleOperation("PATRIMONIO", operation);
     await recordStockMovement(context.prisma, {
       kind,
       ...parsed.data,

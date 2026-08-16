@@ -1,6 +1,6 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { queryCadUnicoMds, createSuasRmaRecord } from "@/lib/social/social-engine";
 import { revalidatePath } from "next/cache";
 
@@ -12,7 +12,7 @@ export async function searchCadUnicoAction(nisOrCpf: string): Promise<ActionResu
   }
 
   try {
-    const context = await getTenantContextForModuleEdit("SOCIAL");
+    const context = await getTenantContextForModule("SOCIAL");
     const result = await queryCadUnicoMds(context.prisma, nisOrCpf.trim());
     return { data: result };
   } catch (err) {
@@ -28,7 +28,7 @@ export async function saveRmaRecordAction(data: {
   detalhesRma: string;
 }): Promise<ActionResult<Awaited<ReturnType<typeof createSuasRmaRecord>>>> {
   try {
-    const context = await getTenantContextForModuleEdit("SOCIAL");
+    const context = await getTenantContextForModuleOperation("SOCIAL", "create");
     const record = await createSuasRmaRecord(context.prisma, {
       ...data,
       tecnicoResponsavel: context.user.email || context.user.name || "Assistente Social",
@@ -43,7 +43,7 @@ export async function saveRmaRecordAction(data: {
 
 export async function getRmaHistoryAction() {
   try {
-    const context = await getTenantContextForModuleEdit("SOCIAL");
+    const context = await getTenantContextForModule("SOCIAL");
     const history = await context.prisma.suasProntuarioRma.findMany({
       orderBy: { createdAt: "desc" },
       take: 15,

@@ -1,11 +1,11 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { nextYearlyCode } from "@/lib/sequence";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("COMPRAS")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("COMPRAS", operation)).prisma;
 }
 
 type PurchaseProcessItemInput = {
@@ -26,7 +26,7 @@ type PurchaseProcessInput = {
 };
 
 export async function deletePurchaseProcess(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   try {
     await prisma.purchaseProcess.delete({
       where: { id },
@@ -40,8 +40,8 @@ export async function deletePurchaseProcess(id: string) {
 }
 
 export async function savePurchaseProcess(payload: PurchaseProcessInput) {
-  const prisma = await getTenantPrisma();
   const { id, number, object, type, modality, estimatedValue, items } = payload;
+  const prisma = await getTenantPrisma(id ? "update" : "create");
   
   const secretariat = await prisma.secretariat.findFirst();
 

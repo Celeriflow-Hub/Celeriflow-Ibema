@@ -1,10 +1,10 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from 'next/cache';
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("SAUDE")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("SAUDE", operation)).prisma;
 }
 
 type HealthTeamInput = {
@@ -23,7 +23,7 @@ function hasErrorCode(error: unknown, code: string) {
 }
 
 export async function createHealthTeam(data: HealthTeamInput) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   try {
     await prisma.healthTeam.create({
       data: {
@@ -43,7 +43,7 @@ export async function createHealthTeam(data: HealthTeamInput) {
 }
 
 export async function updateHealthTeam(id: string, data: HealthTeamInput) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     await prisma.healthTeam.update({
       where: { id },
@@ -63,7 +63,7 @@ export async function updateHealthTeam(id: string, data: HealthTeamInput) {
 }
 
 export async function toggleHealthTeamStatus(id: string, isActive: boolean) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     await prisma.healthTeam.update({
       where: { id },
@@ -77,7 +77,7 @@ export async function toggleHealthTeamStatus(id: string, isActive: boolean) {
 }
 
 export async function deleteHealthTeam(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   try {
     await prisma.healthTeam.delete({
       where: { id },

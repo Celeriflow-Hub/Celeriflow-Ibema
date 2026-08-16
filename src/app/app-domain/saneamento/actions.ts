@@ -1,13 +1,13 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("SANEAMENTO")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("SANEAMENTO", operation)).prisma;
 }
 
 type ActionResult = { error?: string };
@@ -46,7 +46,7 @@ export async function createConsumerUnit(data: {
   ownerName: string;
   ownerDocument: string;
 }): Promise<ActionResult> {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const parsed = z.object({
     code: requiredText,
     address: requiredText,
@@ -78,7 +78,7 @@ export async function updateConsumerUnit(
     status: string;
   }
 ): Promise<ActionResult> {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const parsed = z.object({
     id: requiredText,
     code: requiredText,
@@ -112,7 +112,7 @@ export async function updateConsumerUnit(
 }
 
 export async function inactivateConsumerUnit(id: string): Promise<ActionResult> {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   if (!requiredText.safeParse(id).success) return { error: "Unidade inválida." };
 
   try {
@@ -133,7 +133,7 @@ export async function createMeterReading(data: {
   currentValue: number;
   readerName: string;
 }): Promise<ActionResult> {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const parsed = z.object({
     unitId: requiredText,
     competence,
@@ -174,7 +174,7 @@ export async function updateMeterReading(
   id: string,
   data: { currentValue?: number; status?: string; readerName?: string }
 ): Promise<ActionResult> {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const parsed = z.object({
     id: requiredText,
     currentValue: meterValue,
@@ -219,7 +219,7 @@ export async function createServiceOrder(data: {
   unitId?: string;
   technician?: string;
 }): Promise<ActionResult> {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const parsed = z.object({
     orderType: z.enum(orderTypes),
     description: requiredText,
@@ -269,7 +269,7 @@ export async function updateServiceOrder(
     technician?: string;
   }
 ): Promise<ActionResult> {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const parsed = z.object({
     id: requiredText,
     orderType: z.enum(orderTypes),
@@ -337,7 +337,7 @@ export async function updateWaterQualityAnalysis(
   id: string,
   data: { collectionPoint: string; collectedAt: string; parameter: string; result: string; limit: string; compliance: string }
 ): Promise<ActionResult> {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const parsed = z.object({ id: requiredText, collectionPoint: requiredText, collectedAt: inputDate, parameter: requiredText, result: requiredText, limit: requiredText, compliance: z.enum(complianceStatuses) }).safeParse({ id, ...data });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
@@ -352,7 +352,7 @@ export async function updateWaterQualityAnalysis(
 }
 
 export async function inactivateWaterQualityAnalysis(id: string): Promise<ActionResult> {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   if (!requiredText.safeParse(id).success) return { error: "Análise inválida." };
   try {
     await prisma.sanWaterQualityAnalysis.update({ where: { id }, data: { active: false } });
@@ -367,7 +367,7 @@ export async function updatePortalRequest(
   id: string,
   data: { requestType: string; requesterName: string; requestedAt: string; source: string; status: string }
 ): Promise<ActionResult> {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const parsed = z.object({ id: requiredText, requestType: requiredText, requesterName: requiredText, requestedAt: inputDate, source: requiredText, status: requiredText }).safeParse({ id, ...data });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
@@ -382,7 +382,7 @@ export async function updatePortalRequest(
 }
 
 export async function inactivatePortalRequest(id: string): Promise<ActionResult> {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   if (!requiredText.safeParse(id).success) return { error: "Solicitação inválida." };
   try {
     await prisma.sanPortalRequest.update({ where: { id }, data: { active: false } });
@@ -397,7 +397,7 @@ export async function updateSavedReport(
   id: string,
   data: { name: string; type: string; period: string; format: string }
 ): Promise<ActionResult> {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const parsed = z.object({ id: requiredText, name: requiredText, type: requiredText, period: requiredText, format: requiredText }).safeParse({ id, ...data });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
@@ -412,7 +412,7 @@ export async function updateSavedReport(
 }
 
 export async function inactivateSavedReport(id: string): Promise<ActionResult> {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   if (!requiredText.safeParse(id).success) return { error: "Relatório inválido." };
   try {
     await prisma.sanSavedReport.update({ where: { id }, data: { active: false } });

@@ -1,11 +1,11 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { nextYearlyCode } from "@/lib/sequence";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("COMPRAS")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("COMPRAS", operation)).prisma;
 }
 
 type PurchaseRequestItemInput = {
@@ -27,7 +27,7 @@ type PurchaseRequestInput = {
 };
 
 export async function deletePurchaseRequest(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   try {
     await prisma.purchaseRequest.delete({
       where: { id },
@@ -41,8 +41,8 @@ export async function deletePurchaseRequest(id: string) {
 }
 
 export async function savePurchaseRequest(payload: PurchaseRequestInput) {
-  const prisma = await getTenantPrisma();
   const { id, number, object, justification, estimatedValue, items, secretariatId, departmentId } = payload;
+  const prisma = await getTenantPrisma(id ? "update" : "create");
   
   const secretariat = secretariatId ? await prisma.secretariat.findUnique({ where: { id: secretariatId } }) : await prisma.secretariat.findFirst();
   const department = departmentId ? await prisma.department.findUnique({ where: { id: departmentId } }) : await prisma.department.findFirst();

@@ -1,10 +1,10 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from 'next/cache';
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("SAUDE")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("SAUDE", operation)).prisma;
 }
 
 type PatientInput = {
@@ -27,7 +27,7 @@ function hasErrorCode(error: unknown, code: string) {
 }
 
 export async function createPatient(data: PatientInput) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   try {
     let personId = data.personId;
 
@@ -75,7 +75,7 @@ export async function createPatient(data: PatientInput) {
 }
 
 export async function updatePatient(id: string, data: PatientInput) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     await prisma.patient.update({
       where: { id },
@@ -95,7 +95,7 @@ export async function updatePatient(id: string, data: PatientInput) {
 }
 
 export async function togglePatientStatus(id: string, currentStatus: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     const newStatus = currentStatus === "Ativo" ? "Inativo" : "Ativo";
     await prisma.patient.update({
@@ -110,7 +110,7 @@ export async function togglePatientStatus(id: string, currentStatus: string) {
 }
 
 export async function deletePatient(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   try {
     await prisma.patient.delete({
       where: { id },

@@ -1,10 +1,10 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("TRIBUTACAO")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("TRIBUTACAO", operation)).prisma;
 }
 
 export async function createLicense(data: {
@@ -12,7 +12,7 @@ export async function createLicense(data: {
   taxpayerId: string;
   validUntil: string;
 }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const result = await prisma.license.create({
     data: {
       licenseType: data.licenseType,
@@ -31,7 +31,7 @@ export async function updateLicense(id: string, data: {
   licenseType?: string;
   validUntil?: string;
 }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const result = await prisma.license.update({
     where: { id },
     data: {
@@ -45,7 +45,7 @@ export async function updateLicense(id: string, data: {
 }
 
 export async function deactivateLicense(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const result = await prisma.license.update({
     where: { id },
     data: { status: "Cancelado" }
@@ -56,7 +56,7 @@ export async function deactivateLicense(id: string) {
 }
 
 export async function activateLicense(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const result = await prisma.license.update({
     where: { id },
     data: { status: "Emitido" }

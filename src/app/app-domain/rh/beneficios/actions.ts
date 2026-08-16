@@ -1,16 +1,16 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("RH")).prisma;
+async function getTenantPrisma(operation: "create" | "update" | "delete") {
+  return (await getTenantContextForModuleOperation("RH", operation)).prisma;
 }
 
 export async function saveBeneficio(formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const id = formData.get("id") as string;
+  const prisma = await getTenantPrisma(id ? "update" : "create");
   try {
-    const id = formData.get("id") as string;
     const name = formData.get("name") as string;
     const type = formData.get("type") as string;
     const baseValue = parseFloat(formData.get("baseValue") as string);
@@ -49,7 +49,7 @@ export async function saveBeneficio(formData: FormData) {
 }
 
 export async function toggleBeneficioStatus(id: string, isActive: boolean) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     await prisma.benefitConfig.update({
       where: { id },
@@ -64,7 +64,7 @@ export async function toggleBeneficioStatus(id: string, isActive: boolean) {
 }
 
 export async function deleteBeneficio(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   try {
     // Should check if it has payroll benefits linked before deleting
     const count = await prisma.payrollBenefit.count({ where: { benefitConfigId: id } });

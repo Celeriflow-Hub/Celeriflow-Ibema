@@ -1,10 +1,10 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from 'next/cache';
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("SAUDE")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("SAUDE", operation)).prisma;
 }
 
 type HealthProfessionalInput = {
@@ -19,7 +19,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 export async function createHealthProfessional(data: HealthProfessionalInput) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   try {
     const existing = await prisma.healthProfessional.findUnique({
       where: { employeeId: data.employeeId }
@@ -45,7 +45,7 @@ export async function createHealthProfessional(data: HealthProfessionalInput) {
 }
 
 export async function updateHealthProfessional(id: string, data: HealthProfessionalInput) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     await prisma.healthProfessional.update({
       where: { id },
@@ -63,7 +63,7 @@ export async function updateHealthProfessional(id: string, data: HealthProfessio
 }
 
 export async function toggleHealthProfessionalStatus(id: string, isActive: boolean) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     await prisma.healthProfessional.update({
       where: { id },
@@ -77,7 +77,7 @@ export async function toggleHealthProfessionalStatus(id: string, isActive: boole
 }
 
 export async function deleteHealthProfessional(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   try {
     await prisma.healthProfessional.delete({
       where: { id },

@@ -1,6 +1,6 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { processWaterReadingAndBill } from "@/lib/saneamento/saneamento-engine";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -26,7 +26,7 @@ export async function processMeterReadingAction(input: z.infer<typeof readingSch
   }
 
   try {
-    const context = await getTenantContextForModuleEdit("SANEAMENTO");
+    const context = await getTenantContextForModuleOperation("SANEAMENTO", "update");
     const result = await processWaterReadingAndBill(context.prisma, parsed.data);
 
     revalidatePath("/saneamento/leituras");
@@ -38,7 +38,7 @@ export async function processMeterReadingAction(input: z.infer<typeof readingSch
 
 export async function getWaterReadingsAction() {
   try {
-    const context = await getTenantContextForModuleEdit("SANEAMENTO");
+    const context = await getTenantContextForModule("SANEAMENTO");
     const readings = await context.prisma.waterMeterReading.findMany({
       orderBy: { createdAt: "desc" },
       take: 15,

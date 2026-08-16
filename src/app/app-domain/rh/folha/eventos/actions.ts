@@ -1,16 +1,16 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("RH")).prisma;
+async function getTenantPrisma(operation: "create" | "update") {
+  return (await getTenantContextForModuleOperation("RH", operation)).prisma;
 }
 
 export async function saveEvent(formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const id = formData.get("id") as string;
+  const prisma = await getTenantPrisma(id ? "update" : "create");
   try {
-    const id = formData.get("id") as string;
     const code = formData.get("code") as string;
     const name = formData.get("name") as string;
     const type = formData.get("type") as string;

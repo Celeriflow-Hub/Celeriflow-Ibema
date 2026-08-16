@@ -8,7 +8,7 @@ import {
   createBudgetReservation,
   setFinancialYearStatus,
 } from "@/lib/financeiro";
-import { assertBudgetUnitAccess, getTenantContextForModuleEdit, type AppContext } from "@/lib/platform/tenant-context";
+import { assertBudgetUnitAccess, getTenantContextForModuleOperation, type AppContext } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
 type ActionResult = { error?: string };
@@ -40,7 +40,7 @@ async function assertAppropriationAccess(context: AppContext, appropriationId: s
 export async function createMasterData(type: MasterDataType, data: MasterDataInput): Promise<ActionResult> {
   try {
     validateMasterData(data, type);
-    const { prisma } = await getTenantContextForModuleEdit("FINANCEIRO");
+    const { prisma } = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     if (type === "budgetUnit") await prisma.budgetUnit.create({ data: { code: data.code.trim(), name: data.name.trim(), secretariatId: data.secretariatId! } });
     if (type === "resourceSource") await prisma.resourceSource.create({ data: { code: data.code.trim(), name: data.name.trim() } });
     if (type === "revenueNature") await prisma.revenueNature.create({ data: { code: data.code.trim(), name: data.name.trim() } });
@@ -55,7 +55,7 @@ export async function createMasterData(type: MasterDataType, data: MasterDataInp
 export async function updateMasterData(type: MasterDataType, id: string, data: MasterDataInput): Promise<ActionResult> {
   try {
     validateMasterData(data, type);
-    const { prisma } = await getTenantContextForModuleEdit("FINANCEIRO");
+    const { prisma } = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     if (type === "budgetUnit") await prisma.budgetUnit.update({ where: { id }, data: { code: data.code.trim(), name: data.name.trim(), secretariatId: data.secretariatId! } });
     if (type === "resourceSource") await prisma.resourceSource.update({ where: { id }, data: { code: data.code.trim(), name: data.name.trim() } });
     if (type === "revenueNature") await prisma.revenueNature.update({ where: { id }, data: { code: data.code.trim(), name: data.name.trim() } });
@@ -70,7 +70,7 @@ export async function updateMasterData(type: MasterDataType, id: string, data: M
 
 export async function deleteMasterData(type: MasterDataType, id: string): Promise<ActionResult> {
   try {
-    const { prisma } = await getTenantContextForModuleEdit("FINANCEIRO");
+    const { prisma } = await getTenantContextForModuleOperation("FINANCEIRO", "delete");
     if (type === "budgetUnit") await prisma.budgetUnit.delete({ where: { id } });
     if (type === "resourceSource") await prisma.resourceSource.delete({ where: { id } });
     if (type === "revenueNature") await prisma.revenueNature.delete({ where: { id } });
@@ -84,7 +84,7 @@ export async function deleteMasterData(type: MasterDataType, id: string): Promis
 
 export async function createBudgetReservationAction(data: { number: string; date: Date; value: number; appropriationId: string; expenseId?: string; justification?: string }): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     await assertAppropriationAccess(context, data.appropriationId);
     if (!data.expenseId) throw new FinanceError("Selecione uma solicitação de despesa aprovada.");
     await createBudgetReservation(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, { ...data, expenseId: data.expenseId });
@@ -98,7 +98,7 @@ export async function createBudgetReservationAction(data: { number: string; date
 
 export async function createExpenseRequestAction(data: { date: Date; description: string; value: number; appropriationId: string; supplierId: string; secretariatId: string }): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     await assertAppropriationAccess(context, data.appropriationId);
     await createExpenseRequest(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, { ...data, sourceModule: "FINANCEIRO", sourceType: "EXPENSE_REQUEST", eventType: "EXPENSE_REQUEST" });
     revalidatePath("/financeiro/orcamento");
@@ -110,7 +110,7 @@ export async function createExpenseRequestAction(data: { date: Date; description
 
 export async function approveExpenseRequestAction(expenseId: string): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     const expense = await context.prisma.expense.findUnique({ where: { id: expenseId }, select: { appropriationId: true } });
     if (!expense) throw new FinanceError("Solicitação de despesa não encontrada.");
     await assertAppropriationAccess(context, expense.appropriationId);
@@ -124,7 +124,7 @@ export async function approveExpenseRequestAction(expenseId: string): Promise<Ac
 
 export async function cancelBudgetReservationAction(id: string): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "delete");
     const reservation = await context.prisma.budgetReservation.findUnique({
       where: { id },
       select: { appropriationId: true },
@@ -142,7 +142,7 @@ export async function cancelBudgetReservationAction(id: string): Promise<ActionR
 
 export async function setFinancialYearStatusAction(id: string, status: string): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     await setFinancialYearStatus(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, id, status);
     revalidatePath("/financeiro/orcamento");
     return {};

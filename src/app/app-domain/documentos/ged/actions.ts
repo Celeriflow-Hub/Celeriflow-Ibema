@@ -1,14 +1,14 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("DOCUMENTOS")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("DOCUMENTOS", operation)).prisma;
 }
 
 export async function createFolder(name: string, parentId: string | null) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   if (!name.trim()) throw new Error("Nome obrigatório");
   await prisma.folder.create({
     data: { name: name.trim(), parentId: parentId || null },
@@ -23,7 +23,7 @@ export async function createDocument(
   fileUrl: string,
   folderId: string | null
 ) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   if (!title.trim()) throw new Error("Título obrigatório");
   await prisma.document.create({
     data: {
@@ -39,14 +39,14 @@ export async function createDocument(
 }
 
 export async function deleteDocument(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   await prisma.document.delete({ where: { id } });
   revalidatePath("/documentos/ged");
   revalidatePath("/documentos");
 }
 
 export async function deleteFolder(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   // First move all documents inside to folderId = null (unlink), then delete
   await prisma.document.updateMany({
     where: { folderId: id },

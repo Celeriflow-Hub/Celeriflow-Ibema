@@ -1,6 +1,6 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma, type TrafficInfractionTicket } from "@prisma/client";
@@ -21,7 +21,7 @@ export async function issueTrafficTicketAction(input: z.infer<typeof ticketSchem
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
 
   try {
-    const context = await getTenantContextForModuleEdit("SEGURANCA");
+    const context = await getTenantContextForModuleOperation("SEGURANCA", "create");
     const { prisma, user } = context;
 
     const numeroAit = `AIT-GM-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -51,7 +51,7 @@ export async function issueTrafficTicketAction(input: z.infer<typeof ticketSchem
 
 export async function getTrafficTicketsAction(): Promise<ActionResult<TrafficInfractionTicket[]>> {
   try {
-    const context = await getTenantContextForModuleEdit("SEGURANCA");
+    const context = await getTenantContextForModule("SEGURANCA");
     const tickets = await context.prisma.trafficInfractionTicket.findMany({
       orderBy: { createdAt: "desc" },
       take: 20,

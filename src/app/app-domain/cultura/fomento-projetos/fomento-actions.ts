@@ -1,6 +1,6 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { CulturalIncentiveProject, Prisma } from "@prisma/client";
@@ -26,7 +26,7 @@ export async function submitCulturalProjectAction(input: z.infer<typeof projectS
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
 
   try {
-    const context = await getTenantContextForModuleEdit("CULTURA");
+    const context = await getTenantContextForModuleOperation("CULTURA", "create");
     const project = await context.prisma.culturalIncentiveProject.create({
       data: {
         ...parsed.data,
@@ -46,7 +46,7 @@ export async function submitCulturalProjectAction(input: z.infer<typeof projectS
 export async function submitAccountabilityAction(projectId: string, reciboNota: string): Promise<ActionResult<{ project: CulturalIncentiveProject; recibo: string }>> {
   void reciboNota;
   try {
-    const context = await getTenantContextForModuleEdit("CULTURA");
+    const context = await getTenantContextForModuleOperation("CULTURA", "update");
     const timestamp = Date.now();
     const recibo = `REC-PREST-${timestamp}`;
 
@@ -68,7 +68,7 @@ export async function submitAccountabilityAction(projectId: string, reciboNota: 
 
 export async function getCulturalProjectsAction(): Promise<ActionResult<CulturalIncentiveProject[]>> {
   try {
-    const context = await getTenantContextForModuleEdit("CULTURA");
+    const context = await getTenantContextForModule("CULTURA");
     const projects = await context.prisma.culturalIncentiveProject.findMany({
       orderBy: { createdAt: "desc" },
       take: 20,

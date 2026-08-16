@@ -1,10 +1,10 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("TRIBUTACAO")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("TRIBUTACAO", operation)).prisma;
 }
 
 export async function createRealEstate(data: {
@@ -15,7 +15,7 @@ export async function createRealEstate(data: {
   landArea: number;
   builtArea: number;
 }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const result = await prisma.realEstate.create({
     data: {
       municipalInsc: data.municipalInsc || undefined,
@@ -40,7 +40,7 @@ export async function updateRealEstate(id: string, data: {
   landArea?: number | null;
   builtArea?: number | null;
 }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const result = await prisma.realEstate.update({
     where: { id },
     data
@@ -51,7 +51,7 @@ export async function updateRealEstate(id: string, data: {
 }
 
 export async function deactivateRealEstate(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const result = await prisma.realEstate.update({
     where: { id },
     data: { status: "Inativo" }
@@ -62,7 +62,7 @@ export async function deactivateRealEstate(id: string) {
 }
 
 export async function activateRealEstate(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const result = await prisma.realEstate.update({
     where: { id },
     data: { status: "Regular" }

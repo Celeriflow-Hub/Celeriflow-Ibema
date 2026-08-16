@@ -1,6 +1,6 @@
 "use server";
 
-import { getTenantContextForModuleEdit, isSystemAdministrator } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, getTenantContextForModuleOperation, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
@@ -85,9 +85,9 @@ export async function runAutomatedBankDownloadAction(input: {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
-  let context: Awaited<ReturnType<typeof getTenantContextForModuleEdit>> | undefined;
+  let context: AppContext | undefined;
   try {
-    context = await getTenantContextForModuleEdit("FINANCEIRO");
+    context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const { prisma, user } = context;
 
     const timestamp = Date.now();
@@ -302,7 +302,7 @@ function bankStatementContentType(format: "OFX" | "JSON" | "CNAB") {
 
 export async function getDownloadHistoryAction(): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModule("FINANCEIRO");
     const accountScope = isSystemAdministrator(context.user)
       ? undefined
       : await context.prisma.bankAccount.findMany({

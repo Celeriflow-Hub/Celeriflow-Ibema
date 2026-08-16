@@ -1,6 +1,6 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { calculateInvestmentYield, transmitYieldToMunicipalSystem, type YieldCalculationResult, type YieldTransmissionResult, YieldType } from "@/lib/financeiro/yield-engine";
 import { bankIntegrationClient, type InvestmentYieldDTO } from "@/lib/financeiro/bank-integration-client";
 import { revalidatePath } from "next/cache";
@@ -46,7 +46,7 @@ export async function transmitYieldAction(input: {
 }): Promise<ActionResult<YieldTransmissionResult>> {
   try {
     if (!isPocVirtualBankAccount(input.contaNumero)) return { error: "A conta informada não pertence ao Banco Virtual Robonuvem." };
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const result = await transmitYieldToMunicipalSystem(context.prisma, {
       ...input,
       data: new Date(input.data),
@@ -63,7 +63,7 @@ export async function transmitYieldAction(input: {
 
 export async function getYieldHistoryAction(): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModule("FINANCEIRO");
     const history = await context.prisma.yieldTransaction.findMany({
       where: { contaNumero: { in: [...pocVirtualBank.accountNumbers] } },
       orderBy: { createdAt: "desc" },
@@ -86,7 +86,7 @@ export async function fetchExternalYieldsAction(input: {
     if (!isPocVirtualBank(input.banco) || !isPocVirtualBankAccount(input.contaNumero)) {
       return { error: "A POC aceita somente contas do Banco Virtual Robonuvem." };
     }
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModule("FINANCEIRO");
     const yields = await bankIntegrationClient.fetchYieldReport(
       {
         banco: input.banco,

@@ -1,14 +1,14 @@
 "use server"
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("TRANSPARENCIA")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("TRANSPARENCIA", operation)).prisma;
 }
 
 export async function uploadBiddingsCsv(formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const file = formData.get("file") as File;
   if (!file) throw new Error("Nenhum arquivo enviado.");
 

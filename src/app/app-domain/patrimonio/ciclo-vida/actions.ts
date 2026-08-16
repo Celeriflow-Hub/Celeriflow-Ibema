@@ -1,7 +1,7 @@
 "use server";
 
 import { AssetLifecycleError, depreciateAssetsForMonth, recordAssetDisposal, recordAssetValueAdjustment, type AssetValueAdjustmentType } from "@/lib/patrimonio/asset-lifecycle";
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
 type ActionResult = { error?: string; message?: string };
@@ -21,7 +21,7 @@ function parseCompetence(value: string) {
 
 export async function runMonthlyDepreciation(competence: string): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("PATRIMONIO");
+    const context = await getTenantContextForModuleOperation("PATRIMONIO", "create");
     const result = await depreciateAssetsForMonth(context.prisma, parseCompetence(competence));
     revalidatePath("/patrimonio/ciclo-vida");
     revalidatePath("/patrimonio/bens");
@@ -46,7 +46,7 @@ export async function registerAssetDisposal(input: {
       throw new AssetLifecycleError("Data da baixa inválida.");
     }
     const disposalValue = input.disposalValue.trim() === "" ? 0 : Number(input.disposalValue.replace(",", "."));
-    const context = await getTenantContextForModuleEdit("PATRIMONIO");
+    const context = await getTenantContextForModuleOperation("PATRIMONIO", "delete");
     const writeOff = await recordAssetDisposal(context.prisma, {
       ...input,
       date,
@@ -78,7 +78,7 @@ export async function registerAssetValueAdjustment(input: {
       throw new AssetLifecycleError("Data do ajuste inválida.");
     }
     const value = Number(input.value.replace(",", "."));
-    const context = await getTenantContextForModuleEdit("PATRIMONIO");
+    const context = await getTenantContextForModuleOperation("PATRIMONIO", "update");
     await recordAssetValueAdjustment(context.prisma, { ...input, date, value });
     revalidatePath("/patrimonio/ciclo-vida");
     revalidatePath("/patrimonio/bens");

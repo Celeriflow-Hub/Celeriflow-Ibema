@@ -1,10 +1,10 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("COMPRAS")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("COMPRAS", operation)).prisma;
 }
 
 type CatalogItemFormData = {
@@ -19,7 +19,7 @@ type CatalogItemFormData = {
 };
 
 export async function saveCatalogItem(formData: CatalogItemFormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma(formData.id ? "update" : "create");
   try {
     let finalCode = formData.code;
 
@@ -81,7 +81,7 @@ export async function saveCatalogItem(formData: CatalogItemFormData) {
 }
 
 export async function toggleCatalogItemStatus(id: string, isActive: boolean) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     await prisma.catalogItem.update({
       where: { id },

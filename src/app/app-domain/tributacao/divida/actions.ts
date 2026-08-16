@@ -1,10 +1,10 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("TRIBUTACAO")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("TRIBUTACAO", operation)).prisma;
 }
 
 export async function createActiveDebt(data: {
@@ -15,7 +15,7 @@ export async function createActiveDebt(data: {
   updatedValue: number;
   taxpayerId: string;
 }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const result = await prisma.activeDebt.create({
     data: {
       cdaNumber: data.cdaNumber,
@@ -39,7 +39,7 @@ export async function updateActiveDebt(id: string, data: {
   originalValue?: number;
   updatedValue?: number;
 }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const result = await prisma.activeDebt.update({
     where: { id },
     data
@@ -50,7 +50,7 @@ export async function updateActiveDebt(id: string, data: {
 }
 
 export async function cancelActiveDebt(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const result = await prisma.activeDebt.update({
     where: { id },
     data: { status: "Cancelada" }
@@ -61,7 +61,7 @@ export async function cancelActiveDebt(id: string) {
 }
 
 export async function reactivateActiveDebt(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const result = await prisma.activeDebt.update({
     where: { id },
     data: { status: "Inscrita" }

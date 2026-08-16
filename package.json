@@ -29,6 +29,7 @@
     "finance:treasury:opening-backfill": "node scripts/finance-treasury-opening-backfill.mjs",
     "finance:creditor:backfill": "node scripts/finance-creditor-backfill.mjs",
     "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
+    "bootstrap:test-db": "node scripts/bootstrap-test-database.mjs",
     "reset:firebase-password": "node scripts/reset-firebase-password.mjs",
     "postinstall": "prisma generate"
   },

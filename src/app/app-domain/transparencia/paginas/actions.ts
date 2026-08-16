@@ -1,14 +1,14 @@
 "use server"
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("TRANSPARENCIA")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("TRANSPARENCIA", operation)).prisma;
 }
 
 export async function createPage(data: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const title = data.get("title") as string;
   const content = data.get("content") as string;
   const status = data.get("status") as string;
@@ -32,7 +32,7 @@ export async function createPage(data: FormData) {
 }
 
 export async function deletePage(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   await prisma.portalPage.delete({
     where: { id }
   });

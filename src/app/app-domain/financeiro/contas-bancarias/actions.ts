@@ -1,6 +1,6 @@
 "use server";
 
-import { assertBudgetUnitAccess, getTenantContextForModuleEdit, isSystemAdministrator } from "@/lib/platform/tenant-context";
+import { assertBudgetUnitAccess, getTenantContextForModuleOperation, isSystemAdministrator, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { createBankAccountWithOpeningBalance, createTreasuryTransfer, FinanceError, updateBankAccountDetails } from "@/lib/financeiro";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -15,8 +15,8 @@ const transferSchema = z.object({
   history: z.string().trim().max(500, "O histórico deve ter no máximo 500 caracteres.").optional(),
 });
 
-async function getTenantPrisma() {
-  return getTenantContextForModuleEdit("FINANCEIRO");
+async function getTenantPrisma(operation: ModuleOperation) {
+  return getTenantContextForModuleOperation("FINANCEIRO", operation);
 }
 
 async function assertAccountAccess(context: Awaited<ReturnType<typeof getTenantPrisma>>, accountId: string, nextBudgetUnitId?: string) {
@@ -51,7 +51,7 @@ export async function createBankAccount(data: {
   accountingPlanId: string;
   isActive: boolean;
 }) {
-  const context = await getTenantPrisma();
+  const context = await getTenantPrisma("create");
   assertBudgetUnitAccess(context.user, data.budgetUnitId);
   const account = await createBankAccountWithOpeningBalance(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, {
     ...data,
@@ -73,7 +73,7 @@ export async function updateBankAccount(id: string, data: {
   accountingPlanId?: string;
   isActive?: boolean;
 }) {
-  const context = await getTenantPrisma();
+  const context = await getTenantPrisma("update");
   await assertAccountAccess(context, id, data.budgetUnitId);
   const account = await updateBankAccountDetails(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, id, data);
 
@@ -82,7 +82,7 @@ export async function updateBankAccount(id: string, data: {
 }
 
 export async function toggleBankAccountStatus(id: string, isActive: boolean) {
-  const context = await getTenantPrisma();
+  const context = await getTenantPrisma("update");
   await assertAccountAccess(context, id);
   const account = await updateBankAccountDetails(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, id, { isActive });
 
@@ -106,7 +106,7 @@ export async function createTreasuryTransferAction(data: {
   }
 
   try {
-    const context = await getTenantPrisma();
+    const context = await getTenantPrisma("create");
     const [source, destination] = await Promise.all([
       getTransferAccount(context, parsed.data.sourceBankAccountId),
       getTransferAccount(context, parsed.data.destinationBankAccountId),

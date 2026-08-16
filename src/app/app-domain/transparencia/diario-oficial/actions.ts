@@ -1,14 +1,14 @@
 "use server"
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("TRANSPARENCIA")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("TRANSPARENCIA", operation)).prisma;
 }
 
 export async function createDiary(data: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const editionNumberStr = data.get("editionNumber") as string;
   const pdfUrl = data.get("pdfUrl") as string;
   const status = data.get("status") as string;
@@ -41,7 +41,7 @@ export async function createDiary(data: FormData) {
 }
 
 export async function deleteDiary(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   await prisma.officialDiary.delete({
     where: { id }
   });

@@ -1,14 +1,14 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("COMPRAS")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("COMPRAS", operation)).prisma;
 }
 
 export async function deleteContract(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   try {
     await prisma.contract.delete({
       where: { id },
@@ -23,8 +23,8 @@ export async function deleteContract(id: string) {
 }
 
 export async function saveContract(formData: FormData) {
-  const prisma = await getTenantPrisma();
   const id = formData.get("id") as string | null;
+  const prisma = await getTenantPrisma(id ? "update" : "create");
   const number = formData.get("number") as string;
   const object = formData.get("object") as string;
   const initialValue = parseFloat(formData.get("initialValue") as string) || 0;

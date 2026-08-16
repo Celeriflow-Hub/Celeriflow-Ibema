@@ -1,17 +1,17 @@
 ﻿"use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { uploadFile } from "@/lib/platform/blob";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("MEIO_AMBIENTE")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("MEIO_AMBIENTE", operation)).prisma;
 }
 
 // ─── EnvEnterprise ───────────────────────────────────────────────────────────
 
 export async function createEnvEnterprise(formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const name = formData.get("name") as string;
   const cnpjCpf = formData.get("cnpjCpf") as string;
   const activityType = formData.get("activityType") as string;
@@ -30,7 +30,7 @@ export async function createEnvEnterprise(formData: FormData) {
 }
 
 export async function updateEnvEnterprise(id: string, formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const name = formData.get("name") as string;
   const cnpjCpf = formData.get("cnpjCpf") as string;
   const activityType = formData.get("activityType") as string;
@@ -50,7 +50,7 @@ export async function updateEnvEnterprise(id: string, formData: FormData) {
 }
 
 export async function inactivateEnvEnterprise(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     await prisma.envEnterprise.update({ where: { id }, data: { status: "Inativo" } });
     revalidatePath("/meio-ambiente/empreendimentos");
@@ -65,7 +65,7 @@ export async function inactivateEnvEnterprise(id: string) {
 // ─── EnvLicense ──────────────────────────────────────────────────────────────
 
 export async function createEnvLicense(formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const licenseNumber = formData.get("licenseNumber") as string;
   const licenseType = formData.get("licenseType") as string;
   const enterpriseId = formData.get("enterpriseId") as string;
@@ -84,7 +84,7 @@ export async function createEnvLicense(formData: FormData) {
 }
 
 export async function updateEnvLicense(id: string, formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const licenseNumber = formData.get("licenseNumber") as string;
   const licenseType = formData.get("licenseType") as string;
   const validUntilStr = formData.get("validUntil") as string;
@@ -103,7 +103,7 @@ export async function updateEnvLicense(id: string, formData: FormData) {
 }
 
 export async function inactivateEnvLicense(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     await prisma.envLicense.update({ where: { id }, data: { status: "Suspensa" } });
     revalidatePath("/meio-ambiente/licenciamento");
@@ -116,7 +116,7 @@ export async function inactivateEnvLicense(id: string) {
 }
 
 export async function deleteEnvLicense(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   try {
     await prisma.envLicense.delete({ where: { id } });
     revalidatePath("/meio-ambiente/licenciamento");
@@ -131,7 +131,7 @@ export async function deleteEnvLicense(id: string) {
 // ─── EnvComplaint ─────────────────────────────────────────────────────────────
 
 export async function createEnvComplaint(formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const complaintType = formData.get("complaintType") as string;
   const description = formData.get("description") as string;
   const address = formData.get("address") as string;
@@ -149,7 +149,7 @@ export async function createEnvComplaint(formData: FormData) {
 }
 
 export async function updateEnvComplaint(id: string, formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const status = formData.get("status") as string;
   const address = formData.get("address") as string;
   const description = formData.get("description") as string;
@@ -165,7 +165,7 @@ export async function updateEnvComplaint(id: string, formData: FormData) {
 }
 
 export async function deleteEnvComplaint(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   try {
     await prisma.envComplaint.delete({ where: { id } });
     revalidatePath("/meio-ambiente/denuncias");
@@ -180,7 +180,7 @@ export async function deleteEnvComplaint(id: string) {
 // ─── EnvInspection ────────────────────────────────────────────────────────────
 
 export async function createEnvInspection(formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const dateScheduledStr = formData.get("dateScheduled") as string;
   const inspector = formData.get("inspector") as string;
   const notes = formData.get("notes") as string;
@@ -199,7 +199,7 @@ export async function createEnvInspection(formData: FormData) {
 }
 
 export async function updateEnvInspection(id: string, formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const dateScheduledStr = formData.get("dateScheduled") as string;
   const inspector = formData.get("inspector") as string;
   const notes = formData.get("notes") as string;
@@ -218,7 +218,7 @@ export async function updateEnvInspection(id: string, formData: FormData) {
 }
 
 export async function deleteEnvInspection(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   try {
     await prisma.envInspection.delete({ where: { id } });
     revalidatePath("/meio-ambiente/fiscalizacao");
@@ -233,7 +233,7 @@ export async function deleteEnvInspection(id: string) {
 // ─── EnvGreenArea ─────────────────────────────────────────────────────────────
 
 export async function createEnvGreenArea(formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const name = formData.get("name") as string;
   const areaType = formData.get("areaType") as string;
   const sizeSqmStr = formData.get("sizeSqm") as string;
@@ -254,7 +254,7 @@ export async function createEnvGreenArea(formData: FormData) {
 }
 
 export async function updateEnvGreenArea(id: string, formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const name = formData.get("name") as string;
   const areaType = formData.get("areaType") as string;
   const sizeSqmStr = formData.get("sizeSqm") as string;
@@ -275,7 +275,7 @@ export async function updateEnvGreenArea(id: string, formData: FormData) {
 }
 
 export async function inactivateEnvGreenArea(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     await prisma.envGreenArea.update({ where: { id }, data: { status: "Degradado" } });
     revalidatePath("/meio-ambiente/areas-verdes");
@@ -290,7 +290,7 @@ export async function inactivateEnvGreenArea(id: string) {
 // ─── EnvWaste ─────────────────────────────────────────────────────────────────
 
 export async function createEnvWaste(formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const generatorName = formData.get("generatorName") as string;
   const wasteType = formData.get("wasteType") as string;
   const quantityKgStr = formData.get("quantityKg") as string;
@@ -311,7 +311,7 @@ export async function createEnvWaste(formData: FormData) {
 }
 
 export async function updateEnvWaste(id: string, formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const generatorName = formData.get("generatorName") as string;
   const wasteType = formData.get("wasteType") as string;
   const quantityKgStr = formData.get("quantityKg") as string;
@@ -332,7 +332,7 @@ export async function updateEnvWaste(id: string, formData: FormData) {
 }
 
 export async function deleteEnvWaste(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   try {
     await prisma.envWaste.delete({ where: { id } });
     revalidatePath("/meio-ambiente/residuos");
@@ -347,7 +347,7 @@ export async function deleteEnvWaste(id: string) {
 // ─── EnvEduProgram ────────────────────────────────────────────────────────────
 
 export async function createEnvEduProgram(formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const title = formData.get("title") as string;
   const description = formData.get("description") as string;
   const targetAudience = formData.get("targetAudience") as string;
@@ -371,7 +371,7 @@ export async function createEnvEduProgram(formData: FormData) {
 }
 
 export async function updateEnvEduProgram(id: string, formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const title = formData.get("title") as string;
   const description = formData.get("description") as string;
   const targetAudience = formData.get("targetAudience") as string;
@@ -395,7 +395,7 @@ export async function updateEnvEduProgram(id: string, formData: FormData) {
 }
 
 export async function deleteEnvEduProgram(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   try {
     await prisma.envEduProgram.delete({ where: { id } });
     revalidatePath("/meio-ambiente/educacao");
@@ -410,7 +410,7 @@ export async function deleteEnvEduProgram(id: string) {
 // ─── EnvDocument ──────────────────────────────────────────────────────────────
 
 export async function createEnvDocument(formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   const title = formData.get("title") as string;
   const docType = formData.get("docType") as string;
   const enterpriseId = formData.get("enterpriseId") as string;
@@ -430,7 +430,7 @@ export async function createEnvDocument(formData: FormData) {
 }
 
 export async function updateEnvDocument(id: string, formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const title = formData.get("title") as string;
   const docType = formData.get("docType") as string;
   const enterpriseId = formData.get("enterpriseId") as string;
@@ -447,7 +447,7 @@ export async function updateEnvDocument(id: string, formData: FormData) {
 }
 
 export async function deleteEnvDocument(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   try {
     await prisma.envDocument.delete({ where: { id } });
     revalidatePath("/meio-ambiente/documentos");

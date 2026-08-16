@@ -22,7 +22,7 @@ import {
   publishCreditRequest,
   transitionPlanningLegalWorkflow,
 } from "@/lib/financeiro/planejamento";
-import { getTenantContextForModuleEdit, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
@@ -166,7 +166,7 @@ export async function actionCreateMultiYearPlan(input: {
   description?: string;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const actor = financeActor(context);
     const plan = await createMultiYearPlan(context.prisma, actor, multiYearPlanSchema.parse(input));
     revalidatePath("/financeiro/orcamento/planejamento");
@@ -183,7 +183,7 @@ export async function actionAddProgramPPA(input: {
   type?: string;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const actor = financeActor(context);
     const program = await addProgramPPA(context.prisma, actor, programSchema.parse(input));
     revalidatePath("/financeiro/orcamento/planejamento");
@@ -200,7 +200,7 @@ export async function actionAddActionPPA(input: {
   type?: string;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const action = await addActionPPA(context.prisma, financeActor(context), actionSchema.parse(input));
     revalidatePath("/financeiro/orcamento/planejamento");
     return { data: { id: action.id } };
@@ -215,7 +215,7 @@ export async function actionAddObjectivePPA(input: {
   description: string;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const objective = await addObjectivePPA(context.prisma, financeActor(context), objectiveSchema.parse(input));
     revalidatePath("/financeiro/orcamento/planejamento");
     return { data: { id: objective.id } };
@@ -232,7 +232,7 @@ export async function actionAddIndicatorPPA(input: {
   targetValue: number;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const indicator = await addIndicatorPPA(context.prisma, financeActor(context), indicatorSchema.parse(input));
     revalidatePath("/financeiro/orcamento/planejamento");
     return { data: { id: indicator.id } };
@@ -248,7 +248,7 @@ export async function actionAddGoalPPA(input: {
   financial: number;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const goal = await addGoalPPA(context.prisma, financeActor(context), goalSchema.parse(input));
     revalidatePath("/financeiro/orcamento/planejamento");
     return { data: { id: goal.id } };
@@ -264,7 +264,7 @@ export async function actionCreateBudgetGuideline(input: {
   risks?: { description: string; estimatedImpact: number; mitigation: string }[];
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const actor = financeActor(context);
     const guideline = await createBudgetGuideline(context.prisma, actor, guidelineSchema.parse(input));
     revalidatePath("/financeiro/orcamento/planejamento");
@@ -285,7 +285,7 @@ export async function actionCreateAnnualBudgetLaw(input: {
   expenseFixations?: { code: string; name: string; fixedValue: number }[];
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const actor = financeActor(context);
     const parsedInput = annualBudgetLawSchema.parse(input);
     const loa = await createAnnualBudgetLaw(context.prisma, actor, {
@@ -307,7 +307,7 @@ export async function actionTransitionPlanningLegalWorkflow(input: {
   publication?: { publicationDate: string; publicationReference: string };
 }): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     const parsedInput = planningTransitionSchema.parse(input);
     await transitionPlanningLegalWorkflow(context.prisma, financeActor(context), {
       ...parsedInput,
@@ -328,7 +328,7 @@ export async function actionCreatePlanningAmendment(input: {
   amendedSnapshot: Record<string, unknown>;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const parsedInput = planningAmendmentSchema.parse(input);
     const amendment = await createPlanningAmendment(context.prisma, financeActor(context), {
       ...parsedInput,
@@ -352,7 +352,7 @@ export async function actionCreateBudgetAppropriationFromFixation(input: {
   initialValue: number;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const appropriation = await createBudgetAppropriationFromFixation(context.prisma, financeActor(context), input);
     revalidatePath("/financeiro/orcamento");
     return { data: { id: appropriation.id } };
@@ -368,7 +368,7 @@ export async function actionSaveMonthlyDisbursementSchedule(input: {
   limitValue: number;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     const schedule = await saveMonthlyDisbursementSchedule(context.prisma, financeActor(context), input);
     revalidatePath("/financeiro/orcamento/planejamento");
     return { data: { id: schedule.id } };
@@ -383,7 +383,7 @@ export async function actionSaveBimonthlyRevenueTarget(input: {
   targetValue: number;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     const target = await saveBimonthlyRevenueTarget(context.prisma, financeActor(context), input);
     revalidatePath("/financeiro/orcamento/planejamento");
     return { data: { id: target.id } };
@@ -405,7 +405,7 @@ export async function actionCreateCreditRequest(input: {
   items: { appropriationId: string; type: "Acréscimo" | "Anulação"; value: number }[];
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const parsedInput = creditRequestSchema.parse(input);
     const credit = await createCreditRequest(context.prisma, financeActor(context), { ...parsedInput, legalActDate: new Date(parsedInput.legalActDate) });
     revalidatePath("/financeiro/orcamento");
@@ -417,7 +417,7 @@ export async function actionCreateCreditRequest(input: {
 
 export async function actionSubmitCreditRequest(creditRequestId: string): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     await submitCreditRequest(context.prisma, financeActor(context), z.string().min(1).parse(creditRequestId));
     revalidatePath("/financeiro/orcamento");
     return {};
@@ -428,7 +428,7 @@ export async function actionSubmitCreditRequest(creditRequestId: string): Promis
 
 export async function actionApproveCreditRequest(creditRequestId: string): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     await approveCreditRequest(context.prisma, financeActor(context), z.string().min(1).parse(creditRequestId));
     revalidatePath("/financeiro/orcamento");
     return {};
@@ -439,7 +439,7 @@ export async function actionApproveCreditRequest(creditRequestId: string): Promi
 
 export async function actionExecuteCreditRequest(creditRequestId: string): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     await executeCreditRequest(context.prisma, financeActor(context), z.string().min(1).parse(creditRequestId));
     revalidatePath("/financeiro/orcamento");
     return {};
@@ -450,7 +450,7 @@ export async function actionExecuteCreditRequest(creditRequestId: string): Promi
 
 export async function actionSanctionCreditRequest(creditRequestId: string): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     await sanctionCreditRequest(context.prisma, financeActor(context), z.string().min(1).parse(creditRequestId));
     revalidatePath("/financeiro/orcamento");
     return {};
@@ -465,7 +465,7 @@ export async function actionPublishCreditRequest(input: {
   publicationReference: string;
 }): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     const parsedInput = z.object({ creditRequestId: z.string().min(1), publicationDate: z.string().min(1), publicationReference: z.string().trim().min(1) }).parse(input);
     await publishCreditRequest(context.prisma, financeActor(context), parsedInput.creditRequestId, {
       publicationDate: new Date(parsedInput.publicationDate),

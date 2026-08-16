@@ -1,7 +1,7 @@
 "use server";
 
 import { FinanceError, authorizeAccountingMonthClose, authorizeAccountingMonthReopen, configureAccountingPostingRule, finalizeAnnualAccountingClose, postAccountingTransaction, prepareAnnualAccountingClose, requestAccountingMonthClose, requestAccountingMonthReopen } from "@/lib/financeiro";
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
 type ActionResult = { error?: string };
@@ -9,7 +9,7 @@ const message = (error: unknown) => error instanceof FinanceError ? error.messag
 
 export async function postManualAccountingTransaction(data: { financialYearId: string; date: string; history: string; debitAccountId: string; creditAccountId: string; value: number }): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     await postAccountingTransaction(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, {
       financialYearId: data.financialYearId,
       date: new Date(data.date),
@@ -25,7 +25,7 @@ export async function postManualAccountingTransaction(data: { financialYearId: s
 
 export async function requestMonthClose(data: { financialYearId: string; competence: string }): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     await requestAccountingMonthClose(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, data.financialYearId, new Date(data.competence));
     revalidatePath("/financeiro/contabilidade");
     return {};
@@ -36,7 +36,7 @@ export async function requestMonthClose(data: { financialYearId: string; compete
 
 export async function authorizeMonthClose(data: { financialYearId: string; competence: string }): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     await authorizeAccountingMonthClose(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, data.financialYearId, new Date(data.competence));
     revalidatePath("/financeiro/contabilidade");
     return {};
@@ -47,7 +47,7 @@ export async function authorizeMonthClose(data: { financialYearId: string; compe
 
 export async function requestMonthReopen(data: { financialYearId: string; competence: string; justification: string }): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     await requestAccountingMonthReopen(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, data.financialYearId, new Date(data.competence), data.justification);
     revalidatePath("/financeiro/contabilidade");
     return {};
@@ -58,7 +58,7 @@ export async function requestMonthReopen(data: { financialYearId: string; compet
 
 export async function authorizeMonthReopen(data: { financialYearId: string; competence: string }): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     await authorizeAccountingMonthReopen(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, data.financialYearId, new Date(data.competence));
     revalidatePath("/financeiro/contabilidade");
     return {};
@@ -69,7 +69,7 @@ export async function authorizeMonthReopen(data: { financialYearId: string; comp
 
 export async function prepareAnnualClose(financialYearId: string): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     await prepareAnnualAccountingClose(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, financialYearId);
     revalidatePath("/financeiro/contabilidade");
     return {};
@@ -80,7 +80,7 @@ export async function prepareAnnualClose(financialYearId: string): Promise<Actio
 
 export async function finalizeAnnualClose(financialYearId: string): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     await finalizeAnnualAccountingClose(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, financialYearId);
     revalidatePath("/financeiro/contabilidade");
     revalidatePath("/financeiro/orcamento");
@@ -92,7 +92,7 @@ export async function finalizeAnnualClose(financialYearId: string): Promise<Acti
 
 export async function savePostingRule(data: { eventCode: string; eventName: string; debitAccountId: string; creditAccountId: string }): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     await configureAccountingPostingRule(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, data);
     revalidatePath("/financeiro/contabilidade");
     return {};

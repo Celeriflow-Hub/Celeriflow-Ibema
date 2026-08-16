@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { canEditModule, getTenantContextForModule, getTenantContextForModuleEdit, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
+import { canEditModule, getTenantContextForModule, getTenantContextForModuleEdit, getTenantContextForModuleOperation, isSystemAdministrator, type AppContext, type ModuleOperation } from "@/lib/platform/tenant-context";
 
 export type ProtocolContext = AppContext & {
   protocolAccess: {
@@ -13,6 +13,14 @@ export async function getProtocolContext(required: "view" | "edit" = "view"): Pr
   const context = required === "edit"
     ? await getTenantContextForModuleEdit("PROCESSOS")
     : await getTenantContextForModule("PROCESSOS");
+  const isAdmin = isSystemAdministrator(context.user);
+  return { ...context, protocolAccess: { isAdmin, canView: true, canEdit: canEditModule(context.user, "PROCESSOS") } };
+}
+
+export async function getProtocolContextForOperation(
+  operation: Extract<ModuleOperation, "create" | "update" | "delete">,
+): Promise<ProtocolContext> {
+  const context = await getTenantContextForModuleOperation("PROCESSOS", operation);
   const isAdmin = isSystemAdministrator(context.user);
   return { ...context, protocolAccess: { isAdmin, canView: true, canEdit: canEditModule(context.user, "PROCESSOS") } };
 }

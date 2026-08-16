@@ -1,13 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { z } from "zod";
 import { nextYearlyCode } from "@/lib/sequence";
 import type { SegMobFormData, SegMobKind } from "./types";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("SEGURANCA")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("SEGURANCA", operation)).prisma;
 }
 
 const kindSchema = z.enum(["guarda", "ocorrencia", "infracao", "registro"]);
@@ -56,7 +56,7 @@ function validateInput(kind: SegMobKind, data: SegMobFormData, id?: string) {
 }
 
 async function nextSecurityCode(kind: SegMobKind) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   if (kind === "guarda") {
     const items = await prisma.segurancaGuarda.findMany({ select: { matricula: true } });
     return nextYearlyCode({ prisma, key: "seguranca-guarda", prefix: "GCM", existingCodes: items.map(({ matricula }) => ({ code: matricula })) });
@@ -74,7 +74,7 @@ async function nextSecurityCode(kind: SegMobKind) {
 }
 
 export async function createSegMobItem(kind: SegMobKind, data: SegMobFormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   if (!kindSchema.safeParse(kind).success) return { error: "Tipo de registro invalido." };
   if (!data.code.trim()) data = { ...data, code: await nextSecurityCode(kind) };
   const error = validateInput(kind, data);
@@ -156,7 +156,7 @@ export async function createSegMobItem(kind: SegMobKind, data: SegMobFormData) {
 }
 
 export async function updateSegMobItem(kind: SegMobKind, id: string, data: SegMobFormData) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   const error = validateInput(kind, data, id);
   if (error) return { error };
 
@@ -240,7 +240,7 @@ export async function updateSegMobItem(kind: SegMobKind, id: string, data: SegMo
 }
 
 export async function toggleSegMobItemStatus(kind: SegMobKind, id: string, isActive: boolean) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   if (!kindSchema.safeParse(kind).success || !z.string().cuid().safeParse(id).success || typeof isActive !== "boolean") {
     return { error: "Dados invalidos para alterar o status." };
   }

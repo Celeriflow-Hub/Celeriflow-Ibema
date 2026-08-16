@@ -1,14 +1,14 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("SOCIAL")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("SOCIAL", operation)).prisma;
 }
 
 export async function createSocialUnit(data: { name: string; type: string; phone?: string; email?: string; addressId?: string; realEstateId?: string; managerId?: string }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   try {
     const unit = await prisma.socialUnit.create({
       data: {
@@ -31,7 +31,7 @@ export async function createSocialUnit(data: { name: string; type: string; phone
 }
 
 export async function updateSocialUnit(id: string, data: { name: string; type: string; phone?: string; email?: string; realEstateId?: string; managerId?: string }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     const unit = await prisma.socialUnit.update({
       where: { id },
@@ -54,7 +54,7 @@ export async function updateSocialUnit(id: string, data: { name: string; type: s
 }
 
 export async function toggleSocialUnitStatus(id: string, isActive: boolean) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     const unit = await prisma.socialUnit.update({
       where: { id },
@@ -70,7 +70,7 @@ export async function toggleSocialUnitStatus(id: string, isActive: boolean) {
 }
 
 export async function createFamily(data: { representativeId: string; nis?: string; familyCode?: string; income?: number; perCapitaIncome?: number; vulnerabilities?: string }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   try {
     const family = await prisma.socialFamily.create({
       data: {
@@ -92,7 +92,7 @@ export async function createFamily(data: { representativeId: string; nis?: strin
 }
 
 export async function updateFamily(id: string, data: { representativeId: string; nis?: string; familyCode?: string; income?: number; perCapitaIncome?: number; vulnerabilities?: string }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     const family = await prisma.socialFamily.update({
       where: { id },
@@ -115,7 +115,7 @@ export async function updateFamily(id: string, data: { representativeId: string;
 }
 
 export async function toggleFamilyStatus(id: string, status: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     const family = await prisma.socialFamily.update({
       where: { id },
@@ -131,7 +131,7 @@ export async function toggleFamilyStatus(id: string, status: string) {
 }
 
 export async function createAttendance(data: { familyId: string; unitId: string; professionalId: string; type: string; description: string; secrecyLevel?: string; personId?: string }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   try {
     const attendance = await prisma.socialAttendance.create({
       data: {
@@ -155,7 +155,7 @@ export async function createAttendance(data: { familyId: string; unitId: string;
 }
 
 export async function updateAttendance(id: string, data: { familyId: string; unitId: string; professionalId: string; type: string; description: string; secrecyLevel?: string; personId?: string }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     const attendance = await prisma.socialAttendance.update({
       where: { id },
@@ -179,7 +179,7 @@ export async function updateAttendance(id: string, data: { familyId: string; uni
 }
 
 export async function createSocialBenefit(data: { name: string; description?: string; isRecurrent: boolean; expense?: { description: string; value: number; appropriationId: string; secretariatId: string } }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   try {
     const benefit = await prisma.socialBenefit.create({
       data: {
@@ -206,7 +206,7 @@ export async function createSocialBenefit(data: { name: string; description?: st
 }
 
 export async function createSocialProgram(data: { name: string; sphere: string; description?: string; expense?: { description: string; value: number; appropriationId: string; secretariatId: string } }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   try {
     const program = await prisma.socialProgram.create({
       data: {
@@ -232,7 +232,7 @@ export async function createSocialProgram(data: { name: string; sphere: string; 
   }
 }
 export async function toggleAttendanceStatus(id: string, isActive: boolean) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     const attendance = await prisma.socialAttendance.update({
       where: { id },
@@ -248,7 +248,7 @@ export async function toggleAttendanceStatus(id: string, isActive: boolean) {
 }
 
 export async function createBenefitConcession(data: { benefitId: string; familyId: string; professionalId: string; quantity?: number; value?: number; personId?: string }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("create");
   try {
     const concession = await prisma.socialBenefitConcession.create({
       data: {

@@ -1,6 +1,6 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { classifyBankMovement, sendMovementToMunicipalSystem, type ClassificationResult, type MunicipalIntegrationReceipt } from "@/lib/financeiro/classification-engine";
 import { revalidatePath } from "next/cache";
 
@@ -15,7 +15,7 @@ function errorMessage(error: unknown, fallback: string) {
 
 export async function getBankStatementItemsAction(): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModule("FINANCEIRO");
     const items = await context.prisma.bankStatementItem.findMany({
       where: { banco: "001 - Banco Virtual Robonuvem" },
       orderBy: { date: "desc" },
@@ -36,7 +36,7 @@ export async function classifyItemAction(input: {
   contaNumero?: string;
 }): Promise<ActionResult<ClassificationResult>> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModule("FINANCEIRO");
     const result = await classifyBankMovement(context.prisma, input);
     return { data: result };
   } catch (err: unknown) {
@@ -46,7 +46,7 @@ export async function classifyItemAction(input: {
 
 export async function transmitItemAction(input: { statementItemId: string }): Promise<ActionResult<MunicipalIntegrationReceipt>> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const item = await context.prisma.bankStatementItem.findFirst({ where: { id: input.statementItemId, banco: "001 - Banco Virtual Robonuvem" }, select: { id: true } });
     if (!item) return { error: "O lançamento informado não pertence ao Banco Virtual Robonuvem." };
     const receipt = await sendMovementToMunicipalSystem(context.prisma, {

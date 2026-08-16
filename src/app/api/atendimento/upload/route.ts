@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { AccessError } from "@/lib/platform/tenant-context";
-import { getAttendanceOperationalContext, ombudsmanScope, ticketScope } from "@/lib/attendance/access";
+import { getAttendanceOperationalContextForOperation, ombudsmanScope, ticketScope } from "@/lib/attendance/access";
 import { uploadFile } from "@/lib/platform/blob";
 
 export const runtime = "nodejs";
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
-    const context = await getAttendanceOperationalContext();
+    const context = await getAttendanceOperationalContextForOperation("create");
     const formData = await request.formData();
     const file = formData.get("file");
     const entityType = String(formData.get("entityType") || "");

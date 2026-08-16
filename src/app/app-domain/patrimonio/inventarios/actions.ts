@@ -7,7 +7,7 @@ import {
   recordInventoryCount,
   submitInventoryForApproval,
 } from "@/lib/patrimonio/inventory-service";
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -30,7 +30,7 @@ export async function createInventorySessionAction(data: { warehouseId: string }
   const parsed = z.object({ warehouseId: text }).safeParse(data);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados do inventário inválidos." };
   try {
-    const context = await getTenantContextForModuleEdit("PATRIMONIO");
+    const context = await getTenantContextForModuleOperation("PATRIMONIO", "create");
     const session = await createInventorySession(context.prisma, {
       warehouseId: parsed.data.warehouseId,
       actor: { usuarioId: context.user.id, employeeId: context.user.employeeId },
@@ -60,7 +60,7 @@ export async function recordInventoryCountAction(data: {
   }).safeParse(data);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados da contagem inválidos." };
   try {
-    const context = await getTenantContextForModuleEdit("PATRIMONIO");
+    const context = await getTenantContextForModuleOperation("PATRIMONIO", "update");
     await recordInventoryCount(context.prisma, parsed.data);
     invalidateInventoryPaths(parsed.data.sessionId);
     return { message: "Contagem registrada." };
@@ -73,7 +73,7 @@ export async function submitInventoryForApprovalAction(data: { sessionId: string
   const parsed = z.object({ sessionId: text }).safeParse(data);
   if (!parsed.success) return { error: "Inventário inválido." };
   try {
-    const context = await getTenantContextForModuleEdit("PATRIMONIO");
+    const context = await getTenantContextForModuleOperation("PATRIMONIO", "update");
     await submitInventoryForApproval(context.prisma, parsed.data.sessionId);
     invalidateInventoryPaths(parsed.data.sessionId);
     return { message: "Inventário enviado para aprovação; o bloqueio de movimentações foi mantido." };
@@ -86,7 +86,7 @@ export async function closeApprovedInventoryAction(data: { sessionId: string; ap
   const parsed = z.object({ sessionId: text, approvalEvidence: text.max(2000) }).safeParse(data);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados da aprovação inválidos." };
   try {
-    const context = await getTenantContextForModuleEdit("PATRIMONIO");
+    const context = await getTenantContextForModuleOperation("PATRIMONIO", "update");
     await closeApprovedInventory(context.prisma, {
       ...parsed.data,
       actor: { usuarioId: context.user.id, employeeId: context.user.employeeId },

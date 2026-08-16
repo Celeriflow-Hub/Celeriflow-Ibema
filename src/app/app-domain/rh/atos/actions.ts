@@ -1,16 +1,16 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("RH")).prisma;
+async function getTenantPrisma(operation: "create" | "update" | "delete") {
+  return (await getTenantContextForModuleOperation("RH", operation)).prisma;
 }
 
 export async function saveAtoPessoal(formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const id = formData.get("id") as string | null;
+  const prisma = await getTenantPrisma(id ? "update" : "create");
   try {
-    const id = formData.get("id") as string | null;
     const employeeId = formData.get("employeeId") as string;
     const type = formData.get("type") as string;
     const date = formData.get("date") as string;
@@ -49,7 +49,7 @@ export async function saveAtoPessoal(formData: FormData) {
 }
 
 export async function deleteAtoPessoal(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   try {
     await prisma.personnelAct.delete({
       where: { id },

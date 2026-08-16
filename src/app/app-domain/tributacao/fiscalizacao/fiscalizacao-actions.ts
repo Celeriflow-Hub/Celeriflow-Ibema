@@ -1,6 +1,6 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { runTaxAuditCrossCheck, issueTaxInfractionNotice, type TaxAuditCrossCheckResult } from "@/lib/tributacao/inteligencia-tributaria-engine";
 import type { TaxAuditCrossCheck } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -25,7 +25,7 @@ export async function runTaxAuditAction(input: z.infer<typeof auditSchema>): Pro
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
 
   try {
-    const context = await getTenantContextForModuleEdit("TRIBUTACAO");
+    const context = await getTenantContextForModuleOperation("TRIBUTACAO", "create");
     const result = await runTaxAuditCrossCheck(context.prisma, parsed.data);
 
     revalidatePath("/tributacao/fiscalizacao");
@@ -37,7 +37,7 @@ export async function runTaxAuditAction(input: z.infer<typeof auditSchema>): Pro
 
 export async function issueInfractionNoticeAction(crossCheckId: string): Promise<ActionResult<{ record: TaxAuditCrossCheck; numeroAutoInfracao: string }>> {
   try {
-    const context = await getTenantContextForModuleEdit("TRIBUTACAO");
+    const context = await getTenantContextForModuleOperation("TRIBUTACAO", "update");
     const result = await issueTaxInfractionNotice(context.prisma, crossCheckId);
 
     revalidatePath("/tributacao/fiscalizacao");
@@ -49,7 +49,7 @@ export async function issueInfractionNoticeAction(crossCheckId: string): Promise
 
 export async function getTaxAuditRecordsAction(): Promise<ActionResult<TaxAuditCrossCheck[]>> {
   try {
-    const context = await getTenantContextForModuleEdit("TRIBUTACAO");
+    const context = await getTenantContextForModule("TRIBUTACAO");
     const records = await context.prisma.taxAuditCrossCheck.findMany({
       orderBy: { createdAt: "desc" },
       take: 15,

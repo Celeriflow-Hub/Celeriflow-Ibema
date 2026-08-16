@@ -1,15 +1,15 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("ADMINISTRACAO")).prisma;
+async function getTenantPrisma(operation: ModuleOperation) {
+  return (await getTenantContextForModuleOperation("ADMINISTRACAO", operation)).prisma;
 }
 
 // --- Secretariats ---
 export async function deactivateSecretariat(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   await prisma.secretariat.update({
     where: { id },
     data: { isActive: false }
@@ -18,7 +18,7 @@ export async function deactivateSecretariat(id: string) {
 }
 
 export async function activateSecretariat(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   await prisma.secretariat.update({
     where: { id },
     data: { isActive: true }
@@ -27,7 +27,7 @@ export async function activateSecretariat(id: string) {
 }
 
 export async function updateSecretariat(id: string, data: { name: string, acronym: string, managerName: string }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   await prisma.secretariat.update({
     where: { id },
     data
@@ -37,7 +37,7 @@ export async function updateSecretariat(id: string, data: { name: string, acrony
 
 // --- Departments ---
 export async function deactivateDepartment(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   await prisma.department.update({
     where: { id },
     data: { isActive: false }
@@ -46,7 +46,7 @@ export async function deactivateDepartment(id: string) {
 }
 
 export async function activateDepartment(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   await prisma.department.update({
     where: { id },
     data: { isActive: true }
@@ -55,7 +55,7 @@ export async function activateDepartment(id: string) {
 }
 
 export async function updateDepartment(id: string, data: { name: string, description: string, secretariatId: string }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   await prisma.department.update({
     where: { id },
     data
@@ -65,7 +65,7 @@ export async function updateDepartment(id: string, data: { name: string, descrip
 
 // --- Roles ---
 export async function deactivateRole(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   await prisma.role.update({
     where: { id },
     data: { isActive: false }
@@ -74,7 +74,7 @@ export async function deactivateRole(id: string) {
 }
 
 export async function activateRole(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   await prisma.role.update({
     where: { id },
     data: { isActive: true }
@@ -83,7 +83,7 @@ export async function activateRole(id: string) {
 }
 
 export async function updateRole(id: string, data: { name: string, level: string, canSign: boolean }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   await prisma.role.update({
     where: { id },
     data
@@ -93,7 +93,7 @@ export async function updateRole(id: string, data: { name: string, level: string
 
 // --- Employees ---
 export async function deactivateEmployee(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   await prisma.employee.update({
     where: { id },
     data: { isActive: false }
@@ -102,7 +102,7 @@ export async function deactivateEmployee(id: string) {
 }
 
 export async function activateEmployee(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   await prisma.employee.update({
     where: { id },
     data: { isActive: true }
@@ -118,7 +118,7 @@ export async function updateEmployee(id: string, data: {
   secretariatId: string | null,
   departmentId: string | null
 }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   await prisma.employee.update({
     where: { id },
     data
@@ -128,7 +128,7 @@ export async function updateEmployee(id: string, data: {
 
 // --- Administrative Units ---
 export async function updateAdministrativeUnit(id: string, data: { name: string, type: string, managerName: string, secretariatId: string }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   await prisma.administrativeUnit.update({
     where: { id },
     data
@@ -138,7 +138,7 @@ export async function updateAdministrativeUnit(id: string, data: { name: string,
 
 // --- Internal Demands ---
 export async function updateInternalDemand(id: string, data: { title: string, status: string, priority: string, assigneeId: string | null, secretariatId: string | null, departmentId: string | null }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   await prisma.internalDemand.update({
     where: { id },
     data
@@ -148,13 +148,13 @@ export async function updateInternalDemand(id: string, data: { title: string, st
 
 // --- Calendar Events ---
 export async function deleteCalendarEvent(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   await prisma.calendarEvent.delete({ where: { id } });
   revalidatePath('/administracao/calendario');
 }
 
 export async function updateCalendarEvent(id: string, data: { title: string, description: string, date: Date, type: string, isHoliday: boolean }) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   await prisma.calendarEvent.update({ where: { id }, data });
   revalidatePath('/administracao/calendario');
 }

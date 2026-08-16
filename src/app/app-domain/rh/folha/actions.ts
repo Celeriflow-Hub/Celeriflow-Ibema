@@ -1,16 +1,16 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("RH")).prisma;
+async function getTenantPrisma(operation: "create" | "update" | "delete") {
+  return (await getTenantContextForModuleOperation("RH", operation)).prisma;
 }
 
 export async function saveFolha(formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const id = formData.get("id") as string | null;
+  const prisma = await getTenantPrisma(id ? "update" : "create");
   try {
-    const id = formData.get("id") as string | null;
     const competence = formData.get("competence") as string;
     const type = formData.get("type") as string;
     const status = formData.get("status") as string;
@@ -45,7 +45,7 @@ export async function saveFolha(formData: FormData) {
 }
 
 export async function deleteFolha(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   try {
     await prisma.payroll.delete({
       where: { id },
@@ -59,7 +59,7 @@ export async function deleteFolha(id: string) {
 }
 
 export async function processPayroll(payrollId: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     const employees = await prisma.employee.findMany({
       where: { isActive: true },

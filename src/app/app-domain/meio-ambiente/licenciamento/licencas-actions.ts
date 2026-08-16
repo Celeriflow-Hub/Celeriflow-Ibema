@@ -1,6 +1,6 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { generateEnvironmentalLicense, type EnvironmentalLicenseInput, type EnvironmentalLicenseResult } from "@/lib/meio-ambiente/licenciamento-engine";
 import type { EnvironmentalLicense } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -13,7 +13,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 export async function issueEnvironmentalLicenseAction(input: EnvironmentalLicenseInput): Promise<ActionResult<EnvironmentalLicenseResult>> {
   try {
-    const context = await getTenantContextForModuleEdit("MEIO_AMBIENTE");
+    const context = await getTenantContextForModuleOperation("MEIO_AMBIENTE", "create");
     const result = await generateEnvironmentalLicense(context.prisma, input);
 
     revalidatePath("/meio-ambiente/licenciamento");
@@ -25,7 +25,7 @@ export async function issueEnvironmentalLicenseAction(input: EnvironmentalLicens
 
 export async function getIssuedLicensesAction(): Promise<ActionResult<EnvironmentalLicense[]>> {
   try {
-    const context = await getTenantContextForModuleEdit("MEIO_AMBIENTE");
+    const context = await getTenantContextForModule("MEIO_AMBIENTE");
     const licenses = await context.prisma.environmentalLicense.findMany({
       orderBy: { createdAt: "desc" },
       take: 15,

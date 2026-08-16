@@ -1,6 +1,6 @@
 "use server";
 
-import { getProtocolContext } from "@/lib/protocols/access";
+import { getProtocolContextForOperation } from "@/lib/protocols/access";
 import { notifyProtocolDepartment, notifyProtocolUsers } from "@/lib/protocols/notifications";
 import { createValidatedProcess } from "@/lib/protocols/service";
 import { revalidatePath } from "next/cache";
@@ -9,8 +9,8 @@ import { redirect } from "next/navigation";
 const AWAITING_RECEIPT = "Aguardando Recebimento";
 const AWAITING_ACCOUNTING = "Aguardando Contabilidade";
 
-async function getOperationalContext() {
-  const context = await getProtocolContext("edit");
+async function getOperationalContext(operation: "create" | "update") {
+  const context = await getProtocolContextForOperation(operation);
   if (!context.user.employeeId) {
     throw new Error("Seu usuario precisa estar vinculado a um servidor para realizar esta operacao.");
   }
@@ -45,7 +45,7 @@ function revalidateProtocolPages() {
 }
 
 export async function createProtocol(formData: FormData): Promise<void> {
-  const { prisma, employee } = await getOperationalContext();
+  const { prisma, employee } = await getOperationalContext("create");
   const processTypeId = String(formData.get("processTypeId") || "");
   const subjectId = String(formData.get("subjectId") || "");
   const personId = String(formData.get("personId") || "") || null;
@@ -67,7 +67,7 @@ export async function createProtocol(formData: FormData): Promise<void> {
 
 export async function receiveProcess(processId: string): Promise<{ error: string | null }> {
   try {
-    const { prisma, employee, departmentId } = await getOperationalContext();
+    const { prisma, employee, departmentId } = await getOperationalContext("update");
 
     await prisma.$transaction(async (tx) => {
       const process = await tx.process.findUnique({
@@ -145,7 +145,7 @@ export async function forwardProcess(data: {
   dueAt?: string;
 }): Promise<{ error: string | null }> {
   try {
-    const { prisma, employee, departmentId } = await getOperationalContext();
+    const { prisma, employee, departmentId } = await getOperationalContext("update");
     const destinationEmployeeId = data.destinationEmployeeId || null;
     const reason = data.reason?.trim() || null;
     const dueAt = data.dueAt ? new Date(data.dueAt) : null;
@@ -273,7 +273,7 @@ export async function addProcessDispatch(data: {
   dispatchType: string;
 }): Promise<{ error: string | null }> {
   try {
-    const { prisma, employee, departmentId } = await getOperationalContext();
+    const { prisma, employee, departmentId } = await getOperationalContext("create");
     const content = data.content.trim();
     const dispatchType = ["Despacho", "Parecer", "Decisao"].includes(data.dispatchType) ? data.dispatchType : "Despacho";
     if (!content) throw new Error("Informe o conteudo do despacho.");
@@ -312,7 +312,7 @@ export async function addProcessDispatch(data: {
 
 export async function concludeProcess(processId: string, reason: string): Promise<{ error: string | null }> {
   try {
-    const { prisma, employee, departmentId } = await getOperationalContext();
+    const { prisma, employee, departmentId } = await getOperationalContext("update");
     const description = reason.trim();
     if (!description) throw new Error("Informe a justificativa da conclusao.");
 
@@ -340,7 +340,7 @@ export async function concludeProcess(processId: string, reason: string): Promis
 
 export async function archiveProcess(processId: string, reason: string): Promise<{ error: string | null }> {
   try {
-    const { prisma, employee, departmentId } = await getOperationalContext();
+    const { prisma, employee, departmentId } = await getOperationalContext("update");
     const archiveReason = reason.trim();
     if (!archiveReason) throw new Error("Informe a justificativa do arquivamento.");
 
@@ -369,7 +369,7 @@ export async function archiveProcess(processId: string, reason: string): Promise
 
 export async function reopenProcess(processId: string, reason: string): Promise<{ error: string | null }> {
   try {
-    const { prisma, employee, departmentId } = await getOperationalContext();
+    const { prisma, employee, departmentId } = await getOperationalContext("update");
     const description = reason.trim();
     if (!description) throw new Error("Informe a justificativa da reabertura.");
 
@@ -397,7 +397,7 @@ export async function reopenProcess(processId: string, reason: string): Promise<
 
 export async function markProtocolNotificationRead(notificationId: string): Promise<{ error: string | null }> {
   try {
-    const { prisma, user } = await getProtocolContext();
+    const { prisma, user } = await getProtocolContextForOperation("update");
     const updated = await prisma.protocolNotification.updateMany({
       where: { id: notificationId, userId: user.id, readAt: null },
       data: { readAt: new Date() },

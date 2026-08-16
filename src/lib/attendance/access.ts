@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { canEditModule, getTenantContextForModule, getTenantContextForModuleEdit, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
+import { canEditModule, getTenantContextForModule, getTenantContextForModuleEdit, getTenantContextForModuleOperation, isSystemAdministrator, type AppContext, type ModuleOperation } from "@/lib/platform/tenant-context";
 
 export type AttendanceContext = AppContext & {
   attendanceAccess: {
@@ -25,6 +25,19 @@ export async function getAttendanceContext(required: "view" | "edit" = "view"): 
 
 export async function getAttendanceOperationalContext() {
   const context = await getAttendanceContext("edit");
+  return getOperationalContext(context);
+}
+
+export async function getAttendanceOperationalContextForOperation(operation: ModuleOperation) {
+  const context = await getTenantContextForModuleOperation("ATENDIMENTO", operation);
+  const role = context.user.role.toLowerCase();
+  const isAdmin = isSystemAdministrator(context.user);
+  const isManager = isAdmin || role.includes("gestor");
+  const isOmbudsman = isAdmin || role.includes("ouvid");
+  return getOperationalContext({ ...context, attendanceAccess: { isAdmin, isManager, isOmbudsman, canView: true, canEdit: canEditModule(context.user, "ATENDIMENTO") } });
+}
+
+async function getOperationalContext(context: AttendanceContext) {
   if (!context.user.employeeId) {
     throw new Error("Seu usuario precisa estar vinculado a um servidor para realizar esta operacao.");
   }

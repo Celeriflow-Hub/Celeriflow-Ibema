@@ -1,16 +1,16 @@
 "use server";
 
-import { getTenantContextForModuleEdit } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma() {
-  return (await getTenantContextForModuleEdit("RH")).prisma;
+async function getTenantPrisma(operation: "create" | "update" | "delete") {
+  return (await getTenantContextForModuleOperation("RH", operation)).prisma;
 }
 
 export async function saveServidor(formData: FormData) {
-  const prisma = await getTenantPrisma();
+  const id = formData.get("id") as string | null;
+  const prisma = await getTenantPrisma(id ? "update" : "create");
   try {
-    const id = formData.get("id") as string | null;
     const name = formData.get("name") as string;
     const cpf = formData.get("cpf") as string;
     const registration = formData.get("registration") as string;
@@ -61,7 +61,7 @@ export async function saveServidor(formData: FormData) {
 }
 
 export async function toggleServidorStatus(id: string, isActive: boolean) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("update");
   try {
     await prisma.employee.update({
       where: { id },
@@ -76,7 +76,7 @@ export async function toggleServidorStatus(id: string, isActive: boolean) {
 }
 
 export async function deleteServidor(id: string) {
-  const prisma = await getTenantPrisma();
+  const prisma = await getTenantPrisma("delete");
   try {
     // Delete is dangerous as it may fail due to foreign key constraints.
     // The preferred way in this module is soft-delete via toggleServidorStatus,

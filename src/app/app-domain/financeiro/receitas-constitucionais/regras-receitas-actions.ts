@@ -1,6 +1,6 @@
 "use server";
 
-import { getTenantContextForModuleEdit, isSystemAdministrator } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, getTenantContextForModuleOperation, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
@@ -40,7 +40,7 @@ const ruleSchema = z.object({
  */
 export async function seedConstitutionalRulesAction(): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     const { prisma } = context;
 
     const count = await prisma.classificationRule.count({
@@ -275,7 +275,7 @@ export async function seedConstitutionalRulesAction(): Promise<ActionResult> {
 
 export async function getConstitutionalRulesAction(): Promise<ActionResult<ConstitutionalRulesData>> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModule("FINANCEIRO");
     const rules = await context.prisma.classificationRule.findMany({
       where: { tipoMovimento: "RECEITA_CONSTITUCIONAL" },
       orderBy: { prioridade: "asc" },
@@ -298,7 +298,7 @@ export async function getConstitutionalRulesAction(): Promise<ActionResult<Const
 
 export async function getExceptionQueueAction(): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModule("FINANCEIRO");
     const items = await context.prisma.exceptionQueueItem.findMany({
       where: { status: "PENDENTE", banco: pocVirtualBank.name },
       orderBy: { createdAt: "desc" },
@@ -314,7 +314,7 @@ export async function createRuleAction(data: z.infer<typeof ruleSchema>): Promis
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
 
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const bankAccount = await context.prisma.bankAccount.findFirst({
       where: {
         id: parsed.data.bankAccountId,
@@ -343,7 +343,7 @@ export async function createRuleAction(data: z.infer<typeof ruleSchema>): Promis
 
 export async function resolveExceptionAction(exceptionId: string, ruleText?: string): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
     const { prisma, user } = context;
 
     const exceptionItem = await prisma.exceptionQueueItem.findUnique({
@@ -396,7 +396,7 @@ export async function resolveExceptionAction(exceptionId: string, ruleText?: str
 
 export async function processConstitutionalRevenueAction(statementItemId: string): Promise<ActionResult> {
   try {
-    const context = await getTenantContextForModuleEdit("FINANCEIRO");
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const result = await context.prisma.$transaction(async (tx) => {
       const item = await tx.bankStatementItem.findUnique({ where: { id: statementItemId } });
       if (!item) throw new Error("Lançamento bancário não encontrado.");

@@ -1,38 +1,9 @@
 import { Building2, Save, ArrowLeft, Building, Briefcase, Phone, Mail } from "lucide-react";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { MaskedInput } from "@/components/ui/MaskedInput";
+import { createCompany } from "../../actions";
 
 export default function NovaPessoaJuridicaPage() {
-  async function createCompany(formData: FormData) {
-    "use server";
-    const { prisma } = await getTenantContextForModuleOperation("CADASTROS", "create");
-    
-    const corporateName = formData.get("corporateName") as string;
-    const tradeName = formData.get("tradeName") as string;
-    const cnpj = formData.get("cnpj") as string;
-    const emailPrimary = formData.get("emailPrimary") as string;
-    const phone = formData.get("phone") as string;
-    const municipalInsc = formData.get("municipalInsc") as string;
-    const companyType = formData.get("companyType") as string;
-
-    await prisma.company.create({
-      data: {
-        corporateName,
-        tradeName,
-        cnpj: cnpj.replace(/[^a-zA-Z0-9]/g, ""), // clean before save
-        emailPrimary,
-        phone,
-        municipalInsc,
-        companyType,
-        status: "Ativo"
-      }
-    });
-
-    redirect("/cadastros/pessoas-juridicas");
-  }
-
   return (
     <div className="max-w-4xl animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-6">

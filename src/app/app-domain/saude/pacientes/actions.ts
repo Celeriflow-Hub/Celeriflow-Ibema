@@ -1,6 +1,7 @@
 "use server";
 
 import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
+import { requireValidCpf } from "@/lib/identifiers/brazilian-identifiers";
 import { revalidatePath } from 'next/cache';
 
 async function getTenantPrisma(operation: ModuleOperation) {
@@ -33,7 +34,7 @@ export async function createPatient(data: PatientInput) {
 
     // Se nao enviou personId, cria uma nova pessoa
     if (!personId) {
-      const cpf = data.cpf?.trim();
+      const cpf = requireValidCpf(data.cpf);
       if (!data.fullName || !cpf) {
         return { error: "Nome completo e CPF são obrigatórios para cadastrar um novo paciente." };
       }

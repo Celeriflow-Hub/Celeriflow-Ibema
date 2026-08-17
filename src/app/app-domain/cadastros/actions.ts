@@ -1,6 +1,7 @@
 "use server";
 
 import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
+import { requireValidCnpj, requireValidCpf } from "@/lib/identifiers/brazilian-identifiers";
 import { revalidatePath } from "next/cache";
 
 type PersonUpdateData = {
@@ -39,6 +40,48 @@ type DocumentUpdateData = {
 
 async function getTenantPrisma(operation: ModuleOperation) {
   return (await getTenantContextForModuleOperation("CADASTROS", operation)).prisma;
+}
+
+function textValue(formData: FormData, name: string) {
+  return String(formData.get(name) || "").trim();
+}
+
+export async function createPerson(formData: FormData): Promise<void> {
+  const prisma = await getTenantPrisma("create");
+  const fullName = textValue(formData, "fullName");
+  const cpf = requireValidCpf(textValue(formData, "cpf"));
+  if (!fullName) throw new Error("Nome completo é obrigatório.");
+  await prisma.person.create({
+    data: {
+      fullName,
+      cpf,
+      email: textValue(formData, "email") || null,
+      phonePrimary: textValue(formData, "phonePrimary") || null,
+      birthDate: textValue(formData, "birthDate") ? new Date(textValue(formData, "birthDate")) : null,
+      status: "Ativo",
+    },
+  });
+  revalidatePath("/cadastros/pessoas-fisicas");
+}
+
+export async function createCompany(formData: FormData): Promise<void> {
+  const prisma = await getTenantPrisma("create");
+  const corporateName = textValue(formData, "corporateName");
+  const cnpj = requireValidCnpj(textValue(formData, "cnpj"));
+  if (!corporateName) throw new Error("Razão social é obrigatória.");
+  await prisma.company.create({
+    data: {
+      corporateName,
+      cnpj,
+      tradeName: textValue(formData, "tradeName") || null,
+      emailPrimary: textValue(formData, "emailPrimary") || null,
+      phone: textValue(formData, "phone") || null,
+      municipalInsc: textValue(formData, "municipalInsc") || null,
+      companyType: textValue(formData, "companyType") || null,
+      status: "Ativo",
+    },
+  });
+  revalidatePath("/cadastros/pessoas-juridicas");
 }
 
 // Person

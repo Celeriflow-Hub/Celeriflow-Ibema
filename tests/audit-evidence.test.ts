@@ -45,6 +45,9 @@ test("defines authentication, protected-operation, and usage-monitoring event ty
     "INSTANCE_CONFIGURATION_CHANGED",
     "INTERNAL_NOTIFICATION_CREATED",
     "INTERNAL_NOTIFICATION_READ",
+    "PERSON_MERGE_PROPOSED",
+    "PERSON_MERGE_EXECUTED",
+    "PERSON_MERGE_REVERSED",
   ]);
 });
 

@@ -387,6 +387,10 @@ model Person {
 
   culturaAgents       CulturaAgente[]  @relation("CulturaAgentPerson")
   culturaReservations CulturaReserva[] @relation("CulturaReservationPerson")
+  mergeSourceRequests PersonMergeRequest[] @relation("PersonMergeSource")
+  mergeTargetRequests PersonMergeRequest[] @relation("PersonMergeTarget")
+  mergeSourceLedger   PersonMergeLedger[]  @relation("PersonMergeLedgerSource")
+  mergeTargetLedger   PersonMergeLedger[]  @relation("PersonMergeLedgerTarget")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -5872,6 +5876,10 @@ model Usuario {
   expenseRequests              Expense[]                     @relation("ExpenseRequestedBy")
   expenseApprovals             Expense[]                     @relation("ExpenseApprovedBy")
   auditEvents                  AuditEvent[]                  @relation("AuditEventActor")
+  proposedPersonMergeRequests  PersonMergeRequest[]          @relation("PersonMergeProposer")
+  approvedPersonMergeRequests  PersonMergeRequest[]          @relation("PersonMergeApprover")
+  reversedPersonMergeRequests  PersonMergeRequest[]          @relation("PersonMergeReverser")
+  personMergeLedger            PersonMergeLedger[]           @relation("PersonMergeLedgerActor")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -5892,6 +5900,53 @@ model AuditEvent {
   @@index([actorUsuarioId, createdAt])
   @@index([eventType, createdAt])
   @@index([targetType, targetId, createdAt])
+}
+
+// Mutable workflow state for an approved PF-only duplicate merge.
+model PersonMergeRequest {
+  id                  String   @id @default(cuid())
+  status              String   @default("PROPOSED") // PROPOSED, EXECUTED, REVERSED
+  sourcePersonId      String
+  sourcePerson        Person   @relation("PersonMergeSource", fields: [sourcePersonId], references: [id], onDelete: Restrict)
+  targetPersonId      String
+  targetPerson        Person   @relation("PersonMergeTarget", fields: [targetPersonId], references: [id], onDelete: Restrict)
+  proposedByUsuarioId String
+  proposedByUsuario   Usuario  @relation("PersonMergeProposer", fields: [proposedByUsuarioId], references: [id], onDelete: Restrict)
+  approvedByUsuarioId String?
+  approvedByUsuario   Usuario? @relation("PersonMergeApprover", fields: [approvedByUsuarioId], references: [id], onDelete: Restrict)
+  reversedByUsuarioId String?
+  reversedByUsuario   Usuario? @relation("PersonMergeReverser", fields: [reversedByUsuarioId], references: [id], onDelete: Restrict)
+  approvedAt          DateTime?
+  executedAt          DateTime?
+  reversedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  ledger PersonMergeLedger[]
+
+  @@index([status, createdAt])
+  @@index([sourcePersonId])
+  @@index([targetPersonId])
+}
+
+// Immutable identifier-only evidence and manifest of every merge state transition.
+model PersonMergeLedger {
+  id             String             @id @default(cuid())
+  requestId      String
+  request        PersonMergeRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  eventType      String             // PROPOSED, EXECUTED, REVERSED
+  sourcePersonId String
+  sourcePerson   Person             @relation("PersonMergeLedgerSource", fields: [sourcePersonId], references: [id], onDelete: Restrict)
+  targetPersonId String
+  targetPerson   Person             @relation("PersonMergeLedgerTarget", fields: [targetPersonId], references: [id], onDelete: Restrict)
+  actorUsuarioId String
+  actorUsuario   Usuario            @relation("PersonMergeLedgerActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict)
+  manifest       Json
+  createdAt      DateTime           @default(now())
+
+  @@index([requestId, createdAt])
+  @@index([sourcePersonId, createdAt])
+  @@index([targetPersonId, createdAt])
 }
 
 model FinancialAuditLog {

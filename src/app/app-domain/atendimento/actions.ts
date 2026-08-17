@@ -6,6 +6,7 @@ import { nextYearlyCode } from "@/lib/sequence";
 import { getAttendanceContext, getAttendanceOperationalContextForOperation, ombudsmanScope, ticketScope } from "@/lib/attendance/access";
 import { createValidatedProcess } from "@/lib/protocols/service";
 import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { requireValidCnpj, requireValidCpf } from "@/lib/identifiers/brazilian-identifiers";
 import type { Prisma } from "@prisma/client";
 
 const TICKET_STATUSES = new Set(["Aberto", "Encaminhado", "Aguardando Recebimento", "Em Atendimento", "Aguardando Informação", "Resolvido", "Concluído", "Cancelado", "Reaberto"]);
@@ -83,7 +84,7 @@ export async function createTicket(formData: FormData): Promise<void> {
     let personId: string | null = null;
     let companyId: string | null = null;
     if (requesterType === "person") {
-      const cpf = stringValue(formData, "cpf").replace(/\D/g, "");
+      const cpf = requireValidCpf(stringValue(formData, "cpf"));
       const fullName = stringValue(formData, "fullName");
       const phone = stringValue(formData, "phone");
       if (!cpf || !fullName) throw new Error("Informe CPF e nome da pessoa solicitante.");
@@ -95,7 +96,7 @@ export async function createTicket(formData: FormData): Promise<void> {
       personId = person.id;
     }
     if (requesterType === "company") {
-      const cnpj = stringValue(formData, "cnpj").replace(/\D/g, "");
+      const cnpj = requireValidCnpj(stringValue(formData, "cnpj"));
       const corporateName = stringValue(formData, "corporateName");
       const phone = stringValue(formData, "companyPhone");
       if (!cnpj || !corporateName) throw new Error("Informe CNPJ e razao social da empresa solicitante.");
@@ -168,7 +169,7 @@ export async function createOmbudsman(formData: FormData): Promise<void> {
     }
     let personId: string | null = null;
     if (!isAnonymous) {
-      const cpf = stringValue(formData, "cpf").replace(/\D/g, "");
+      const cpf = requireValidCpf(stringValue(formData, "cpf"));
       const fullName = stringValue(formData, "fullName");
       if (!cpf || !fullName) throw new Error("Informe CPF e nome ou marque a manifestacao como anonima.");
       personId = (await tx.person.upsert({ where: { cpf }, create: { cpf, fullName, status: "Ativo" }, update: { fullName } })).id;

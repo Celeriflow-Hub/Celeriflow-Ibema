@@ -12,6 +12,9 @@ export const auditEventTypes = {
   instanceConfigurationChanged: "INSTANCE_CONFIGURATION_CHANGED",
   internalNotificationCreated: "INTERNAL_NOTIFICATION_CREATED",
   internalNotificationRead: "INTERNAL_NOTIFICATION_READ",
+  personMergeProposed: "PERSON_MERGE_PROPOSED",
+  personMergeExecuted: "PERSON_MERGE_EXECUTED",
+  personMergeReversed: "PERSON_MERGE_REVERSED",
 } as const;
 
 export type AuditEventType = (typeof auditEventTypes)[keyof typeof auditEventTypes];

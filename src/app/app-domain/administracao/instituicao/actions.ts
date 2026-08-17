@@ -3,6 +3,7 @@
 import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
+import { requireValidCep, requireValidCnpj } from "@/lib/identifiers/brazilian-identifiers";
 
 export async function saveInstitution(formData: FormData) {
   try {
@@ -26,12 +27,12 @@ export async function saveInstitution(formData: FormData) {
 
     const data: Prisma.InstitutionCreateInput = {
       name: formData.get("name") as string,
-      cnpj: formData.get("cnpj") as string,
+      cnpj: requireValidCnpj(formData.get("cnpj") as string),
       legalName: formData.get("legalName") as string,
       address: formData.get("address") as string,
       city: formData.get("city") as string,
       state: formData.get("state") as string,
-      zipCode: formData.get("zipCode") as string,
+      zipCode: requireValidCep(formData.get("zipCode") as string),
       phone: formData.get("phone") as string,
       email: formData.get("email") as string,
       website: formData.get("website") as string,

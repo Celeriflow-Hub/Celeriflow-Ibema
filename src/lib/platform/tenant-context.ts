@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getIdTokenPrincipal, getSessionPrincipal, SESSION_COOKIE_NAME, type SessionPrincipal } from "@/lib/platform/session";
 import type { PrismaClient } from "@prisma/client";
+import { SYSTEM_ADMIN_PROFILE_CODE } from "@/lib/administration/c3-policy";
 
 export { canIssueFinancialReports } from "@/lib/financeiro/report-access";
 
@@ -22,6 +23,7 @@ export type AppContext = {
     email: string;
     name: string;
     role: string;
+    profileCode: string | null;
     permissions?: string | null;
     modulePermissions: { code: string; canView: boolean; canEdit: boolean }[];
     allowedBudgetUnitIds: string[];
@@ -31,8 +33,6 @@ export type AppContext = {
   };
   prisma: PrismaClient;
 };
-
-const SYSTEM_ADMINISTRATOR_ROLE = "Administrador";
 
 type RolePermissions = {
   acesso?: unknown;
@@ -71,7 +71,11 @@ function hasModuleAccess(values: unknown, moduleCode: string) {
 function getModuleProfilePermission(rolePermissions: RolePermissions | null, moduleCode: string): ModuleProfilePermission | null {
   if (!rolePermissions?.modules || typeof rolePermissions.modules !== "object" || Array.isArray(rolePermissions.modules)) return null;
   const raw = (rolePermissions.modules as Record<string, unknown>)[moduleCode];
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  // A granular profile is deny-by-default. Per-user module rows can narrow,
+  // but cannot grant access beyond this profile baseline.
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { showDashboardCard: false, blocked: true, create: false, update: false, delete: false, issueReports: false };
+  }
   const permission = raw as Partial<ModuleProfilePermission>;
   return {
     showDashboardCard: permission.showDashboardCard === true,
@@ -105,7 +109,11 @@ export function canViewModule(user: AppContext["user"], moduleCode: string) {
   const codeUpper = moduleCode.toUpperCase();
   const rolePermissions = parseRolePermissions(user.permissions);
   const permission = getModuleProfilePermission(rolePermissions, codeUpper);
-  if (permission) return !permission.blocked;
+  if (permission) {
+    if (permission.blocked) return false;
+    const individualPermissionsExist = user.modulePermissions.length > 0;
+    return !individualPermissionsExist || user.modulePermissions.some((item) => item.code === codeUpper && (item.canView || item.canEdit));
+  }
   if (hasModuleAccess(rolePermissions?.modulosBloqueados, codeUpper)) return false;
 
   const allowedModules = rolePermissions?.modulosPermitidos;
@@ -122,7 +130,11 @@ export function canEditModule(user: AppContext["user"], moduleCode: string) {
   const codeUpper = moduleCode.toUpperCase();
   const rolePermissions = parseRolePermissions(user.permissions);
   const permission = getModuleProfilePermission(rolePermissions, codeUpper);
-  if (permission) return !permission.blocked && (permission.create || permission.update || permission.delete);
+  if (permission) {
+    if (permission.blocked || !(permission.create || permission.update || permission.delete)) return false;
+    const individualPermissionsExist = user.modulePermissions.length > 0;
+    return !individualPermissionsExist || user.modulePermissions.some((item) => item.code === codeUpper && item.canEdit);
+  }
   if (hasModuleAccess(rolePermissions?.modulosBloqueados, codeUpper)) return false;
   if (hasModuleAccess(rolePermissions?.modulosSomenteLeitura, codeUpper)) return false;
 
@@ -144,7 +156,11 @@ export function canPerformModuleOperation(
   const codeUpper = moduleCode.toUpperCase();
   const rolePermissions = parseRolePermissions(user.permissions);
   const permission = getModuleProfilePermission(rolePermissions, codeUpper);
-  if (permission) return !permission.blocked && permission[operation];
+  if (permission) {
+    if (permission.blocked || !permission[operation]) return false;
+    const individualPermissionsExist = user.modulePermissions.length > 0;
+    return !individualPermissionsExist || user.modulePermissions.some((item) => item.code === codeUpper && item.canEdit);
+  }
 
   // Profiles created before the granular matrix keep their existing CRUD access.
   // Report issuance remains opt-in because legacy profiles never stored it safely.
@@ -152,10 +168,7 @@ export function canPerformModuleOperation(
 }
 
 export function isSystemAdministrator(user: AppContext["user"]) {
-  return (
-    user.role === SYSTEM_ADMINISTRATOR_ROLE &&
-    parseRolePermissions(user.permissions)?.acesso === "total"
-  );
+  return user.profileCode === SYSTEM_ADMIN_PROFILE_CODE;
 }
 
 export function isPocEvaluator(user: AppContext["user"]) {
@@ -182,7 +195,7 @@ async function resolveUser(principal: SessionPrincipal | null): Promise<AppConte
 
   try {
     usuario = await prisma.usuario.findUnique({
-      where: { email: principal.email },
+      where: { firebaseUid: principal.firebaseUid },
       include: {
         perfil: true,
         employee: true,
@@ -200,7 +213,7 @@ async function resolveUser(principal: SessionPrincipal | null): Promise<AppConte
   } catch {
     // Fallback if UsuarioUnidadeGestora table does not exist yet in DB migration
     usuario = await prisma.usuario.findUnique({
-      where: { email: principal.email },
+      where: { firebaseUid: principal.firebaseUid },
       include: {
         perfil: true,
         employee: true,
@@ -221,6 +234,7 @@ async function resolveUser(principal: SessionPrincipal | null): Promise<AppConte
     email: usuario.email,
     name: usuario.nome || principal.name,
     role: usuario.perfil.nome,
+    profileCode: usuario.perfil.codigo,
     permissions: usuario.perfil.permissoes ?? null,
     modulePermissions: usuario.permissoesModulo.map((permission) => ({
       code: permission.modulo.codigo.toUpperCase(),

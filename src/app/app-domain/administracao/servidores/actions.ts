@@ -1,7 +1,9 @@
 "use server";
-import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { validateEmployeeRelations } from "@/lib/administration/employee-lifecycle";
+import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 
 export async function createEmployee(formData: FormData) {
   const name = formData.get("name") as string;
@@ -18,9 +20,11 @@ export async function createEmployee(formData: FormData) {
   if (!name || !cpf) return { error: "Nome e CPF são obrigatórios" };
 
   try {
-    const { prisma } = await getTenantContextForModuleOperation("ADMINISTRACAO", "create");
-    await prisma.employee.create({
-      data: { name, cpf, email, phone, registration, roleId, secretariatId, departmentId, unitId }
+    const context = await getTenantContextForSystemAdministration();
+    const hierarchy = await validateEmployeeRelations(context.prisma, { secretariatId, departmentId, unitId });
+    await context.prisma.$transaction(async (tx) => {
+      const employee = await tx.employee.create({ data: { name, cpf, email, phone, registration, roleId, secretariatId: hierarchy.secretariatId, departmentId, unitId } });
+      await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "EMPLOYEE", targetId: employee.id });
     });
   } catch (error: unknown) {
     console.error("Error creating employee:", error);

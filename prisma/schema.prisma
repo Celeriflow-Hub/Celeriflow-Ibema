@@ -153,6 +153,7 @@ model AdministrativeUnit {
   employees     Employee[]
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+  isActive      Boolean     @default(true)
 }
 
 // Cargos e FunÃ§Ãµes
@@ -5887,6 +5888,7 @@ model IntegrationRun {
 
 model ConfiguracaoPerfil {
   id         String  @id @default(cuid())
+  codigo     String? @unique
   nome       String // Administrador Municipal, Gestor, Operador
   descricao  String?
   permissoes String // JSON string with permissions
@@ -5902,7 +5904,9 @@ model Usuario {
   id    String  @id @default(cuid())
   nome  String
   email String  @unique
-  senha String // Hash da senha (Firebase uid ou local)
+  // Legacy-only field. Firebase is the sole operational credential provider.
+  senha String  @default("LEGACY_CREDENTIAL_DISABLED")
+  firebaseUid String? @unique
   ativo Boolean @default(true)
 
   perfilId String

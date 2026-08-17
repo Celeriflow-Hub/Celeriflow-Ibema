@@ -1,15 +1,8 @@
 import "dotenv/config";
 import type { HealthProfessional } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-
-function hashPassword(password: string) {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const derivedKey = crypto.pbkdf2Sync(password, salt, 100000, 64, "sha512").toString("hex");
-  return `$pbkdf2-sha512$100000$${salt}$${derivedKey}`;
-}
 
 function ensureSampleFiles() {
   const docsDir = path.join(process.cwd(), "public", "docs");
@@ -36,9 +29,6 @@ function ensureSampleFiles() {
 export async function runMassivePocSeed() {
   console.log("🚀 Iniciando Seed Massiva da POC CeleriFlow (500 Servidores, 500 Pessoas Físicas, 200+ por módulo)...");
   ensureSampleFiles();
-
-  const seedPassword = process.env.SEED_USER_PASSWORD || "SenhaSegura123!";
-  const pwHash = hashPassword(seedPassword);
 
   // 1. Exercício Fiscal e Secretarias
   await prisma.financialYear.upsert({
@@ -97,14 +87,14 @@ export async function runMassivePocSeed() {
   // 2. Perfis e Usuários
   const perfilAdmin = await prisma.configuracaoPerfil.upsert({
     where: { id: "perfil-admin-poc" },
-    create: { id: "perfil-admin-poc", nome: "Administrador Geral", ativo: true, permissoes: '{"ALL": true}' },
-    update: { nome: "Administrador Geral" },
+    create: { id: "perfil-admin-poc", codigo: "SYSTEM_ADMINISTRATOR", nome: "Administrador Geral", ativo: true, permissoes: '{"acesso":"operacional","modules":{}}' },
+    update: { codigo: "SYSTEM_ADMINISTRATOR", nome: "Administrador Geral", ativo: true, permissoes: '{"acesso":"operacional","modules":{}}' },
   });
 
   await prisma.usuario.upsert({
     where: { email: "adminteste@email.com" },
-    create: { email: "adminteste@email.com", nome: "Admin Teste POC", senha: pwHash, perfilId: perfilAdmin.id, ativo: true },
-    update: { nome: "Admin Teste POC", senha: pwHash },
+    create: { email: "adminteste@email.com", nome: "Admin Teste POC", perfilId: perfilAdmin.id, ativo: true },
+    update: { nome: "Admin Teste POC", perfilId: perfilAdmin.id, ativo: true },
   });
 
   // 3. SEED MASSIVO: CADASTRO DE SERVIDORES (500 SERVIDORES)

@@ -1,7 +1,8 @@
 "use server";
-import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 
 export async function createSecretariat(formData: FormData) {
   const name = formData.get("name") as string;
@@ -11,9 +12,10 @@ export async function createSecretariat(formData: FormData) {
   if (!name) return { error: "Nome é obrigatório" };
 
   try {
-    const { prisma } = await getTenantContextForModuleOperation("ADMINISTRACAO", "create");
-    await prisma.secretariat.create({
-      data: { name, acronym, managerName }
+    const context = await getTenantContextForSystemAdministration();
+    await context.prisma.$transaction(async (tx) => {
+      const secretariat = await tx.secretariat.create({ data: { name, acronym, managerName } });
+      await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "SECRETARIAT", targetId: secretariat.id });
     });
   } catch {
     return { error: "Erro ao criar secretaria" };

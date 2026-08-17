@@ -15,6 +15,7 @@ export const auditEventTypes = {
   personMergeProposed: "PERSON_MERGE_PROPOSED",
   personMergeExecuted: "PERSON_MERGE_EXECUTED",
   personMergeReversed: "PERSON_MERGE_REVERSED",
+  administrativeMutation: "ADMINISTRATIVE_MUTATION",
 } as const;
 
 export type AuditEventType = (typeof auditEventTypes)[keyof typeof auditEventTypes];

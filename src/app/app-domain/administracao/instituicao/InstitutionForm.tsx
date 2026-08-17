@@ -16,11 +16,12 @@ export function InstitutionForm({ institution }: { institution: Institution | nu
   const [message, setMessage] = useState({ type: "", text: "" });
   
   const [cnpj, setCnpj] = useState(institution?.cnpj || "");
+  const [zipCode, setZipCode] = useState(institution?.zipCode || "");
   const [phone, setPhone] = useState(institution?.phone || "");
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const handleCnpjChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    let v = e.target.value.replace(/\D/g, '');
     if (v.length > 14) v = v.substring(0, 14);
     
     let formatted = v;
@@ -123,7 +124,7 @@ export function InstitutionForm({ institution }: { institution: Institution | nu
             name="cnpj" 
             value={cnpj}
             onChange={handleCnpjChange}
-            placeholder="00.000.000/0001-00 (Aceita Alfanumérico)"
+            placeholder="00.000.000/0001-00"
             className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-sm"
           />
         </div>
@@ -225,6 +226,19 @@ export function InstitutionForm({ institution }: { institution: Institution | nu
             type="text" 
             name="address" 
             defaultValue={institution?.address || ""}
+            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-sm"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-slate-700">CEP</label>
+          <input
+            type="text"
+            name="zipCode"
+            value={zipCode}
+            onChange={(e) => setZipCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+            placeholder="00000000"
+            inputMode="numeric"
             className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-sm"
           />
         </div>

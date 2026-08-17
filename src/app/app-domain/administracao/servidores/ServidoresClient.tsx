@@ -72,7 +72,7 @@ export default function ServidoresClient({
 
   const handleSave = async (id: string) => {
     if (window.confirm("Tem certeza que deseja salvar estas alterações?")) {
-      await updateEmployee(id, {
+      const result = await updateEmployee(id, {
         name: editForm.name,
         email: editForm.email,
         cpf: editForm.cpf,
@@ -80,19 +80,21 @@ export default function ServidoresClient({
         secretariatId: editForm.secretariatId || null,
         departmentId: editForm.departmentId || null
       });
-      setEditingId(null);
+      if (result.error) alert(result.error); else setEditingId(null);
     }
   };
 
   const handleDeactivate = async (id: string) => {
     if (window.confirm("Tem certeza que deseja INATIVAR este servidor? Ele não será excluído do sistema, apenas desativado.")) {
-      await deactivateEmployee(id);
+      const result = await deactivateEmployee(id);
+      if (result.error) alert(result.error);
     }
   };
 
   const handleActivate = async (id: string) => {
     if (window.confirm("Deseja REATIVAR este servidor?")) {
-      await activateEmployee(id);
+      const result = await activateEmployee(id);
+      if (result.error) alert(result.error);
     }
   };
 

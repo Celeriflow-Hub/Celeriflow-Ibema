@@ -40,20 +40,22 @@ export default function DepartamentosClient({
 
   const handleSaveEdit = async () => {
     if (editingId && window.confirm("Tem certeza que deseja salvar estas alterações?")) {
-      await updateDepartment(editingId, editForm);
-      setEditingId(null);
+      const result = await updateDepartment(editingId, editForm);
+      if (result.error) alert(result.error); else setEditingId(null);
     }
   };
 
   const handleDeactivate = async (id: string) => {
     if (window.confirm("Tem certeza que deseja INATIVAR este departamento? Ele não será excluído do sistema, apenas desativado.")) {
-      await deactivateDepartment(id);
+      const result = await deactivateDepartment(id);
+      if (result.error) alert(result.error);
     }
   };
 
   const handleActivate = async (id: string) => {
     if (window.confirm("Deseja REATIVAR este departamento?")) {
-      await activateDepartment(id);
+      const result = await activateDepartment(id);
+      if (result.error) alert(result.error);
     }
   };
 

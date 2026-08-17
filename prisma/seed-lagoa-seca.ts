@@ -1,19 +1,9 @@
 import "dotenv/config";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
-import crypto from "node:crypto";
-
-function hashPassword(password: string, saltHex?: string) {
-  const salt = saltHex ?? crypto.randomBytes(16).toString("hex");
-  const derivedKey = crypto.pbkdf2Sync(password, salt, 100000, 64, "sha512").toString("hex");
-  return `$pbkdf2-sha512$100000$${salt}$${derivedKey}`;
-}
 
 async function main() {
   console.log("🌱 Gerando Base Modelo Completa de Homologação e POC para Lagoa Seca/PB...");
-
-  const rawSeedPassword = process.env.SEED_USER_PASSWORD || crypto.randomBytes(16).toString("hex");
-  const defaultUserHash = hashPassword(rawSeedPassword);
 
   // 1. Exercício Financeiro
   const year2026 = await prisma.financialYear.upsert({
@@ -48,18 +38,18 @@ async function main() {
 
   // 3. Perfis mínimos da POC, com auditoria somente leitura e acesso por módulo.
   const profileDefinitions = [
-    { id: "perfil-administrador-lagoaseca", nome: "Administrador", permissoes: { acesso: "total" } },
-    { id: "perfil-solicitante-lagoaseca", nome: "Solicitante", permissoes: { acesso: "operacional", modulosPermitidos: ["FINANCEIRO"] } },
-    { id: "perfil-aprovador-lagoaseca", nome: "Aprovador/Gestor", permissoes: { acesso: "operacional", modulosPermitidos: ["FINANCEIRO"] } },
-    { id: "perfil-contador-lagoaseca", nome: "Contador", permissoes: { acesso: "operacional", modulosPermitidos: ["FINANCEIRO"] } },
-    { id: "perfil-tesoureiro-lagoaseca", nome: "Tesoureiro", permissoes: { acesso: "operacional", modulosPermitidos: ["FINANCEIRO"] } },
-    { id: "perfil-auditor-lagoaseca", nome: "Auditor", permissoes: { acesso: "operacional", modulosPermitidos: ["FINANCEIRO"], modulosSomenteLeitura: ["FINANCEIRO"] } },
-    { id: "perfil-transparencia-lagoaseca", nome: "Transparência", permissoes: { acesso: "operacional", modulosPermitidos: ["TRANSPARENCIA"] } },
+    { id: "perfil-administrador-lagoaseca", codigo: "SYSTEM_ADMINISTRATOR", nome: "Administrador", permissoes: { acesso: "operacional", modules: {} } },
+    { id: "perfil-solicitante-lagoaseca", codigo: "SOLICITANTE", nome: "Solicitante", permissoes: { acesso: "operacional", modulosPermitidos: ["FINANCEIRO"] } },
+    { id: "perfil-aprovador-lagoaseca", codigo: "APROVADOR", nome: "Aprovador/Gestor", permissoes: { acesso: "operacional", modulosPermitidos: ["FINANCEIRO"] } },
+    { id: "perfil-contador-lagoaseca", codigo: "CONTADOR", nome: "Contador", permissoes: { acesso: "operacional", modulosPermitidos: ["FINANCEIRO"] } },
+    { id: "perfil-tesoureiro-lagoaseca", codigo: "TESOUREIRO", nome: "Tesoureiro", permissoes: { acesso: "operacional", modulosPermitidos: ["FINANCEIRO"] } },
+    { id: "perfil-auditor-lagoaseca", codigo: "AUDITOR", nome: "Auditor", permissoes: { acesso: "operacional", modulosPermitidos: ["FINANCEIRO"], modulosSomenteLeitura: ["FINANCEIRO"] } },
+    { id: "perfil-transparencia-lagoaseca", codigo: "TRANSPARENCIA", nome: "Transparência", permissoes: { acesso: "operacional", modulosPermitidos: ["TRANSPARENCIA"] } },
   ];
   await Promise.all(profileDefinitions.map((profile) => prisma.configuracaoPerfil.upsert({
     where: { id: profile.id },
     create: { ...profile, permissoes: JSON.stringify(profile.permissoes), ativo: true },
-    update: { nome: profile.nome, permissoes: JSON.stringify(profile.permissoes), ativo: true },
+    update: { codigo: profile.codigo, nome: profile.nome, permissoes: JSON.stringify(profile.permissoes), ativo: true },
   })));
   const perfilContador = await prisma.configuracaoPerfil.findUniqueOrThrow({ where: { id: "perfil-contador-lagoaseca" } });
 
@@ -68,14 +58,13 @@ async function main() {
     create: {
       email: "contador.prefeitura@lagoaseca.pb.gov.br",
       nome: "Contador Prefeitura - Lagoa Seca",
-      senha: defaultUserHash,
       perfilId: perfilContador.id,
       ativo: true,
       unidadesGestoras: {
         create: { budgetUnitId: ugPrefeitura.id },
       },
     },
-    update: { nome: "Contador Prefeitura - Lagoa Seca", senha: defaultUserHash },
+    update: { nome: "Contador Prefeitura - Lagoa Seca", perfilId: perfilContador.id, ativo: true },
   });
 
   await prisma.usuario.upsert({
@@ -83,14 +72,13 @@ async function main() {
     create: {
       email: "contador.camara@lagoaseca.pb.gov.br",
       nome: "Contador Câmara - Lagoa Seca",
-      senha: defaultUserHash,
       perfilId: perfilContador.id,
       ativo: true,
       unidadesGestoras: {
         create: { budgetUnitId: ugCamara.id },
       },
     },
-    update: { nome: "Contador Câmara - Lagoa Seca", senha: defaultUserHash },
+    update: { nome: "Contador Câmara - Lagoa Seca", perfilId: perfilContador.id, ativo: true },
   });
 
   // 4. Servidor Público

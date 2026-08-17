@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Building, Pencil } from "lucide-react";
-import { updateAdministrativeUnit } from "../actions";
+import { Building, Pencil, Power, PowerOff } from "lucide-react";
+import { activateAdministrativeUnit, deactivateAdministrativeUnit, updateAdministrativeUnit } from "../actions";
 
 type Unit = {
   id: string;
@@ -10,6 +10,7 @@ type Unit = {
   type: string;
   managerName: string | null;
   secretariatId: string;
+  isActive: boolean;
   secretariat: { name: string } | null;
 };
 
@@ -43,9 +44,15 @@ export default function UnidadesClient({
 
   const handleSaveEdit = async () => {
     if (editingId && window.confirm("Tem certeza que deseja salvar estas alterações?")) {
-      await updateAdministrativeUnit(editingId, editForm);
-      setEditingId(null);
+      const result = await updateAdministrativeUnit(editingId, editForm);
+      if (result.error) alert(result.error); else setEditingId(null);
     }
+  };
+
+  const handleToggleStatus = async (unit: Unit) => {
+    if (!window.confirm(`Deseja ${unit.isActive ? "inativar" : "reativar"} esta unidade?`)) return;
+    const result = unit.isActive ? await deactivateAdministrativeUnit(unit.id) : await activateAdministrativeUnit(unit.id);
+    if (result.error) alert(result.error);
   };
 
   if (units.length === 0) {
@@ -79,6 +86,7 @@ export default function UnidadesClient({
               <th className="px-6 py-4">Tipo</th>
               <th className="px-6 py-4">Secretaria Vinculada</th>
               <th className="px-6 py-4">Responsável</th>
+              <th className="px-6 py-4 text-center">Status</th>
               <th className="px-6 py-4 text-right">Ações</th>
             </tr>
           </thead>
@@ -116,6 +124,9 @@ export default function UnidadesClient({
                     <input className="border rounded px-2 py-1 w-full" value={editForm.managerName} onChange={e => setEditForm({...editForm, managerName: e.target.value})} />
                   ) : unit.managerName || "-"}
                 </td>
+                <td className="px-6 py-4 text-center">
+                  <span className={`px-2 py-1 rounded-md text-xs font-semibold ${unit.isActive ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>{unit.isActive ? "Ativa" : "Inativa"}</span>
+                </td>
                 <td className="px-6 py-4 text-right flex justify-end gap-2">
                   {editingId === unit.id ? (
                     <>
@@ -123,16 +134,21 @@ export default function UnidadesClient({
                       <button onClick={() => setEditingId(null)} className="text-slate-500 hover:text-slate-700 font-medium text-xs bg-slate-100 px-2 py-1 rounded">Cancelar</button>
                     </>
                   ) : (
+                    <>
                     <button onClick={() => handleEditClick(unit)} className="text-amber-600 hover:text-amber-700 p-1" title="Editar">
                       <Pencil className="w-4 h-4" />
                     </button>
+                    <button onClick={() => handleToggleStatus(unit)} className="text-slate-600 hover:text-slate-900 p-1" title={unit.isActive ? "Inativar" : "Reativar"}>
+                      {unit.isActive ? <PowerOff className="w-4 h-4" /> : <Power className="w-4 h-4" />}
+                    </button>
+                    </>
                   )}
                 </td>
               </tr>
             ))}
             {filteredUnits.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
                   Nenhuma unidade encontrada.
                 </td>
               </tr>

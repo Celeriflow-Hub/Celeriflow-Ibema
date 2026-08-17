@@ -2,10 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { AccessError, getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
-
-async function getTenantPrisma() {
-  return (await getTenantContextForSystemAdministration()).prisma;
-}
+import { normalizeRestrictiveProfilePermissions, SYSTEM_ADMIN_PROFILE_CODE } from "@/lib/administration/c3-policy";
+import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 
 const MODULE_CODES = new Set([
   "ADMINISTRACAO", "RH", "CADASTROS", "DOCUMENTOS", "ATENDIMENTO", "COMPRAS", "CONTRATOS", "FINANCEIRO", "PATRIMONIO", "TRIBUTACAO", "PROCESSOS", "SAUDE",
@@ -13,37 +11,7 @@ const MODULE_CODES = new Set([
 ]);
 
 function normalizePermissions(value: string | undefined) {
-  if (!value) return JSON.stringify({ acesso: "operacional", modules: {} });
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    throw new Error("A matriz de permissões é inválida.");
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("A matriz de permissões é inválida.");
-  const source = parsed as { acesso?: unknown; modules?: unknown };
-  const modulesSource = source.modules && typeof source.modules === "object" && !Array.isArray(source.modules)
-    ? source.modules as Record<string, unknown>
-    : {};
-  const modules: Record<string, { showDashboardCard: boolean; blocked: boolean; create: boolean; update: boolean; delete: boolean; issueReports: boolean }> = {};
-  for (const [code, raw] of Object.entries(modulesSource)) {
-    if (!MODULE_CODES.has(code) || !raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-    const item = raw as Record<string, unknown>;
-    const blocked = item.blocked === true;
-    modules[code] = {
-      showDashboardCard: item.showDashboardCard === true,
-      blocked,
-      create: !blocked && item.create === true,
-      update: !blocked && item.update === true,
-      delete: !blocked && item.delete === true,
-      issueReports: !blocked && item.issueReports === true,
-    };
-  }
-  return JSON.stringify({
-    acesso: source.acesso === "total" ? "total" : "operacional",
-    modules,
-    modulosBloqueados: Object.entries(modules).filter(([, permission]) => permission.blocked).map(([code]) => code),
-  });
+  return normalizeRestrictiveProfilePermissions(value, MODULE_CODES);
 }
 
 export async function upsertPerfil(data: {
@@ -54,7 +22,8 @@ export async function upsertPerfil(data: {
   ativo: boolean;
 }) {
   try {
-    const prisma = await getTenantPrisma();
+    const context = await getTenantContextForSystemAdministration();
+    const { prisma } = context;
     const nome = data.nome.trim();
     if (!nome) return { error: "Informe o nome do perfil." };
 
@@ -64,23 +33,14 @@ export async function upsertPerfil(data: {
       const existing = await prisma.configuracaoPerfil.findUnique({ where: { id: data.id } });
       if (!existing) return { error: "Perfil não encontrado." };
       
-      await prisma.configuracaoPerfil.update({
-        where: { id: data.id },
-        data: {
-          nome,
-          descricao: data.descricao,
-          permissoes: jsonPermissoes,
-          ativo: data.ativo,
-        },
+      await prisma.$transaction(async (tx) => {
+        const profile = await tx.configuracaoPerfil.update({ where: { id: data.id }, data: { nome, descricao: data.descricao, permissoes: jsonPermissoes, ativo: data.ativo } });
+        await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "PROFILE", targetId: profile.id });
       });
     } else {
-      await prisma.configuracaoPerfil.create({
-        data: {
-          nome,
-          descricao: data.descricao,
-          permissoes: jsonPermissoes,
-          ativo: data.ativo,
-        },
+      await prisma.$transaction(async (tx) => {
+        const profile = await tx.configuracaoPerfil.create({ data: { nome, descricao: data.descricao, permissoes: jsonPermissoes, ativo: data.ativo } });
+        await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "PROFILE", targetId: profile.id });
       });
     }
     revalidatePermissionConsumers();
@@ -93,13 +53,18 @@ export async function upsertPerfil(data: {
 
 export async function togglePerfilStatus(id: string, ativo: boolean) {
   try {
-    const prisma = await getTenantPrisma();
+    const context = await getTenantContextForSystemAdministration();
+    const { prisma } = context;
     const perfil = await prisma.configuracaoPerfil.findUnique({ where: { id } });
     if (!perfil) return { error: "Perfil não encontrado." };
     
-    await prisma.configuracaoPerfil.update({
-      where: { id },
-      data: { ativo },
+    if (!ativo && perfil.codigo === SYSTEM_ADMIN_PROFILE_CODE) {
+      const activeAdministrators = await prisma.usuario.count({ where: { ativo: true, perfilId: id } });
+      if (activeAdministrators > 0) return { error: "Não é possível desativar o perfil do administrador do sistema enquanto houver administradores ativos." };
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.configuracaoPerfil.update({ where: { id }, data: { ativo } });
+      await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "PROFILE", targetId: id });
     });
     revalidatePermissionConsumers();
     return { error: null };

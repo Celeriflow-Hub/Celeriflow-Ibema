@@ -48,6 +48,7 @@ test("defines authentication, protected-operation, and usage-monitoring event ty
     "PERSON_MERGE_PROPOSED",
     "PERSON_MERGE_EXECUTED",
     "PERSON_MERGE_REVERSED",
+    "ADMINISTRATIVE_MUTATION",
   ]);
 });
 
@@ -129,18 +130,15 @@ test("builds stable cursor queries and page navigation without a database", () =
   assert.ok(previousPage.nextCursor);
 });
 
-test("limits audit-log consultation to system administrators with total access", () => {
+test("limits audit-log consultation to the stable system administrator profile code", () => {
   const administrator = {
-    role: "Administrador",
-    permissions: JSON.stringify({ acesso: "total" }),
+    profileCode: "SYSTEM_ADMINISTRATOR",
   } as Parameters<typeof isSystemAdministrator>[0];
   const administratorWithoutTotalAccess = {
-    role: "Administrador",
-    permissions: JSON.stringify({ acesso: "restrito" }),
+    profileCode: "OPERACIONAL",
   } as Parameters<typeof isSystemAdministrator>[0];
   const nonAdministrator = {
-    role: "Gestor",
-    permissions: JSON.stringify({ acesso: "total" }),
+    profileCode: "GESTOR",
   } as Parameters<typeof isSystemAdministrator>[0];
 
   assert.equal(isSystemAdministrator(administrator), true);
@@ -151,11 +149,13 @@ test("limits audit-log consultation to system administrators with total access",
 test("uses the same profile permissions for dashboard visibility and route access", () => {
   const profileAuthorized = {
     role: "Gestor",
+    profileCode: null,
     permissions: JSON.stringify({ modulosPermitidos: ["FINANCEIRO", "COMPRAS"] }),
     modulePermissions: [],
   } as Parameters<typeof canViewModule>[0];
   const explicitlyBlocked = {
     role: "Gestor",
+    profileCode: null,
     permissions: JSON.stringify({ modulosBloqueados: ["COMPRAS"] }),
     modulePermissions: [{ code: "COMPRAS", canView: true, canEdit: true }],
   } as Parameters<typeof canViewModule>[0];
@@ -189,6 +189,7 @@ test("applies dashboard visibility, blocking, and operational module permissions
 test("requires the exact module operation for profiles using the granular matrix", () => {
   const profile = {
     role: "Operador",
+    profileCode: null,
     permissions: JSON.stringify({
       modules: {
         CADASTROS: { showDashboardCard: true, blocked: false, create: true, update: false, delete: false, issueReports: true },
@@ -206,6 +207,7 @@ test("requires the exact module operation for profiles using the granular matrix
 test("does not allow financial cancellations from the create permission", () => {
   const profile = {
     role: "Operador Financeiro",
+    profileCode: null,
     permissions: JSON.stringify({
       modules: {
         FINANCEIRO: { showDashboardCard: true, blocked: false, create: true, update: false, delete: false, issueReports: false },

@@ -49,14 +49,15 @@ export default function CalendarioClient({ events }: { events: CalendarEvent[] }
         type: editForm.type,
         isHoliday: editForm.isHoliday
       };
-      await updateCalendarEvent(editingId, dataToSave);
-      setEditingId(null);
+      const result = await updateCalendarEvent(editingId, dataToSave);
+      if (result.error) alert(result.error); else setEditingId(null);
     }
   };
 
   const handleDelete = async (id: string) => {
     if (window.confirm("Tem certeza que deseja excluir este evento permanentemente?")) {
-      await deleteCalendarEvent(id);
+      const result = await deleteCalendarEvent(id);
+      if (result.error) alert(result.error);
     }
   };
 

@@ -9,21 +9,24 @@ import { prisma } from "../src/lib/prisma";
 async function main() {
   const perfis = [
     {
+      codigo: "SYSTEM_ADMINISTRATOR",
       nome: "Administrador",
-      descricao: "Acesso total ao sistema. Pode configurar usuários, módulos, perfis e realizar qualquer operação.",
-      permissoes: JSON.stringify({ acesso: "total" }),
+      descricao: "Administrador central do sistema. A identidade técnica é definida pelo código estável do perfil.",
+      permissoes: JSON.stringify({ acesso: "operacional", modules: {} }),
       ativo: true,
     },
     {
+      codigo: "OPERADOR",
       nome: "Operador",
       descricao: "Acesso operacional aos módulos contratados. Pode visualizar e editar registros conforme as permissões definidas.",
-      permissoes: JSON.stringify({ acesso: "operacional" }),
+      permissoes: JSON.stringify({ acesso: "operacional", modules: {} }),
       ativo: true,
     },
     {
+      codigo: "VISUALIZADOR",
       nome: "Visualizador",
       descricao: "Acesso somente leitura. Pode consultar informações, mas não pode realizar alterações no sistema.",
-      permissoes: JSON.stringify({ acesso: "leitura" }),
+      permissoes: JSON.stringify({ acesso: "operacional", modules: {} }),
       ativo: true,
     },
   ];
@@ -38,6 +41,8 @@ async function main() {
         where: { id: existing.id },
         data: {
           descricao: perfil.descricao,
+          codigo: perfil.codigo,
+          permissoes: perfil.permissoes,
           ativo: perfil.ativo,
         }
       });

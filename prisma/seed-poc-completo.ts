@@ -1,17 +1,10 @@
 import "dotenv/config";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { generateInternalReportDataset, reportDatasetCsv } from "../src/lib/financeiro/report-delivery";
 import { publicFinancialReportDocumentType } from "../src/lib/transparencia/portal-public";
-
-function hashPassword(password: string) {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const derivedKey = crypto.pbkdf2Sync(password, salt, 100000, 64, "sha512").toString("hex");
-  return `$pbkdf2-sha512$100000$${salt}$${derivedKey}`;
-}
 
 function ensureSampleFiles() {
   const docsDir = path.join(process.cwd(), "public", "docs");
@@ -60,7 +53,6 @@ async function main() {
   console.log("🌱 Gerando Base Completa da POC do CeleriFlow / AcessoFlow...");
   ensureSampleFiles();
 
-  const seedPassword = process.env.SEED_USER_PASSWORD || "SenhaSegura123!";
 
   // ---------------------------------------------------------------------------
   // 1. Exercício Fiscal e Secretarias
@@ -126,8 +118,8 @@ async function main() {
   // ---------------------------------------------------------------------------
   const perfilAdmin = await prisma.configuracaoPerfil.upsert({
     where: { id: "perfil-admin-poc" },
-    create: { id: "perfil-admin-poc", nome: "Administrador Geral", ativo: true, permissoes: '{"ALL": true}' },
-    update: { nome: "Administrador Geral" },
+    create: { id: "perfil-admin-poc", codigo: "SYSTEM_ADMINISTRATOR", nome: "Administrador Geral", ativo: true, permissoes: '{"acesso":"operacional","modules":{}}' },
+    update: { codigo: "SYSTEM_ADMINISTRATOR", nome: "Administrador Geral", ativo: true, permissoes: '{"acesso":"operacional","modules":{}}' },
   });
 
   const perfilGestor = await prisma.configuracaoPerfil.upsert({
@@ -165,19 +157,15 @@ async function main() {
     },
   });
 
-  // Usuários — senha hash gerada dinamicamente com salt correto
-  const pwHash = hashPassword(seedPassword);
-
   const usuarioAdmin = await prisma.usuario.upsert({
     where: { email: "adminteste@email.com" },
     create: {
       email: "adminteste@email.com",
       nome: "Admin Teste",
-      senha: pwHash,
       perfilId: perfilAdmin.id,
       ativo: true,
     },
-    update: { nome: "Admin Teste", senha: hashPassword(seedPassword) },
+    update: { nome: "Admin Teste", perfilId: perfilAdmin.id, ativo: true },
   });
 
   await prisma.usuarioUnidadeGestora.upsert({
@@ -193,8 +181,8 @@ async function main() {
 
   const usuarioGestor = await prisma.usuario.upsert({
     where: { email: "gestao1@email.com" },
-    create: { email: "gestao1@email.com", nome: "Gestão 1", senha: hashPassword(seedPassword), perfilId: perfilGestor.id, ativo: true },
-    update: { nome: "Gestão 1", senha: hashPassword(seedPassword) },
+    create: { email: "gestao1@email.com", nome: "Gestão 1", perfilId: perfilGestor.id, ativo: true },
+    update: { nome: "Gestão 1", perfilId: perfilGestor.id, ativo: true },
   });
   await prisma.usuarioUnidadeGestora.upsert({
     where: { usuarioId_budgetUnitId: { usuarioId: usuarioGestor.id, budgetUnitId: ugPrefeitura.id } },
@@ -204,8 +192,8 @@ async function main() {
 
   const usuarioServidor = await prisma.usuario.upsert({
     where: { email: "servidor1@email.com" },
-    create: { email: "servidor1@email.com", nome: "Servidor 1", senha: hashPassword(seedPassword), perfilId: perfilServidor.id, ativo: true },
-    update: { nome: "Servidor 1", senha: hashPassword(seedPassword) },
+    create: { email: "servidor1@email.com", nome: "Servidor 1", perfilId: perfilServidor.id, ativo: true },
+    update: { nome: "Servidor 1", perfilId: perfilServidor.id, ativo: true },
   });
   await prisma.usuarioUnidadeGestora.upsert({
     where: { usuarioId_budgetUnitId: { usuarioId: usuarioServidor.id, budgetUnitId: ugPrefeitura.id } },
@@ -215,8 +203,8 @@ async function main() {
 
   const usuarioContador = await prisma.usuario.upsert({
     where: { email: "contadorteste@email.com" },
-    create: { email: "contadorteste@email.com", nome: "Contador Teste", senha: hashPassword(seedPassword), perfilId: perfilContador.id, ativo: true },
-    update: { nome: "Contador Teste", senha: hashPassword(seedPassword) },
+    create: { email: "contadorteste@email.com", nome: "Contador Teste", perfilId: perfilContador.id, ativo: true },
+    update: { nome: "Contador Teste", perfilId: perfilContador.id, ativo: true },
   });
   await prisma.usuarioUnidadeGestora.upsert({
     where: { usuarioId_budgetUnitId: { usuarioId: usuarioContador.id, budgetUnitId: ugPrefeitura.id } },
@@ -226,14 +214,14 @@ async function main() {
 
   const usuarioCidadao1 = await prisma.usuario.upsert({
     where: { email: "pessoateste1@email.com" },
-    create: { email: "pessoateste1@email.com", nome: "Pessoa Teste1", senha: hashPassword(seedPassword), perfilId: perfilCidadao.id, ativo: true },
-    update: { nome: "Pessoa Teste1", senha: hashPassword(seedPassword), perfilId: perfilCidadao.id, ativo: true },
+    create: { email: "pessoateste1@email.com", nome: "Pessoa Teste1", perfilId: perfilCidadao.id, ativo: true },
+    update: { nome: "Pessoa Teste1", perfilId: perfilCidadao.id, ativo: true },
   });
 
   const usuarioCidadao2 = await prisma.usuario.upsert({
     where: { email: "pessoateste2@email.com" },
-    create: { email: "pessoateste2@email.com", nome: "Pessoa Teste2", senha: hashPassword(seedPassword), perfilId: perfilCidadao.id, ativo: true },
-    update: { nome: "Pessoa Teste2", senha: hashPassword(seedPassword), perfilId: perfilCidadao.id, ativo: true },
+    create: { email: "pessoateste2@email.com", nome: "Pessoa Teste2", perfilId: perfilCidadao.id, ativo: true },
+    update: { nome: "Pessoa Teste2", perfilId: perfilCidadao.id, ativo: true },
   });
 
   await prisma.usuarioUnidadeGestora.deleteMany({
@@ -797,12 +785,7 @@ async function main() {
   console.log("✅ Seed Completa da POC do CeleriFlow/AcessoFlow gerada com sucesso!");
   console.log("--------------------------------------------------------------------");
   console.log("🔑 Contas de Acesso:");
-  console.log(`   Admin:    adminteste@email.com    / ${seedPassword}`);
-  console.log(`   Gestor:   gestao1@email.com       / ${seedPassword}`);
-  console.log(`   Servidor: servidor1@email.com     / ${seedPassword}`);
-  console.log(`   Contador: contadorteste@email.com / ${seedPassword}`);
-  console.log(`   Cidadão1: pessoateste1@email.com  / ${seedPassword}`);
-  console.log(`   Cidadão2: pessoateste2@email.com  / ${seedPassword}`);
+  console.log("   Usuários criados sem senha local; provisione as credenciais pelo Firebase.");
   console.log("--------------------------------------------------------------------");
   console.log("📁 Arquivos GED disponíveis em /public/docs/");
 }

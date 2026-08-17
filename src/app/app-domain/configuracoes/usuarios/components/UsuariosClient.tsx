@@ -5,7 +5,7 @@ import { UserCog, Plus, Search, Shield, X } from "lucide-react";
 import { upsertUsuario, toggleUsuarioStatus } from "../actions";
 import { Card, CardContent } from "@/components/ui/card";
 
-type Perfil = { id: string; nome: string };
+type Perfil = { id: string; nome: string; codigo: string | null };
 type Modulo = { id: string; nome: string; codigo: string };
 type UsuarioModulo = { moduloId: string; canView: boolean; canEdit: boolean };
 type Usuario = {
@@ -62,7 +62,7 @@ export default function UsuariosClient({
   );
 
   const selectedPerfil = perfis.find(p => p.id === formData.perfilId);
-  const isAdmin = selectedPerfil?.nome === "Administrador";
+  const isAdmin = selectedPerfil?.codigo === "SYSTEM_ADMINISTRATOR";
 
   function openNewModal() {
     setFormData({
@@ -123,7 +123,8 @@ export default function UsuariosClient({
   }
 
   async function handleToggleStatus(id: string, ativo: boolean) {
-    await toggleUsuarioStatus(id, ativo);
+    const result = await toggleUsuarioStatus(id, ativo);
+    if (result.error) alert(result.error);
   }
 
   return (

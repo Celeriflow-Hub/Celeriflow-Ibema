@@ -1,9 +1,9 @@
+import { SYSTEM_ADMIN_PROFILE_CODE } from "@/lib/administration/c3-policy";
+
 type FinancialReportAccessUser = {
-  role: string;
+  profileCode?: string | null;
   permissions?: string | null;
 };
-
-const SYSTEM_ADMINISTRATOR_ROLE = "Administrador";
 
 function parsePermissions(value: string | null | undefined) {
   if (!value) return null;
@@ -20,7 +20,7 @@ function parsePermissions(value: string | null | undefined) {
 
 export function canIssueFinancialReports(user: FinancialReportAccessUser) {
   const permissions = parsePermissions(user.permissions);
-  if (user.role === SYSTEM_ADMINISTRATOR_ROLE && permissions?.acesso === "total") return true;
+  if (user.profileCode === SYSTEM_ADMIN_PROFILE_CODE) return true;
 
   const modules = permissions?.modules;
   if (!modules || typeof modules !== "object" || Array.isArray(modules)) return false;

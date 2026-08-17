@@ -34,20 +34,22 @@ export default function SecretariasClient({ secretariats }: { secretariats: Secr
 
   const handleSaveEdit = async () => {
     if (editingId && window.confirm("Tem certeza que deseja salvar estas alterações?")) {
-      await updateSecretariat(editingId, editForm);
-      setEditingId(null);
+      const result = await updateSecretariat(editingId, editForm);
+      if (result.error) alert(result.error); else setEditingId(null);
     }
   };
 
   const handleDeactivate = async (id: string) => {
     if (window.confirm("Tem certeza que deseja INATIVAR esta secretaria? Ela não será excluída do sistema, apenas desativada.")) {
-      await deactivateSecretariat(id);
+      const result = await deactivateSecretariat(id);
+      if (result.error) alert(result.error);
     }
   };
 
   const handleActivate = async (id: string) => {
     if (window.confirm("Deseja REATIVAR esta secretaria?")) {
-      await activateSecretariat(id);
+      const result = await activateSecretariat(id);
+      if (result.error) alert(result.error);
     }
   };
 

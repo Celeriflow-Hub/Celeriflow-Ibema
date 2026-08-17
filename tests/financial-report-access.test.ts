@@ -39,7 +39,7 @@ test("the report permission is independent from Financeiro CRUD access", () => {
 
 test("the system administrator retains report issuance access", () => {
   assert.equal(canIssueFinancialReports({
-    role: "Administrador",
-    permissions: JSON.stringify({ acesso: "total", modules: {} }),
+    profileCode: "SYSTEM_ADMINISTRATOR",
+    permissions: JSON.stringify({ acesso: "operacional", modules: {} }),
   }), true);
 });

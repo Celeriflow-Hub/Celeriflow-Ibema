@@ -1,13 +1,15 @@
 "use server";
 
-import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
-import { requireValidCep, requireValidCnpj } from "@/lib/identifiers/brazilian-identifiers";
+import { normalizeOptionalInstitutionIdentifiers } from "@/lib/administration/c3-policy";
+import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 
 export async function saveInstitution(formData: FormData) {
   try {
-    const { prisma } = await getTenantContextForModuleOperation("ADMINISTRACAO", "update");
+    const context = await getTenantContextForSystemAdministration();
+    const { prisma } = context;
     let logoUrl: string | null = null;
     const logoFile = formData.get("logoFile") as File | null;
 
@@ -25,19 +27,23 @@ export async function saveInstitution(formData: FormData) {
       logoUrl = `data:${mimeType};base64,${base64}`;
     }
 
+    const identifiers = normalizeOptionalInstitutionIdentifiers({
+      cnpj: formData.get("cnpj") as string,
+      zipCode: formData.get("zipCode") as string,
+    });
     const data: Prisma.InstitutionCreateInput = {
-      name: formData.get("name") as string,
-      cnpj: requireValidCnpj(formData.get("cnpj") as string),
-      legalName: formData.get("legalName") as string,
-      address: formData.get("address") as string,
-      city: formData.get("city") as string,
-      state: formData.get("state") as string,
-      zipCode: requireValidCep(formData.get("zipCode") as string),
-      phone: formData.get("phone") as string,
-      email: formData.get("email") as string,
-      website: formData.get("website") as string,
-      mayorName: formData.get("mayorName") as string,
-      managerName: formData.get("managerName") as string,
+      name: (formData.get("name") as string).trim(),
+      cnpj: identifiers.cnpj,
+      legalName: (formData.get("legalName") as string).trim() || null,
+      address: (formData.get("address") as string).trim() || null,
+      city: (formData.get("city") as string).trim() || null,
+      state: (formData.get("state") as string).trim() || null,
+      zipCode: identifiers.zipCode,
+      phone: (formData.get("phone") as string).trim() || null,
+      email: (formData.get("email") as string).trim().toLowerCase() || null,
+      website: (formData.get("website") as string).trim() || null,
+      mayorName: (formData.get("mayorName") as string).trim() || null,
+      managerName: (formData.get("managerName") as string).trim() || null,
     };
 
     if (logoUrl) {
@@ -50,16 +56,17 @@ export async function saveInstitution(formData: FormData) {
 
     const existing = await prisma.institution.findFirst();
 
-    if (existing) {
-      await prisma.institution.update({
-        where: { id: existing.id },
-        data,
+    await prisma.$transaction(async (tx) => {
+      const institution = existing
+        ? await tx.institution.update({ where: { id: existing.id }, data })
+        : await tx.institution.create({ data });
+      await writeAuditEvent(tx, {
+        actorUsuarioId: context.user.id,
+        eventType: auditEventTypes.administrativeMutation,
+        targetType: "INSTITUTION",
+        targetId: institution.id,
       });
-    } else {
-      await prisma.institution.create({
-        data,
-      });
-    }
+    });
 
     revalidatePath("/administracao");
     revalidatePath("/administracao/instituicao");

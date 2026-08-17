@@ -81,7 +81,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
     nome: string;
     descricao: string;
     ativo: boolean;
-    accessLevel: "operacional" | "total";
+    accessLevel: "operacional";
     permissionsMap: Record<string, ModulePermission>;
   }>({
     nome: "",
@@ -96,7 +96,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
     (p.descricao && p.descricao.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  function parsePermissionsJSON(jsonStr: string | null, legacyModuleCodes: string[] = []): { accessLevel: "operacional" | "total"; map: Record<string, ModulePermission> } {
+  function parsePermissionsJSON(jsonStr: string | null, legacyModuleCodes: string[] = []): { accessLevel: "operacional"; map: Record<string, ModulePermission> } {
     const map = Object.fromEntries(MODULES_LIST.map((moduleItem) => [moduleItem.code, emptyPermission()])) as Record<string, ModulePermission>;
     if (!jsonStr) return { accessLevel: "operacional", map };
     try {
@@ -105,13 +105,13 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
         MODULES_LIST.forEach((m) => {
           map[m.code] = { showDashboardCard: true, blocked: false, create: true, update: true, delete: true, issueReports: false };
         });
-        return { accessLevel: "total", map };
+        return { accessLevel: "operacional", map };
       }
       if (parsed.acesso === "total" && !parsed.modules) {
         MODULES_LIST.forEach((moduleItem) => {
           map[moduleItem.code] = { showDashboardCard: true, blocked: false, create: true, update: true, delete: true, issueReports: false };
         });
-        return { accessLevel: "total", map };
+        return { accessLevel: "operacional", map };
       }
       const modules = parsed.modules;
       if (modules && typeof modules === "object" && !Array.isArray(modules)) {
@@ -129,7 +129,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
             issueReports: !blocked && permission.issueReports === true,
           };
         }
-        return { accessLevel: parsed.acesso === "total" ? "total" : "operacional", map };
+        return { accessLevel: "operacional", map };
       }
       const blockedModules = Array.isArray(parsed.modulosBloqueados) ? parsed.modulosBloqueados : [];
       const allowedModules = Array.isArray(parsed.modulosPermitidos) ? parsed.modulosPermitidos : null;
@@ -148,13 +148,13 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
           issueReports: false,
         };
       }
-      return { accessLevel: parsed.acesso === "total" ? "total" : "operacional", map };
+      return { accessLevel: "operacional", map };
     } catch {
       return { accessLevel: "operacional", map };
     }
   }
 
-  function serializePermissionsJSON(accessLevel: "operacional" | "total", map: Record<string, ModulePermission>): string {
+  function serializePermissionsJSON(accessLevel: "operacional", map: Record<string, ModulePermission>): string {
     return JSON.stringify({
       acesso: accessLevel,
       modules: map,

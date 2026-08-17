@@ -2,14 +2,17 @@
 
 import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
+import { validateEmployeeRelations } from "@/lib/administration/employee-lifecycle";
+import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 
 async function getTenantPrisma(operation: "create" | "update" | "delete") {
-  return (await getTenantContextForModuleOperation("RH", operation)).prisma;
+  return getTenantContextForModuleOperation("RH", operation);
 }
 
 export async function saveServidor(formData: FormData) {
   const id = formData.get("id") as string | null;
-  const prisma = await getTenantPrisma(id ? "update" : "create");
+  const context = await getTenantPrisma(id ? "update" : "create");
+  const { prisma } = context;
   try {
     const name = formData.get("name") as string;
     const cpf = formData.get("cpf") as string;
@@ -27,6 +30,7 @@ export async function saveServidor(formData: FormData) {
       return { success: false, error: "Nome é obrigatório." };
     }
 
+    const hierarchy = await validateEmployeeRelations(prisma, { secretariatId: secretariatId || null, departmentId: departmentId || null });
     const data = {
       name,
       cpf: cpf || null,
@@ -35,22 +39,18 @@ export async function saveServidor(formData: FormData) {
       phone: phone || null,
       roleId: roleId || null,
       departmentId: departmentId || null,
-      secretariatId: secretariatId || null,
+      secretariatId: hierarchy.secretariatId,
       isActive,
       salaryBase,
       contractedHours
     };
 
-    if (id) {
-      await prisma.employee.update({
-        where: { id },
-        data,
-      });
-    } else {
-      await prisma.employee.create({
-        data,
-      });
-    }
+    await prisma.$transaction(async (tx) => {
+      const employee = id
+        ? await tx.employee.update({ where: { id }, data })
+        : await tx.employee.create({ data });
+      await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "EMPLOYEE", targetId: employee.id });
+    });
 
     revalidatePath("/rh/servidores");
     return { success: true };
@@ -61,11 +61,12 @@ export async function saveServidor(formData: FormData) {
 }
 
 export async function toggleServidorStatus(id: string, isActive: boolean) {
-  const prisma = await getTenantPrisma("update");
+  const context = await getTenantPrisma("update");
+  const { prisma } = context;
   try {
-    await prisma.employee.update({
-      where: { id },
-      data: { isActive },
+    await prisma.$transaction(async (tx) => {
+      await tx.employee.update({ where: { id }, data: { isActive } });
+      await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "EMPLOYEE", targetId: id });
     });
     revalidatePath("/rh/servidores");
     return { success: true };
@@ -76,18 +77,6 @@ export async function toggleServidorStatus(id: string, isActive: boolean) {
 }
 
 export async function deleteServidor(id: string) {
-  const prisma = await getTenantPrisma("delete");
-  try {
-    // Delete is dangerous as it may fail due to foreign key constraints.
-    // The preferred way in this module is soft-delete via toggleServidorStatus,
-    // but we'll provide this for explicitly incorrect entries.
-    await prisma.employee.delete({
-      where: { id },
-    });
-    revalidatePath("/rh/servidores");
-    return { success: true };
-  } catch (error) {
-    console.error("Erro ao excluir servidor:", error);
-    return { success: false, error: "Não é possível excluir um servidor que possui vínculos (processos, documentos, folha). Inative-o em vez disso." };
-  }
+  void id;
+  return { success: false, error: "A exclusão física de servidores foi desativada. Inative o servidor para preservar o histórico." };
 }

@@ -7,13 +7,14 @@
  * Uso:
  *   npx tsx scripts/seed-firebase-users.ts
  *
- * Os e-mails e senhas devem corresponder aos usuários criados pela seed do banco.
- * A senha pode ser sobrescrita via variável de ambiente SEED_USER_PASSWORD.
+ * Credenciais operacionais existem exclusivamente no Firebase. O UID resultante
+ * é persistido na tabela Usuario para vincular a identidade ao acesso interno.
  */
 
 import "dotenv/config";
 import { initializeApp, getApps, cert, App } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { prisma } from "../src/lib/prisma";
 
 // ---------------------------------------------------------------------------
 // Inicializa Firebase Admin
@@ -105,7 +106,7 @@ async function upsertFirebaseUser(user: (typeof TEST_USERS)[0]) {
     uid = existing.uid;
     action = "atualizado";
 
-    // Atualiza senha, displayName e força emailVerified
+    // Atualiza a credencial Firebase, sem armazenar senha no banco municipal.
     await adminAuth.updateUser(uid, {
       displayName: user.displayName,
       password: user.password,
@@ -138,6 +139,7 @@ async function main() {
   for (const user of TEST_USERS) {
     try {
       const { uid, action } = await upsertFirebaseUser(user);
+      await prisma.usuario.update({ where: { email: user.email }, data: { firebaseUid: uid } });
       results.push({ email: user.email, role: user.role, uid, action });
       console.log(`  ✅ [${action.toUpperCase()}] ${user.email} (${user.role})`);
     } catch (err) {
@@ -154,8 +156,7 @@ async function main() {
     console.log(`   ${r.email.padEnd(maxEmail + 2)} → ${r.role}`);
   }
 
-  console.log("\n⚠️  Lembre-se: os e-mails acima devem existir também na tabela");
-  console.log("    'Usuario' do banco (seed-poc-completo.ts já faz isso).");
+  console.log("\n⚠️  Os e-mails acima precisam existir na tabela Usuario; os UIDs Firebase foram vinculados.");
   console.log("\n🎯 Pronto! Faça login em /login com qualquer conta acima.\n");
 }
 
@@ -163,4 +164,7 @@ main()
   .catch((e) => {
     console.error("❌ Erro fatal na sincronização do Firebase:", e);
     process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
   });

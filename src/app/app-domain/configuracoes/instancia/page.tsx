@@ -10,6 +10,7 @@ function getInitialValues(parameters: { chave: string; valor: unknown }[]): Inst
   const values = getInstanceConfigurationDefaults();
   for (const parameter of parameters) {
     if (parameter.chave === "WORKFLOW_DEFAULT_SLA_DAYS" && typeof parameter.valor === "number") values.WORKFLOW_DEFAULT_SLA_DAYS = parameter.valor;
+    if (parameter.chave === "WORKFLOW_INSTANCE_TIME_ZONE" && typeof parameter.valor === "string") values.WORKFLOW_INSTANCE_TIME_ZONE = parameter.valor;
     if (parameter.chave === "DOCUMENT_DEFAULT_RETENTION_MONTHS" && typeof parameter.valor === "number") values.DOCUMENT_DEFAULT_RETENTION_MONTHS = parameter.valor;
     if (parameter.chave === "NOTIFICATION_DEFAULT_PRIORITY" && ["BAIXA", "NORMAL", "ALTA"].includes(String(parameter.valor))) values.NOTIFICATION_DEFAULT_PRIORITY = parameter.valor as InstanceConfigurationValues["NOTIFICATION_DEFAULT_PRIORITY"];
     if (parameter.chave === "REPORT_INCLUDE_EMISSION_METADATA" && typeof parameter.valor === "boolean") values.REPORT_INCLUDE_EMISSION_METADATA = parameter.valor;

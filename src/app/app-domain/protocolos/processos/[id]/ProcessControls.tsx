@@ -3,10 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { FileUp, FileText, Send, X } from "lucide-react";
-import { addProcessDispatch, archiveProcess, concludeProcess, forwardProcess, receiveProcess, reopenProcess } from "../../actions";
+import { addProcessDispatch, approveGenericProcessWorkflow, archiveProcess, concludeGenericProcessWorkflow, concludeProcess, forwardProcess, receiveProcess, rejectGenericProcessWorkflow, reopenProcess, returnGenericProcessWorkflow } from "../../actions";
 
 type Department = { id: string; name: string };
-type Mode = "dispatch" | "forward" | "document" | "conclude" | "archive" | "reopen" | null;
+type Mode = "dispatch" | "forward" | "document" | "conclude" | "archive" | "reopen" | "genericApprove" | "genericReturn" | "genericReject" | "genericConclude" | null;
 
 export default function ProcessControls({
   processId,
@@ -14,12 +14,16 @@ export default function ProcessControls({
   currentDepartmentId,
   canOperate,
   departments,
+  genericWorkflow,
+  documentClasses,
 }: {
   processId: string;
   status: string;
   currentDepartmentId: string | null;
   canOperate: boolean;
   departments: Department[];
+  genericWorkflow: { currentPosition: number; totalStages: number; stageLabel: string; status: string } | null;
+  documentClasses: { id: string; label: string }[];
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>(null);
@@ -33,8 +37,10 @@ export default function ProcessControls({
   const [file, setFile] = useState<File | null>(null);
   const [documentTitle, setDocumentTitle] = useState("");
   const [documentType, setDocumentType] = useState("Anexo");
+  const [documentClassId, setDocumentClassId] = useState("");
 
-  const isTerminal = ["Arquivado", "Cancelado"].includes(status);
+  const isGeneric = Boolean(genericWorkflow);
+  const isTerminal = ["Arquivado", "Cancelado", "Rejeitado"].includes(status) || (isGeneric && genericWorkflow?.status !== "ACTIVE");
   const isAwaitingAccounting = status === "Aguardando Contabilidade";
   const disabled = !canOperate || isTerminal || status === "Aguardando Recebimento";
 
@@ -76,7 +82,15 @@ export default function ProcessControls({
   function handleLifecycle() {
     setError(null);
     startTransition(async () => {
-      const result = mode === "conclude"
+      const result = mode === "genericApprove"
+        ? await approveGenericProcessWorkflow(processId, reason)
+        : mode === "genericReturn"
+          ? await returnGenericProcessWorkflow(processId, reason)
+          : mode === "genericReject"
+            ? await rejectGenericProcessWorkflow(processId, reason)
+            : mode === "genericConclude"
+              ? await concludeGenericProcessWorkflow(processId, reason)
+        : mode === "conclude"
         ? await concludeProcess(processId, reason)
         : mode === "archive"
           ? await archiveProcess(processId, reason)
@@ -106,6 +120,7 @@ export default function ProcessControls({
       formData.append("processId", processId);
       formData.append("title", documentTitle);
       formData.append("documentType", documentType);
+      formData.append("documentClassId", documentClassId);
       const response = await fetch("/api/protocolos/upload", { method: "POST", body: formData });
       const payload = await response.json();
       if (!response.ok) {
@@ -133,21 +148,27 @@ export default function ProcessControls({
           <FileText className="w-4 h-4" />
           Adicionar Despacho
         </button>
-        <button disabled={disabled || isAwaitingAccounting} onClick={() => setMode("forward")} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-colors">
+        {!isGeneric && <button disabled={disabled || isAwaitingAccounting} onClick={() => setMode("forward")} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-colors">
           <Send className="w-4 h-4" />
           Tramitar
-        </button>
-        {status === "Recebido" || status === "Em Analise" || status === "Reaberto" ? (
+        </button>}
+        {isGeneric && genericWorkflow && status !== "Aguardando Recebimento" && !isTerminal ? <>
+          {genericWorkflow.currentPosition < genericWorkflow.totalStages && <button disabled={!canOperate || isPending} onClick={() => setMode("genericApprove")} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors">Aprovar e encaminhar</button>}
+          {genericWorkflow.currentPosition > 1 && <button disabled={!canOperate || isPending} onClick={() => setMode("genericReturn")} className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors">Devolver etapa</button>}
+          <button disabled={!canOperate || isPending} onClick={() => setMode("genericReject")} className="px-4 py-2 bg-red-700 hover:bg-red-800 disabled:opacity-50 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors">Rejeitar</button>
+          {genericWorkflow.currentPosition === genericWorkflow.totalStages && <button disabled={!canOperate || isPending} onClick={() => setMode("genericConclude")} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors">Concluir</button>}
+        </> : null}
+        {!isGeneric && (status === "Recebido" || status === "Em Analise" || status === "Reaberto") ? (
           <button disabled={!canOperate || isPending} onClick={() => setMode("conclude")} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors">
             Concluir
           </button>
         ) : null}
-        {status === "Concluido" ? (
+        {!isGeneric && status === "Concluido" ? (
           <button disabled={!canOperate || isPending} onClick={() => setMode("archive")} className="px-4 py-2 bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors">
             Arquivar
           </button>
         ) : null}
-        {status === "Arquivado" ? (
+        {!isGeneric && status === "Arquivado" ? (
           <button disabled={!canOperate || isPending} onClick={() => setMode("reopen")} className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors">
             Reabrir
           </button>
@@ -161,7 +182,7 @@ export default function ProcessControls({
           <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 p-5">
               <h2 className="text-lg font-bold text-slate-900">
-                {mode === "forward" ? "Tramitar processo" : mode === "dispatch" ? "Adicionar despacho" : mode === "document" ? "Anexar documento" : mode === "conclude" ? "Concluir processo" : mode === "archive" ? "Arquivar processo" : "Reabrir processo"}
+                 {mode === "forward" ? "Tramitar processo" : mode === "dispatch" ? "Adicionar despacho" : mode === "document" ? "Anexar documento" : mode === "genericApprove" ? "Aprovar etapa" : mode === "genericReturn" ? "Devolver etapa" : mode === "genericReject" ? "Rejeitar processo" : mode === "genericConclude" ? "Concluir processo" : mode === "conclude" ? "Concluir processo" : mode === "archive" ? "Arquivar processo" : "Reabrir processo"}
               </h2>
               <button onClick={close} disabled={isPending} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
             </div>
@@ -182,18 +203,22 @@ export default function ProcessControls({
                   </label>
                 </>
               )}
-              {mode === "dispatch" && (
+               {mode === "dispatch" && (
                 <>
-                  <label className="block text-sm font-medium text-slate-700">Tipo
+                   <label className="block text-sm font-medium text-slate-700">Tipo
                     <select value={dispatchType} onChange={event => setDispatchType(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2">
                       <option>Despacho</option><option>Parecer</option><option>Decisao</option>
                     </select>
-                  </label>
+                   </label>
+                   {isGeneric && <label className="block text-sm font-medium text-slate-700">Classe documental
+                     <select value={documentClassId} onChange={event => setDocumentClassId(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"><option value="">Selecione a classe</option>{documentClasses.map((documentClass) => <option key={documentClass.id} value={documentClass.id}>{documentClass.label}</option>)}</select>
+                   </label>}
                   <label className="block text-sm font-medium text-slate-700">Conteúdo
                     <textarea value={content} onChange={event => setContent(event.target.value)} rows={7} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
                   </label>
                 </>
-              )}
+               )}
+               {mode === "genericApprove" && <label className="block text-sm font-medium text-slate-700">Observação (opcional)<textarea value={reason} onChange={event => setReason(event.target.value)} rows={5} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" /></label>}
               {mode === "document" && (
                 <>
                   <label className="block text-sm font-medium text-slate-700">Titulo
@@ -210,7 +235,7 @@ export default function ProcessControls({
                   <p className="text-xs text-slate-500">PDF, JPG ou PNG, com até 10 MB.</p>
                 </>
               )}
-              {(mode === "conclude" || mode === "archive" || mode === "reopen") && (
+               {(mode === "conclude" || mode === "archive" || mode === "reopen" || mode === "genericReturn" || mode === "genericReject" || mode === "genericConclude") && (
                 <label className="block text-sm font-medium text-slate-700">Justificativa
                   <textarea value={reason} onChange={event => setReason(event.target.value)} rows={5} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
                 </label>
@@ -219,8 +244,8 @@ export default function ProcessControls({
             </div>
             <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 p-5">
               <button onClick={close} disabled={isPending} className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600">Cancelar</button>
-              <button disabled={isPending} onClick={mode === "forward" ? handleForward : mode === "dispatch" ? handleDispatch : mode === "document" ? handleDocument : handleLifecycle} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                {isPending ? "Salvando..." : mode === "forward" ? "Tramitar" : mode === "dispatch" ? "Adicionar" : mode === "document" ? "Anexar" : mode === "conclude" ? "Concluir" : mode === "archive" ? "Arquivar" : "Reabrir"}
+               <button disabled={isPending} onClick={mode === "forward" ? handleForward : mode === "dispatch" ? handleDispatch : mode === "document" ? handleDocument : handleLifecycle} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                 {isPending ? "Salvando..." : mode === "forward" ? "Tramitar" : mode === "dispatch" ? "Adicionar" : mode === "document" ? "Anexar" : mode === "genericApprove" ? "Aprovar" : mode === "genericReturn" ? "Devolver" : mode === "genericReject" ? "Rejeitar" : mode === "genericConclude" || mode === "conclude" ? "Concluir" : mode === "archive" ? "Arquivar" : "Reabrir"}
               </button>
             </div>
           </div>

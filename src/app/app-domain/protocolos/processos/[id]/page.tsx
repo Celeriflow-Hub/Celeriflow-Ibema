@@ -33,7 +33,10 @@ export default async function ProcessoDetalhesPage({ params }: { params: { id: s
       events: {
         include: { employee: true, department: true },
         orderBy: { createdAt: 'desc' }
-      }
+      },
+      genericWorkflowInstance: {
+        include: { definition: { include: { stages: { orderBy: { position: "asc" } } } } },
+      },
     }
   });
 
@@ -41,11 +44,10 @@ export default async function ProcessoDetalhesPage({ params }: { params: { id: s
     notFound();
   }
 
-  const departamentos = await prisma.department.findMany({
-    where: { isActive: true },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
+  const [departamentos, documentClasses] = await Promise.all([
+    prisma.department.findMany({ where: { isActive: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.documentClass.findMany({ where: { isActive: true }, select: { id: true, label: true }, orderBy: { label: "asc" } }),
+  ]);
   const canOperate = context.protocolAccess.canEdit && Boolean(
     user.employeeId && user.departmentId && user.departmentId === processo.currentDepartmentId,
   );
@@ -55,6 +57,7 @@ export default async function ProcessoDetalhesPage({ params }: { params: { id: s
   const daysToDeadline = processo.expectedCompletionAt
     ? Math.ceil((processo.expectedCompletionAt.getTime() - requestTime.getTime()) / 86_400_000)
     : null;
+  const genericStage = processo.genericWorkflowInstance?.definition.stages.find((stage) => stage.position === processo.genericWorkflowInstance?.currentPosition) || null;
 
   return (
     <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -84,6 +87,13 @@ export default async function ProcessoDetalhesPage({ params }: { params: { id: s
           currentDepartmentId={processo.currentDepartmentId}
           canOperate={canOperate}
           departments={departamentos}
+          documentClasses={documentClasses}
+          genericWorkflow={processo.genericWorkflowInstance && genericStage ? {
+            currentPosition: processo.genericWorkflowInstance.currentPosition,
+            totalStages: processo.genericWorkflowInstance.definition.stages.length,
+            stageLabel: genericStage.label,
+            status: processo.genericWorkflowInstance.status,
+          } : null}
         />
       </div>
 
@@ -172,6 +182,7 @@ export default async function ProcessoDetalhesPage({ params }: { params: { id: s
             <div>
               <p className="text-xs text-slate-400 font-medium">Setor Atual</p>
               <p className="text-sm font-semibold text-slate-800 mt-1">{processo.currentDepartment?.name || "Não atribuído"}</p>
+              {genericStage && <p className="mt-1 text-xs text-indigo-700">Fluxo genérico v{processo.genericWorkflowInstance?.definitionVersion} · etapa {genericStage.position}: {genericStage.label}</p>}
             </div>
 
             <div>

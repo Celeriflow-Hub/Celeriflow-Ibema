@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AccessError } from "@/lib/platform/tenant-context";
 import { getProtocolContextForOperation } from "@/lib/protocols/access";
 import { uploadProcessFile } from "@/lib/platform/blob";
+import { createPublicValidationCode, hashDocumentContent } from "@/lib/documents/document-flow-policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +27,7 @@ export async function POST(request: NextRequest) {
     const processId = String(formData.get("processId") || "");
     const title = String(formData.get("title") || "").trim();
     const documentType = String(formData.get("documentType") || "Anexo").trim() || "Anexo";
+    const documentClassId = String(formData.get("documentClassId") || "") || null;
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Nenhum arquivo enviado." }, { status: 400 });
     }
@@ -37,7 +39,7 @@ export async function POST(request: NextRequest) {
     const document = await context.prisma.$transaction(async (tx) => {
       const process = await tx.process.findUnique({
         where: { id: processId },
-        select: { id: true, protocolNumber: true, status: true, currentDepartmentId: true },
+        select: { id: true, protocolNumber: true, status: true, currentDepartmentId: true, processType: { select: { genericWorkflowEnabled: true } } },
       });
       if (!process) throw new Error("Processo nao encontrado.");
       if (process.currentDepartmentId !== employee.departmentId) throw new Error("Este processo nao pertence ao seu setor.");
@@ -45,6 +47,13 @@ export async function POST(request: NextRequest) {
         throw new Error("Este processo nao aceita anexos neste momento.");
       }
 
+      if (process.processType.genericWorkflowEnabled && !documentClassId) {
+        throw new Error("Selecione a classe documental para anexos do fluxo generico.");
+      }
+      if (documentClassId) {
+        const documentClass = await tx.documentClass.findFirst({ where: { id: documentClassId, isActive: true }, select: { id: true } });
+        if (!documentClass) throw new Error("A classe documental selecionada nao esta ativa.");
+      }
       const document = await tx.document.create({
         data: {
           title,
@@ -52,8 +61,21 @@ export async function POST(request: NextRequest) {
           fileUrl: blob.url,
           status: "Válido",
           notes: `Anexo do processo ${process.protocolNumber}.`,
+          documentClassId,
         },
       });
+      if (process.processType.genericWorkflowEnabled) {
+        await tx.documentVersion.create({
+          data: {
+            documentId: document.id,
+            versionNumber: 1,
+            fileUrl: blob.url,
+            hashSha256: hashDocumentContent(new Uint8Array(await file.arrayBuffer())),
+            publicValidationCode: createPublicValidationCode(),
+            status: "FINAL",
+          },
+        });
+      }
       await tx.processDocument.create({
         data: {
           processId: process.id,

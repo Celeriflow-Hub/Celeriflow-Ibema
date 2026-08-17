@@ -112,6 +112,7 @@ model Department {
   initialSubjects     Subject[]              @relation("SubjectInitialDepartment")
   processEvents       ProcessEvent[]         @relation("ProcessEventDepartment")
   workflowStages      ProcessWorkflowStage[]
+  genericWorkflowStages GenericProcessWorkflowStage[]
 
   // Mod 4 e 5
   folders                Folder[]            @relation("FolderDepartment")
@@ -658,6 +659,7 @@ model DocumentClass {
   signaturePolicy String     @default("EXTERNAL_PROVIDER_REQUIRED") // INTERNAL_ALLOWED, ICP_REQUIRED, EXTERNAL_PROVIDER_REQUIRED
   isActive        Boolean    @default(true)
   documents       Document[]
+  genericWorkflowRequiredStages GenericProcessWorkflowStage[]
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 }
@@ -787,10 +789,12 @@ model ProcessType {
   defaultPriority       String?
   requiresInterested    Boolean     @default(false)
   allowsInternalOpening Boolean     @default(true)
+  genericWorkflowEnabled Boolean    @default(false)
 
   subjects       Subject[]
   processes      Process[]
   workflowStages ProcessWorkflowStage[]
+  genericWorkflowDefinitions GenericProcessWorkflowDefinition[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -863,6 +867,7 @@ model Process {
   taxCaseLinks         TaxCaseLink[]
   ticket               Ticket?
   ombudsman            Ombudsman?
+  genericWorkflowInstance GenericProcessWorkflowInstance?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -915,6 +920,80 @@ model ProcessWorkflowStage {
 
   @@unique([processTypeId, subjectId, position])
   @@index([processTypeId, subjectId, isActive, position])
+}
+
+// C2-004 is opt-in only. Existing ProcessWorkflowStage records remain the legacy workflow.
+model GenericProcessWorkflowDefinition {
+  id                   String    @id @default(cuid())
+  processTypeId        String
+  processType          ProcessType @relation(fields: [processTypeId], references: [id], onDelete: Restrict)
+  version              Int
+  status               String    @default("DRAFT") // DRAFT, PUBLISHED
+  publishedAt          DateTime?
+  publishedByUsuarioId String?
+  publishedByUsuario   Usuario?  @relation("GenericWorkflowDefinitionPublisher", fields: [publishedByUsuarioId], references: [id], onDelete: Restrict)
+  stages               GenericProcessWorkflowStage[]
+  instances            GenericProcessWorkflowInstance[]
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@unique([processTypeId, version])
+  @@index([processTypeId, status])
+}
+
+model GenericProcessWorkflowStage {
+  id                      String    @id @default(cuid())
+  definitionId            String
+  definition              GenericProcessWorkflowDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  position                Int
+  label                   String
+  departmentId            String
+  department              Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  slaCalendarDays         Int
+  requiresSignedDocument  Boolean   @default(false)
+  requiredDocumentClassId String?
+  requiredDocumentClass   DocumentClass? @relation(fields: [requiredDocumentClassId], references: [id], onDelete: Restrict)
+  createdAt               DateTime  @default(now())
+
+  @@unique([definitionId, position])
+  @@index([definitionId, position])
+}
+
+model GenericProcessWorkflowInstance {
+  id                String    @id @default(cuid())
+  processId         String    @unique
+  process           Process   @relation(fields: [processId], references: [id], onDelete: Restrict)
+  definitionId      String
+  definition        GenericProcessWorkflowDefinition @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  definitionVersion Int
+  status            String    @default("ACTIVE") // ACTIVE, REJECTED, CONCLUDED
+  currentPosition   Int
+  dueAt             DateTime?
+  instanceTimeZone  String
+  openedByUsuarioId String
+  openedByUsuario   Usuario   @relation("GenericWorkflowInstanceOpener", fields: [openedByUsuarioId], references: [id], onDelete: Restrict)
+  events            GenericProcessWorkflowEvent[]
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([definitionId])
+  @@index([status, dueAt])
+}
+
+// This is a separate append-only execution ledger; ProcessEvent remains the legacy timeline.
+model GenericProcessWorkflowEvent {
+  id             String    @id @default(cuid())
+  instanceId     String
+  instance       GenericProcessWorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Restrict)
+  eventType      String
+  fromPosition   Int?
+  toPosition     Int?
+  actorUsuarioId String
+  actorUsuario   Usuario   @relation("GenericWorkflowEventActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict)
+  note           String?
+  createdAt      DateTime  @default(now())
+
+  @@index([instanceId, createdAt])
 }
 
 // Documentos/Anexos do Processo
@@ -5836,6 +5915,9 @@ model Usuario {
   unidadesGestoras             UsuarioUnidadeGestora[]
   documentSignatures           DocumentSignature[]           @relation("DocumentSignatureUsuario")
   requestedDocumentSignatures  DocumentSignature[]           @relation("DocumentSignatureRequestedBy")
+  genericWorkflowDefinitionsPublished GenericProcessWorkflowDefinition[] @relation("GenericWorkflowDefinitionPublisher")
+  genericWorkflowInstancesOpened      GenericProcessWorkflowInstance[]   @relation("GenericWorkflowInstanceOpener")
+  genericWorkflowEvents               GenericProcessWorkflowEvent[]      @relation("GenericWorkflowEventActor")
   protocolNotifications        ProtocolNotification[]
   financialAuditLogs           FinancialAuditLog[]           @relation("FinancialAuditUsuario")
   taxAuditLogs                 TaxAuditLog[]                 @relation("TaxAuditUsuario")

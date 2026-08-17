@@ -1,4 +1,6 @@
 import type { Prisma } from "@prisma/client";
+import { getGenericWorkflowInstanceTimeZone } from "@/lib/protocols/generic-workflow-definition-service";
+import { calculateGenericWorkflowDeadline } from "@/lib/protocols/generic-workflow-policy";
 import { notifyProtocolDepartment } from "@/lib/protocols/notifications";
 
 const AWAITING_RECEIPT = "Aguardando Recebimento";
@@ -31,12 +33,26 @@ export async function createValidatedProcess(tx: Prisma.TransactionClient, emplo
     throw new Error("Este processo exige a selecao de um interessado.");
   }
 
-  const subjectStages = await tx.processWorkflowStage.findMany({ where: { processTypeId, subjectId, isActive: true }, orderBy: { position: "asc" } });
-  const workflowStages = subjectStages.length
+  const genericDefinition = subject.processType.genericWorkflowEnabled
+    ? await tx.genericProcessWorkflowDefinition.findFirst({
+      where: { processTypeId, status: "PUBLISHED" },
+      orderBy: { version: "desc" },
+      include: { stages: { orderBy: { position: "asc" } } },
+    })
+    : null;
+  if (subject.processType.genericWorkflowEnabled && !genericDefinition) {
+    throw new Error("Este tipo usa o fluxo generico e precisa de uma versao publicada antes da abertura.");
+  }
+  if (genericDefinition && selectedDepartmentId) {
+    throw new Error("O setor inicial do fluxo generico e definido pela versao publicada.");
+  }
+  const subjectStages = genericDefinition ? [] : await tx.processWorkflowStage.findMany({ where: { processTypeId, subjectId, isActive: true }, orderBy: { position: "asc" } });
+  const workflowStages = genericDefinition || subjectStages.length
     ? subjectStages
     : await tx.processWorkflowStage.findMany({ where: { processTypeId, subjectId: null, isActive: true }, orderBy: { position: "asc" } });
   const initialStage = workflowStages[0] || null;
-  const initialDepartmentId = initialStage?.departmentId || subject.initialDepartmentId || subject.processType.initialDepartmentId || selectedDepartmentId;
+  const initialGenericStage = genericDefinition?.stages[0] || null;
+  const initialDepartmentId = initialGenericStage?.departmentId || initialStage?.departmentId || subject.initialDepartmentId || subject.processType.initialDepartmentId || selectedDepartmentId;
   if (!initialDepartmentId) throw new Error("Selecione o setor inicial responsavel pelo processo.");
 
   const department = await tx.department.findFirst({ where: { id: initialDepartmentId, isActive: true }, select: { id: true } });
@@ -47,8 +63,11 @@ export async function createValidatedProcess(tx: Prisma.TransactionClient, emplo
     where: { year }, create: { year, nextNumber: 2 }, update: { nextNumber: { increment: 1 } }, select: { nextNumber: true },
   });
   const protocolNumber = `PROC-${year}-${String(sequence.nextNumber - 1).padStart(6, "0")}`;
+  const instanceTimeZone = genericDefinition ? await getGenericWorkflowInstanceTimeZone(tx) : null;
   const slaDays = initialStage?.slaDays ?? subject.slaDays ?? subject.processType.defaultSlaDays;
-  const expectedCompletionAt = slaDays ? new Date(Date.now() + slaDays * 86_400_000) : null;
+  const expectedCompletionAt = initialGenericStage && instanceTimeZone
+    ? calculateGenericWorkflowDeadline(new Date(), initialGenericStage.slaCalendarDays, instanceTimeZone)
+    : slaDays ? new Date(Date.now() + slaDays * 86_400_000) : null;
   const priority = requestedPriority || subject.defaultPriority || subject.processType.defaultPriority || "Normal";
   const process = await tx.process.create({
     data: {
@@ -56,6 +75,19 @@ export async function createValidatedProcess(tx: Prisma.TransactionClient, emplo
       status: AWAITING_RECEIPT, currentDepartmentId: department.id, currentWorkflowStageId: initialStage?.id || null, expectedCompletionAt,
       movements: { create: { toDepartmentId: department.id, employeeId: employee.id, reason: "Distribuicao inicial", status: "AWAITING_RECEIPT", dueAt: expectedCompletionAt } },
       events: { create: { eventType: "OPENED", description: "Processo protocolado e encaminhado ao setor inicial.", newStatus: AWAITING_RECEIPT, departmentId: department.id, employeeId: employee.id } },
+      ...(genericDefinition && initialGenericStage && instanceTimeZone ? {
+        genericWorkflowInstance: {
+          create: {
+            definitionId: genericDefinition.id,
+            definitionVersion: genericDefinition.version,
+            currentPosition: initialGenericStage.position,
+            dueAt: expectedCompletionAt,
+            instanceTimeZone,
+            openedByUsuarioId: actorUsuarioId,
+            events: { create: { eventType: "OPENED", toPosition: initialGenericStage.position, actorUsuarioId } },
+          },
+        },
+      } : {}),
     },
     select: { id: true, protocolNumber: true, expectedCompletionAt: true },
   });

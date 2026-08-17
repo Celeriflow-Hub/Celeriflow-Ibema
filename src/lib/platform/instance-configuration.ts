@@ -6,6 +6,11 @@ export const instanceConfigurationCatalog = {
     description: "Prazo padrão, em dias, sugerido ao criar um fluxo configurável.",
     defaultValue: 5,
   },
+  WORKFLOW_INSTANCE_TIME_ZONE: {
+    label: "Fuso horario dos fluxos",
+    description: "Fuso da instancia usado para contar dias corridos de SLA dos novos fluxos genericos.",
+    defaultValue: "America/Sao_Paulo",
+  },
   DOCUMENT_DEFAULT_RETENTION_MONTHS: {
     label: "Retenção padrão de documentos",
     description: "Prazo padrão, em meses, sugerido para novos tipos documentais.",
@@ -27,6 +32,14 @@ export type InstanceConfigurationKey = keyof typeof instanceConfigurationCatalog
 
 const instanceConfigurationValuesSchema = z.object({
   WORKFLOW_DEFAULT_SLA_DAYS: z.coerce.number().int().min(1).max(365),
+  WORKFLOW_INSTANCE_TIME_ZONE: z.string().refine((value) => {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: value }).format();
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Fuso horario IANA invalido."),
   DOCUMENT_DEFAULT_RETENTION_MONTHS: z.coerce.number().int().min(1).max(1_200),
   NOTIFICATION_DEFAULT_PRIORITY: z.enum(["BAIXA", "NORMAL", "ALTA"]),
   REPORT_INCLUDE_EMISSION_METADATA: z.boolean(),

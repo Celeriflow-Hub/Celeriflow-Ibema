@@ -3,6 +3,7 @@
 import { getProtocolContextForOperation } from "@/lib/protocols/access";
 import { notifyProtocolDepartment, notifyProtocolUsers } from "@/lib/protocols/notifications";
 import { createValidatedProcess } from "@/lib/protocols/service";
+import { approveGenericWorkflowProcess, concludeGenericWorkflowProcess, isGenericWorkflowProcess, recordGenericWorkflowReceipt, rejectGenericWorkflowProcess, returnGenericWorkflowProcess } from "@/lib/protocols/generic-workflow-runtime";
 import { markInternalNotificationRead } from "@/lib/notifications/internal-notifications";
 import { getCurrentTenantContext } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
@@ -118,6 +119,7 @@ export async function receiveProcess(processId: string): Promise<{ error: string
           employeeId: employee.id,
         },
       });
+      await recordGenericWorkflowReceipt(tx, processId, user.id);
       const sender = movement.employeeId
         ? await tx.usuario.findUnique({ where: { employeeId: movement.employeeId }, select: { id: true } })
         : null;
@@ -173,6 +175,7 @@ export async function forwardProcess(data: {
         },
       });
       if (!process) throw new Error("Processo nao encontrado.");
+      if (await isGenericWorkflowProcess(tx, data.processId)) throw new Error("Use a aprovacao ou devolucao do fluxo generico; ele nao aceita destino ou prazo manual.");
       if (process.currentDepartmentId !== departmentId) throw new Error("Este processo nao pertence ao seu setor.");
       if (["Arquivado", "Cancelado"].includes(process.status)) throw new Error("Este processo nao aceita novas operacoes.");
       if (process.status === AWAITING_RECEIPT) throw new Error("Receba o processo antes de tramita-lo.");
@@ -326,6 +329,7 @@ export async function concludeProcess(processId: string, reason: string): Promis
     if (!description) throw new Error("Informe a justificativa da conclusao.");
 
     await prisma.$transaction(async (tx) => {
+      if (await isGenericWorkflowProcess(tx, processId)) throw new Error("Use a conclusao da etapa final do fluxo generico.");
       const process = await tx.process.findUnique({ where: { id: processId }, select: { status: true, currentDepartmentId: true } });
       if (!process) throw new Error("Processo nao encontrado.");
       if (process.currentDepartmentId !== departmentId) throw new Error("Este processo nao pertence ao seu setor.");
@@ -347,6 +351,60 @@ export async function concludeProcess(processId: string, reason: string): Promis
   }
 }
 
+export async function approveGenericProcessWorkflow(processId: string, note: string): Promise<{ error: string | null }> {
+  try {
+    const { prisma, employee, departmentId, user } = await getOperationalContext("update");
+    await prisma.$transaction((tx) => approveGenericWorkflowProcess(tx, processId, { usuarioId: user.id, employeeId: employee.id, departmentId }, note.trim() || null));
+    revalidateProtocolPages();
+    return { error: null };
+  } catch (error) {
+    console.error(error);
+    return { error: error instanceof Error ? error.message : "Erro ao aprovar a etapa do fluxo." };
+  }
+}
+
+export async function returnGenericProcessWorkflow(processId: string, reason: string): Promise<{ error: string | null }> {
+  try {
+    const { prisma, employee, departmentId, user } = await getOperationalContext("update");
+    const note = reason.trim();
+    if (!note) throw new Error("Informe o motivo da devolucao.");
+    await prisma.$transaction((tx) => returnGenericWorkflowProcess(tx, processId, { usuarioId: user.id, employeeId: employee.id, departmentId }, note));
+    revalidateProtocolPages();
+    return { error: null };
+  } catch (error) {
+    console.error(error);
+    return { error: error instanceof Error ? error.message : "Erro ao devolver a etapa do fluxo." };
+  }
+}
+
+export async function rejectGenericProcessWorkflow(processId: string, reason: string): Promise<{ error: string | null }> {
+  try {
+    const { prisma, employee, departmentId, user } = await getOperationalContext("update");
+    const note = reason.trim();
+    if (!note) throw new Error("Informe o motivo da rejeicao.");
+    await prisma.$transaction((tx) => rejectGenericWorkflowProcess(tx, processId, { usuarioId: user.id, employeeId: employee.id, departmentId }, note));
+    revalidateProtocolPages();
+    return { error: null };
+  } catch (error) {
+    console.error(error);
+    return { error: error instanceof Error ? error.message : "Erro ao rejeitar o processo." };
+  }
+}
+
+export async function concludeGenericProcessWorkflow(processId: string, reason: string): Promise<{ error: string | null }> {
+  try {
+    const { prisma, employee, departmentId, user } = await getOperationalContext("update");
+    const note = reason.trim();
+    if (!note) throw new Error("Informe a justificativa da conclusao.");
+    await prisma.$transaction((tx) => concludeGenericWorkflowProcess(tx, processId, { usuarioId: user.id, employeeId: employee.id, departmentId }, note));
+    revalidateProtocolPages();
+    return { error: null };
+  } catch (error) {
+    console.error(error);
+    return { error: error instanceof Error ? error.message : "Erro ao concluir o processo." };
+  }
+}
+
 export async function archiveProcess(processId: string, reason: string): Promise<{ error: string | null }> {
   try {
     const { prisma, employee, departmentId } = await getOperationalContext("update");
@@ -354,6 +412,7 @@ export async function archiveProcess(processId: string, reason: string): Promise
     if (!archiveReason) throw new Error("Informe a justificativa do arquivamento.");
 
     await prisma.$transaction(async (tx) => {
+      if (await isGenericWorkflowProcess(tx, processId)) throw new Error("Processos do fluxo generico nao usam arquivamento manual.");
       const process = await tx.process.findUnique({ where: { id: processId }, select: { status: true, currentDepartmentId: true } });
       if (!process) throw new Error("Processo nao encontrado.");
       if (process.currentDepartmentId !== departmentId) throw new Error("Este processo nao pertence ao seu setor.");
@@ -383,6 +442,7 @@ export async function reopenProcess(processId: string, reason: string): Promise<
     if (!description) throw new Error("Informe a justificativa da reabertura.");
 
     await prisma.$transaction(async (tx) => {
+      if (await isGenericWorkflowProcess(tx, processId)) throw new Error("Processos do fluxo generico nao podem ser reabertos.");
       const process = await tx.process.findUnique({ where: { id: processId }, select: { status: true, currentDepartmentId: true } });
       if (!process) throw new Error("Processo nao encontrado.");
       if (process.currentDepartmentId !== departmentId) throw new Error("Este processo nao pertence ao seu setor.");

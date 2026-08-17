@@ -17,12 +17,7 @@ interface IntegrationRunModalProps {
     status: string;
     message: string;
     createdAt: Date | string;
-    responsePayload?: string | null;
-    requestPayload?: string | null;
-    protocol?: string | null;
-    retries?: number;
-    layoutVersion?: string;
-    relatedEntityId?: string;
+    payload?: string | null;
   } | null;
   onReprocess?: () => Promise<void>;
 }
@@ -36,48 +31,17 @@ export default function IntegrationRunModal({
   run,
   onReprocess,
 }: IntegrationRunModalProps) {
-  const [copiedReq, setCopiedReq] = useState(false);
-  const [copiedRes, setCopiedRes] = useState(false);
+  const [copiedEvidence, setCopiedEvidence] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
 
   if (!isOpen || !run) return null;
 
-  const mockRequestPayload = run.requestPayload || JSON.stringify(
-    {
-      protocol: run.protocol || `PROT-2026-${run.id.slice(0, 6).toUpperCase()}`,
-      action: run.operation || "SYNC_DATA",
-      environment: environment,
-      timestamp: new Date(run.createdAt).toISOString(),
-      entityId: run.relatedEntityId || "EMP-2026/00142",
-      system: "CeleriFlow v1.235.0",
-      layoutVersion: run.layoutVersion || "2026.1",
-    },
-    null,
-    2
-  );
+  const persistedEnvelope = run.payload || "Nenhuma evidência sanitizada foi persistida para esta execução.";
 
-  const mockResponsePayload = run.responsePayload || JSON.stringify(
-    {
-      statusCode: run.status === "SUCCESS" || run.status === "SUCESSO" ? 200 : 500,
-      protocol: run.protocol || `PROT-2026-${run.id.slice(0, 6).toUpperCase()}`,
-      status: run.status,
-      message: run.message,
-      processedAt: new Date(run.createdAt).toISOString(),
-    },
-    null,
-    2
-  );
-
-  const handleCopyReq = () => {
-    navigator.clipboard.writeText(mockRequestPayload);
-    setCopiedReq(true);
-    setTimeout(() => setCopiedReq(false), 2000);
-  };
-
-  const handleCopyRes = () => {
-    navigator.clipboard.writeText(mockResponsePayload);
-    setCopiedRes(true);
-    setTimeout(() => setCopiedRes(false), 2000);
+  const handleCopyEvidence = () => {
+    navigator.clipboard.writeText(persistedEnvelope);
+    setCopiedEvidence(true);
+    setTimeout(() => setCopiedEvidence(false), 2000);
   };
 
   const handleReprocessClick = async () => {
@@ -118,65 +82,30 @@ export default function IntegrationRunModal({
           </button>
         </div>
 
-        {/* Metadata Grid (8.3 Requirements) */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+        <div className="grid grid-cols-2 gap-3 text-xs bg-slate-950/60 p-4 rounded-xl border border-slate-800">
           <div>
             <span className="text-slate-400">Ambiente</span>
-            <p className="font-semibold text-white mt-0.5">{environment}</p>
-          </div>
-          <div>
-            <span className="text-slate-400">Protocolo</span>
-            <p className="font-mono text-indigo-300 font-semibold mt-0.5">{run.protocol || `PROT-${run.id.slice(0, 8)}`}</p>
+            <p className="font-semibold text-white mt-0.5">{run.environment || environment}</p>
           </div>
           <div>
             <span className="text-slate-400">Data/Hora Execução</span>
             <p className="font-semibold text-white mt-0.5">{new Date(run.createdAt).toLocaleString("pt-BR")}</p>
           </div>
-          <div>
-            <span className="text-slate-400">Versão Leiaute / Registro</span>
-            <p className="font-mono text-emerald-300 mt-0.5">{run.layoutVersion || "v2026.1"} (ID: {run.relatedEntityId || "REG-1042"})</p>
-          </div>
         </div>
 
-        {/* Payloads Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Request Payload */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                <FileJson className="w-4 h-4 text-blue-400" /> Payload Enviado
-              </span>
-              <button
-                onClick={handleCopyReq}
-                className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
-              >
-                {copiedReq ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                {copiedReq ? "Copiado!" : "Copiar"}
-              </button>
-            </div>
-            <pre className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-blue-300 overflow-x-auto max-h-60">
-              {mockRequestPayload}
-            </pre>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <FileJson className="w-4 h-4 text-emerald-400" /> Envelope Sanitizado Persistido
+            </span>
+            <button onClick={handleCopyEvidence} className="text-xs text-slate-400 hover:text-white flex items-center gap-1">
+              {copiedEvidence ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              {copiedEvidence ? "Copiado!" : "Copiar"}
+            </button>
           </div>
-
-          {/* Response Payload */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                <FileJson className="w-4 h-4 text-emerald-400" /> Resposta Recebida
-              </span>
-              <button
-                onClick={handleCopyRes}
-                className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
-              >
-                {copiedRes ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                {copiedRes ? "Copiado!" : "Copiar"}
-              </button>
-            </div>
-            <pre className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-emerald-300 overflow-x-auto max-h-60">
-              {mockResponsePayload}
-            </pre>
-          </div>
+          <pre className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-emerald-300 overflow-x-auto max-h-80">
+            {persistedEnvelope}
+          </pre>
         </div>
 
         {/* Footer Actions */}

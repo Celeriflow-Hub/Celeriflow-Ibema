@@ -1,4 +1,13 @@
 export type IntegrationEnvironment = "MOCK" | "SANDBOX" | "HOMOLOGACAO" | "PRODUCAO";
+export type IntegrationOperation = "HEALTH_CHECK" | "DOWNLOAD_STATEMENT";
+export type MockIntegrationResult = {
+  status: "SUCESSO" | "FALHA";
+  message: string;
+  externalId: string;
+  evidence: { dispatch: "MOCK"; scenario: string; externalId: string };
+};
+
+export const integrationEnvironments = ["MOCK", "SANDBOX", "HOMOLOGACAO", "PRODUCAO"] as const;
 
 export type IntegrationDefinition = {
   code: string;
@@ -31,15 +40,52 @@ export function getIntegrationDefinition(code: string) {
   return integrationCatalog.find((integration) => integration.code === code);
 }
 
-export function runMockIntegration(code: string, operation: string) {
+export function isIntegrationEnvironment(value: string): value is IntegrationEnvironment {
+  return integrationEnvironments.includes(value as IntegrationEnvironment);
+}
+
+export function isEnvironmentAllowedForIntegration(code: string, environment: IntegrationEnvironment) {
+  return code === "BANCO_API" ? environment === "SANDBOX" : environment === "MOCK";
+}
+
+export function assertIntegrationEnvironmentPolicy(code: string, environment: IntegrationEnvironment) {
+  if (!getIntegrationDefinition(code)) throw new Error("Conector externo não reconhecido.");
+  if (environment === "PRODUCAO") throw new Error("Despachos para PRODUCAO são bloqueados por política da instalação.");
+  if (code === "BANCO_API" && environment !== "SANDBOX") {
+    throw new Error("O Banco Virtual Robonuvem aceita somente o ambiente SANDBOX.");
+  }
+  if (code !== "BANCO_API" && environment !== "MOCK") {
+    throw new Error(`O conector ${code} é restrito ao ambiente MOCK e não realiza conexões de rede.`);
+  }
+}
+
+export function assertIntegrationOperation(code: string, operation: IntegrationOperation) {
+  if (operation === "DOWNLOAD_STATEMENT" && code !== "BANCO_API") {
+    throw new Error("DOWNLOAD_STATEMENT é suportada somente pela integração BANCO_API.");
+  }
+}
+
+export function runMockIntegration(code: string, operation: IntegrationOperation, mockScenario?: unknown): MockIntegrationResult {
   const definition = getIntegrationDefinition(code);
   if (!definition) throw new Error("Conector externo não reconhecido.");
 
-  const externalId = `MOCK-${code}-${Date.now()}`;
+  const scenario = getMockScenarioName(mockScenario);
+  const failed = scenario === "failure";
+  const externalId = `MOCK-${code}-${operation}-${scenario}`;
   return {
-    status: "SUCESSO",
-    message: `${definition.name}: ${operation} simulado com sucesso. Nenhuma conexão externa foi realizada.`,
+    status: failed ? "FALHA" : "SUCESSO",
+    message: failed
+      ? `${definition.name}: cenário MOCK ${scenario} retornou falha simulada. Nenhuma conexão externa foi realizada.`
+      : `${definition.name}: cenário MOCK ${scenario} concluído. Nenhuma conexão externa foi realizada.`,
     externalId,
-    payload: { simulated: true, code, operation, externalId },
+    evidence: { dispatch: "MOCK", scenario, externalId },
   };
+}
+
+function getMockScenarioName(mockScenario: unknown) {
+  if (!mockScenario || typeof mockScenario !== "object" || Array.isArray(mockScenario)) return "success";
+  const scenario = (mockScenario as Record<string, unknown>).scenario;
+  return typeof scenario === "string" && /^[a-z0-9_-]+$/i.test(scenario.trim())
+    ? scenario.trim().toLowerCase()
+    : "success";
 }

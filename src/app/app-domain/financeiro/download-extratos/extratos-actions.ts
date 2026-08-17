@@ -6,7 +6,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import crypto from "crypto";
 
-import { bankIntegrationClient } from "@/lib/financeiro/bank-integration-client";
+import { executeConfiguredStatementDownload } from "@/lib/integrations/runtime";
 import { archiveBankStatement } from "@/lib/platform/blob";
 import { saveFinancialFileToGed } from "@/lib/financeiro/ged";
 import { pocVirtualBank } from "@/lib/poc/poc-config";
@@ -92,18 +92,6 @@ export async function runAutomatedBankDownloadAction(input: {
 
     const timestamp = Date.now();
 
-    // Conectar ao Simulador Bancário Externo via BankIntegrationClient
-    const bankData = await bankIntegrationClient.fetchBankStatement(
-      {
-        banco: parsed.data.banco,
-        agencia: parsed.data.agencia,
-        contaNumero: parsed.data.contaNumero,
-      },
-      {
-        periodoInicio: parsed.data.periodoInicio,
-        periodoFim: parsed.data.periodoFim,
-      }
-    );
     const bankAccount = await prisma.bankAccount.findFirst({
       where: {
         bankName: parsed.data.banco,
@@ -117,6 +105,12 @@ export async function runAutomatedBankDownloadAction(input: {
     if (!isSystemAdministrator(user) && (!bankAccount.budgetUnitId || !user.allowedBudgetUnitIds.includes(bankAccount.budgetUnitId))) {
       throw new Error("Sem permissão para automatizar extratos desta Unidade Gestora.");
     }
+    const bankExecution = await executeConfiguredStatementDownload(
+      prisma,
+      { banco: parsed.data.banco, agencia: parsed.data.agencia, contaNumero: parsed.data.contaNumero },
+      { periodoInicio: parsed.data.periodoInicio, periodoFim: parsed.data.periodoFim },
+    );
+    const bankData = bankExecution.data;
 
     const existingDownload = await prisma.automatedBankDownload.findFirst({
       where: {
@@ -242,20 +236,6 @@ export async function runAutomatedBankDownloadAction(input: {
         });
         if (exceptionRows.length > 0) await tx.exceptionQueueItem.createMany({ data: exceptionRows });
       }
-      const integration = await tx.integrationConnection.findFirst({ where: { code: "BANCO_API", environment: "SANDBOX" }, select: { id: true } });
-      if (integration) {
-        await tx.integrationRun.create({
-          data: {
-            connectionId: integration.id,
-            operation: "DOWNLOAD_EXTRATO",
-            environment: "SANDBOX",
-            status: "SUCESSO",
-            message: `Extrato arquivado com ${inserted.count} movimentações novas e ${statementItems.length - inserted.count} já processadas.`,
-            externalId: bankData.hashSHA256,
-            payload: { banco: parsed.data.banco, agencia: parsed.data.agencia, contaNumero: parsed.data.contaNumero, periodoInicio: parsed.data.periodoInicio, periodoFim: parsed.data.periodoFim, archiveUrl: archivedFile.url, hashSHA256: bankData.hashSHA256 },
-          },
-        });
-      }
       return { downloadRecord, insertedCount: inserted.count };
     });
 
@@ -265,28 +245,6 @@ export async function runAutomatedBankDownloadAction(input: {
     revalidatePath("/documentos");
     return { data: serializeDownloadRecord(result.downloadRecord) };
   } catch (err: unknown) {
-    if (context) {
-      try {
-        const integration = await context.prisma.integrationConnection.findFirst({
-          where: { code: "BANCO_API", environment: "SANDBOX" },
-          select: { id: true },
-        });
-        if (integration) {
-          await context.prisma.integrationRun.create({
-            data: {
-              connectionId: integration.id,
-              operation: "DOWNLOAD_EXTRATO",
-              environment: "SANDBOX",
-              status: "FALHA",
-              message: errorMessage(err, "Falha na automação bancária."),
-              payload: { banco: parsed.data.banco, agencia: parsed.data.agencia, contaNumero: parsed.data.contaNumero },
-            },
-          });
-        }
-      } catch {
-        // Preserve the original integration error even if audit persistence is unavailable.
-      }
-    }
     return { error: errorMessage(err, "Falha na execução da automação bancária.") };
   }
 }

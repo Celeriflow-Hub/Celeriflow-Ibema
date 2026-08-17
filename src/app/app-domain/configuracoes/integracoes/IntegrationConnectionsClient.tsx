@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { integrationEnvironments, isEnvironmentAllowedForIntegration, isIntegrationEnvironment, type IntegrationEnvironment } from "@/lib/integrations/registry";
 import { testIntegrationConnection, saveIntegrationConnection } from "./actions";
 import IntegrationRunModal from "./IntegrationRunModal";
 
@@ -25,8 +26,7 @@ type ConnectionRun = {
   status: string;
   message: string;
   createdAt: Date;
-  responsePayload?: string | null;
-  requestPayload?: string | null;
+  payload?: string | null;
 };
 
 type Connection = {
@@ -49,7 +49,7 @@ type Connection = {
 
 type FormState = {
   code: string;
-  environment: "MOCK" | "HOMOLOGACAO" | "PRODUCAO";
+  environment: IntegrationEnvironment;
   baseUrl: string;
   credentialReference: string;
   configurationJson: string;
@@ -58,9 +58,12 @@ type FormState = {
 };
 
 function formFor(connection: Connection | undefined, code: string): FormState {
+  const configuredEnvironment = connection?.environment;
   return {
     code,
-    environment: connection?.environment === "PRODUCAO" || connection?.environment === "HOMOLOGACAO" ? connection.environment : "MOCK",
+    environment: configuredEnvironment && isIntegrationEnvironment(configuredEnvironment)
+      ? configuredEnvironment
+      : code === "BANCO_API" ? "SANDBOX" : "MOCK",
     baseUrl: connection?.baseUrl ?? "",
     credentialReference: connection?.credentialReference ?? "",
     configurationJson: connection?.configuration ?? "",
@@ -177,9 +180,14 @@ export default function IntegrationConnectionsClient({ catalog, connections }: {
                   value={form.environment}
                   onChange={(event) => setForm({ ...form, environment: event.target.value as FormState["environment"] })}
                 >
-                  <option value="MOCK">Mock Local (Simulação POC)</option>
-                  <option value="HOMOLOGACAO">Homologação Órgão Externo</option>
-                  <option value="PRODUCAO">Produção Real</option>
+                  {integrationEnvironments.map((environment) => (
+                    <option key={environment} value={environment} disabled={!isEnvironmentAllowedForIntegration(selectedCode, environment)}>
+                      {environment === "MOCK" ? "Mock Local (Simulação POC)" : null}
+                      {environment === "SANDBOX" ? "Sandbox Banco Virtual Robonuvem" : null}
+                      {environment === "HOMOLOGACAO" ? "Homologação Órgão Externo (bloqueada)" : null}
+                      {environment === "PRODUCAO" ? "Produção Real (bloqueada)" : null}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="space-y-2">
@@ -296,12 +304,13 @@ export default function IntegrationConnectionsClient({ catalog, connections }: {
         environment={form.environment}
         endpoint={form.baseUrl}
         run={activeModalRun}
-        onReprocess={async () => {
-          if (selectedConnection) {
-            await testIntegrationConnection(selectedConnection.id);
-            router.refresh();
-          }
-        }}
+          onReprocess={async () => {
+            if (selectedConnection) {
+              const result = await testIntegrationConnection(selectedConnection.id);
+              if (result.error) alert(result.error);
+              router.refresh();
+            }
+          }}
       />
     </div>
   );

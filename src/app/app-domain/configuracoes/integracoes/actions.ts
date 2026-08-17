@@ -1,8 +1,8 @@
 "use server";
 
 import { Prisma } from "@prisma/client";
-import { getIntegrationDefinition, runMockIntegration, type IntegrationEnvironment } from "@/lib/integrations/registry";
-import { bankIntegrationClient } from "@/lib/financeiro/bank-integration-client";
+import { assertIntegrationEnvironmentPolicy, getIntegrationDefinition } from "@/lib/integrations/registry";
+import { executeConfiguredHealthCheck } from "@/lib/integrations/runtime";
 import { getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -49,6 +49,7 @@ function parsePublicJson(value: string | undefined, field: string): Prisma.Input
 function validateConnectionInput(input: z.infer<typeof connectionSchema>) {
   const definition = getIntegrationDefinition(input.code);
   if (!definition) throw new Error("Conector externo inválido.");
+  assertIntegrationEnvironmentPolicy(definition.code, input.environment);
 
   if (input.baseUrl) {
     try {
@@ -110,45 +111,17 @@ export async function testIntegrationConnection(connectionId: string): Promise<A
     if (!connection) throw new Error("Conexão não encontrada.");
     if (connection.status === "DESATIVADA") throw new Error("Ative a conexão antes de executar o teste.");
 
-    const environment = connection.environment as IntegrationEnvironment;
-    const result = environment === "MOCK"
-      ? runMockIntegration(connection.code, "TESTE_DE_CONEXAO")
-      : environment === "SANDBOX" && connection.code === "BANCO_API"
-        ? await bankIntegrationClient.checkSandboxHealth().then(() => ({
-            status: "SUCESSO",
-            message: "Banco simulado externo disponível para a POC.",
-            externalId: undefined,
-            payload: { simulated: false, environment: "SANDBOX", code: connection.code, operation: "TESTE_DE_CONEXAO" },
-          }))
-        : {
-          status: "PENDENTE",
-          message: "O adaptador real ainda deve ser homologado com o fornecedor e a referência de credencial configurada.",
-          externalId: undefined,
-          payload: { simulated: false, code: connection.code, operation: "TESTE_DE_CONEXAO" },
-        };
+    const result = await executeConfiguredHealthCheck(context.prisma, connection.code, true);
 
-    await context.prisma.$transaction([
-      context.prisma.integrationConnection.update({
-        where: { id: connection.id },
-        data: {
-          status: result.status === "SUCESSO" ? "ATIVA" : "CONFIGURANDO",
-          lastTestedAt: new Date(),
-          lastTestStatus: result.status,
-          lastTestMessage: result.message,
-        },
-      }),
-      context.prisma.integrationRun.create({
-        data: {
-          connectionId: connection.id,
-          operation: "TESTE_DE_CONEXAO",
-          environment,
-          status: result.status,
-          message: result.message,
-          externalId: result.externalId,
-          payload: result.payload,
-        },
-      }),
-    ]);
+    await context.prisma.integrationConnection.update({
+      where: { id: connection.id },
+      data: {
+        status: result.status === "SUCESSO" ? "ATIVA" : "CONFIGURANDO",
+        lastTestedAt: new Date(),
+        lastTestStatus: result.status,
+        lastTestMessage: result.message,
+      },
+    });
     revalidatePath("/configuracoes/integracoes");
     revalidatePath("/configuracoes");
     return { data: { id: connection.id, message: result.message } };

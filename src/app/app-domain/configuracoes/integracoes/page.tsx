@@ -15,5 +15,9 @@ export default async function IntegrationConnectionsPage() {
     ...connection,
     configuration: connection.configuration ? JSON.stringify(connection.configuration, null, 2) : "",
     mockScenario: connection.mockScenario ? JSON.stringify(connection.mockScenario, null, 2) : "",
+    runs: connection.runs.map((run) => ({
+      ...run,
+      payload: run.payload ? JSON.stringify(run.payload, null, 2) : null,
+    })),
   }))} />;
 }

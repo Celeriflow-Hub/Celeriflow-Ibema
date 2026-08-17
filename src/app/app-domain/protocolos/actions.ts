@@ -1,11 +1,17 @@
 "use server";
 
-import { getProtocolContextForOperation } from "@/lib/protocols/access";
+import { getProtocolContext, getProtocolContextForOperation, protocolScope } from "@/lib/protocols/access";
 import { notifyProtocolDepartment, notifyProtocolUsers } from "@/lib/protocols/notifications";
 import { createValidatedProcess } from "@/lib/protocols/service";
 import { approveGenericWorkflowProcess, concludeGenericWorkflowProcess, isGenericWorkflowProcess, recordGenericWorkflowReceipt, rejectGenericWorkflowProcess, returnGenericWorkflowProcess } from "@/lib/protocols/generic-workflow-runtime";
 import { markInternalNotificationRead } from "@/lib/notifications/internal-notifications";
-import { getCurrentTenantContext } from "@/lib/platform/tenant-context";
+import { getCurrentTenantContext, getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
+import { requestProcessDocumentSignatures } from "@/lib/documents/document-flow-service";
+import { registerInternalDocumentSignature } from "@/lib/signatures/internal-signature";
+import { getIdTokenPrincipal } from "@/lib/platform/session";
+import { headers } from "next/headers";
+import { publishProcessPublicNotice } from "@/lib/transparencia/public-notices";
+import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -119,6 +125,7 @@ export async function receiveProcess(processId: string): Promise<{ error: string
           employeeId: employee.id,
         },
       });
+      await writeAuditEvent(tx, { actorUsuarioId: user.id, eventType: auditEventTypes.processUpdated, targetType: "PROCESS", targetId: processId });
       await recordGenericWorkflowReceipt(tx, processId, user.id);
       const sender = movement.employeeId
         ? await tx.usuario.findUnique({ where: { employeeId: movement.employeeId }, select: { id: true } })
@@ -259,6 +266,7 @@ export async function forwardProcess(data: {
         priority: "NORMAL",
         dedupeDiscriminator: movement.id,
       });
+      await writeAuditEvent(tx, { actorUsuarioId: user.id, eventType: auditEventTypes.processUpdated, targetType: "PROCESS", targetId: process.id });
       if (effectiveDueAt) {
         await notifyProtocolDepartment(tx, user.id, destinationDepartment.id, {
           processId: process.id,
@@ -285,7 +293,7 @@ export async function addProcessDispatch(data: {
   dispatchType: string;
 }): Promise<{ error: string | null }> {
   try {
-    const { prisma, employee, departmentId } = await getOperationalContext("create");
+    const { prisma, employee, departmentId, user } = await getOperationalContext("create");
     const content = data.content.trim();
     const dispatchType = ["Despacho", "Parecer", "Decisao"].includes(data.dispatchType) ? data.dispatchType : "Despacho";
     if (!content) throw new Error("Informe o conteudo do despacho.");
@@ -312,6 +320,7 @@ export async function addProcessDispatch(data: {
           employeeId: employee.id,
         },
       });
+      await writeAuditEvent(tx, { actorUsuarioId: user.id, eventType: auditEventTypes.processUpdated, targetType: "PROCESS", targetId: process.id });
     });
 
     revalidateProtocolPages();
@@ -324,7 +333,7 @@ export async function addProcessDispatch(data: {
 
 export async function concludeProcess(processId: string, reason: string): Promise<{ error: string | null }> {
   try {
-    const { prisma, employee, departmentId } = await getOperationalContext("update");
+    const { prisma, employee, departmentId, user } = await getOperationalContext("update");
     const description = reason.trim();
     if (!description) throw new Error("Informe a justificativa da conclusao.");
 
@@ -342,6 +351,7 @@ export async function concludeProcess(processId: string, reason: string): Promis
       await tx.processEvent.create({
         data: { processId, eventType: "CONCLUDED", description, previousStatus: process.status, newStatus: "Concluido", departmentId, employeeId: employee.id },
       });
+      await writeAuditEvent(tx, { actorUsuarioId: user.id, eventType: auditEventTypes.processUpdated, targetType: "PROCESS", targetId: processId });
     });
     revalidateProtocolPages();
     return { error: null };
@@ -407,7 +417,7 @@ export async function concludeGenericProcessWorkflow(processId: string, reason: 
 
 export async function archiveProcess(processId: string, reason: string): Promise<{ error: string | null }> {
   try {
-    const { prisma, employee, departmentId } = await getOperationalContext("update");
+    const { prisma, employee, departmentId, user } = await getOperationalContext("update");
     const archiveReason = reason.trim();
     if (!archiveReason) throw new Error("Informe a justificativa do arquivamento.");
 
@@ -426,6 +436,7 @@ export async function archiveProcess(processId: string, reason: string): Promise
       await tx.processEvent.create({
         data: { processId, eventType: "ARCHIVED", description: archiveReason, previousStatus: "Concluido", newStatus: "Arquivado", departmentId, employeeId: employee.id },
       });
+      await writeAuditEvent(tx, { actorUsuarioId: user.id, eventType: auditEventTypes.processUpdated, targetType: "PROCESS", targetId: processId });
     });
     revalidateProtocolPages();
     return { error: null };
@@ -437,7 +448,7 @@ export async function archiveProcess(processId: string, reason: string): Promise
 
 export async function reopenProcess(processId: string, reason: string): Promise<{ error: string | null }> {
   try {
-    const { prisma, employee, departmentId } = await getOperationalContext("update");
+    const { prisma, employee, departmentId, user } = await getOperationalContext("update");
     const description = reason.trim();
     if (!description) throw new Error("Informe a justificativa da reabertura.");
 
@@ -455,6 +466,7 @@ export async function reopenProcess(processId: string, reason: string): Promise<
       await tx.processEvent.create({
         data: { processId, eventType: "REOPENED", description, previousStatus: "Arquivado", newStatus: "Reaberto", departmentId, employeeId: employee.id },
       });
+      await writeAuditEvent(tx, { actorUsuarioId: user.id, eventType: auditEventTypes.processUpdated, targetType: "PROCESS", targetId: processId });
     });
     revalidateProtocolPages();
     return { error: null };
@@ -474,5 +486,71 @@ export async function markProtocolNotificationRead(notificationId: string): Prom
     return { error: null };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Erro ao atualizar notificacao." };
+  }
+}
+
+export async function requestProcessSignatures(data: {
+  processId: string;
+  documentId: string;
+  signerUsuarioIds: string[];
+}): Promise<{ error: string | null }> {
+  try {
+    const context = await getOperationalContext("create");
+    await requestProcessDocumentSignatures(context, {
+      processId: data.processId,
+      documentId: data.documentId,
+      signerUsuarioIds: data.signerUsuarioIds,
+      employeeId: context.employee.id,
+      departmentId: context.departmentId,
+    });
+    revalidateProtocolPages();
+    revalidatePath("/protocolos/assinaturas");
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Nao foi possivel solicitar as assinaturas." };
+  }
+}
+
+export async function signProcessDocumentInternally(documentId: string, reauthenticationToken: string): Promise<{ error: string | null }> {
+  try {
+    if (!reauthenticationToken) throw new Error("Confirme sua senha para assinar o documento.");
+    const context = await getProtocolContext();
+    const reauthenticatedUser = await getIdTokenPrincipal(reauthenticationToken);
+    if (!reauthenticatedUser || reauthenticatedUser.firebaseUid !== context.user.firebaseUid) {
+      throw new Error("A reautenticacao nao corresponde ao usuario da sessao atual.");
+    }
+    if (Date.now() - reauthenticatedUser.authTime * 1000 > 5 * 60 * 1000) {
+      throw new Error("A confirmacao de senha expirou. Informe sua senha novamente.");
+    }
+    const scopedPendingSignature = await context.prisma.processDocument.findFirst({
+      where: {
+        documentId,
+        process: { is: protocolScope(context) },
+        document: { signatures: { some: { signerUsuarioId: context.user.id, status: "PENDING", documentVersion: { status: "PENDING_SIGNATURE" } } } },
+      },
+      select: { id: true },
+    });
+    if (!scopedPendingSignature) throw new Error("Nenhuma assinatura pendente deste processo foi encontrada para voce.");
+    const requestHeaders = await headers();
+    await registerInternalDocumentSignature(context, documentId, {
+      ipAddress: requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
+      userAgent: requestHeaders.get("user-agent"),
+    }, new Date());
+    revalidateProtocolPages();
+    revalidatePath("/protocolos/assinaturas");
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Nao foi possivel registrar a assinatura interna." };
+  }
+}
+
+export async function publishProcessNotice(processId: string): Promise<{ error: string | null }> {
+  try {
+    const context = await getTenantContextForSystemAdministration();
+    await publishProcessPublicNotice(context.prisma, context.user.id, processId);
+    revalidatePath("/portal-transparencia");
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Nao foi possivel publicar o aviso." };
   }
 }

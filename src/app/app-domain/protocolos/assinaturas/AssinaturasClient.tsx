@@ -1,16 +1,54 @@
 "use client";
 
-import { FileSignature, CheckCircle2 } from "lucide-react";
-import Link from "next/link";
+import { useState, useTransition } from "react";
+import { CheckCircle2, FileSignature, X } from "lucide-react";
+import { EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
+import { auth } from "@/lib/firebase/client";
+import { signProcessDocumentInternally } from "../actions";
 
-type ProcessDocument = {
+type PendingSignature = {
   id: string;
-  createdAt: Date | string;
+  requestedAt: Date | string;
   process: { id: string; protocolNumber: string };
-  document: { id: string; title: string; documentType: string; createdAt: Date | string } | null;
+  title: string;
+  documentType: string;
 };
 
-export default function AssinaturasClient({ initialDocuments }: { initialDocuments: ProcessDocument[] }) {
+export default function AssinaturasClient({ initialDocuments }: { initialDocuments: PendingSignature[] }) {
+  const [documents, setDocuments] = useState(initialDocuments);
+  const [selectedDocument, setSelectedDocument] = useState<PendingSignature | null>(null);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function close() {
+    if (isPending) return;
+    setSelectedDocument(null);
+    setPassword("");
+    setError(null);
+  }
+
+  function sign() {
+    if (!selectedDocument || !password) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        const user = auth.currentUser;
+        if (!user?.email) throw new Error("Sua sessao Firebase nao esta disponivel. Entre novamente no sistema.");
+        await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password));
+        const result = await signProcessDocumentInternally(selectedDocument.id, await user.getIdToken(true));
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
+        setDocuments((current) => current.filter((document) => document.id !== selectedDocument.id));
+        close();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Nao foi possivel confirmar sua senha.");
+      }
+    });
+  }
+
   return (
     <div className="max-w-6xl animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -24,7 +62,7 @@ export default function AssinaturasClient({ initialDocuments }: { initialDocumen
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        {initialDocuments.length === 0 ? (
+        {documents.length === 0 ? (
           <div className="p-12 text-center flex flex-col items-center justify-center">
             <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
               <CheckCircle2 className="text-slate-400 w-8 h-8" />
@@ -44,21 +82,21 @@ export default function AssinaturasClient({ initialDocuments }: { initialDocumen
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {initialDocuments.map((processDocument) => (
-                  <tr key={processDocument.id} className="hover:bg-slate-50 transition-colors">
+                {documents.map((processDocument) => (
+                  <tr key={`${processDocument.id}-${processDocument.process.id}`} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4">
-                      <span className="block font-bold text-slate-800">{processDocument.document?.title}</span>
+                      <span className="block font-bold text-slate-800">{processDocument.title}</span>
                       <span className="block text-xs text-slate-500 mt-0.5">{processDocument.process.protocolNumber}</span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="block font-medium text-slate-800">{processDocument.document?.documentType || "Arquivo"}</span>
+                      <span className="block font-medium text-slate-800">{processDocument.documentType || "Arquivo"}</span>
                       <span className="block text-xs text-slate-500 mt-0.5">Vinculado ao processo</span>
                     </td>
                     <td className="px-6 py-4 text-slate-500">
-                      {new Date(processDocument.createdAt).toLocaleDateString('pt-BR')}
+                      {new Date(processDocument.requestedAt).toLocaleDateString('pt-BR')}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Link href="/documentos/assinaturas" className="text-sm font-semibold text-emerald-700 hover:underline">Abrir assinatura</Link>
+                      <button onClick={() => setSelectedDocument(processDocument)} disabled={isPending} className="text-sm font-semibold text-emerald-700 hover:underline disabled:opacity-50">Assinar</button>
                     </td>
                   </tr>
                 ))}
@@ -67,6 +105,7 @@ export default function AssinaturasClient({ initialDocuments }: { initialDocumen
           </div>
         )}
       </div>
+      {selectedDocument && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-lg rounded-xl bg-white shadow-xl"><div className="flex items-center justify-between border-b border-slate-200 p-5"><h2 className="flex items-center gap-2 text-lg font-bold text-slate-900"><FileSignature className="h-5 w-5 text-emerald-600" />Assinar documento</h2><button onClick={close} disabled={isPending} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button></div><div className="space-y-4 p-5 text-sm text-slate-700"><p><strong>{selectedDocument.title}</strong> esta vinculado a uma versao bloqueada com hash SHA-256.</p><label className="block text-sm font-medium text-slate-700">Senha da conta<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" /></label>{error && <p className="rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}</div><div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 p-5"><button onClick={close} disabled={isPending} className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600">Cancelar</button><button onClick={sign} disabled={!password || isPending} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{isPending ? "Registrando..." : "Registrar assinatura"}</button></div></div></div>}
     </div>
   );
 }

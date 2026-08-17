@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { getGenericWorkflowInstanceTimeZone } from "@/lib/protocols/generic-workflow-definition-service";
 import { calculateGenericWorkflowDeadline } from "@/lib/protocols/generic-workflow-policy";
 import { notifyProtocolDepartment } from "@/lib/protocols/notifications";
+import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 
 const AWAITING_RECEIPT = "Aguardando Recebimento";
 
@@ -93,6 +94,12 @@ export async function createValidatedProcess(tx: Prisma.TransactionClient, emplo
   });
   await notifyProtocolDepartment(tx, actorUsuarioId, department.id, {
     processId: process.id, type: "RECEIVE", title: `Novo processo ${process.protocolNumber}`, message: "Um processo aguarda recebimento no seu setor.", priority: "NORMAL", dedupeDiscriminator: "OPENED",
+  });
+  await writeAuditEvent(tx, {
+    actorUsuarioId,
+    eventType: auditEventTypes.processOpened,
+    targetType: "PROCESS",
+    targetId: process.id,
   });
   if (process.expectedCompletionAt) {
     await notifyProtocolDepartment(tx, actorUsuarioId, department.id, {

@@ -16,6 +16,13 @@ const eventLabels: Record<string, string> = {
   UI_INTERACTION: "Interagiu com controle",
   FORM_SUBMIT: "Enviou formulário",
   INSTANCE_CONFIGURATION_CHANGED: "Alterou parâmetro da instância",
+  PROCESS_OPENED: "Abriu processo",
+  PROCESS_UPDATED: "Atualizou processo",
+  PROCESS_DOCUMENT_LINKED: "Vinculou documento ao processo",
+  GED_DOCUMENT_INGESTED: "Registrou documento no GED",
+  DOCUMENT_SIGNATURE_REQUESTED: "Solicitou assinatura interna",
+  DOCUMENT_SIGNATURE_REGISTERED: "Registrou assinatura interna",
+  PUBLIC_NOTICE_PUBLISHED: "Publicou aviso público redigido",
 };
 
 function describeTarget(event: { eventType: string; targetType: string; targetId: string }) {
@@ -29,6 +36,9 @@ function describeTarget(event: { eventType: string; targetType: string; targetId
   if (event.targetType === "DOCUMENT") return "Documento protegido";
   if (event.targetType === "FINANCIAL_REPORT") return "Relatório financeiro";
   if (event.targetType === "INSTANCE_CONFIGURATION") return "Parâmetro operacional da instância";
+  if (event.targetType === "PROCESS") return "Processo privado";
+  if (event.targetType === "DOCUMENT_SIGNATURE") return "Assinatura de documento";
+  if (event.targetType === "PUBLIC_NOTICE") return "Aviso público redigido";
   return event.targetType;
 }
 

@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Prisma } from "@prisma/client";
 import { notifyProtocolDepartment } from "./notifications";
+import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 import { assertGenericWorkflowTransition, assertRequiredSignedProcessDocument, calculateGenericWorkflowDeadline } from "./generic-workflow-policy";
 
 const AWAITING_RECEIPT = "Aguardando Recebimento";
@@ -66,6 +67,7 @@ export async function approveGenericWorkflowProcess(tx: Prisma.TransactionClient
   const movement = await tx.processMovement.create({ data: { processId, fromDepartmentId: actor.departmentId, toDepartmentId: nextStage.departmentId, employeeId: actor.employeeId, reason: note, status: "AWAITING_RECEIPT", dueAt }, select: { id: true } });
   await tx.process.update({ where: { id: processId }, data: { status: AWAITING_RECEIPT, currentDepartmentId: nextStage.departmentId, currentResponsibleEmployeeId: null, expectedCompletionAt: dueAt } });
   await tx.processEvent.create({ data: { processId, eventType: "GENERIC_WORKFLOW_APPROVED", description: note || "Etapa aprovada e encaminhada para a proxima etapa.", previousStatus: instance.process.status, newStatus: AWAITING_RECEIPT, departmentId: actor.departmentId, employeeId: actor.employeeId } });
+  await writeAuditEvent(tx, { actorUsuarioId: actor.usuarioId, eventType: auditEventTypes.processUpdated, targetType: "PROCESS", targetId: processId });
   await tx.genericProcessWorkflowEvent.create({ data: { instanceId: instance.id, eventType: "APPROVED", fromPosition: transition.fromPosition, toPosition: nextStage.position, actorUsuarioId: actor.usuarioId, note } });
   await notifyProtocolDepartment(tx, actor.usuarioId, nextStage.departmentId, { processId, type: "GENERIC_WORKFLOW_STAGE", title: `Nova etapa: ${instance.process.protocolNumber}`, message: `O processo aguarda recebimento na etapa ${nextStage.label}.`, priority: "NORMAL", dedupeDiscriminator: movement.id });
 }
@@ -80,6 +82,7 @@ export async function returnGenericWorkflowProcess(tx: Prisma.TransactionClient,
   const movement = await tx.processMovement.create({ data: { processId, fromDepartmentId: actor.departmentId, toDepartmentId: previousStage.departmentId, employeeId: actor.employeeId, reason: note, status: "AWAITING_RECEIPT", dueAt }, select: { id: true } });
   await tx.process.update({ where: { id: processId }, data: { status: AWAITING_RECEIPT, currentDepartmentId: previousStage.departmentId, currentResponsibleEmployeeId: null, expectedCompletionAt: dueAt } });
   await tx.processEvent.create({ data: { processId, eventType: "GENERIC_WORKFLOW_RETURNED", description: note, previousStatus: instance.process.status, newStatus: AWAITING_RECEIPT, departmentId: actor.departmentId, employeeId: actor.employeeId } });
+  await writeAuditEvent(tx, { actorUsuarioId: actor.usuarioId, eventType: auditEventTypes.processUpdated, targetType: "PROCESS", targetId: processId });
   await tx.genericProcessWorkflowEvent.create({ data: { instanceId: instance.id, eventType: "RETURNED", fromPosition: transition.fromPosition, toPosition: previousStage.position, actorUsuarioId: actor.usuarioId, note } });
   await notifyProtocolDepartment(tx, actor.usuarioId, previousStage.departmentId, { processId, type: "GENERIC_WORKFLOW_RETURNED", title: `Processo devolvido: ${instance.process.protocolNumber}`, message: `O processo retornou para a etapa ${previousStage.label}.`, priority: "ALTA", dedupeDiscriminator: movement.id });
 }
@@ -90,6 +93,7 @@ export async function rejectGenericWorkflowProcess(tx: Prisma.TransactionClient,
   await tx.genericProcessWorkflowInstance.update({ where: { id: instance.id }, data: { status: "REJECTED" } });
   await tx.process.update({ where: { id: processId }, data: { status: "Rejeitado", expectedCompletionAt: null } });
   await tx.processEvent.create({ data: { processId, eventType: "GENERIC_WORKFLOW_REJECTED", description: note, previousStatus: instance.process.status, newStatus: "Rejeitado", departmentId: actor.departmentId, employeeId: actor.employeeId } });
+  await writeAuditEvent(tx, { actorUsuarioId: actor.usuarioId, eventType: auditEventTypes.processUpdated, targetType: "PROCESS", targetId: processId });
   await tx.genericProcessWorkflowEvent.create({ data: { instanceId: instance.id, eventType: "REJECTED", fromPosition: transition.fromPosition, actorUsuarioId: actor.usuarioId, note } });
 }
 
@@ -101,5 +105,6 @@ export async function concludeGenericWorkflowProcess(tx: Prisma.TransactionClien
   await tx.genericProcessWorkflowInstance.update({ where: { id: instance.id }, data: { status: "CONCLUDED", dueAt: null } });
   await tx.process.update({ where: { id: processId }, data: { status: "Concluido", completedAt, expectedCompletionAt: null } });
   await tx.processEvent.create({ data: { processId, eventType: "GENERIC_WORKFLOW_CONCLUDED", description: note, previousStatus: instance.process.status, newStatus: "Concluido", departmentId: actor.departmentId, employeeId: actor.employeeId } });
+  await writeAuditEvent(tx, { actorUsuarioId: actor.usuarioId, eventType: auditEventTypes.processUpdated, targetType: "PROCESS", targetId: processId });
   await tx.genericProcessWorkflowEvent.create({ data: { instanceId: instance.id, eventType: "CONCLUDED", fromPosition: transition.fromPosition, actorUsuarioId: actor.usuarioId, note } });
 }

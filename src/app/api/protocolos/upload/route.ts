@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AccessError } from "@/lib/platform/tenant-context";
 import { getProtocolContextForOperation } from "@/lib/protocols/access";
-import { uploadProcessFile } from "@/lib/platform/blob";
-import { createPublicValidationCode, hashDocumentContent } from "@/lib/documents/document-flow-policy";
+import { ingestProcessDocument } from "@/lib/documents/document-flow-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,76 +26,25 @@ export async function POST(request: NextRequest) {
     const processId = String(formData.get("processId") || "");
     const title = String(formData.get("title") || "").trim();
     const documentType = String(formData.get("documentType") || "Anexo").trim() || "Anexo";
-    const documentClassId = String(formData.get("documentClassId") || "") || null;
+    const documentClassId = String(formData.get("documentClassId") || "");
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Nenhum arquivo enviado." }, { status: 400 });
     }
-    if (!processId || !title) {
-      return NextResponse.json({ error: "Informe o processo e o titulo do documento." }, { status: 400 });
+    if (!processId || !title || !documentClassId) {
+      return NextResponse.json({ error: "Informe o processo, o titulo e a classe documental." }, { status: 400 });
     }
 
-    const blob = await uploadProcessFile(file);
-    const document = await context.prisma.$transaction(async (tx) => {
-      const process = await tx.process.findUnique({
-        where: { id: processId },
-        select: { id: true, protocolNumber: true, status: true, currentDepartmentId: true, processType: { select: { genericWorkflowEnabled: true } } },
-      });
-      if (!process) throw new Error("Processo nao encontrado.");
-      if (process.currentDepartmentId !== employee.departmentId) throw new Error("Este processo nao pertence ao seu setor.");
-      if (["Aguardando Recebimento", "Arquivado", "Cancelado"].includes(process.status)) {
-        throw new Error("Este processo nao aceita anexos neste momento.");
-      }
-
-      if (process.processType.genericWorkflowEnabled && !documentClassId) {
-        throw new Error("Selecione a classe documental para anexos do fluxo generico.");
-      }
-      if (documentClassId) {
-        const documentClass = await tx.documentClass.findFirst({ where: { id: documentClassId, isActive: true }, select: { id: true } });
-        if (!documentClass) throw new Error("A classe documental selecionada nao esta ativa.");
-      }
-      const document = await tx.document.create({
-        data: {
-          title,
-          documentType,
-          fileUrl: blob.url,
-          status: "Válido",
-          notes: `Anexo do processo ${process.protocolNumber}.`,
-          documentClassId,
-        },
-      });
-      if (process.processType.genericWorkflowEnabled) {
-        await tx.documentVersion.create({
-          data: {
-            documentId: document.id,
-            versionNumber: 1,
-            fileUrl: blob.url,
-            hashSha256: hashDocumentContent(new Uint8Array(await file.arrayBuffer())),
-            publicValidationCode: createPublicValidationCode(),
-            status: "FINAL",
-          },
-        });
-      }
-      await tx.processDocument.create({
-        data: {
-          processId: process.id,
-          documentId: document.id,
-          purpose: documentType,
-          employeeId: employee.id,
-        },
-      });
-      await tx.processEvent.create({
-        data: {
-          processId: process.id,
-          eventType: "DOCUMENT_ADDED",
-          description: `Documento ${title} anexado ao processo e registrado no GED.`,
-          departmentId: employee.departmentId,
-          employeeId: employee.id,
-        },
-      });
-      return document;
+    const document = await ingestProcessDocument(context, {
+      processId,
+      employeeId: employee.id,
+      departmentId: employee.departmentId,
+      title,
+      documentType,
+      documentClassId,
+      file,
     });
 
-    return NextResponse.json({ id: document.id }, { status: 201 });
+    return NextResponse.json({ id: document.documentId }, { status: 201 });
   } catch (error) {
     if (error instanceof AccessError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

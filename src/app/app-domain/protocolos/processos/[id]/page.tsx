@@ -1,6 +1,7 @@
 import { ArrowLeft, Clock, FileText, User, CheckCircle2, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { getProtocolContext, protocolScope } from "@/lib/protocols/access";
+import { canViewModule } from "@/lib/platform/tenant-context";
 import { notFound } from "next/navigation";
 import ProcessControls from "./ProcessControls";
 
@@ -44,9 +45,14 @@ export default async function ProcessoDetalhesPage({ params }: { params: { id: s
     notFound();
   }
 
-  const [departamentos, documentClasses] = await Promise.all([
+  const [departamentos, documentClasses, signers] = await Promise.all([
     prisma.department.findMany({ where: { isActive: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.documentClass.findMany({ where: { isActive: true }, select: { id: true, label: true }, orderBy: { label: "asc" } }),
+    prisma.documentClass.findMany({ where: { isActive: true, signaturePolicy: "INTERNAL_ALLOWED" }, select: { id: true, label: true }, orderBy: { label: "asc" } }),
+    prisma.usuario.findMany({
+      where: { ativo: true, perfil: { ativo: true } },
+      include: { perfil: true, permissoesModulo: { include: { modulo: { select: { codigo: true } } } } },
+      orderBy: { nome: "asc" },
+    }),
   ]);
   const canOperate = context.protocolAccess.canEdit && Boolean(
     user.employeeId && user.departmentId && user.departmentId === processo.currentDepartmentId,
@@ -88,6 +94,14 @@ export default async function ProcessoDetalhesPage({ params }: { params: { id: s
           canOperate={canOperate}
           departments={departamentos}
           documentClasses={documentClasses}
+          signableDocuments={processo.documents.flatMap((item) => item.document?.status === "Válido" && item.document.documentClassId ? [{ id: item.document.id, title: item.document.title }] : [])}
+          signers={signers.filter((signer) => canViewModule({
+            id: signer.id, firebaseUid: "", email: signer.email, name: signer.nome, role: signer.perfil.nome, profileCode: signer.perfil.codigo,
+            permissions: signer.perfil.permissoes,
+            modulePermissions: signer.permissoesModulo.map((permission) => ({ code: permission.modulo.codigo.toUpperCase(), canView: permission.canView, canEdit: permission.canEdit })),
+            allowedBudgetUnitIds: [], employeeId: signer.employeeId, departmentId: null, secretariatId: null,
+          }, "PROCESSOS")).map((signer) => ({ id: signer.id, nome: signer.nome, email: signer.email }))}
+          canPublishPublicNotice={context.protocolAccess.isAdmin}
           genericWorkflow={processo.genericWorkflowInstance && genericStage ? {
             currentPosition: processo.genericWorkflowInstance.currentPosition,
             totalStages: processo.genericWorkflowInstance.definition.stages.length,

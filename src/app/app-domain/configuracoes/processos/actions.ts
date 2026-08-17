@@ -1,15 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
 import { addGenericWorkflowStage, createGenericWorkflowDefinition, publishGenericWorkflowDefinition } from "@/lib/protocols/generic-workflow-definition-service";
 
-async function getConfigurationPrisma(operation: ModuleOperation) {
-  const context = await getTenantContextForModuleOperation("CONFIGURACOES", operation);
-  if (!context.user.role.toLowerCase().includes("administrador")) {
-    throw new Error("Somente administradores podem parametrizar processos.");
-  }
-  return context.prisma;
+async function getConfigurationPrisma() {
+  return (await getTenantContextForSystemAdministration()).prisma;
 }
 
 function optionalId(formData: FormData, name: string) {
@@ -18,7 +14,7 @@ function optionalId(formData: FormData, name: string) {
 
 export async function saveProcessType(formData: FormData): Promise<void> {
   const id = optionalId(formData, "id");
-  const prisma = await getConfigurationPrisma(id ? "update" : "create");
+  const prisma = await getConfigurationPrisma();
   const name = String(formData.get("name") || "").trim();
   if (!name) throw new Error("Informe o nome do Tipo de Processo.");
 
@@ -49,7 +45,7 @@ export async function saveProcessType(formData: FormData): Promise<void> {
 
 export async function saveSubject(formData: FormData): Promise<void> {
   const id = optionalId(formData, "id");
-  const prisma = await getConfigurationPrisma(id ? "update" : "create");
+  const prisma = await getConfigurationPrisma();
   const name = String(formData.get("name") || "").trim();
   const processTypeId = String(formData.get("processTypeId") || "");
   if (!name || !processTypeId) throw new Error("Informe o Assunto e o Tipo de Processo.");
@@ -75,7 +71,7 @@ export async function saveSubject(formData: FormData): Promise<void> {
 
 export async function saveProcessWorkflowStage(formData: FormData): Promise<void> {
   const id = optionalId(formData, "id");
-  const prisma = await getConfigurationPrisma(id ? "update" : "create");
+  const prisma = await getConfigurationPrisma();
   const processTypeId = String(formData.get("processTypeId") || "");
   const subjectId = optionalId(formData, "subjectId");
   const departmentId = String(formData.get("departmentId") || "");
@@ -103,7 +99,7 @@ export async function saveProcessWorkflowStage(formData: FormData): Promise<void
 }
 
 export async function deleteProcessWorkflowStage(formData: FormData): Promise<void> {
-  const prisma = await getConfigurationPrisma("delete");
+  const prisma = await getConfigurationPrisma();
   const id = String(formData.get("id") || "");
   if (!id) throw new Error("Etapa nao informada.");
   await prisma.processWorkflowStage.delete({ where: { id } });
@@ -111,7 +107,7 @@ export async function deleteProcessWorkflowStage(formData: FormData): Promise<vo
 }
 
 export async function createGenericWorkflowDefinitionAction(formData: FormData): Promise<void> {
-  const prisma = await getConfigurationPrisma("create");
+  const prisma = await getConfigurationPrisma();
   const processTypeId = String(formData.get("processTypeId") || "");
   if (!processTypeId) throw new Error("Selecione um Tipo de Processo opt-in.");
   await prisma.$transaction((tx) => createGenericWorkflowDefinition(tx, processTypeId));
@@ -119,7 +115,7 @@ export async function createGenericWorkflowDefinitionAction(formData: FormData):
 }
 
 export async function addGenericWorkflowStageAction(formData: FormData): Promise<void> {
-  const prisma = await getConfigurationPrisma("create");
+  const prisma = await getConfigurationPrisma();
   const definitionId = String(formData.get("definitionId") || "");
   const position = Number(formData.get("position") || "");
   const slaCalendarDays = Number(formData.get("slaCalendarDays") || "");
@@ -136,7 +132,7 @@ export async function addGenericWorkflowStageAction(formData: FormData): Promise
 }
 
 export async function deleteGenericWorkflowStageAction(formData: FormData): Promise<void> {
-  const prisma = await getConfigurationPrisma("delete");
+  const prisma = await getConfigurationPrisma();
   const id = String(formData.get("id") || "");
   const stage = await prisma.genericProcessWorkflowStage.findUnique({ where: { id }, select: { definition: { select: { status: true } } } });
   if (!stage || stage.definition.status !== "DRAFT") throw new Error("Somente etapas de rascunho podem ser excluidas.");
@@ -145,10 +141,9 @@ export async function deleteGenericWorkflowStageAction(formData: FormData): Prom
 }
 
 export async function publishGenericWorkflowDefinitionAction(formData: FormData): Promise<void> {
-  const prisma = await getConfigurationPrisma("update");
+  const prisma = await getConfigurationPrisma();
   const definitionId = String(formData.get("definitionId") || "");
-  const context = await getTenantContextForModuleOperation("CONFIGURACOES", "update");
-  if (!context.user.role.toLowerCase().includes("administrador")) throw new Error("Somente administradores podem publicar fluxos.");
+  const context = await getTenantContextForSystemAdministration();
   await prisma.$transaction((tx) => publishGenericWorkflowDefinition(tx, definitionId, context.user.id));
   revalidatePath("/configuracoes/processos");
 }

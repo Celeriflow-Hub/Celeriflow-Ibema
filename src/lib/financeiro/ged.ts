@@ -50,6 +50,7 @@ export async function saveFinancialFileToGed(
     content: string | Uint8Array;
     contentType: string;
     fileUrl?: string;
+    actorUsuarioId: string;
   },
 ) {
   const file = input.fileUrl
@@ -67,6 +68,7 @@ export async function saveFinancialFileToGed(
     fileUrl: file.url,
     folderId,
     content: input.content,
+    actorUsuarioId: input.actorUsuarioId,
   });
   return { documentId: document.documentId, folderId };
 }

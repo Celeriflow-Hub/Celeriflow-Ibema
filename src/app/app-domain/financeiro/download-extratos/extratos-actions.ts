@@ -137,6 +137,7 @@ export async function runAutomatedBankDownloadAction(input: {
       content: bankData.rawContent,
       contentType: bankStatementContentType(bankData.formato),
       fileUrl: archivedFile.url,
+      actorUsuarioId: user.id,
     });
 
     const logsExecucao = [

@@ -49,6 +49,13 @@ test("defines authentication, protected-operation, and usage-monitoring event ty
     "PERSON_MERGE_EXECUTED",
     "PERSON_MERGE_REVERSED",
     "ADMINISTRATIVE_MUTATION",
+    "PROCESS_OPENED",
+    "PROCESS_UPDATED",
+    "PROCESS_DOCUMENT_LINKED",
+    "GED_DOCUMENT_INGESTED",
+    "DOCUMENT_SIGNATURE_REQUESTED",
+    "DOCUMENT_SIGNATURE_REGISTERED",
+    "PUBLIC_NOTICE_PUBLISHED",
   ]);
 });
 

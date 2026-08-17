@@ -7,6 +7,7 @@ import {
   type PublicDataFilter,
 } from "@/lib/transparencia/portal-fiscal";
 import { getPublicBiddings, getPublicContracts, getPublicFinancialReportSnapshots } from "@/lib/transparencia/portal-public";
+import { getPublicNotices } from "@/lib/transparencia/public-notices";
 
 export const dynamic = "force-dynamic";
 
@@ -80,10 +81,11 @@ export default async function PortalTransparenciaPage({ searchParams }: { search
   const revenues = view === "receitas" ? await getPublicRevenues(prisma, filter) : null;
   const activeResult = expenses ?? revenues!;
   const exportPath = `/api/transparencia/${view}?${queryFor(filter, activeResult.page, { format: "csv" })}`;
-  const [reports, contracts, biddings, institution] = await Promise.all([
+  const [reports, contracts, biddings, notices, institution] = await Promise.all([
     getPublicFinancialReportSnapshots(prisma),
     getPublicContracts(prisma),
     getPublicBiddings(prisma),
+    getPublicNotices(prisma),
     prisma.institution.findFirst({ select: { name: true, phone: true, email: true, address: true, city: true, state: true, website: true } }),
   ]);
 
@@ -176,9 +178,14 @@ export default async function PortalTransparenciaPage({ searchParams }: { search
           <div className="max-h-[420px] overflow-auto"><table className="min-w-full text-left text-sm"><thead className="sticky top-0 bg-slate-100 text-xs uppercase tracking-wide text-slate-600"><tr><th className="px-4 py-3">Contrato</th><th className="px-4 py-3">Fornecedor</th><th className="px-4 py-3">Objeto / processo</th><th className="px-4 py-3">Vigência</th><th className="px-4 py-3 text-right">Valor atualizado</th></tr></thead><tbody className="divide-y divide-slate-200">{contracts.map((contract) => <tr key={contract.number}><td className="px-4 py-3 font-medium">{contract.number}<span className="block text-xs font-normal text-slate-500">{contract.status}</span></td><td className="px-4 py-3">{contract.supplier.name}<span className="block text-xs text-slate-500">{contract.supplier.documentMasked}</span></td><td className="px-4 py-3"><span className="block max-w-sm truncate" title={contract.object}>{contract.object}</span><span className="block text-xs text-slate-500">{contract.processNumber}{contract.modality ? ` · ${contract.modality}` : ""}</span></td><td className="px-4 py-3">{formatDate(contract.startDate)}<span className="block text-xs text-slate-500">até {formatDate(contract.endDate)}</span></td><td className="px-4 py-3 text-right font-medium">{formatMoney(contract.updatedValue)}</td></tr>)}{!contracts.length && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Nenhum contrato publicável.</td></tr>}</tbody></table></div>
         </section>
 
+        <section className="mt-6 rounded-lg bg-white shadow-sm ring-1 ring-slate-200">
+          <div className="border-b border-slate-200 px-5 py-4"><h2 className="text-lg font-bold">Avisos públicos</h2><p className="text-sm text-slate-500">Publicações redigidas: título, categoria, data e link de validação. Não há narrativas, interessados, anexos ou downloads.</p></div>
+          <div className="overflow-x-auto"><table className="min-w-full text-left text-sm"><thead className="bg-slate-100 text-xs uppercase tracking-wide text-slate-600"><tr><th className="px-4 py-3">Título</th><th className="px-4 py-3">Categoria</th><th className="px-4 py-3">Publicação</th><th className="px-4 py-3"></th></tr></thead><tbody className="divide-y divide-slate-200">{notices.map((notice) => <tr key={notice.validationUrl}><td className="px-4 py-3 font-medium">{notice.title}</td><td className="px-4 py-3">{notice.category}</td><td className="px-4 py-3">{formatDate(notice.publishedAt)}</td><td className="px-4 py-3"><Link className="font-semibold text-sky-800 hover:underline" href={notice.validationUrl}>Validar aviso</Link></td></tr>)}{!notices.length && <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-500">Nenhum aviso público publicado.</td></tr>}</tbody></table></div>
+        </section>
+
         {institution && (institution.phone || institution.email || institution.address || institution.website) && <section className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700"><h2 className="font-bold">Contato institucional</h2><p className="mt-1">{institution.name}</p>{institution.address && <p>{institution.address}{institution.city ? `, ${institution.city}` : ""}{institution.state ? `/${institution.state}` : ""}</p>}{institution.phone && <p>Telefone: {institution.phone}</p>}{institution.email && <p>E-mail: <a className="font-semibold text-sky-800 hover:underline" href={`mailto:${institution.email}`}>{institution.email}</a></p>}{institution.website && <p>Site: <a className="font-semibold text-sky-800 hover:underline" href={institution.website}>{institution.website}</a></p>}</section>}
 
-        <p className="mt-6 text-xs leading-5 text-slate-500">API pública: <code>/api/transparencia/despesas</code>, <code>/api/transparencia/receitas</code>, <code>/api/transparencia/contratos</code>, <code>/api/transparencia/licitacoes</code> e <code>/api/transparencia/relatorios</code>. Exportações e snapshots são CSV; não há PDF ou TXT nesta entrega.</p>
+        <p className="mt-6 text-xs leading-5 text-slate-500">API pública: <code>/api/transparencia/despesas</code>, <code>/api/transparencia/receitas</code>, <code>/api/transparencia/contratos</code>, <code>/api/transparencia/licitacoes</code> e <code>/api/transparencia/relatorios</code>. Avisos públicos não expõem arquivos, anexos ou downloads.</p>
       </div>
     </main>
   );

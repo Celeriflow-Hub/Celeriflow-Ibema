@@ -5962,6 +5962,7 @@ model Usuario {
   expenseRequests              Expense[]                     @relation("ExpenseRequestedBy")
   expenseApprovals             Expense[]                     @relation("ExpenseApprovedBy")
   auditEvents                  AuditEvent[]                  @relation("AuditEventActor")
+  publishedPublicNotices       PublicNotice[]                @relation("PublicNoticePublisher")
   proposedPersonMergeRequests  PersonMergeRequest[]          @relation("PersonMergeProposer")
   approvedPersonMergeRequests  PersonMergeRequest[]          @relation("PersonMergeApprover")
   reversedPersonMergeRequests  PersonMergeRequest[]          @relation("PersonMergeReverser")
@@ -5986,6 +5987,22 @@ model AuditEvent {
   @@index([actorUsuarioId, createdAt])
   @@index([eventType, createdAt])
   @@index([targetType, targetId, createdAt])
+}
+
+// A deliberately redacted, independently validated public projection. Source records remain private.
+model PublicNotice {
+  id                  String   @id @default(cuid())
+  sourceModule        String
+  sourceEntityId      String
+  title               String
+  category            String
+  publishedAt         DateTime @default(now())
+  validationCode      String   @unique
+  publishedByUsuarioId String
+  publishedByUsuario  Usuario  @relation("PublicNoticePublisher", fields: [publishedByUsuarioId], references: [id], onDelete: Restrict)
+
+  @@unique([sourceModule, sourceEntityId])
+  @@index([publishedAt])
 }
 
 // Mutable workflow state for an approved PF-only duplicate merge.

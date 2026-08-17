@@ -16,6 +16,13 @@ export const auditEventTypes = {
   personMergeExecuted: "PERSON_MERGE_EXECUTED",
   personMergeReversed: "PERSON_MERGE_REVERSED",
   administrativeMutation: "ADMINISTRATIVE_MUTATION",
+  processOpened: "PROCESS_OPENED",
+  processUpdated: "PROCESS_UPDATED",
+  processDocumentLinked: "PROCESS_DOCUMENT_LINKED",
+  gedDocumentIngested: "GED_DOCUMENT_INGESTED",
+  documentSignatureRequested: "DOCUMENT_SIGNATURE_REQUESTED",
+  documentSignatureRegistered: "DOCUMENT_SIGNATURE_REGISTERED",
+  publicNoticePublished: "PUBLIC_NOTICE_PUBLISHED",
 } as const;
 
 export type AuditEventType = (typeof auditEventTypes)[keyof typeof auditEventTypes];

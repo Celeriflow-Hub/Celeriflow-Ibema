@@ -35,6 +35,7 @@ export async function createDocument(
     publicLabel,
     fileUrl,
     folderId: folderId || null,
+    actorUsuarioId: context.user.id,
   });
   revalidatePath("/documentos/ged");
   revalidatePath("/documentos");

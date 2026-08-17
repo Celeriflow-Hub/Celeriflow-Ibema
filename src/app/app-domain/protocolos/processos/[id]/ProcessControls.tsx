@@ -3,10 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { FileUp, FileText, Send, X } from "lucide-react";
-import { addProcessDispatch, approveGenericProcessWorkflow, archiveProcess, concludeGenericProcessWorkflow, concludeProcess, forwardProcess, receiveProcess, rejectGenericProcessWorkflow, reopenProcess, returnGenericProcessWorkflow } from "../../actions";
+import { addProcessDispatch, approveGenericProcessWorkflow, archiveProcess, concludeGenericProcessWorkflow, concludeProcess, forwardProcess, publishProcessNotice, receiveProcess, rejectGenericProcessWorkflow, reopenProcess, requestProcessSignatures, returnGenericProcessWorkflow } from "../../actions";
 
 type Department = { id: string; name: string };
-type Mode = "dispatch" | "forward" | "document" | "conclude" | "archive" | "reopen" | "genericApprove" | "genericReturn" | "genericReject" | "genericConclude" | null;
+type Mode = "dispatch" | "forward" | "document" | "signatures" | "conclude" | "archive" | "reopen" | "genericApprove" | "genericReturn" | "genericReject" | "genericConclude" | null;
 
 export default function ProcessControls({
   processId,
@@ -16,6 +16,9 @@ export default function ProcessControls({
   departments,
   genericWorkflow,
   documentClasses,
+  signableDocuments,
+  signers,
+  canPublishPublicNotice,
 }: {
   processId: string;
   status: string;
@@ -24,6 +27,9 @@ export default function ProcessControls({
   departments: Department[];
   genericWorkflow: { currentPosition: number; totalStages: number; stageLabel: string; status: string } | null;
   documentClasses: { id: string; label: string }[];
+  signableDocuments: { id: string; title: string }[];
+  signers: { id: string; nome: string; email: string }[];
+  canPublishPublicNotice: boolean;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>(null);
@@ -38,6 +44,8 @@ export default function ProcessControls({
   const [documentTitle, setDocumentTitle] = useState("");
   const [documentType, setDocumentType] = useState("Anexo");
   const [documentClassId, setDocumentClassId] = useState("");
+  const [signatureDocumentId, setSignatureDocumentId] = useState("");
+  const [selectedSignerIds, setSelectedSignerIds] = useState<string[]>([]);
 
   const isGeneric = Boolean(genericWorkflow);
   const isTerminal = ["Arquivado", "Cancelado", "Rejeitado"].includes(status) || (isGeneric && genericWorkflow?.status !== "ACTIVE");
@@ -108,6 +116,10 @@ export default function ProcessControls({
       setError("Informe o titulo do documento.");
       return;
     }
+    if (!documentClassId) {
+      setError("Selecione a classe documental de assinatura interna.");
+      return;
+    }
     if (file.size > 10 * 1024 * 1024 || !["application/pdf", "image/jpeg", "image/png"].includes(file.type)) {
       setError("Envie apenas PDF, JPG ou PNG de ate 10 MB.");
       return;
@@ -132,6 +144,35 @@ export default function ProcessControls({
     });
   }
 
+  function handleSignatures() {
+    if (!signatureDocumentId) {
+      setError("Selecione o documento para assinatura.");
+      return;
+    }
+    if (!selectedSignerIds.length) {
+      setError("Selecione ao menos um signatario.");
+      return;
+    }
+    setError(null);
+    startTransition(async () => handleResult(await requestProcessSignatures({
+      processId,
+      documentId: signatureDocumentId,
+      signerUsuarioIds: selectedSignerIds,
+    })));
+  }
+
+  function toggleSigner(signerId: string) {
+    setSelectedSignerIds((current) => current.includes(signerId)
+      ? current.filter((id) => id !== signerId)
+      : [...current, signerId]);
+  }
+
+  function handlePublishPublicNotice() {
+    if (!confirm("Publicar somente o aviso redigido, sem descricao, interessado ou anexos?")) return;
+    setError(null);
+    startTransition(async () => handleResult(await publishProcessNotice(processId)));
+  }
+
   return (
     <>
       <div className="flex flex-wrap gap-2">
@@ -144,6 +185,12 @@ export default function ProcessControls({
           <FileUp className="w-4 h-4" />
           Anexar Documento
         </button>
+        {signableDocuments.length > 0 && <button disabled={disabled} onClick={() => setMode("signatures")} className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 text-slate-700 text-sm font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-colors">
+          Solicitar assinatura
+        </button>}
+        {canPublishPublicNotice && <button disabled={isPending} onClick={handlePublishPublicNotice} className="px-4 py-2 bg-slate-900 hover:bg-slate-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors">
+          Publicar aviso redigido
+        </button>}
         <button disabled={disabled} onClick={() => setMode("dispatch")} className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 text-slate-700 text-sm font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-colors">
           <FileText className="w-4 h-4" />
           Adicionar Despacho
@@ -182,7 +229,7 @@ export default function ProcessControls({
           <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 p-5">
               <h2 className="text-lg font-bold text-slate-900">
-                 {mode === "forward" ? "Tramitar processo" : mode === "dispatch" ? "Adicionar despacho" : mode === "document" ? "Anexar documento" : mode === "genericApprove" ? "Aprovar etapa" : mode === "genericReturn" ? "Devolver etapa" : mode === "genericReject" ? "Rejeitar processo" : mode === "genericConclude" ? "Concluir processo" : mode === "conclude" ? "Concluir processo" : mode === "archive" ? "Arquivar processo" : "Reabrir processo"}
+                 {mode === "forward" ? "Tramitar processo" : mode === "dispatch" ? "Adicionar despacho" : mode === "document" ? "Anexar documento" : mode === "signatures" ? "Solicitar assinaturas" : mode === "genericApprove" ? "Aprovar etapa" : mode === "genericReturn" ? "Devolver etapa" : mode === "genericReject" ? "Rejeitar processo" : mode === "genericConclude" ? "Concluir processo" : mode === "conclude" ? "Concluir processo" : mode === "archive" ? "Arquivar processo" : "Reabrir processo"}
               </h2>
               <button onClick={close} disabled={isPending} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
             </div>
@@ -210,10 +257,7 @@ export default function ProcessControls({
                       <option>Despacho</option><option>Parecer</option><option>Decisao</option>
                     </select>
                    </label>
-                   {isGeneric && <label className="block text-sm font-medium text-slate-700">Classe documental
-                     <select value={documentClassId} onChange={event => setDocumentClassId(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"><option value="">Selecione a classe</option>{documentClasses.map((documentClass) => <option key={documentClass.id} value={documentClass.id}>{documentClass.label}</option>)}</select>
-                   </label>}
-                  <label className="block text-sm font-medium text-slate-700">Conteúdo
+                   <label className="block text-sm font-medium text-slate-700">Conteúdo
                     <textarea value={content} onChange={event => setContent(event.target.value)} rows={7} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
                   </label>
                 </>
@@ -224,17 +268,28 @@ export default function ProcessControls({
                   <label className="block text-sm font-medium text-slate-700">Titulo
                     <input value={documentTitle} onChange={event => setDocumentTitle(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
                   </label>
-                  <label className="block text-sm font-medium text-slate-700">Tipo
+                   <label className="block text-sm font-medium text-slate-700">Tipo
                     <input value={documentType} onChange={event => setDocumentType(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
-                  </label>
-                  <input type="file" accept="application/pdf,image/jpeg,image/png" onChange={event => {
+                   </label>
+                   <label className="block text-sm font-medium text-slate-700">Classe documental
+                     <select value={documentClassId} onChange={event => setDocumentClassId(event.target.value)} required className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"><option value="">Selecione a classe</option>{documentClasses.map((documentClass) => <option key={documentClass.id} value={documentClass.id}>{documentClass.label}</option>)}</select>
+                   </label>
+                   <input type="file" accept="application/pdf,image/jpeg,image/png" onChange={event => {
                     const selectedFile = event.target.files?.[0] || null;
                     setFile(selectedFile);
                     if (selectedFile && !documentTitle) setDocumentTitle(selectedFile.name);
                   }} className="block w-full text-sm text-slate-600" />
                   <p className="text-xs text-slate-500">PDF, JPG ou PNG, com até 10 MB.</p>
-                </>
-              )}
+                 </>
+               )}
+               {mode === "signatures" && (
+                 <>
+                   <label className="block text-sm font-medium text-slate-700">Documento
+                     <select value={signatureDocumentId} onChange={event => setSignatureDocumentId(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"><option value="">Selecione o documento</option>{signableDocuments.map((document) => <option key={document.id} value={document.id}>{document.title}</option>)}</select>
+                   </label>
+                   <fieldset className="space-y-2"><legend className="text-sm font-medium text-slate-700">Signatarios com acesso a Processos</legend>{signers.map((signer) => <label key={signer.id} className="flex items-center gap-2 rounded-lg border border-slate-200 p-2 text-sm"><input type="checkbox" checked={selectedSignerIds.includes(signer.id)} onChange={() => toggleSigner(signer.id)} /> <span>{signer.nome}<span className="block text-xs text-slate-500">{signer.email}</span></span></label>)}</fieldset>
+                 </>
+               )}
                {(mode === "conclude" || mode === "archive" || mode === "reopen" || mode === "genericReturn" || mode === "genericReject" || mode === "genericConclude") && (
                 <label className="block text-sm font-medium text-slate-700">Justificativa
                   <textarea value={reason} onChange={event => setReason(event.target.value)} rows={5} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
@@ -244,8 +299,8 @@ export default function ProcessControls({
             </div>
             <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 p-5">
               <button onClick={close} disabled={isPending} className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600">Cancelar</button>
-               <button disabled={isPending} onClick={mode === "forward" ? handleForward : mode === "dispatch" ? handleDispatch : mode === "document" ? handleDocument : handleLifecycle} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                 {isPending ? "Salvando..." : mode === "forward" ? "Tramitar" : mode === "dispatch" ? "Adicionar" : mode === "document" ? "Anexar" : mode === "genericApprove" ? "Aprovar" : mode === "genericReturn" ? "Devolver" : mode === "genericReject" ? "Rejeitar" : mode === "genericConclude" || mode === "conclude" ? "Concluir" : mode === "archive" ? "Arquivar" : "Reabrir"}
+               <button disabled={isPending} onClick={mode === "forward" ? handleForward : mode === "dispatch" ? handleDispatch : mode === "document" ? handleDocument : mode === "signatures" ? handleSignatures : handleLifecycle} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                  {isPending ? "Salvando..." : mode === "forward" ? "Tramitar" : mode === "dispatch" ? "Adicionar" : mode === "document" ? "Anexar" : mode === "signatures" ? "Solicitar" : mode === "genericApprove" ? "Aprovar" : mode === "genericReturn" ? "Devolver" : mode === "genericReject" ? "Rejeitar" : mode === "genericConclude" || mode === "conclude" ? "Concluir" : mode === "archive" ? "Arquivar" : "Reabrir"}
               </button>
             </div>
           </div>

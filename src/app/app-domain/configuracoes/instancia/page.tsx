@@ -50,6 +50,12 @@ export default async function InstanciaPage() {
         </Link>
       </div>
 
+      <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/40">
+        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Modelo global de relatórios</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Cabeçalho, rodapé, orientação e metadados de emissão são configurados em um único modelo, sem duplicar a identidade institucional.</p>
+        <Link href="/configuracoes/relatorios" className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-700 hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-indigo-200">Configurar modelo de relatórios <ExternalLink className="h-4 w-4" /></Link>
+      </div>
+
       {!isSystemAdministrator(user) ? (
         <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
           Os parâmetros operacionais desta instância são gerenciados pelo administrador do sistema.

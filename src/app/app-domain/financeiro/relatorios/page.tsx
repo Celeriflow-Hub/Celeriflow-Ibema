@@ -18,7 +18,7 @@ export default async function FinanceiroRelatoriosPage() {
     <div className="max-w-3xl space-y-6 p-6 md:p-8">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Relatórios Financeiros</h1>
-        <p className="mt-1 text-sm text-slate-500">Prévia e emissão interna em CSV ou PDF para os relatórios básicos da POC.</p>
+        <p className="mt-1 text-sm text-slate-500">Prévia e emissão interna em PDF, CSV, XLSX, TXT ou impressão para os relatórios básicos da POC.</p>
       </div>
       <section className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="font-semibold text-slate-800">Emitir relatório básico</h2>
@@ -47,6 +47,9 @@ export default async function FinanceiroRelatoriosPage() {
               <select name="format" defaultValue="PDF" className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm">
                 <option value="PDF">PDF</option>
                 <option value="CSV">CSV</option>
+                <option value="XLSX">XLSX</option>
+                <option value="TXT">TXT</option>
+                <option value="print">Imprimir</option>
                 <option value="preview">Prévia</option>
               </select>
             </label>

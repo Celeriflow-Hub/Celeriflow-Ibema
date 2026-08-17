@@ -4,6 +4,7 @@ import {
   type InternalReportDataset,
   type InternalReportType,
 } from "./report-delivery";
+import { createReportTemplatePresentation, type ReportEmissionMetadata, type ReportInstitutionIdentity } from "@/lib/reports/report-template";
 
 export const financeInternalReportKey = "finance.internal";
 
@@ -17,6 +18,11 @@ export type FinanceReportDataset = {
   financialYearId: string;
   reportType: InternalReportType;
   report: InternalReportDataset;
+  presentation?: {
+    institution: ReportInstitutionIdentity | null;
+    template: ReturnType<typeof createReportTemplatePresentation>;
+    emission: ReportEmissionMetadata | null;
+  };
 };
 
 export function createFinanceReportDataset(
@@ -40,14 +46,32 @@ export const financeInternalReportDefinition: ReportDefinition<FinanceReportInpu
       throw new AccessError("Exercício financeiro não encontrado.", 404);
     }
 
-    const report = await generateInternalReportDataset(
-      context.prisma,
-      input.reportType,
-      financialYear.id,
-      financialYear.year,
-      { month: input.month },
-    );
-    return createFinanceReportDataset(financialYear, input.reportType, report);
+    const [report, institution, storedTemplate] = await Promise.all([
+      generateInternalReportDataset(
+        context.prisma,
+        input.reportType,
+        financialYear.id,
+        financialYear.year,
+        { month: input.month },
+      ),
+      context.prisma.institution.findFirst({
+        select: { name: true, legalName: true, cnpj: true, address: true, city: true, state: true },
+        orderBy: { createdAt: "asc" },
+      }),
+      context.prisma.reportTemplate.findUnique({
+        where: { scope: "GLOBAL" },
+        select: { version: true, fingerprint: true, header: true, footer: true, orientation: true, includeEmissionMetadata: true },
+      }),
+    ]);
+    const template = createReportTemplatePresentation(storedTemplate);
+    return {
+      ...createFinanceReportDataset(financialYear, input.reportType, report),
+      presentation: {
+        institution,
+        template,
+        emission: template.includeEmissionMetadata ? { issuedAt: new Date().toISOString(), issuedBy: context.user.name } : null,
+      },
+    };
   },
   auditTarget() {
     return {

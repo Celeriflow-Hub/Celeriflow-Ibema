@@ -49,6 +49,20 @@ model Institution {
   updatedAt   DateTime @updatedAt
 }
 
+// The instance-wide visual layout; institutional identity remains in Institution.
+model ReportTemplate {
+  id                      String   @id @default(cuid())
+  scope                   String   @unique @default("GLOBAL")
+  version                 Int      @default(1)
+  fingerprint             String   @unique
+  header                  String   @default("")
+  footer                  String   @default("")
+  orientation             String   @default("LANDSCAPE")
+  includeEmissionMetadata Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
 // Secretarias, Autarquias e Fundos
 model Secretariat {
   id          String               @id @default(cuid())

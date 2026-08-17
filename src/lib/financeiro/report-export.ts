@@ -1,5 +1,7 @@
 import PDFDocument from "pdfkit";
 import type { InternalReportDataset, ReportRow } from "./report-delivery";
+import type { TabularReportPresentation } from "@/lib/reports/tabular-renderers";
+import { createDefaultReportTemplate } from "@/lib/reports/report-template";
 
 function rowHeaders(rows: ReportRow[]) {
   return [...new Set(rows.flatMap((row) => Object.keys(row)))];
@@ -9,9 +11,9 @@ function displayValue(value: string | number) {
   return typeof value === "number" ? new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(value) : value;
 }
 
-export function generateReportPdf(dataset: InternalReportDataset): Promise<Uint8Array> {
+export function generateReportPdf(dataset: InternalReportDataset, presentation: TabularReportPresentation = { institution: null, template: createDefaultReportTemplate(), emission: null }): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
-    const document = new PDFDocument({ size: "A4", layout: "landscape", margin: 36, info: { Title: dataset.title, Author: "CeleriFlow" } });
+    const document = new PDFDocument({ size: "A4", layout: presentation.template.orientation === "LANDSCAPE" ? "landscape" : "portrait", margin: 36, info: { Title: dataset.title, Author: presentation.institution?.name ?? "CeleriFlow" } });
     const chunks: Buffer[] = [];
     document.on("data", (chunk: Buffer) => chunks.push(chunk));
     document.on("end", () => resolve(new Uint8Array(Buffer.concat(chunks))));
@@ -20,10 +22,14 @@ export function generateReportPdf(dataset: InternalReportDataset): Promise<Uint8
     const pageWidth = document.page.width - document.page.margins.left - document.page.margins.right;
     const bottom = () => document.page.height - document.page.margins.bottom;
     const heading = () => {
+      if (presentation.template.header) document.font("Helvetica").fontSize(8).text(presentation.template.header);
       document.font("Helvetica-Bold").fontSize(15).text(dataset.title);
+      const institution = presentation.institution;
+      document.font("Helvetica").fontSize(8).text([institution?.name ?? "Instituição não configurada", institution?.legalName, institution?.cnpj ? `CNPJ: ${institution.cnpj}` : null].filter(Boolean).join(" | "));
       document.font("Helvetica").fontSize(9).text(`Exercício ${dataset.year} | ${dataset.metadata.scope} | ${dataset.metadata.referencePeriod}`);
       document.font("Helvetica").fontSize(8).text(`Situação: ${dataset.metadata.status} | Completude estatutária: ${dataset.metadata.statutoryCompleteness} | Snapshot público: ${dataset.metadata.publicSnapshotEligible ? "elegível sob condição" : "não aprovado"}`);
       document.font("Helvetica").fontSize(8).text(dataset.metadata.publicSnapshotCondition);
+      document.font("Helvetica").fontSize(8).text(`Template v${presentation.template.version}: ${presentation.template.fingerprint}`);
       dataset.warnings.forEach((warning) => document.fillColor("#8a3b12").fontSize(8).text(warning));
       document.fillColor("black").moveDown(0.7);
     };
@@ -61,6 +67,11 @@ export function generateReportPdf(dataset: InternalReportDataset): Promise<Uint8
         document.y = y + height;
       }
       document.moveDown(0.7);
+    }
+    if (presentation.template.footer || presentation.emission) {
+      document.moveDown(0.7).font("Helvetica").fontSize(8);
+      if (presentation.template.footer) document.text(presentation.template.footer);
+      if (presentation.emission) document.text(`Emitido em ${presentation.emission.issuedAt} por ${presentation.emission.issuedBy}.`);
     }
     document.end();
   });

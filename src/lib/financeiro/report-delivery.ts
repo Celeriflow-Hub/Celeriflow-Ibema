@@ -9,7 +9,8 @@ import {
   generateRGF,
   generateRREO,
 } from "@/lib/financeiro/relatorios-legais";
-import { exportPublicDataCSV } from "@/lib/transparencia/portal-fiscal";
+import { createDefaultReportTemplate } from "@/lib/reports/report-template";
+import { renderTabularCsv } from "@/lib/reports/tabular-renderers";
 import { uploadGeneratedReport } from "@/lib/platform/blob";
 import { isPublicFinancialReportType, publicFinancialReportDocumentType, type PublicFinancialReportType } from "@/lib/transparencia/portal-public";
 
@@ -65,7 +66,7 @@ export const financialReportOptions = [...legalReportOptions, ...planningReportO
 export type InternalReportType = (typeof financialReportOptions)[number]["type"];
 // Kept as an alias for existing consumers of the financial-report delivery API.
 export type FinancialReportType = InternalReportType;
-export type ReportFormat = "CSV" | "PDF";
+export type ReportFormat = "CSV" | "PDF" | "XLSX" | "TXT";
 
 const internalReportWarning = "Documento interno gerado a partir dos dados registrados no CeleriFlow. Não corresponde a leiaute oficial de TCE, STN ou SICONFI.";
 const partialReportWarning = "Conteúdo parcial: a disponibilidade dos dados não comprova completude estatutária, legal ou de prestação de contas.";
@@ -76,7 +77,7 @@ export function isFinancialReportType(value: string | null): value is InternalRe
 }
 
 export function isReportFormat(value: string | null): value is ReportFormat {
-  return value === "CSV" || value === "PDF";
+  return value === "CSV" || value === "PDF" || value === "XLSX" || value === "TXT";
 }
 
 export function isReportMonth(value: number | null): value is number {
@@ -386,21 +387,8 @@ export async function generateInternalReportDataset(
 }
 
 export function reportDatasetCsv(dataset: InternalReportDataset) {
-  const metadataRows: ReportRow[] = [{
-    titulo: dataset.title,
-    exercicio: dataset.year,
-    situacaoRelatorio: dataset.metadata.status,
-    escopo: dataset.metadata.scope,
-    periodoReferencia: dataset.metadata.referencePeriod,
-    completudeEstatutaria: dataset.metadata.statutoryCompleteness,
-    snapshotPublicoElegivel: dataset.metadata.publicSnapshotEligible ? "Sim" : "Não",
-    condicaoSnapshotPublico: dataset.metadata.publicSnapshotCondition,
-    avisos: dataset.warnings.join(" | "),
-  }];
-  const rows = [...metadataRows.map<ReportRow>((row) => ({ secao: "Metadados do relatório", ...row })), ...dataset.sections.flatMap<ReportRow>((section) => section.rows.map<ReportRow>((row) => ({ secao: section.title, ...row })))];
-  const headers = [...new Set(rows.flatMap((row) => Object.keys(row)))];
-  const normalizedRows = rows.map((row) => Object.fromEntries(headers.map((header) => [header, row[header] ?? ""])) as ReportRow);
-  return { csv: exportPublicDataCSV(normalizedRows), rowCount: rows.length };
+  const presentation = { institution: null, template: createDefaultReportTemplate(), emission: null };
+  return { csv: renderTabularCsv(dataset, presentation), rowCount: 1 + dataset.sections.reduce((count, section) => count + section.rows.length, 0) };
 }
 
 export async function generateFinancialReportCsv(db: PrismaClient, reportType: InternalReportType, financialYearId: string) {

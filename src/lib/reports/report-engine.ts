@@ -1,7 +1,7 @@
 import { writeAuditEvent, auditEventTypes } from "@/lib/platform/audit-evidence";
 import type { AppContext } from "@/lib/platform/tenant-context";
 
-export const reportFormats = ["preview", "pdf", "csv"] as const;
+export const reportFormats = ["preview", "pdf", "csv", "xlsx", "txt", "print"] as const;
 export type ReportFormat = (typeof reportFormats)[number];
 export type ReportDataset = object;
 
@@ -22,6 +22,8 @@ export type AuthorizedReportExecution<Input, Dataset extends ReportDataset> = Re
   context: AppContext;
   definition: ReportDefinition<Input, Dataset>;
 };
+
+export type ReportRenderer<Input, Dataset extends ReportDataset, Result> = (execution: AuthorizedReportExecution<Input, Dataset>) => Promise<Result> | Result;
 
 export function isReportFormat(value: string | null | undefined): value is ReportFormat {
   return typeof value === "string" && (reportFormats as readonly string[]).includes(value);
@@ -56,4 +58,13 @@ export async function writeReportIssuanceAudit<Input, Dataset extends ReportData
     targetType: target.targetType,
     targetId: target.targetId,
   });
+}
+
+export async function renderReport<Input, Dataset extends ReportDataset, Result>(
+  execution: AuthorizedReportExecution<Input, Dataset>,
+  renderers: Partial<Record<ReportFormat, ReportRenderer<Input, Dataset, Result>>>,
+) {
+  const renderer = renderers[execution.format];
+  if (!renderer) throw new Error(`Formato de relatório não suportado: ${execution.format}.`);
+  return renderer(execution);
 }

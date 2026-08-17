@@ -5,7 +5,7 @@ import {
   Upload, Plus, Folder as FolderIcon, File, X, Check,
   Trash2, MoreVertical, ExternalLink
 } from "lucide-react";
-import { createFolder, createDocument, deleteDocument, deleteFolder } from "./actions";
+import { createFolder, createDocument, deleteDocument, deleteFolder, requestInternalSignatures } from "./actions";
 
 type DocItem = {
   id: string;
@@ -21,24 +21,36 @@ type FolderItem = {
   description: string | null;
   _count: { documents: number; children: number };
 };
+type DocumentClassItem = { code: string; label: string; signaturePolicy: string };
+type SignerItem = { id: string; nome: string; email: string };
 
 export default function GEDClient({
   folders,
   documents,
   currentFolderId,
+  documentClasses,
+  signers,
 }: {
   folders: FolderItem[];
   documents: DocItem[];
   currentFolderId: string | null;
+  documentClasses: DocumentClassItem[];
+  signers: SignerItem[];
 }) {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [uploadTitle, setUploadTitle] = useState("");
   const [uploadType, setUploadType] = useState("Arquivo");
+  const [uploadClassCode, setUploadClassCode] = useState("");
+  const [uploadPublicLabel, setUploadPublicLabel] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [signatureDocument, setSignatureDocument] = useState<DocItem | null>(null);
+  const [selectedSignerIds, setSelectedSignerIds] = useState<string[]>([]);
+  const [signatureError, setSignatureError] = useState<string | null>(null);
+  const [qrValidationUrl, setQrValidationUrl] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleCreateFolder = async () => {
@@ -73,17 +85,38 @@ export default function GEDClient({
 
       const blobData = await response.json();
 
-      await createDocument(uploadTitle, uploadType, blobData.url, currentFolderId);
+      await createDocument(uploadTitle, uploadType, uploadClassCode, uploadPublicLabel, blobData.url, currentFolderId);
       
       setUploadTitle("");
       setUploadFile(null);
       setUploadType("Arquivo");
+      setUploadClassCode("");
+      setUploadPublicLabel("");
       setShowUploadModal(false);
     } catch {
       alert("Erro ao fazer upload");
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleSigner = (signerId: string) => {
+    setSelectedSignerIds((current) => current.includes(signerId)
+      ? current.filter((id) => id !== signerId)
+      : [...current, signerId]);
+  };
+
+  const handleRequestSignatures = async () => {
+    if (!signatureDocument) return;
+    setLoading(true);
+    setSignatureError(null);
+    const result = await requestInternalSignatures(signatureDocument.id, selectedSignerIds);
+    setLoading(false);
+    if (result.error) {
+      setSignatureError(result.error);
+      return;
+    }
+    setQrValidationUrl(result.qrValidationUrl ?? null);
   };
 
   const handleDeleteDoc = async (id: string, title: string) => {
@@ -234,6 +267,12 @@ export default function GEDClient({
                             <ExternalLink className="w-3.5 h-3.5" /> Visualizar
                           </a>
                           <button
+                            onClick={() => { setActiveMenu(null); setSignatureDocument(doc); setSelectedSignerIds([]); setSignatureError(null); setQrValidationUrl(null); }}
+                            className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                          >
+                            <Check className="w-3.5 h-3.5" /> Solicitar assinaturas
+                          </button>
+                          <button
                             onClick={() => handleDeleteDoc(doc.id, doc.title)}
                             className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                           >
@@ -342,7 +381,7 @@ export default function GEDClient({
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Tipo de Documento</label>
-                <select
+               <select
                   value={uploadType}
                   onChange={(e) => setUploadType(e.target.value)}
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600"
@@ -356,19 +395,71 @@ export default function GEDClient({
                   <option>Relatório</option>
                   <option>Norma</option>
                   <option>Projeto</option>
-                </select>
-              </div>
+               </select>
+               </div>
+               <div>
+                 <label className="block text-sm font-semibold text-slate-700 mb-1">Classe documental</label>
+                 <select
+                   value={uploadClassCode}
+                   onChange={(e) => setUploadClassCode(e.target.value)}
+                   className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600"
+                 >
+                   <option value="">Selecione a classe...</option>
+                   {documentClasses.map((documentClass) => (
+                     <option key={documentClass.code} value={documentClass.code}>{documentClass.label}</option>
+                   ))}
+                 </select>
+               </div>
+               <div>
+                 <label className="block text-sm font-semibold text-slate-700 mb-1">Rótulo público de validação</label>
+                 <input
+                   value={uploadPublicLabel}
+                   onChange={(e) => setUploadPublicLabel(e.target.value)}
+                   placeholder="Ex: Documento administrativo autenticado"
+                   className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600"
+                 />
+               </div>
             </div>
 
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowUploadModal(false)} className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Cancelar</button>
               <button
                 onClick={handleUpload}
-                disabled={!uploadFile || !uploadTitle.trim() || loading}
+                disabled={!uploadFile || !uploadTitle.trim() || !uploadClassCode || loading}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 {loading ? "Enviando..." : <><Check className="w-4 h-4" /> Confirmar Upload</>}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {signatureDocument && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => !loading && setSignatureDocument(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-slate-900">Solicitar assinaturas internas</h2>
+            <p className="mt-1 text-sm text-slate-600">{signatureDocument.title}</p>
+            {qrValidationUrl ? (
+              <div className="mt-4 space-y-3">
+                <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">Solicitação criada para todos os signatários selecionados.</p>
+                <label className="block text-sm font-semibold text-slate-700">URL de validação/QR
+                  <input readOnly value={qrValidationUrl} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-xs" />
+                </label>
+              </div>
+            ) : (
+              <div className="mt-4 max-h-56 space-y-2 overflow-y-auto rounded-lg border border-slate-200 p-3">
+                {signers.map((signer) => (
+                  <label key={signer.id} className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
+                    <input type="checkbox" checked={selectedSignerIds.includes(signer.id)} onChange={() => toggleSigner(signer.id)} />
+                    <span>{signer.nome}<span className="block text-xs text-slate-400">{signer.email}</span></span>
+                  </label>
+                ))}
+              </div>
+            )}
+            {signatureError && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{signatureError}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setSignatureDocument(null)} disabled={loading} className="px-4 py-2 text-sm font-semibold text-slate-600">{qrValidationUrl ? "Fechar" : "Cancelar"}</button>
+              {!qrValidationUrl && <button onClick={handleRequestSignatures} disabled={selectedSignerIds.length === 0 || loading} className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg disabled:opacity-50">{loading ? "Solicitando..." : "Solicitar"}</button>}
             </div>
           </div>
         </div>

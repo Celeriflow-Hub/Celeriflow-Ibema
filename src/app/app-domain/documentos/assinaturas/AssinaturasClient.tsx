@@ -102,8 +102,8 @@ export default function AssinaturasClient({ initialDocuments }: { initialDocumen
               <button onClick={closeConfirmation} disabled={isPending} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
             </div>
             <div className="space-y-4 p-5 text-sm text-slate-700">
-              <p><strong>{selectedDocument.title}</strong> será congelado em uma versão com hash SHA-256 antes do registro.</p>
-              <p className="rounded-lg bg-indigo-50 p-3 text-indigo-800">Confirme sua senha Firebase para registrar a manifestação interna. O hash SHA-256 e a reautenticação serão gravados na auditoria.</p>
+              <p><strong>{selectedDocument.title}</strong> já está vinculado a uma versão bloqueada com hash SHA-256.</p>
+              <p className="rounded-lg bg-indigo-50 p-3 text-indigo-800">Confirme sua senha Firebase para concluir sua assinatura interna. A versão será concluída somente depois de todos os signatários obrigatórios.</p>
               <label className="block text-sm font-medium text-slate-700">Senha da conta
                 <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
               </label>

@@ -647,6 +647,17 @@ model RealEstate {
 }
 
 // Documentos e Anexos
+model DocumentClass {
+  id              String     @id @default(cuid())
+  code            String     @unique
+  label           String
+  signaturePolicy String     @default("EXTERNAL_PROVIDER_REQUIRED") // INTERNAL_ALLOWED, ICP_REQUIRED, EXTERNAL_PROVIDER_REQUIRED
+  isActive        Boolean    @default(true)
+  documents       Document[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
 model Document {
   id           String    @id @default(cuid())
   title        String
@@ -655,6 +666,10 @@ model Document {
   validUntil   DateTime?
   status       String    @default("VÃ¡lido") // VÃ¡lido, Vencido, Pendente
   notes        String?
+  documentClassId String?
+  documentClass   DocumentClass? @relation(fields: [documentClassId], references: [id], onDelete: Restrict)
+  publicLabel     String         @default("Documento autenticado")
+  retentionMonths Int            @default(60)
 
   personId String?
   person   Person? @relation(fields: [personId], references: [id], onDelete: Cascade)
@@ -704,6 +719,7 @@ model DocumentVersion {
   status        String    @default("FINAL") // FINAL, SIGNED, SUPERSEDED, CANCELLED
   lockedAt      DateTime?
   finalizedAt   DateTime  @default(now())
+  publicValidationCode String? @unique
   createdAt     DateTime  @default(now())
 
   signatures DocumentSignature[]
@@ -730,6 +746,9 @@ model DocumentSignature {
 
   signatureType        String    @default("SIGN")
   provider             String    @default("INTERNAL")
+  isRequired           Boolean   @default(true)
+  requestedByUsuarioId String?
+  requestedByUsuario   Usuario?  @relation("DocumentSignatureRequestedBy", fields: [requestedByUsuarioId], references: [id], onDelete: Restrict)
   authenticationMethod String
   reauthenticatedAt    DateTime?
   documentHash         String
@@ -5812,6 +5831,7 @@ model Usuario {
   permissoesModulo             UsuarioModulo[]
   unidadesGestoras             UsuarioUnidadeGestora[]
   documentSignatures           DocumentSignature[]           @relation("DocumentSignatureUsuario")
+  requestedDocumentSignatures  DocumentSignature[]           @relation("DocumentSignatureRequestedBy")
   protocolNotifications        ProtocolNotification[]
   financialAuditLogs           FinancialAuditLog[]           @relation("FinancialAuditUsuario")
   taxAuditLogs                 TaxAuditLog[]                 @relation("TaxAuditUsuario")

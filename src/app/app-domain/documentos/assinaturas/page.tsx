@@ -5,14 +5,27 @@ import AssinaturasClient from "./AssinaturasClient";
 export const dynamic = "force-dynamic";
 
 export default async function AssinaturasPage() {
-  const { prisma } = await getTenantContextForModule("DOCUMENTOS");
-  const pendentes = await prisma.document.findMany({
+  const { prisma, user } = await getTenantContextForModule("DOCUMENTOS");
+  const pendingSignatures = await prisma.documentSignature.findMany({
     where: {
-      status: "Pendente Assinatura",
-      signatures: { none: { status: "SIGNED" } },
+      signerUsuarioId: user.id,
+      status: "PENDING",
+      documentVersion: { status: "PENDING_SIGNATURE" },
     },
-    orderBy: { createdAt: "asc" },
+    orderBy: { requestedAt: "asc" },
+    select: {
+      documentId: true,
+      requestedAt: true,
+      document: { select: { title: true, documentType: true, status: true } },
+    },
   });
+  const documents = pendingSignatures.map((signature) => ({
+    id: signature.documentId,
+    title: signature.document.title,
+    documentType: signature.document.documentType,
+    createdAt: signature.requestedAt,
+    status: signature.document.status,
+  }));
 
   return (
     <div className="max-w-6xl animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
@@ -39,12 +52,12 @@ export default async function AssinaturasPage() {
         </div>
 
         <div className="overflow-x-auto">
-          {pendentes.length === 0 ? (
+          {documents.length === 0 ? (
             <div className="p-8 text-center text-slate-500 text-sm">
               Você não possui documentos pendentes de assinatura no momento.
             </div>
           ) : (
-            <AssinaturasClient initialDocuments={pendentes} />
+            <AssinaturasClient initialDocuments={documents} />
           )}
         </div>
       </div>

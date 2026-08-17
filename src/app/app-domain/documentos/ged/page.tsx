@@ -14,6 +14,18 @@ export default async function GEDPage({
   const resolved = await searchParams;
   const currentFolderId = resolved?.folderId || null;
   const view = resolved?.view || null;
+  const [documentClasses, signers] = await Promise.all([
+    prisma.documentClass.findMany({
+      where: { isActive: true },
+      select: { code: true, label: true, signaturePolicy: true },
+      orderBy: { label: "asc" },
+    }),
+    prisma.usuario.findMany({
+      where: { ativo: true },
+      select: { id: true, nome: true, email: true },
+      orderBy: { nome: "asc" },
+    }),
+  ]);
 
   // Current folder metadata
   let currentFolder = null;
@@ -165,6 +177,8 @@ export default async function GEDPage({
             folders={displayFolders}
             documents={documents}
             currentFolderId={currentFolderId}
+            documentClasses={documentClasses}
+            signers={signers}
           />
         </div>
       </div>

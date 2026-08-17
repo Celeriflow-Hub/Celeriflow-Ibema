@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { checkRateLimit } from "@/lib/platform/rate-limit";
 
 // ATENÇÃO: O middleware roda no Edge Runtime — NÃO importar módulos Node.js aqui.
 const SESSION_COOKIE_NAME = "celeriflow_session";
@@ -19,6 +20,18 @@ export const config = {
 
 export default function middleware(req: NextRequest) {
   const url = req.nextUrl;
+  const isPublicDocumentValidation = /^\/validar-documento\/[^/]+$/.test(url.pathname);
+  if (isPublicDocumentValidation) {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || req.headers.get("x-real-ip") || "unknown";
+    const rateLimit = checkRateLimit(`public-document:${ip}`);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Muitas tentativas. Tente novamente mais tarde." },
+        { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
+      );
+    }
+    return NextResponse.next();
+  }
   const hostname = (req.headers.get("host") || "").toLowerCase().split(":")[0];
 
   // Domínio que deve apontar direto para o sistema interno (dashboard)

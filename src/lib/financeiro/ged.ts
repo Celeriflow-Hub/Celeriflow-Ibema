@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { uploadGeneratedFinancialFile } from "@/lib/platform/blob";
+import { ingestGedDocument } from "@/lib/documents/document-flow-service";
 
 const financialFolderName = "Financeiro";
 
@@ -55,30 +55,18 @@ export async function saveFinancialFileToGed(
   const file = input.fileUrl
     ? { url: input.fileUrl }
     : await uploadGeneratedFinancialFile(input.filename, input.content, input.contentType);
-  const hashSha256 = createHash("sha256").update(input.content).digest("hex");
-
-  return db.$transaction(async (tx) => {
+  const folderId = await db.$transaction(async (tx) => {
     const folderId = await resolveFinancialFolder(tx);
     await moveFinancialDocumentsToFolder(tx, folderId);
-    const document = await tx.document.create({
-      data: {
-        title: input.title,
-        documentType: input.documentType,
-        fileUrl: file.url,
-        folderId,
-        status: "Válido",
-      },
-      select: { id: true },
-    });
-    await tx.documentVersion.create({
-      data: {
-        documentId: document.id,
-        versionNumber: 1,
-        fileUrl: file.url,
-        hashSha256,
-        status: "FINAL",
-      },
-    });
-    return { documentId: document.id, folderId };
+    return folderId;
   });
+  const document = await ingestGedDocument(db, {
+    title: input.title,
+    documentType: input.documentType,
+    documentClassCode: "GED_EXTERNAL_PROVIDER_REQUIRED",
+    fileUrl: file.url,
+    folderId,
+    content: input.content,
+  });
+  return { documentId: document.documentId, folderId };
 }

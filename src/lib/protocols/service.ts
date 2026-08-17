@@ -16,7 +16,7 @@ export type ProcessOpeningInput = {
 type OperationalEmployee = { id: string };
 
 // This is the only process-opening path used by Protocols and its integrations.
-export async function createValidatedProcess(tx: Prisma.TransactionClient, employee: OperationalEmployee, input: ProcessOpeningInput) {
+export async function createValidatedProcess(tx: Prisma.TransactionClient, employee: OperationalEmployee, actorUsuarioId: string, input: ProcessOpeningInput) {
   const { processTypeId, subjectId, personId = null, companyId = null, initialDepartmentId: selectedDepartmentId = null, priority: requestedPriority = null, description = null } = input;
   if (!processTypeId || !subjectId) throw new Error("Selecione o Tipo e o Assunto do processo.");
   if (personId && companyId) throw new Error("Selecione apenas um interessado: pessoa ou empresa.");
@@ -59,13 +59,13 @@ export async function createValidatedProcess(tx: Prisma.TransactionClient, emplo
     },
     select: { id: true, protocolNumber: true, expectedCompletionAt: true },
   });
-  await notifyProtocolDepartment(tx, department.id, {
-    processId: process.id, type: "RECEIVE", title: `Novo processo ${process.protocolNumber}`, message: "Um processo aguarda recebimento no seu setor.",
+  await notifyProtocolDepartment(tx, actorUsuarioId, department.id, {
+    processId: process.id, type: "RECEIVE", title: `Novo processo ${process.protocolNumber}`, message: "Um processo aguarda recebimento no seu setor.", priority: "NORMAL", dedupeDiscriminator: "OPENED",
   });
   if (process.expectedCompletionAt) {
-    await notifyProtocolDepartment(tx, department.id, {
+    await notifyProtocolDepartment(tx, actorUsuarioId, department.id, {
       processId: process.id, type: "DEADLINE", title: `Prazo definido: ${process.protocolNumber}`,
-      message: `Prazo da etapa: ${process.expectedCompletionAt.toLocaleDateString("pt-BR")}.`,
+      message: `Prazo da etapa: ${process.expectedCompletionAt.toLocaleDateString("pt-BR")}.`, priority: "ALTA", dedupeDiscriminator: `DEADLINE:${process.expectedCompletionAt.toISOString()}`,
     });
   }
   return process;

@@ -361,7 +361,7 @@ export async function createProcessFromTicket(formData: FormData): Promise<void>
   const initialDepartmentId = stringValue(formData, "initialDepartmentId") || null;
   const priority = stringValue(formData, "priority") || null;
   const process = await context.prisma.$transaction(async (tx) => {
-    const created = await createValidatedProcess(tx, context.employee, {
+    const created = await createValidatedProcess(tx, context.employee, context.user.id, {
       processTypeId, subjectId, initialDepartmentId, priority,
       personId: ticket.personId, companyId: ticket.companyId,
       description: `Atendimento ${ticket.ticketNumber}: ${ticket.subject}\n\n${ticket.description}`,
@@ -468,7 +468,7 @@ export async function createProcessFromOmbudsman(formData: FormData): Promise<vo
   if (ombudsman.processId) throw new Error("Esta manifestacao ja possui um processo relacionado.");
   if (!disclosure) throw new Error("Informe o resumo autorizado para o processo. Nao inclua dados de identidade ou detalhes sensiveis.");
   const process = await context.prisma.$transaction(async (tx) => {
-    const created = await createValidatedProcess(tx, context.employee, {
+    const created = await createValidatedProcess(tx, context.employee, context.user.id, {
       processTypeId: stringValue(formData, "processTypeId"), subjectId: stringValue(formData, "subjectId"),
       initialDepartmentId: stringValue(formData, "initialDepartmentId") || null,
       priority: stringValue(formData, "priority") || null,

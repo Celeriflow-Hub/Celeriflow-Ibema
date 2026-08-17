@@ -43,6 +43,8 @@ test("defines authentication, protected-operation, and usage-monitoring event ty
     "UI_INTERACTION",
     "FORM_SUBMIT",
     "INSTANCE_CONFIGURATION_CHANGED",
+    "INTERNAL_NOTIFICATION_CREATED",
+    "INTERNAL_NOTIFICATION_READ",
   ]);
 });
 

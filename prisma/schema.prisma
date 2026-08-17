@@ -941,19 +941,25 @@ model ProcessEvent {
 }
 
 model ProtocolNotification {
-  id        String    @id @default(cuid())
-  userId    String
-  user      Usuario   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  processId String
-  process   Process   @relation(fields: [processId], references: [id], onDelete: Cascade)
-  type      String
-  title     String
-  message   String
-  dedupeKey String?
-  readAt    DateTime?
-  createdAt DateTime  @default(now())
+  id           String    @id @default(cuid())
+  userId       String
+  user         Usuario   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Kept for existing protocol records. New notifications use the typed entity fields.
+  processId    String?
+  process      Process?  @relation(fields: [processId], references: [id], onDelete: Cascade)
+  sourceModule String    @default("PROCESSOS")
+  entityType   String    @default("PROCESS")
+  entityId     String
+  type         String
+  title        String
+  message      String
+  priority     String    @default("NORMAL")
+  dedupeKey    String?
+  readAt       DateTime?
+  createdAt    DateTime  @default(now())
 
   @@index([userId, readAt, createdAt])
+  @@index([sourceModule, entityType, entityId, createdAt])
   @@index([processId, createdAt])
   @@index([userId, dedupeKey])
 }

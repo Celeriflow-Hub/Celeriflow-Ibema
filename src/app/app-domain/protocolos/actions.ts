@@ -3,6 +3,8 @@
 import { getProtocolContextForOperation } from "@/lib/protocols/access";
 import { notifyProtocolDepartment, notifyProtocolUsers } from "@/lib/protocols/notifications";
 import { createValidatedProcess } from "@/lib/protocols/service";
+import { markInternalNotificationRead } from "@/lib/notifications/internal-notifications";
+import { getCurrentTenantContext } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -45,7 +47,7 @@ function revalidateProtocolPages() {
 }
 
 export async function createProtocol(formData: FormData): Promise<void> {
-  const { prisma, employee } = await getOperationalContext("create");
+  const { prisma, employee, user } = await getOperationalContext("create");
   const processTypeId = String(formData.get("processTypeId") || "");
   const subjectId = String(formData.get("subjectId") || "");
   const personId = String(formData.get("personId") || "") || null;
@@ -57,7 +59,7 @@ export async function createProtocol(formData: FormData): Promise<void> {
   if (!processTypeId || !subjectId) throw new Error("Selecione o Tipo e o Assunto do processo.");
   if (personId && companyId) throw new Error("Selecione apenas um interessado: pessoa ou empresa.");
 
-  const process = await prisma.$transaction((tx) => createValidatedProcess(tx, employee, {
+  const process = await prisma.$transaction((tx) => createValidatedProcess(tx, employee, user.id, {
     processTypeId, subjectId, personId, companyId, initialDepartmentId: selectedDepartmentId, priority: requestedPriority, description,
   }));
 
@@ -67,7 +69,7 @@ export async function createProtocol(formData: FormData): Promise<void> {
 
 export async function receiveProcess(processId: string): Promise<{ error: string | null }> {
   try {
-    const { prisma, employee, departmentId } = await getOperationalContext("update");
+    const { prisma, employee, departmentId, user } = await getOperationalContext("update");
 
     await prisma.$transaction(async (tx) => {
       const process = await tx.process.findUnique({
@@ -120,11 +122,13 @@ export async function receiveProcess(processId: string): Promise<{ error: string
         ? await tx.usuario.findUnique({ where: { employeeId: movement.employeeId }, select: { id: true } })
         : null;
       if (sender) {
-        await notifyProtocolUsers(tx, [sender.id], {
+        await notifyProtocolUsers(tx, user.id, [sender.id], {
           processId,
           type: "RECEIVED",
           title: `Processo recebido: ${movement.process.protocolNumber}`,
           message: "O setor de destino confirmou o recebimento do processo.",
+          priority: "NORMAL",
+          dedupeDiscriminator: movement.id,
         });
       }
     });
@@ -145,7 +149,7 @@ export async function forwardProcess(data: {
   dueAt?: string;
 }): Promise<{ error: string | null }> {
   try {
-    const { prisma, employee, departmentId } = await getOperationalContext("update");
+    const { prisma, employee, departmentId, user } = await getOperationalContext("update");
     const destinationEmployeeId = data.destinationEmployeeId || null;
     const reason = data.reason?.trim() || null;
     const dueAt = data.dueAt ? new Date(data.dueAt) : null;
@@ -210,7 +214,7 @@ export async function forwardProcess(data: {
       }
       const effectiveDueAt = dueAt || (nextStage?.slaDays ? new Date(Date.now() + nextStage.slaDays * 24 * 60 * 60 * 1000) : null);
 
-      await tx.processMovement.create({
+      const movement = await tx.processMovement.create({
         data: {
           processId: process.id,
           fromDepartmentId: departmentId,
@@ -221,6 +225,7 @@ export async function forwardProcess(data: {
           status: "AWAITING_RECEIPT",
           dueAt: effectiveDueAt,
         },
+        select: { id: true },
       });
       await tx.process.update({
         where: { id: process.id },
@@ -243,18 +248,22 @@ export async function forwardProcess(data: {
           employeeId: employee.id,
         },
       });
-      await notifyProtocolDepartment(tx, destinationDepartment.id, {
+      await notifyProtocolDepartment(tx, user.id, destinationDepartment.id, {
         processId: process.id,
         type: "FORWARDED",
         title: `Processo encaminhado: ${process.protocolNumber}`,
         message: `O processo foi encaminhado pelo seu setor de origem${reason ? `: ${reason}` : "."}`,
+        priority: "NORMAL",
+        dedupeDiscriminator: movement.id,
       });
       if (effectiveDueAt) {
-        await notifyProtocolDepartment(tx, destinationDepartment.id, {
+        await notifyProtocolDepartment(tx, user.id, destinationDepartment.id, {
           processId: process.id,
           type: "DEADLINE",
           title: `Prazo definido: ${process.protocolNumber}`,
           message: `Prazo da etapa: ${effectiveDueAt.toLocaleDateString("pt-BR")}.`,
+          priority: "ALTA",
+          dedupeDiscriminator: `DEADLINE:${effectiveDueAt.toISOString()}`,
         });
       }
     });
@@ -397,13 +406,11 @@ export async function reopenProcess(processId: string, reason: string): Promise<
 
 export async function markProtocolNotificationRead(notificationId: string): Promise<{ error: string | null }> {
   try {
-    const { prisma, user } = await getProtocolContextForOperation("update");
-    const updated = await prisma.protocolNotification.updateMany({
-      where: { id: notificationId, userId: user.id, readAt: null },
-      data: { readAt: new Date() },
-    });
-    if (!updated.count) throw new Error("Notificacao nao encontrada ou ja lida.");
+    const { prisma, user } = await getCurrentTenantContext();
+    const marked = await prisma.$transaction((tx) => markInternalNotificationRead(tx, notificationId, user.id));
+    if (!marked) throw new Error("Notificacao nao encontrada ou ja lida.");
     revalidatePath("/protocolos/notificacoes");
+    revalidatePath("/notificacoes");
     return { error: null };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Erro ao atualizar notificacao." };

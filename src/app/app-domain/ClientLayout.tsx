@@ -7,7 +7,8 @@ import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import { 
   LogOut,
-  Landmark
+  Landmark,
+  Bell
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { APP_VERSION } from "@/lib/version";
@@ -99,6 +100,9 @@ export default function ClientLayout({
 
         {/* Right: User Menu */}
         <div className="w-1/3 flex justify-end items-center gap-2 sm:gap-4">
+          <Link href="/notificacoes" className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-emerald-700" aria-label="Notificações internas">
+            <Bell className="h-5 w-5" />
+          </Link>
           <div className="hidden lg:flex flex-col text-right mr-1">
             <span className="text-sm font-semibold text-slate-800 leading-tight">{userName}</span>
             <span className="text-[11px] text-muted-foreground leading-tight">{userRole}</span>

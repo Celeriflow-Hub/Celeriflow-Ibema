@@ -10,6 +10,8 @@ export const auditEventTypes = {
   uiInteraction: "UI_INTERACTION",
   formSubmit: "FORM_SUBMIT",
   instanceConfigurationChanged: "INSTANCE_CONFIGURATION_CHANGED",
+  internalNotificationCreated: "INTERNAL_NOTIFICATION_CREATED",
+  internalNotificationRead: "INTERNAL_NOTIFICATION_READ",
 } as const;
 
 export type AuditEventType = (typeof auditEventTypes)[keyof typeof auditEventTypes];

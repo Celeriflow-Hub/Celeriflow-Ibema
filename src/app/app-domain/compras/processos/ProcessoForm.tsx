@@ -28,6 +28,7 @@ type ProcessData = {
   object: string;
   estimatedValue: number | null;
   items?: ProcessItem[];
+  purchaseRequestId?: string | null;
 };
 
 type CatalogItemOption = {
@@ -40,13 +41,15 @@ type CatalogItemOption = {
 type ProcessoFormProps = {
   data?: ProcessData;
   catalogItems?: CatalogItemOption[];
+  purchaseRequests?: { id: string; number: string; object: string }[];
 };
 
-export function ProcessoForm({ data, catalogItems = [] }: ProcessoFormProps) {
+export function ProcessoForm({ data, catalogItems = [], purchaseRequests = [] }: ProcessoFormProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   
   const [items, setItems] = useState<ProcessItem[]>(data?.items || []);
+  const [purchaseRequestId, setPurchaseRequestId] = useState(data?.purchaseRequestId || "");
   const estimatedTotal = items.length > 0
     ? items.reduce((acc, curr) => acc + (curr.quantity * (curr.estimatedUnitValue || 0)), 0)
     : data?.estimatedValue || 0;
@@ -89,7 +92,8 @@ export function ProcessoForm({ data, catalogItems = [] }: ProcessoFormProps) {
       modality: String(formData.get("modality") ?? ""),
       object: String(formData.get("object") ?? ""),
       estimatedValue: parseFloat(formData.get("estimatedValue") as string) || estimatedTotal,
-      items: items
+      items,
+      purchaseRequestId,
     };
 
     const result = await savePurchaseProcess(payload);
@@ -136,6 +140,19 @@ export function ProcessoForm({ data, catalogItems = [] }: ProcessoFormProps) {
                 <input type="hidden" name="estimatedValue" value={estimatedTotal} />
               </div>
             </div>
+
+            {!data && (
+              <div className="space-y-2">
+                <Label htmlFor="purchaseRequestId">Solicitação aprovada de origem</Label>
+                <Select value={purchaseRequestId} onValueChange={(value) => setPurchaseRequestId(value ?? "")}>
+                  <SelectTrigger><SelectValue placeholder="Selecione a solicitação aprovada" /></SelectTrigger>
+                  <SelectContent>
+                    {purchaseRequests.map((request) => <SelectItem key={request.id} value={request.id}>{request.number} - {request.object}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Os itens canônicos da solicitação aprovada serão copiados sem substituir IDs de catálogo ou material.</p>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

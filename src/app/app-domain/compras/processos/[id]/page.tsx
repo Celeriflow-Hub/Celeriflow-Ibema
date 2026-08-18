@@ -14,7 +14,7 @@ export default async function ProcessoDetalhesPage({ params }: { params: Promise
     include: {
       secretariat: true,
       items: {
-        include: { material: true }
+        include: { catalogItem: true }
       }
     }
   });
@@ -93,7 +93,7 @@ export default async function ProcessoDetalhesPage({ params }: { params: Promise
               </thead>
               <tbody className="divide-y">
                 {processo.items.map((item) => {
-                  const name = item.material ? item.material.name : item.customName;
+                  const name = item.catalogItem ? item.catalogItem.name : item.customName;
                   const unitVal = item.estimatedUnitValue || 0;
                   const subtotal = item.quantity * unitVal;
                   return (

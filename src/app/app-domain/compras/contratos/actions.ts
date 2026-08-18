@@ -37,6 +37,17 @@ export async function saveContract(formData: FormData) {
     throw new Error("Dados básicos (Processo, Fornecedor, Secretaria) não foram selecionados.");
   }
 
+  const [process, supplier] = await Promise.all([
+    prisma.purchaseProcess.findUnique({ where: { id: processId }, select: { id: true, secretariatId: true, purchaseRequest: { select: { status: true } } } }),
+    prisma.supplier.findUnique({ where: { id: supplierId }, select: { id: true, status: true } }),
+  ]);
+  if (!process || process.secretariatId !== secretariatId || process.purchaseRequest?.status !== "Aprovada") {
+    return { success: false, error: "O contrato exige um processo originado de solicitação de compra aprovada e da mesma secretaria." };
+  }
+  if (!supplier || supplier.status !== "Ativo") {
+    return { success: false, error: "Selecione um fornecedor ativo." };
+  }
+
   const data = {
     number,
     object,

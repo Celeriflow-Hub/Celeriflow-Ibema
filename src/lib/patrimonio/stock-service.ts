@@ -1,4 +1,5 @@
 import { type Prisma, type PrismaClient } from "@prisma/client";
+import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 
 export class StockServiceError extends Error {}
 
@@ -25,6 +26,9 @@ export type StockMovementInput = {
   settlementId?: string | null;
   /** Reserved for the approved inventory-close workflow. */
   inventorySessionId?: string | null;
+  /** Stock entries are reserved for a receipt already approved by procurement. */
+  sourceType?: "APPROVED_PURCHASE_RECEIPT" | "MATERIAL_REQUEST_ISSUE";
+  materialRequestItemId?: string | null;
   actor: StockActor;
 };
 
@@ -49,6 +53,12 @@ export function normalizeStockMovement(input: StockMovementInput): ValidStockMov
   }
   if ((input.kind === "ENTRY" || input.kind === "EXIT") && input.quantity < 0) {
     throw new StockServiceError("Entrada e saída devem informar quantidade positiva.");
+  }
+  if (input.kind === "ENTRY" && input.sourceType !== "APPROVED_PURCHASE_RECEIPT") {
+    throw new StockServiceError("Entradas de estoque são registradas exclusivamente por recebimento de compra aprovado.");
+  }
+  if (input.sourceType === "MATERIAL_REQUEST_ISSUE" && input.kind !== "EXIT") {
+    throw new StockServiceError("A requisição de material pode originar somente uma saída de estoque.");
   }
   if (input.unitCost !== undefined && input.unitCost !== null && (!Number.isFinite(input.unitCost) || input.unitCost < 0)) {
     throw new StockServiceError("O custo unitário deve ser maior ou igual a zero.");
@@ -173,6 +183,7 @@ export async function applyStockMovement(tx: Prisma.TransactionClient, rawInput:
       obrasServicoId: input.obrasServicoId?.trim() || null,
       settlementId: input.settlementId?.trim() || null,
       inventorySessionId: input.inventorySessionId?.trim() || null,
+      materialRequestItemId: input.materialRequestItemId?.trim() || null,
       actorUsuarioId: input.actor.usuarioId,
       actorEmployeeId: input.actor.employeeId ?? null,
     },
@@ -181,5 +192,16 @@ export async function applyStockMovement(tx: Prisma.TransactionClient, rawInput:
 }
 
 export async function recordStockMovement(db: PrismaClient, input: StockMovementInput) {
-  return db.$transaction((tx) => applyStockMovement(tx, input));
+  return db.$transaction(async (tx) => {
+    const result = await applyStockMovement(tx, input);
+    if (input.kind === "ADJUSTMENT" && !input.inventorySessionId?.trim()) {
+      await writeAuditEvent(tx, {
+        actorUsuarioId: input.actor.usuarioId,
+        eventType: auditEventTypes.stockManuallyAdjusted,
+        targetType: "MATERIAL_MOVEMENT",
+        targetId: result.movement.id,
+      });
+    }
+    return result;
+  });
 }

@@ -3,6 +3,7 @@
 import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { nextYearlyCode } from "@/lib/sequence";
+import { approvePurchaseRequest as approveOfficialPurchaseRequest, ProcurementLifecycleError } from "@/lib/compras/procurement-lifecycle";
 
 async function getTenantPrisma(operation: ModuleOperation) {
   return (await getTenantContextForModuleOperation("COMPRAS", operation)).prisma;
@@ -22,8 +23,8 @@ type PurchaseRequestInput = {
   justification: string;
   estimatedValue: number;
   items: PurchaseRequestItemInput[];
-  secretariatId?: string;
-  departmentId?: string;
+  secretariatId: string;
+  departmentId: string;
 };
 
 export async function deletePurchaseRequest(id: string) {
@@ -42,17 +43,29 @@ export async function deletePurchaseRequest(id: string) {
 
 export async function savePurchaseRequest(payload: PurchaseRequestInput) {
   const { id, number, object, justification, estimatedValue, items, secretariatId, departmentId } = payload;
-  const prisma = await getTenantPrisma(id ? "update" : "create");
-  
-  const secretariat = secretariatId ? await prisma.secretariat.findUnique({ where: { id: secretariatId } }) : await prisma.secretariat.findFirst();
-  const department = departmentId ? await prisma.department.findUnique({ where: { id: departmentId } }) : await prisma.department.findFirst();
-  const requester = await prisma.employee.findFirst();
-
-  if (!secretariat || !department || !requester) {
-    throw new Error("Dados básicos (Secretaria, Departamento, Funcionario) não encontrados no banco.");
-  }
+  const context = await getTenantContextForModuleOperation("COMPRAS", id ? "update" : "create");
+  const { prisma } = context;
 
   try {
+    if (!secretariatId?.trim() || !departmentId?.trim()) return { success: false, error: "Selecione a secretaria e o departamento solicitante." };
+    if (!context.user.employeeId) return { success: false, error: "O usuário autenticado deve estar vinculado a um servidor solicitante." };
+    const [secretariat, department, requester] = await Promise.all([
+      prisma.secretariat.findUnique({ where: { id: secretariatId } }),
+      prisma.department.findUnique({ where: { id: departmentId } }),
+      prisma.employee.findUnique({ where: { id: context.user.employeeId }, select: { id: true, isActive: true } }),
+    ]);
+    if (!secretariat || !department || department.secretariatId !== secretariat.id || !requester?.isActive) {
+      return { success: false, error: "Secretaria, departamento ou solicitante inválido." };
+    }
+    if (!items.length) return { success: false, error: "Adicione ao menos um item à solicitação." };
+    const catalogItemIds = items.filter((item) => item.catalogItemId && item.catalogItemId !== "custom").map((item) => item.catalogItemId);
+    const catalogItems = catalogItemIds.length
+      ? await prisma.catalogItem.findMany({ where: { id: { in: catalogItemIds }, isActive: true }, select: { id: true } })
+      : [];
+    if (catalogItems.length !== new Set(catalogItemIds).size) return { success: false, error: "Selecione itens ativos do catálogo ou descreva o item livre." };
+    if (items.some((item) => !Number.isFinite(item.quantity) || item.quantity <= 0 || (item.catalogItemId === "custom" && !item.customName.trim()))) {
+      return { success: false, error: "Revise os itens e suas quantidades." };
+    }
     let finalNumber = number?.trim();
     if (!finalNumber && !id) {
       const requests = await prisma.purchaseRequest.findMany({ select: { number: true } });
@@ -75,6 +88,8 @@ export async function savePurchaseRequest(payload: PurchaseRequestInput) {
     let requestId: string;
 
     if (id) {
+      const existing = await prisma.purchaseRequest.findUnique({ where: { id }, select: { status: true, requesterId: true } });
+      if (!existing || existing.status !== "Rascunho" || existing.requesterId !== requester.id) return { success: false, error: "Somente o solicitante pode editar uma solicitação em rascunho." };
       // Atualizar a solicitacao
       await prisma.purchaseRequest.update({ where: { id }, data });
       requestId = id;
@@ -93,7 +108,7 @@ export async function savePurchaseRequest(payload: PurchaseRequestInput) {
     if (items && items.length > 0) {
       const itemsToCreate = items.map((item) => ({
         purchaseRequestId: requestId,
-        materialId: item.catalogItemId === "custom" || !item.catalogItemId ? null : item.catalogItemId,
+        catalogItemId: item.catalogItemId === "custom" || !item.catalogItemId ? null : item.catalogItemId,
         customName: item.catalogItemId === "custom" || !item.catalogItemId ? item.customName : null,
         quantity: item.quantity,
         estimatedUnitValue: item.estimatedUnitValue || null
@@ -109,5 +124,17 @@ export async function savePurchaseRequest(payload: PurchaseRequestInput) {
   } catch (error) {
     console.error("Error saving purchase request:", error);
     return { success: false, error: "Falha ao salvar a solicitação." };
+  }
+}
+
+export async function approvePurchaseRequest(id: string) {
+  try {
+    const context = await getTenantContextForModuleOperation("COMPRAS", "update");
+    await approveOfficialPurchaseRequest(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, id);
+    revalidatePath("/compras/solicitacoes");
+    revalidatePath(`/compras/solicitacoes/${id}`);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof ProcurementLifecycleError ? error.message : "Falha ao aprovar a solicitação." };
   }
 }

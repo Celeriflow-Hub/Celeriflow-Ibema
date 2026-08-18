@@ -24,6 +24,7 @@ type RequestData = {
   id: string;
   number: string;
   secretariatId: string;
+  departmentId: string;
   object: string;
   justification: string;
   estimatedValue: number | null;
@@ -38,18 +39,22 @@ type CatalogItemOption = {
 };
 
 type SecretariatOption = { id: string; name: string };
+type DepartmentOption = { id: string; name: string; secretariatId: string };
 
 type SolicitacaoFormProps = {
   data?: RequestData;
   catalogItems?: CatalogItemOption[];
   secretarias?: SecretariatOption[];
+  departments?: DepartmentOption[];
 };
 
-export function SolicitacaoForm({ data, catalogItems = [], secretarias = [] }: SolicitacaoFormProps) {
+export function SolicitacaoForm({ data, catalogItems = [], secretarias = [], departments = [] }: SolicitacaoFormProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   
   const [items, setItems] = useState<RequestItem[]>(data?.items || []);
+  const [secretariatId, setSecretariatId] = useState(data?.secretariatId || "");
+  const [departmentId, setDepartmentId] = useState(data?.departmentId || "");
   const estimatedTotal = items.length > 0
     ? items.reduce((acc, curr) => acc + (curr.quantity * (curr.estimatedUnitValue || 0)), 0)
     : data?.estimatedValue || 0;
@@ -91,7 +96,9 @@ export function SolicitacaoForm({ data, catalogItems = [], secretarias = [] }: S
       object: String(formData.get("object") ?? ""),
       justification: String(formData.get("justification") ?? ""),
       estimatedValue: parseFloat(formData.get("estimatedValue") as string) || estimatedTotal,
-      items: items
+      items,
+      secretariatId,
+      departmentId,
     };
 
     const result = await savePurchaseRequest(payload);
@@ -131,13 +138,26 @@ export function SolicitacaoForm({ data, catalogItems = [], secretarias = [] }: S
               </div>
               <div className="space-y-2">
                 <Label htmlFor="secretariatId">Secretaria</Label>
-                <Select name="secretariatId" defaultValue={data?.secretariatId || ""}>
+                <Select value={secretariatId} onValueChange={(value) => { setSecretariatId(value ?? ""); setDepartmentId(""); }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione a Secretaria" />
                   </SelectTrigger>
                   <SelectContent>
                     {secretarias.map(sec => (
                       <SelectItem key={sec.id} value={sec.id}>{sec.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="departmentId">Departamento</Label>
+                <Select value={departmentId} onValueChange={(value) => setDepartmentId(value ?? "")}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o Departamento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments.filter((department) => department.secretariatId === secretariatId).map((department) => (
+                      <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

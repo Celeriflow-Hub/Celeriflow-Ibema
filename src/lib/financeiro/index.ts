@@ -351,6 +351,7 @@ export async function createExpenseRequest(
     sourceId?: string;
     eventType: string;
     idempotencyKey?: string;
+    purchaseReceiptId?: string;
   },
 ) {
   const value = money(input.value);
@@ -359,15 +360,24 @@ export async function createExpenseRequest(
       const existing = await tx.expense.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
       if (existing) return existing;
     }
-    const [appropriation, supplier] = await Promise.all([
+    const [appropriation, supplier, purchaseReceipt] = await Promise.all([
       tx.budgetAppropriation.findUnique({
         where: { id: input.appropriationId },
         include: { expenseNature: { select: { procurementOriginPolicy: true } } },
       }),
       tx.supplier.findUnique({ where: { id: input.supplierId }, select: { id: true, status: true } }),
+      input.purchaseReceiptId
+        ? tx.purchaseReceipt.findUnique({ where: { id: input.purchaseReceiptId }, select: { id: true, status: true, contract: { select: { supplierId: true } } } })
+        : null,
     ]);
     if (!appropriation) throw new FinanceError("Dotação orçamentária não encontrada.");
     if (!supplier || supplier.status !== "Ativo") throw new FinanceError("Selecione um fornecedor ativo para a solicitação de despesa.");
+    if (input.purchaseReceiptId && (!purchaseReceipt || purchaseReceipt.status !== "APPROVED")) {
+      throw new FinanceError("A despesa de compra exige um recebimento aprovado.");
+    }
+    if (purchaseReceipt && purchaseReceipt.contract.supplierId !== supplier.id) {
+      throw new FinanceError("O fornecedor da despesa deve corresponder ao contrato do recebimento aprovado.");
+    }
     const year = await assertFinancialYearOpen(tx, appropriation.financialYearId, input.date);
     const expense = await tx.expense.create({
       data: {
@@ -384,10 +394,32 @@ export async function createExpenseRequest(
         sourceId: input.sourceId?.trim() || undefined,
         eventType: input.eventType.trim(),
         idempotencyKey: input.idempotencyKey?.trim() || undefined,
+        purchaseReceiptId: purchaseReceipt?.id,
       },
     });
-    await audit(tx, actor, "CREATE", "Expense", expense.id, { value: jsonMoney(value), supplierId: supplier.id, sourceModule: expense.sourceModule, sourceType: expense.sourceType, sourceId: expense.sourceId, eventType: expense.eventType }, year.id, appropriation.budgetUnitId);
+    await audit(tx, actor, "CREATE", "Expense", expense.id, { value: jsonMoney(value), supplierId: supplier.id, sourceModule: expense.sourceModule, sourceType: expense.sourceType, sourceId: expense.sourceId, eventType: expense.eventType, purchaseReceiptId: expense.purchaseReceiptId }, year.id, appropriation.budgetUnitId);
     return expense;
+  });
+}
+
+export async function createExpenseRequestFromApprovedPurchaseReceipt(
+  db: PrismaClient,
+  actor: FinanceActor,
+  input: { purchaseReceiptId: string; date: Date; description: string; value: Prisma.Decimal | string | number; appropriationId: string; secretariatId: string; idempotencyKey?: string },
+) {
+  const receipt = await db.purchaseReceipt.findUnique({
+    where: { id: input.purchaseReceiptId },
+    select: { id: true, status: true, contract: { select: { supplierId: true } } },
+  });
+  if (!receipt || receipt.status !== "APPROVED") throw new FinanceError("A solicitação de despesa exige um recebimento aprovado.");
+  return createExpenseRequest(db, actor, {
+    ...input,
+    supplierId: receipt.contract.supplierId,
+    sourceModule: "COMPRAS",
+    sourceType: "PURCHASE_RECEIPT",
+    sourceId: receipt.id,
+    eventType: "PURCHASE_RECEIPT_EXPENSE_REQUESTED",
+    idempotencyKey: input.idempotencyKey ?? `C5:PURCHASE_RECEIPT:${receipt.id}:EXPENSE`,
   });
 }
 
@@ -563,7 +595,7 @@ export async function createCommitment(
         where: { id: input.appropriationId },
         include: { expenseNature: { select: { procurementOriginPolicy: true } } },
       }),
-      tx.budgetReservation.findUnique({ where: { id: input.reservationId } }),
+      tx.budgetReservation.findUnique({ where: { id: input.reservationId }, include: { expense: { select: { purchaseReceiptId: true } } } }),
     ] as const);
     if (!appropriation) throw new FinanceError("Dotação orçamentária não encontrada.");
     const year = await assertFinancialYearOpen(tx, appropriation.financialYearId, input.date);
@@ -586,6 +618,16 @@ export async function createCommitment(
       : null;
     if (contract) {
       if (contract.supplierId !== input.supplierId) throw new FinanceError("O contrato informado não pertence ao fornecedor do empenho.");
+    }
+    const purchaseReceiptId = reservation.expense?.purchaseReceiptId ?? undefined;
+    const purchaseReceipt = purchaseReceiptId
+      ? await tx.purchaseReceipt.findUnique({ where: { id: purchaseReceiptId }, select: { id: true, status: true, contractId: true, purchaseProcessId: true } })
+      : null;
+    if (purchaseReceiptId && (!purchaseReceipt || purchaseReceipt.status !== "APPROVED")) {
+      throw new FinanceError("O empenho exige um recebimento de compra aprovado.");
+    }
+    if (purchaseReceipt && (!contract || purchaseReceipt.contractId !== contract.id)) {
+      throw new FinanceError("O empenho deve utilizar o contrato vinculado ao recebimento aprovado.");
     }
     const [covenant, publicityCampaign, fundedDebt] = await Promise.all([
       input.covenantId
@@ -642,6 +684,8 @@ export async function createCommitment(
         creditorId: creditor.id,
         processId: input.processId || undefined,
         contractId: input.contractId || undefined,
+        purchaseProcessId: purchaseReceipt?.purchaseProcessId ?? contract?.processId,
+        purchaseReceiptId: purchaseReceipt?.id,
         covenantId: covenant?.id,
         covenantNumber: covenant?.number,
         publicityCampaignId: publicityCampaign?.id,
@@ -670,6 +714,8 @@ export async function createCommitment(
           supplierId: commitment.supplierId,
           creditorId: commitment.creditorId,
           reservationId: commitment.reservationId,
+          purchaseProcessId: commitment.purchaseProcessId,
+          purchaseReceiptId: commitment.purchaseReceiptId,
           obrasService: obrasService ? { id: obrasService.id, protocolo: obrasService.protocolo, budgetAppropriationId: obrasService.budgetAppropriationId } : null,
         },
       },
@@ -712,7 +758,7 @@ export async function createCommitment(
         });
       }
     }
-    await audit(tx, actor, "CREATE", "Commitment", commitment.id, { value: jsonMoney(value), reservationId: reservation.id, creditorId: creditor.id, processId: commitment.processId, contractId: commitment.contractId, obrasServiceId: obrasService?.id }, year.id);
+    await audit(tx, actor, "CREATE", "Commitment", commitment.id, { value: jsonMoney(value), reservationId: reservation.id, creditorId: creditor.id, processId: commitment.processId, purchaseProcessId: commitment.purchaseProcessId, purchaseReceiptId: commitment.purchaseReceiptId, contractId: commitment.contractId, obrasServiceId: obrasService?.id }, year.id);
     return commitment;
   });
 }

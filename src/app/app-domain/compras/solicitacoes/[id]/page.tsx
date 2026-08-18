@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Edit } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { ApprovePurchaseRequestButton } from "../ApprovePurchaseRequestButton";
 
 export default async function SolicitacaoDetalhesPage({ params }: { params: Promise<{ id: string }> }) {
   const { prisma } = await getTenantContextForModule("COMPRAS");
@@ -16,7 +17,7 @@ export default async function SolicitacaoDetalhesPage({ params }: { params: Prom
       department: true,
       requester: true,
       items: {
-        include: { material: true }
+        include: { catalogItem: true }
       }
     }
   });
@@ -40,6 +41,7 @@ export default async function SolicitacaoDetalhesPage({ params }: { params: Prom
             <Edit className="mr-2 h-4 w-4" /> Editar
           </Button>
         </Link>
+        {solicitacao.status === "Rascunho" && <ApprovePurchaseRequestButton id={solicitacao.id} />}
       </div>
 
       <Card>
@@ -99,7 +101,7 @@ export default async function SolicitacaoDetalhesPage({ params }: { params: Prom
               </thead>
               <tbody className="divide-y">
                 {solicitacao.items.map((item) => {
-                  const name = item.material ? item.material.name : item.customName;
+                  const name = item.catalogItem ? item.catalogItem.name : item.customName;
                   const unitVal = item.estimatedUnitValue || 0;
                   const subtotal = item.quantity * unitVal;
                   return (

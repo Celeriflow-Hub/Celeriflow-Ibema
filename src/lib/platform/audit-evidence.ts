@@ -23,6 +23,7 @@ export const auditEventTypes = {
   documentSignatureRequested: "DOCUMENT_SIGNATURE_REQUESTED",
   documentSignatureRegistered: "DOCUMENT_SIGNATURE_REGISTERED",
   publicNoticePublished: "PUBLIC_NOTICE_PUBLISHED",
+  stockManuallyAdjusted: "STOCK_MANUALLY_ADJUSTED",
 } as const;
 
 export type AuditEventType = (typeof auditEventTypes)[keyof typeof auditEventTypes];

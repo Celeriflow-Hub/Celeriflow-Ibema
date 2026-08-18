@@ -241,6 +241,9 @@ model Employee {
 
   // Mod 9
   purchaseRequests        PurchaseRequest[] @relation("EmployeePurchaseRequests")
+  approvedPurchaseRequests PurchaseRequest[] @relation("PurchaseRequestApprover")
+  receivedPurchaseReceipts PurchaseReceipt[] @relation("PurchaseReceiptReceiver")
+  attestedPurchaseReceipts PurchaseReceipt[] @relation("PurchaseReceiptAttester")
   managedContracts        Contract[]        @relation("ContractManager")
   inspectedContracts      Contract[]        @relation("ContractInspector")
   camaraCouncilorProfiles CamVereador[]     @relation("CamaraCouncilorEmployee")
@@ -262,6 +265,8 @@ model Employee {
   assetTransfersFrom          AssetTransfer[]        @relation("TransferFromResp")
   assetTransfersTo            AssetTransfer[]        @relation("TransferToResp")
   materialRequests            MaterialRequest[]      @relation("MaterialRequester")
+  approvedMaterialRequests    MaterialRequest[]      @relation("MaterialRequestApprover")
+  issuedMaterialRequests      MaterialRequest[]      @relation("MaterialRequestIssuer")
   obrasTeamMemberships        ObrasEquipeMembro[]
   obrasServiceAssignments     ObrasServicoEmployee[]
   culturaSpacesResponsible    CulturaEspaco[]        @relation("CulturaSpaceResponsible")
@@ -695,6 +700,7 @@ model Document {
   camaraLegislativeLinks       CamDocumentoLegislativo[]     @relation("CamaraLegislativeDocument")
   segurancaRegistros           SegurancaMobilidadeRegistro[] @relation("SegurancaRegistroDocument")
   settlementDocuments          Settlement[]                  @relation("SettlementDocument")
+  purchaseReceiptDocuments     PurchaseReceipt[]             @relation("PurchaseReceiptDocument")
   withholdingReceipts          WithholdingPayable[]          @relation("WithholdingReceiptDocument")
   taxGuideDocuments            TaxGuide[]                    @relation("TaxGuideDocument")
   taxPaymentProofs             TaxPayment[]                  @relation("TaxPaymentProofDocument")
@@ -2418,6 +2424,9 @@ model Expense {
   eventType       String              @default("EXPENSE_REQUEST")
   idempotencyKey  String?             @unique
 
+  purchaseReceiptId String?          @unique
+  purchaseReceipt   PurchaseReceipt? @relation("PurchaseReceiptExpense", fields: [purchaseReceiptId], references: [id], onDelete: Restrict)
+
   socialProgramId String?
   socialProgram   SocialProgram? @relation(fields: [socialProgramId], references: [id])
 
@@ -2501,6 +2510,10 @@ model Commitment {
   process               Process?            @relation("FinancialCommitmentProcess", fields: [processId], references: [id])
   contractId            String?
   contract              Contract?           @relation("FinancialCommitmentContract", fields: [contractId], references: [id])
+  purchaseProcessId     String?
+  purchaseProcess       PurchaseProcess?    @relation("ProcurementProcessCommitments", fields: [purchaseProcessId], references: [id], onDelete: Restrict)
+  purchaseReceiptId     String?             @unique
+  purchaseReceipt       PurchaseReceipt?    @relation("PurchaseReceiptCommitment", fields: [purchaseReceiptId], references: [id], onDelete: Restrict)
   covenantId            String?
   covenant              Covenant?           @relation("CovenantCommitments", fields: [covenantId], references: [id])
   publicityCampaignId   String?
@@ -3207,7 +3220,12 @@ model PurchaseRequest {
   requesterId String
   requester   Employee @relation("EmployeePurchaseRequests", fields: [requesterId], references: [id])
 
+  approvedByEmployeeId String?
+  approvedByEmployee   Employee? @relation("PurchaseRequestApprover", fields: [approvedByEmployeeId], references: [id], onDelete: Restrict)
+  approvedAt           DateTime?
+
   items             PurchaseRequestItem[]
+  purchaseProcesses PurchaseProcess[] @relation("PurchaseRequestProcesses")
   obrasServiceLinks ObrasServicoCompra[]
 
   createdAt DateTime @default(now())
@@ -3243,12 +3261,17 @@ model PurchaseProcess {
   secretariatId String
   secretariat   Secretariat @relation("SecretariatPurchaseProcesses", fields: [secretariatId], references: [id])
 
+  purchaseRequestId String?
+  purchaseRequest   PurchaseRequest? @relation("PurchaseRequestProcesses", fields: [purchaseRequestId], references: [id], onDelete: Restrict)
+
   preliminaryStudies PreliminaryTechnicalStudy[]
   termsOfReference   TermOfReference[]
   priceResearches    PriceResearch[]
   biddings           Bidding[]
   directContractings DirectContracting[]
   contracts          Contract[]
+  receipts           PurchaseReceipt[]
+  commitments        Commitment[] @relation("ProcurementProcessCommitments")
 
   items             PurchaseProcessItem[]
   obrasServiceLinks ObrasServicoCompra[]
@@ -3270,6 +3293,8 @@ model PurchaseProcessItem {
 
   materialId String?
   material   Material? @relation(fields: [materialId], references: [id])
+
+  receiptItems PurchaseReceiptItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3395,6 +3420,7 @@ model Contract {
   amendments      ContractAmendment[]
   culturaProjects CulturaProjeto[]    @relation("CulturaProjectContract")
   commitments     Commitment[]        @relation("FinancialCommitmentContract")
+  receipts        PurchaseReceipt[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3415,6 +3441,76 @@ model ContractAmendment {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// C5 procurement evidence is append-only. It links canonical procurement records
+// without using the generic protocol Process as a procurement source.
+model ProcurementLifecycleEvent {
+  id             String   @id @default(cuid())
+  eventType      String
+  entityType     String
+  entityId       String
+  sourceType     String?
+  sourceId       String?
+  actorUsuarioId String
+  actorUsuario   Usuario  @relation("ProcurementLifecycleEventActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict)
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([sourceType, sourceId])
+}
+
+model PurchaseReceipt {
+  id             String   @id @default(cuid())
+  number         String   @unique
+  receivedAt     DateTime
+  status         String   @default("APPROVED") // APPROVED, CANCELLED
+  contractId     String
+  contract       Contract @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  purchaseProcessId String
+  purchaseProcess   PurchaseProcess @relation(fields: [purchaseProcessId], references: [id], onDelete: Restrict)
+  documentId     String
+  document       Document @relation("PurchaseReceiptDocument", fields: [documentId], references: [id], onDelete: Restrict)
+  receiverId     String
+  receiver       Employee @relation("PurchaseReceiptReceiver", fields: [receiverId], references: [id], onDelete: Restrict)
+  attesterId     String
+  attester       Employee @relation("PurchaseReceiptAttester", fields: [attesterId], references: [id], onDelete: Restrict)
+  idempotencyKey String   @unique
+  sourceType     String   @default("CONTRACT")
+  sourceId       String
+  items          PurchaseReceiptItem[]
+  expense        Expense? @relation("PurchaseReceiptExpense")
+  commitment     Commitment? @relation("PurchaseReceiptCommitment")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([purchaseProcessId, receivedAt])
+  @@index([contractId, receivedAt])
+  @@index([sourceType, sourceId])
+}
+
+model PurchaseReceiptItem {
+  id                    String              @id @default(cuid())
+  purchaseReceiptId     String
+  purchaseReceipt       PurchaseReceipt     @relation(fields: [purchaseReceiptId], references: [id], onDelete: Restrict)
+  purchaseProcessItemId String
+  purchaseProcessItem   PurchaseProcessItem @relation(fields: [purchaseProcessItemId], references: [id], onDelete: Restrict)
+  materialId            String
+  material              Material            @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  warehouseId           String
+  warehouse             Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  quantity              Float
+  unitCost              Float
+  batchNumber           String              @default("")
+  expirationDate        DateTime?
+  stockMovementId       String              @unique
+  stockMovement         MaterialMovement    @relation("PurchaseReceiptItemMovement", fields: [stockMovementId], references: [id], onDelete: Restrict)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@index([purchaseProcessItemId])
+  @@index([materialId, warehouseId])
 }
 
 // --- MÃ³dulo 10: RH e Folha ---
@@ -3741,6 +3837,7 @@ model Warehouse {
 
   stocks            MaterialStock[]
   movements         MaterialMovement[]
+  receiptItems      PurchaseReceiptItem[]
   inventorySessions InventorySession[]
 
   schoolMeals SchoolMeal[]
@@ -3781,6 +3878,7 @@ model Material {
   requests              MaterialRequestItem[]
   purchaseRequestItems  PurchaseRequestItem[]
   purchaseProcessItems  PurchaseProcessItem[]
+  receiptItems          PurchaseReceiptItem[]
   obrasServiceMaterials ObrasServicoMaterial[]
 }
 
@@ -3836,6 +3934,11 @@ model MaterialMovement {
   settlementId String?
   settlement   Settlement? @relation("SettlementMaterialMovements", fields: [settlementId], references: [id], onDelete: Restrict)
 
+  purchaseReceiptItem   PurchaseReceiptItem? @relation("PurchaseReceiptItemMovement")
+
+  materialRequestItemId String?
+  materialRequestItem   MaterialRequestItem? @relation("MaterialRequestItemMovements", fields: [materialRequestItemId], references: [id], onDelete: Restrict)
+
   actorUsuarioId  String?
   actorUsuario    Usuario?  @relation("MaterialMovementActorUsuario", fields: [actorUsuarioId], references: [id])
   actorEmployeeId String?
@@ -3853,6 +3956,7 @@ model MaterialMovement {
   @@index([actorEmployeeId])
   @@index([inventorySessionId])
   @@index([settlementId])
+  @@index([materialRequestItemId])
 }
 
 model InventorySession {
@@ -3921,6 +4025,13 @@ model MaterialRequest {
   requesterId String
   requester   Employee @relation("MaterialRequester", fields: [requesterId], references: [id])
 
+  approvedByEmployeeId String?
+  approvedByEmployee   Employee? @relation("MaterialRequestApprover", fields: [approvedByEmployeeId], references: [id], onDelete: Restrict)
+  approvedAt           DateTime?
+  issuedByEmployeeId   String?
+  issuedByEmployee     Employee? @relation("MaterialRequestIssuer", fields: [issuedByEmployeeId], references: [id], onDelete: Restrict)
+  issuedAt             DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -3938,6 +4049,8 @@ model MaterialRequestItem {
 
   materialId String
   material   Material @relation(fields: [materialId], references: [id])
+
+  movements MaterialMovement[] @relation("MaterialRequestItemMovements")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -5961,6 +6074,7 @@ model Usuario {
   creditRequestsExecuted       CreditRequest[]               @relation("CreditRequestExecutedBy")
   expenseRequests              Expense[]                     @relation("ExpenseRequestedBy")
   expenseApprovals             Expense[]                     @relation("ExpenseApprovedBy")
+  procurementLifecycleEvents   ProcurementLifecycleEvent[]   @relation("ProcurementLifecycleEventActor")
   auditEvents                  AuditEvent[]                  @relation("AuditEventActor")
   publishedPublicNotices       PublicNotice[]                @relation("PublicNoticePublisher")
   proposedPersonMergeRequests  PersonMergeRequest[]          @relation("PersonMergeProposer")

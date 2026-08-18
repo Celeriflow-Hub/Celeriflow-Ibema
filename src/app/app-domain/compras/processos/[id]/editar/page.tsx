@@ -10,11 +10,12 @@ export default async function EditarProcessoPage({ params }: { params: Promise<{
     include: { items: true }
   });
   
-  const materialsPromise = prisma.material.findMany({
+  const catalogItemsPromise = prisma.catalogItem.findMany({
+    where: { isActive: true },
     orderBy: { name: 'asc' }
   });
 
-  const [processo, materials] = await Promise.all([processoPromise, materialsPromise]);
+  const [processo, catalogItems] = await Promise.all([processoPromise, catalogItemsPromise]);
 
   if (!processo) {
     notFound();
@@ -23,12 +24,12 @@ export default async function EditarProcessoPage({ params }: { params: Promise<{
   const mappedProcesso = {
     ...processo,
     items: processo.items.map((item) => ({
-      catalogItemId: item.materialId ?? "",
+      catalogItemId: item.catalogItemId ?? "",
       customName: item.customName ?? "",
       quantity: item.quantity,
       estimatedUnitValue: item.estimatedUnitValue ?? 0,
     }))
   };
 
-  return <ProcessoForm data={mappedProcesso} catalogItems={materials} />;
+  return <ProcessoForm data={mappedProcesso} catalogItems={catalogItems} />;
 }

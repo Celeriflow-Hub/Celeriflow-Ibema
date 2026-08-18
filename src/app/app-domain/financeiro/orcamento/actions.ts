@@ -4,6 +4,7 @@ import {
   FinanceError,
   cancelBudgetReservation,
   createExpenseRequest,
+  createExpenseRequestFromApprovedPurchaseReceipt,
   approveExpenseRequest,
   createBudgetReservation,
   setFinancialYearStatus,
@@ -100,11 +101,23 @@ export async function createExpenseRequestAction(data: { date: Date; description
   try {
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     await assertAppropriationAccess(context, data.appropriationId);
-    await createExpenseRequest(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, { ...data, sourceModule: "FINANCEIRO", sourceType: "EXPENSE_REQUEST", eventType: "EXPENSE_REQUEST" });
+    await createExpenseRequest(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, { ...data, sourceModule: "FINANCEIRO", sourceType: "MANUAL_EXPENSE_REQUEST", eventType: "MANUAL_EXPENSE_REQUEST" });
     revalidatePath("/financeiro/orcamento");
     return {};
   } catch (error) {
     return failure(error, "Não foi possível criar a solicitação de despesa.");
+  }
+}
+
+export async function createExpenseRequestFromPurchaseReceiptAction(data: { purchaseReceiptId: string; date: Date; description: string; value: number; appropriationId: string; secretariatId: string }): Promise<ActionResult> {
+  try {
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
+    await assertAppropriationAccess(context, data.appropriationId);
+    await createExpenseRequestFromApprovedPurchaseReceipt(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, data);
+    revalidatePath("/financeiro/orcamento");
+    return {};
+  } catch (error) {
+    return failure(error, "Não foi possível criar a solicitação de despesa a partir do recebimento.");
   }
 }
 

@@ -3,6 +3,7 @@
 import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { nextYearlyCode } from "@/lib/sequence";
+import { createPurchaseProcessFromApprovedRequest } from "@/lib/compras/procurement-lifecycle";
 
 async function getTenantPrisma(operation: ModuleOperation) {
   return (await getTenantContextForModuleOperation("COMPRAS", operation)).prisma;
@@ -23,6 +24,7 @@ type PurchaseProcessInput = {
   modality: string;
   estimatedValue: number;
   items: PurchaseProcessItemInput[];
+  purchaseRequestId?: string;
 };
 
 export async function deletePurchaseProcess(id: string) {
@@ -40,14 +42,9 @@ export async function deletePurchaseProcess(id: string) {
 }
 
 export async function savePurchaseProcess(payload: PurchaseProcessInput) {
-  const { id, number, object, type, modality, estimatedValue, items } = payload;
-  const prisma = await getTenantPrisma(id ? "update" : "create");
-  
-  const secretariat = await prisma.secretariat.findFirst();
-
-  if (!secretariat) {
-    throw new Error("Secretaria não encontrada no banco.");
-  }
+  const { id, number, object, type, modality, estimatedValue, purchaseRequestId } = payload;
+  const context = await getTenantContextForModuleOperation("COMPRAS", id ? "update" : "create");
+  const { prisma } = context;
 
   try {
     let finalNumber = number?.trim();
@@ -59,43 +56,29 @@ export async function savePurchaseProcess(payload: PurchaseProcessInput) {
       return { success: false, error: "Informe o número do processo." };
     }
 
+    if (!id) {
+      if (!purchaseRequestId?.trim()) return { success: false, error: "Selecione uma solicitação de compra aprovada." };
+      await createPurchaseProcessFromApprovedRequest(prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, {
+        purchaseRequestId,
+        number: finalNumber,
+        type,
+        modality,
+      });
+      revalidatePath("/compras/processos");
+      return { success: true };
+    }
+
     const data = {
       number: finalNumber,
       object,
       type,
       modality,
       estimatedValue,
-      secretariatId: secretariat.id,
     };
 
-    let processId: string;
-
-    if (id) {
-      await prisma.purchaseProcess.update({ where: { id }, data });
-      processId = id;
-      
-      await prisma.purchaseProcessItem.deleteMany({
-        where: { purchaseProcessId: id }
-      });
-    } else {
-      const newProcess = await prisma.purchaseProcess.create({ data });
-      processId = newProcess.id;
-    }
-
-    if (items && items.length > 0) {
-      const itemsToCreate = items.map((item) => ({
-        purchaseProcessId: processId,
-        materialId: item.catalogItemId === "custom" || !item.catalogItemId ? null : item.catalogItemId,
-        customName: item.catalogItemId === "custom" || !item.catalogItemId ? item.customName : null,
-        quantity: item.quantity,
-        estimatedUnitValue: item.estimatedUnitValue || null
-      }));
-
-      await prisma.purchaseProcessItem.createMany({
-        data: itemsToCreate
-      });
-    }
-
+    const existing = await prisma.purchaseProcess.findUnique({ where: { id }, select: { status: true } });
+    if (!existing || existing.status !== "Em Planejamento") return { success: false, error: "Somente processos em planejamento podem ser editados." };
+    await prisma.purchaseProcess.update({ where: { id }, data });
     revalidatePath("/compras/processos");
     return { success: true };
   } catch (error) {

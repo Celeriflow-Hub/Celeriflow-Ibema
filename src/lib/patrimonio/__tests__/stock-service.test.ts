@@ -5,7 +5,7 @@ import { recordStockMovement, StockServiceError, normalizeStockMovement } from "
 const actor = { usuarioId: "user-1", employeeId: "employee-1" };
 
 test("normalizes an omitted batch to the single non-batch stock key", () => {
-  const movement = normalizeStockMovement({ kind: "ENTRY", warehouseId: "warehouse-1", materialId: "material-1", quantity: 3, actor });
+  const movement = normalizeStockMovement({ kind: "ENTRY", sourceType: "APPROVED_PURCHASE_RECEIPT", warehouseId: "warehouse-1", materialId: "material-1", quantity: 3, actor });
   assert.equal(movement.batchNumber, "");
   assert.equal(movement.quantity, 3);
 });
@@ -24,7 +24,7 @@ test("rejects invalid stock quantities and costs before writing", () => {
     StockServiceError,
   );
   assert.throws(
-    () => normalizeStockMovement({ kind: "ENTRY", warehouseId: "warehouse-1", materialId: "material-1", quantity: 1, unitCost: -1, actor }),
+    () => normalizeStockMovement({ kind: "ENTRY", sourceType: "APPROVED_PURCHASE_RECEIPT", warehouseId: "warehouse-1", materialId: "material-1", quantity: 1, unitCost: -1, actor }),
     StockServiceError,
   );
 });
@@ -52,6 +52,7 @@ test("records the stock row and audit evidence in one transaction", async () => 
 
   await recordStockMovement(database as never, {
     kind: "ENTRY",
+    sourceType: "APPROVED_PURCHASE_RECEIPT",
     warehouseId: "warehouse-1",
     materialId: "material-1",
     quantity: 3,
@@ -73,6 +74,7 @@ test("records the stock row and audit evidence in one transaction", async () => 
     obrasServicoId: null,
     settlementId: null,
     inventorySessionId: null,
+    materialRequestItemId: null,
     actorUsuarioId: "user-1",
     actorEmployeeId: "employee-1",
   });
@@ -110,7 +112,7 @@ test("blocks every regular stock movement while the warehouse inventory is locke
 
   for (const kind of ["ENTRY", "EXIT", "ADJUSTMENT"] as const) {
     await assert.rejects(
-      recordStockMovement(database as never, { kind, warehouseId: "warehouse-1", materialId: "material-1", quantity: 1, actor }),
+      recordStockMovement(database as never, { kind, ...(kind === "ENTRY" ? { sourceType: "APPROVED_PURCHASE_RECEIPT" as const } : {}), warehouseId: "warehouse-1", materialId: "material-1", quantity: 1, actor }),
       /Movimentações estão bloqueadas enquanto o inventário/,
     );
   }

@@ -66,8 +66,9 @@ export async function registerMaterialEntryAction(data: {
   expirationDate?: string;
   unitCost?: number;
   reason?: string;
-}) {
-  return registerMovement("ENTRY", data);
+}): Promise<ActionResult> {
+  void data;
+  return { error: "Entradas manuais foram desabilitadas. Registre o recebimento aprovado da compra." };
 }
 
 export async function registerMaterialExitAction(data: {

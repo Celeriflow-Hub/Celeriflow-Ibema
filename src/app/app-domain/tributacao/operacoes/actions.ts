@@ -1,6 +1,6 @@
 "use server";
 
-import { TaxError, configureTaxParameter, configureTaxServiceActivity, createTaxServiceRequest, enrollAssessmentInActiveDebt, evaluateTaxCertificateSituation, recordIssDeclaration } from "@/lib/tributacao";
+import { TaxError, configureTaxParameter, configureTaxServiceActivity, createTaxAssessment, createTaxServiceRequest, enrollAssessmentInActiveDebt, evaluateTaxCertificateSituation, generateTaxGuide, recordIssDeclaration } from "@/lib/tributacao";
 import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
@@ -46,6 +46,18 @@ export async function saveIssDeclaration(data: { taxpayerId: string; activityId:
     const context = await getTenantContextForModuleOperation("TRIBUTACAO", "create");
     await recordIssDeclaration(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, { ...data, competence: new Date(data.competence) });
     revalidatePath("/tributacao/operacoes");
+    return {};
+  } catch (error) { return { error: message(error) }; }
+}
+
+export async function createAssessmentGuideAction(data: { year: number; taxId: string; taxpayerId: string; taxableBase: number; rate: number; dueDate: string }): Promise<ActionResult> {
+  try {
+    const context = await getTenantContextForModuleOperation("TRIBUTACAO", "create");
+    const assessment = await createTaxAssessment(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, data);
+    await generateTaxGuide(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, { assessmentId: assessment.id, dueDate: new Date(`${data.dueDate}T12:00:00.000Z`) });
+    revalidatePath("/tributacao/operacoes");
+    revalidatePath("/tributacao/guias");
+    revalidatePath("/tributacao");
     return {};
   } catch (error) { return { error: message(error) }; }
 }

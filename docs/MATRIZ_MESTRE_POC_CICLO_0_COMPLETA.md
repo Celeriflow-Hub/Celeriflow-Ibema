@@ -275,3 +275,12 @@ O Portal da Transparência publica apenas o número e a data do recebimento, ass
 - Transparência, Assistência Social e Meio Ambiente permanecem nas projeções e fluxos existentes, sem expor dados pessoais em indicadores agregados.
 
 **Evidências técnicas:** `src/lib/c7/__tests__/operations-service.test.ts`, `tests/audit-evidence.test.ts`, rotas de Controle Interno, Frotas, Indicadores e Portal do Servidor, e migração `20260819110000_add_c7_control_and_fleet`.
+
+## 21. Execução registrada - Ciclo 8
+
+**Data:** 19 de agosto de 2026
+**Status:** concluído para o recorte tributário demonstrável.
+
+O fluxo interno agora permite lançar o tributo e emitir a DAM na mesma operação pela interface. A confirmação posterior da DAM já exige mapeamento financeiro ativo e gera receita e tesouraria; avaliações de situação fiscal e inscrição em dívida ativa permanecem explicitamente internas, sem emitir CDA ou certidão oficial.
+
+**Evidências técnicas:** `src/lib/tributacao/__tests__/c8-tax-assessment.test.ts`, operações tributárias, Guias/DAM, Dívida Ativa e Certidões, com build de produção aprovado.

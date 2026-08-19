@@ -284,3 +284,30 @@ O Portal da Transparência publica apenas o número e a data do recebimento, ass
 O fluxo interno agora permite lançar o tributo e emitir a DAM na mesma operação pela interface. A confirmação posterior da DAM já exige mapeamento financeiro ativo e gera receita e tesouraria; avaliações de situação fiscal e inscrição em dívida ativa permanecem explicitamente internas, sem emitir CDA ou certidão oficial.
 
 **Evidências técnicas:** `src/lib/tributacao/__tests__/c8-tax-assessment.test.ts`, operações tributárias, Guias/DAM, Dívida Ativa e Certidões, com build de produção aprovado.
+
+## 23. Execução registrada - Ciclo 10
+
+**Data:** 19 de agosto de 2026
+**Status:** roteiro e pacote de evidências consolidados.
+
+O roteiro `docs/ROTEIRO_POC_CICLO_10.md` define preparação em ambiente isolado, perfis de demonstração, fluxos críticos, comandos de verificação e encerramento. Ele exige seed sintético reexecutável, registros de auditoria e identificação explícita de integrações MOCK/SANDBOX/PRODUÇÃO.
+
+## 24. Execução registrada - Ciclo 11
+
+**Data:** 19 de agosto de 2026
+**Status:** dossiê operacional e congelamento preparados; evidências de provedor permanecem pendentes.
+
+O dossiê `docs/DOSSIE_OPERACIONAL_CICLO_11.md` separa controles comprováveis pelo repositório das evidências que só podem ser emitidas pelo provedor e pela operação. Nenhuma condição de HTTPS, backup, firewall, monitoramento ou continuidade é declarada atendida sem anexo externo verificável.
+
+A rodada de verificação confirmou migrations, evidências estáticas e build, mas bloqueou a prontidão da POC pela ausência da massa financeira esperada e de três usuários de demonstração no ambiente configurado.
+
+## 22. Execução registrada - Ciclo 9
+
+**Data:** 19 de agosto de 2026
+**Status:** concluído pelos recortes setoriais internos demonstráveis.
+
+- RH: servidor, eventos, folha, férias, licenças, benefícios, atos e ponto.
+- Educação: escola, calendário, professores, matrícula, transporte e merenda.
+- Saúde: unidade, profissional, paciente, agenda, atendimento, farmácia, vacinação e relatórios.
+
+As integrações externas de eSocial, Educacenso, CNES e e-SUS/SISAB continuam tratadas como MOCK/SANDBOX conforme a Matriz Mestre; não são declaradas produtivas sem credenciais e homologação.

@@ -20,6 +20,9 @@ type ContractData = {
   number: string;
   object: string;
   initialValue: number;
+  status: string;
+  startDate: Date;
+  endDate: Date;
 };
 
 type ProcessOption = {
@@ -50,6 +53,7 @@ export function ContratoForm({ data, processos = [], secretarias = [], fornecedo
 
   const selectedProcess = processos.find(p => p.id === selectedProcessId);
   const calculatedTotal = selectedProcess?.estimatedValue ?? data?.initialValue ?? 0;
+  const dateValue = (value?: Date) => value ? new Date(value).toISOString().slice(0, 10) : "";
 
   async function handleSubmit(formData: FormData) {
     setIsSaving(true);
@@ -100,6 +104,28 @@ export function ContratoForm({ data, processos = [], secretarias = [], fornecedo
                     {processos.map(proc => (
                       <SelectItem key={proc.id} value={proc.id}>{proc.number} - {proc.object?.substring(0, 30)}...</SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="startDate">Início da vigência</Label>
+                <Input id="startDate" name="startDate" type="date" required defaultValue={dateValue(data?.startDate)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="endDate">Fim da vigência</Label>
+                <Input id="endDate" name="endDate" type="date" required defaultValue={dateValue(data?.endDate)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="status">Situação</Label>
+                <Select name="status" defaultValue={data?.status || "Minuta"} required>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Minuta">Minuta</SelectItem>
+                    <SelectItem value="Vigente">Vigente</SelectItem>
+                    <SelectItem value="Encerrado">Encerrado</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

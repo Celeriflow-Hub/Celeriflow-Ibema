@@ -409,9 +409,21 @@ export async function createExpenseRequestFromApprovedPurchaseReceipt(
 ) {
   const receipt = await db.purchaseReceipt.findUnique({
     where: { id: input.purchaseReceiptId },
-    select: { id: true, status: true, contract: { select: { supplierId: true } } },
+    select: {
+      id: true,
+      status: true,
+      items: { select: { quantity: true, unitCost: true } },
+      contract: { select: { supplierId: true, secretariatId: true } },
+    },
   });
   if (!receipt || receipt.status !== "APPROVED") throw new FinanceError("A solicitação de despesa exige um recebimento aprovado.");
+  if (receipt.contract.secretariatId !== input.secretariatId) {
+    throw new FinanceError("A solicitação de despesa deve utilizar a secretaria do contrato recebido.");
+  }
+  const receiptValue = receipt.items.reduce((total, item) => total.plus(new Prisma.Decimal(item.quantity).mul(item.unitCost)), new Prisma.Decimal(0));
+  if (!money(input.value).equals(receiptValue)) {
+    throw new FinanceError("A solicitação de despesa deve corresponder integralmente ao valor do recebimento aprovado.");
+  }
   return createExpenseRequest(db, actor, {
     ...input,
     supplierId: receipt.contract.supplierId,

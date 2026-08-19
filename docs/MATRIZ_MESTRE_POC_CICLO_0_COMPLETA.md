@@ -240,3 +240,14 @@ Essas pendências permanecem rastreadas. Elas bloqueiam apenas os grupos que as 
 ## 17. Próximo marco
 
 O próximo trabalho é executar o **Ciclo 1**, iniciando por `C1-001` a `C1-006` da matriz inicial: catálogo de configuração por instância, permissões por ação, auditoria consultável, contrato do `ReportEngine`, contrato de integrações e central de notificações.
+
+## 18. Execução registrada - Ciclo 5
+
+**Data:** 19 de agosto de 2026
+**Status:** concluído como fluxo vertical demonstrável.
+
+O ciclo integra a solicitação aprovada, processo de compra, contrato vigente, recebimento com recebedor e atestador distintos, entrada de estoque vinculada ao recebimento, solicitação de despesa de valor integral, reserva, empenho, liquidação, pagamento e projeções já existentes de contratos, despesas e licitações no Portal da Transparência.
+
+Também foi incluído o tombamento de bem permanente a partir de item de recebimento aprovado. O vínculo é persistido entre `Asset` e `PurchaseReceiptItem`, limita o tombamento à quantidade efetivamente recebida e registra evento de auditoria.
+
+**Evidências técnicas:** `tests/c5-procurement-policy.test.ts`, `src/lib/patrimonio/__tests__/asset-acquisition-service.test.ts`, telas de Recebimentos, Orçamento e Bens Patrimoniais, e migrações `20260817180000_add_c5_procurement_receipt_lifecycle` e `20260819090000_add_c5_asset_receipt_traceability`.

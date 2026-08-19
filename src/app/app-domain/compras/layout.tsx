@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Scale,
   Gavel,
+  PackageCheck,
   LayoutDashboard,
   ArrowLeft,
   Menu,
@@ -21,6 +22,7 @@ const sidebarNavItems = [
   { title: "Processos de Compra", href: "/compras/processos", icon: ClipboardList },
   { title: "Licitações", href: "/compras/licitacoes", icon: Gavel },
   { title: "Contratos", href: "/compras/contratos", icon: Scale },
+  { title: "Recebimentos", href: "/compras/recebimentos", icon: PackageCheck },
   { title: "Catálogo de Itens", href: "/compras/catalogo", icon: FileText },
 ];
 

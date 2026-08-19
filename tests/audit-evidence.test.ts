@@ -56,6 +56,8 @@ test("defines authentication, protected-operation, and usage-monitoring event ty
     "DOCUMENT_SIGNATURE_REQUESTED",
     "DOCUMENT_SIGNATURE_REGISTERED",
     "PUBLIC_NOTICE_PUBLISHED",
+    "STOCK_MANUALLY_ADJUSTED",
+    "ASSET_ACQUIRED_FROM_RECEIPT",
   ]);
 });
 

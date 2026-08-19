@@ -3506,6 +3506,7 @@ model PurchaseReceiptItem {
   expirationDate        DateTime?
   stockMovementId       String              @unique
   stockMovement         MaterialMovement    @relation("PurchaseReceiptItemMovement", fields: [stockMovementId], references: [id], onDelete: Restrict)
+  assets                Asset[]
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
 
@@ -3696,6 +3697,9 @@ model Asset {
   supplier   Supplier? @relation("AssetSupplier", fields: [supplierId], references: [id])
 
   invoiceNumber String?
+
+  purchaseReceiptItemId String?
+  purchaseReceiptItem   PurchaseReceiptItem? @relation(fields: [purchaseReceiptItemId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -11,7 +11,10 @@ export async function approvePurchaseReceiptAction(input: ApprovePurchaseReceipt
     const context = await getTenantContextForModuleOperation("COMPRAS", "create");
     const receipt = await approvePurchaseReceipt(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, input);
     revalidatePath("/patrimonio/materiais");
+    revalidatePath("/patrimonio/bens");
     revalidatePath("/compras/contratos");
+    revalidatePath("/compras/recebimentos");
+    revalidatePath("/financeiro/orcamento");
     return { receiptId: receipt.id };
   } catch (error) {
     return { error: error instanceof ProcurementLifecycleError ? error.message : "Não foi possível aprovar o recebimento." };

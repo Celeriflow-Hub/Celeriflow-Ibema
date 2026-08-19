@@ -28,6 +28,9 @@ export async function saveContract(formData: FormData) {
   const number = formData.get("number") as string;
   const object = formData.get("object") as string;
   const initialValue = parseFloat(formData.get("initialValue") as string) || 0;
+  const status = formData.get("status") as string;
+  const startDate = new Date(`${formData.get("startDate")}T12:00:00.000Z`);
+  const endDate = new Date(`${formData.get("endDate")}T12:00:00.000Z`);
   
   const processId = formData.get("processId") as string;
   const supplierId = formData.get("supplierId") as string;
@@ -35,6 +38,12 @@ export async function saveContract(formData: FormData) {
 
   if (!processId || !supplierId || !secretariatId) {
     throw new Error("Dados básicos (Processo, Fornecedor, Secretaria) não foram selecionados.");
+  }
+  if (!["Minuta", "Vigente", "Encerrado"].includes(status)) {
+    return { success: false, error: "Status do contrato inválido." };
+  }
+  if (Number.isNaN(startDate.valueOf()) || Number.isNaN(endDate.valueOf()) || endDate < startDate) {
+    return { success: false, error: "Informe uma vigência válida para o contrato." };
   }
 
   const [process, supplier] = await Promise.all([
@@ -53,8 +62,9 @@ export async function saveContract(formData: FormData) {
     object,
     initialValue,
     updatedValue: initialValue,
-    startDate: new Date(),
-    endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
+    startDate,
+    endDate,
+    status,
     processId,
     supplierId,
     secretariatId,

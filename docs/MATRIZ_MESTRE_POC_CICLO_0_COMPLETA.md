@@ -262,3 +262,16 @@ Reservas originadas de recebimentos aprovados passam a indicar e preencher o con
 O Portal da Transparência publica apenas o número e a data do recebimento, associados a contrato e processo. Nenhum identificador interno, documento GED, servidor responsável, lote, estoque ou dado pessoal é exposto.
 
 **Evidências técnicas:** `tests/public-finance.test.ts` e as projeções de `src/lib/transparencia/portal-fiscal.ts`, com build de produção aprovado.
+
+## 20. Execução registrada - Ciclo 7
+
+**Data:** 19 de agosto de 2026
+**Status:** concluído para as frentes reutilizáveis de controle, frota, portal e indicadores.
+
+- Controle Interno: plano, apontamento, responsável, prazo, evidência GED e resolução auditável.
+- Frotas: abastecimento, manutenção e ordem de serviço vinculados exclusivamente a bens patrimoniais classificados como veículos, com custo e evidência GED.
+- Portal do Servidor: consulta autenticada de lotação, situação funcional, férias, afastamentos, atos e documentos destinados à assinatura.
+- Indicadores: painel com filtros de período para planos/apontamentos de controle, custos de frota, pagamentos, benefícios sociais e licenças ambientais.
+- Transparência, Assistência Social e Meio Ambiente permanecem nas projeções e fluxos existentes, sem expor dados pessoais em indicadores agregados.
+
+**Evidências técnicas:** `src/lib/c7/__tests__/operations-service.test.ts`, `tests/audit-evidence.test.ts`, rotas de Controle Interno, Frotas, Indicadores e Portal do Servidor, e migração `20260819110000_add_c7_control_and_fleet`.

@@ -3714,6 +3714,61 @@ model Asset {
   culturaSpaces      CulturaEspaco[]               @relation("CulturaSpaceAsset")
   culturaHeritages   CulturaPatrimonio[]           @relation("CulturaHeritageAsset")
   segurancaRegistros SegurancaMobilidadeRegistro[] @relation("SegurancaRegistroAsset")
+  fleetOperations   FleetOperation[]
+}
+
+model InternalControlPlan {
+  id          String   @id @default(cuid())
+  title       String
+  reference   String
+  status      String   @default("ABERTO") // ABERTO, CONCLUIDO, CANCELADO
+  dueAt       DateTime?
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  findings InternalControlFinding[]
+
+  @@index([status, dueAt])
+}
+
+model InternalControlFinding {
+  id                 String   @id @default(cuid())
+  planId             String
+  plan               InternalControlPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  title              String
+  description        String
+  status             String   @default("PENDENTE") // PENDENTE, EM_TRATAMENTO, RESOLVIDO
+  dueAt              DateTime?
+  responsibleId      String?
+  evidenceDocumentId String?
+  resolvedAt         DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([planId, status])
+  @@index([responsibleId, dueAt])
+}
+
+model FleetOperation {
+  id                 String   @id @default(cuid())
+  assetId            String
+  asset              Asset    @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  type               String   // ABASTECIMENTO, MANUTENCAO, ORDEM_SERVICO
+  occurredAt         DateTime
+  odometer           Float?
+  quantity           Float?
+  cost               Float    @default(0)
+  description        String
+  supplierName       String?
+  evidenceDocumentId String?
+  status             String   @default("REGISTRADO")
+  createdById        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([assetId, occurredAt])
+  @@index([type, occurredAt])
 }
 
 model AssetValueHistory {

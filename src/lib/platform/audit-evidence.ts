@@ -25,6 +25,8 @@ export const auditEventTypes = {
   publicNoticePublished: "PUBLIC_NOTICE_PUBLISHED",
   stockManuallyAdjusted: "STOCK_MANUALLY_ADJUSTED",
   assetAcquiredFromReceipt: "ASSET_ACQUIRED_FROM_RECEIPT",
+  internalControlFindingRegistered: "INTERNAL_CONTROL_FINDING_REGISTERED",
+  fleetOperationRegistered: "FLEET_OPERATION_REGISTERED",
 } as const;
 
 export type AuditEventType = (typeof auditEventTypes)[keyof typeof auditEventTypes];

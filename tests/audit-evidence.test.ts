@@ -58,6 +58,8 @@ test("defines authentication, protected-operation, and usage-monitoring event ty
     "PUBLIC_NOTICE_PUBLISHED",
     "STOCK_MANUALLY_ADJUSTED",
     "ASSET_ACQUIRED_FROM_RECEIPT",
+    "INTERNAL_CONTROL_FINDING_REGISTERED",
+    "FLEET_OPERATION_REGISTERED",
   ]);
 });
 

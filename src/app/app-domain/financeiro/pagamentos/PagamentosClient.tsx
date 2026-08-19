@@ -45,6 +45,7 @@ type Payment = {
   commitment: {
     id: string;
     number: string;
+    purchaseReceipt: { number: string } | null;
   };
   bankAccount: {
     id: string;
@@ -59,7 +60,7 @@ type Payment = {
   };
 };
 
-type CommitmentOption = { id: string; number: string; value: number; supplierId: string };
+type CommitmentOption = { id: string; number: string; value: number; supplierId: string; purchaseReceipt: { number: string } | null };
 type SettlementOption = { id: string; commitmentId: string; documentRef: string | null; availableToPay: number };
 type BankAccountOption = { id: string; bankName: string; agency: string; accountNumber: string };
 type SupplierOption = { id: string; company?: { corporateName: string } | null; person?: { fullName: string } | null };
@@ -296,7 +297,7 @@ export default function PagamentosClient({
                 <TableHead>Ordem</TableHead>
                 <TableHead>Data</TableHead>
                 <TableHead>Fornecedor</TableHead>
-                <TableHead>Empenho Ref.</TableHead>
+                <TableHead>Empenho / recebimento</TableHead>
                 <TableHead>Conta Bancária</TableHead>
                 <TableHead>Forma Pgto.</TableHead>
                 <TableHead>Bruto / Líquido (R$)</TableHead>
@@ -323,7 +324,7 @@ export default function PagamentosClient({
                     <TableCell>
                       {payment.supplier.company?.corporateName || payment.supplier.person?.fullName || 'Não identificado'}
                     </TableCell>
-                    <TableCell>{payment.commitment.number}</TableCell>
+                    <TableCell>{payment.commitment.number}{payment.commitment.purchaseReceipt && <span className="block text-xs text-muted-foreground">{payment.commitment.purchaseReceipt.number}</span>}</TableCell>
                     <TableCell>
                       {payment.bankAccount.bankName} - Ag: {payment.bankAccount.agency} Cc: {payment.bankAccount.accountNumber}
                     </TableCell>
@@ -422,7 +423,7 @@ export default function PagamentosClient({
                 <SelectTrigger><SelectValue placeholder="Selecione o empenho" /></SelectTrigger>
                 <SelectContent>
                   {commitments.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.number} - Saldo: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.value)}</SelectItem>
+                    <SelectItem key={c.id} value={c.id}>{c.number}{c.purchaseReceipt ? ` · ${c.purchaseReceipt.number}` : ""} - Saldo: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.value)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

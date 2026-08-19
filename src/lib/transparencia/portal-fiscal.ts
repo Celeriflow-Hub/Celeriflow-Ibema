@@ -135,6 +135,7 @@ export async function getPublicExpenses(db: Db, filter?: PublicDataFilter) {
         process: { select: { protocolNumber: true } },
         purchaseProcess: { select: { number: true, modality: true } },
         contract: { select: { number: true } },
+        purchaseReceipt: { select: { number: true, receivedAt: true } },
         covenant: { select: { number: true } },
         appropriation: {
           include: {
@@ -181,6 +182,8 @@ export async function getPublicExpenses(db: Db, filter?: PublicDataFilter) {
       date: c.date,
       processNumber: c.purchaseProcess?.number ?? c.process?.protocolNumber ?? "PROC-S/N",
       contractNumber: c.contract?.number ?? "S/N",
+      receiptNumber: c.purchaseReceipt?.number ?? "NÃO APLICÁVEL",
+      receiptDate: c.purchaseReceipt?.receivedAt ?? null,
       biddingNumber: c.purchaseProcess?.number ?? c.process?.protocolNumber ?? "S/N",
       biddingModality: c.purchaseProcess?.modality ?? "NÃO INFORMADA",
       programCode: c.appropriation.programPPA?.code ?? "0000",

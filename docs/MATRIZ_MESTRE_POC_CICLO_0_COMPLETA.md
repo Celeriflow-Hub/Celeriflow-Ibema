@@ -251,3 +251,14 @@ O ciclo integra a solicitação aprovada, processo de compra, contrato vigente, 
 Também foi incluído o tombamento de bem permanente a partir de item de recebimento aprovado. O vínculo é persistido entre `Asset` e `PurchaseReceiptItem`, limita o tombamento à quantidade efetivamente recebida e registra evento de auditoria.
 
 **Evidências técnicas:** `tests/c5-procurement-policy.test.ts`, `src/lib/patrimonio/__tests__/asset-acquisition-service.test.ts`, telas de Recebimentos, Orçamento e Bens Patrimoniais, e migrações `20260817180000_add_c5_procurement_receipt_lifecycle` e `20260819090000_add_c5_asset_receipt_traceability`.
+
+## 19. Execução registrada - Ciclo 6
+
+**Data:** 19 de agosto de 2026
+**Status:** concluído como fechamento financeiro e de transparência da cadeia comum.
+
+Reservas originadas de recebimentos aprovados passam a indicar e preencher o contrato e fornecedor corretos ao emitir o empenho. A referência do recebimento acompanha as telas de empenhos, liquidações e pagamentos, bem como o acompanhamento financeiro do contrato.
+
+O Portal da Transparência publica apenas o número e a data do recebimento, associados a contrato e processo. Nenhum identificador interno, documento GED, servidor responsável, lote, estoque ou dado pessoal é exposto.
+
+**Evidências técnicas:** `tests/public-finance.test.ts` e as projeções de `src/lib/transparencia/portal-fiscal.ts`, com build de produção aprovado.

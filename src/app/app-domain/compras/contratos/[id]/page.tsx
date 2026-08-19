@@ -28,6 +28,11 @@ export default async function ContratoDetalhesPage({ params }: { params: Promise
           payments: { where: { status: "Paga" }, select: { value: true, valueDecimal: true } },
         },
       },
+      receipts: {
+        where: { status: "APPROVED" },
+        select: { number: true, receivedAt: true, items: { select: { quantity: true, unitCost: true } } },
+        orderBy: { receivedAt: "desc" },
+      },
     }
   });
 
@@ -48,6 +53,7 @@ export default async function ContratoDetalhesPage({ params }: { params: Promise
   const paid = contrato.commitments.reduce((total, commitment) => (
     total + commitment.payments.reduce((value, payment) => value + Number(payment.valueDecimal ?? payment.value), 0)
   ), 0);
+  const received = contrato.receipts.reduce((total, receipt) => total + receipt.items.reduce((itemTotal, item) => itemTotal + item.quantity * item.unitCost, 0), 0);
   const formatMoney = (value: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
   return (
@@ -147,7 +153,15 @@ export default async function ContratoDetalhesPage({ params }: { params: Promise
                 <p className="text-sm text-muted-foreground">Saldo Contratual</p>
                 <p>{formatMoney(contracted - paid)}</p>
               </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Recebido e atestado</p>
+                <p>{formatMoney(received)}</p>
+              </div>
             </div>
+          </div>
+          <div className="border-t pt-4">
+            <p className="mb-3 text-sm font-medium text-muted-foreground">Recebimentos aprovados</p>
+            {contrato.receipts.length ? <div className="space-y-2">{contrato.receipts.map((receipt) => <div key={receipt.number} className="flex flex-wrap justify-between gap-2 rounded border p-3 text-sm"><span className="font-medium">{receipt.number}</span><span>{format(receipt.receivedAt, "dd/MM/yyyy", { locale: ptBR })}</span><span>{formatMoney(receipt.items.reduce((total, item) => total + item.quantity * item.unitCost, 0))}</span></div>)}</div> : <p className="text-sm text-muted-foreground">Nenhum recebimento aprovado para este contrato.</p>}
           </div>
         </CardContent>
       </Card>

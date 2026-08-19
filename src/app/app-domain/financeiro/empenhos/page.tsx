@@ -18,6 +18,7 @@ export default async function EmpenhosPage() {
       },
       financialDocument: { select: { id: true, number: true, title: true } },
       obrasServices: { select: { id: true, protocolo: true } },
+      purchaseReceipt: { select: { number: true } },
     },
     orderBy: {
       date: 'desc'
@@ -43,7 +44,7 @@ export default async function EmpenhosPage() {
 
   const reservations = await prisma.budgetReservation.findMany({
     where: { status: "Ativa" },
-    include: { appropriation: { include: { budgetUnit: true } } },
+    include: { appropriation: { include: { budgetUnit: true } }, expense: { select: { purchaseReceipt: { select: { number: true, contractId: true, contract: { select: { supplierId: true } } } } } } },
     orderBy: { date: "desc" },
   });
 

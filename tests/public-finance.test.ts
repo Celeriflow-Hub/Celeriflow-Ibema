@@ -49,6 +49,7 @@ test("projeta despesa pública sem identificadores internos ou dados pessoais", 
         valueDecimal: null,
         status: "Pago",
         updatedAt: new Date("2026-02-03T00:00:00.000Z"),
+        purchaseReceipt: { number: "REC-2026-001", receivedAt: new Date("2026-01-31T00:00:00.000Z") },
         creditor: { name: "Maria da Silva", document: "12345678901", personId: "person-1" },
         supplier: { person: { cpf: "12345678901" }, company: null },
         appropriation: {
@@ -72,6 +73,8 @@ test("projeta despesa pública sem identificadores internos ou dados pessoais", 
   assert.equal(row.settledValue, 100);
   assert.equal(row.paidValue, 100);
   assert.equal(row.paidPaymentCount, 1);
+  assert.equal(row.receiptNumber, "REC-2026-001");
+  assert.equal(row.receiptDate.toISOString(), "2026-01-31T00:00:00.000Z");
   assert.equal("id" in row, false);
   assert.equal("history" in row, false);
   assert.match(JSON.stringify(where), /budgetUnit/);

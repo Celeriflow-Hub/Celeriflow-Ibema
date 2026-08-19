@@ -43,6 +43,7 @@ type Commitment = {
   };
   financialDocument: { id: string; number: string; title: string } | null;
   obrasServices: { id: string; protocolo: string }[];
+  purchaseReceipt: { number: string } | null;
 };
 
 type SupplierOption = {
@@ -52,7 +53,7 @@ type SupplierOption = {
 };
 
 type AppropriationOption = { id: string; code: string; budgetUnit: { name: string } };
-type ReservationOption = { id: string; number: string; value: number; appropriationId: string; appropriation: { code: string } };
+type ReservationOption = { id: string; number: string; value: number; appropriationId: string; appropriation: { code: string }; expense: { purchaseReceipt: { number: string; contractId: string; contract: { supplierId: string } } | null } | null };
 type ProcessOption = { id: string; protocolNumber: string; description: string | null };
 type ContractOption = { id: string; number: string; object: string; supplierId: string; status: string };
 type ObrasServiceOption = { id: string; protocolo: string; tipo: string; descricao: string; local: string; budgetAppropriationId: string | null; budgetAppropriation: { code: string } | null };
@@ -208,6 +209,7 @@ export default function EmpenhosClient({
                 <TableHead>Fornecedor/Credor</TableHead>
                 <TableHead>Unidade Orçamentária</TableHead>
                 <TableHead>Valor (R$)</TableHead>
+                <TableHead>Recebimento</TableHead>
                 <TableHead>Documento interno</TableHead>
                 <TableHead>Obra/OS</TableHead>
                 <TableHead>Status</TableHead>
@@ -217,7 +219,7 @@ export default function EmpenhosClient({
             <TableBody>
               {filteredCommitments.length === 0 ? (
                 <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground h-32">
+                    <TableCell colSpan={10} className="text-center text-muted-foreground h-32">
                     <div className="flex flex-col items-center justify-center">
                       <FileText className="h-8 w-8 mb-2 opacity-20" />
                       Nenhum empenho encontrado.
@@ -234,8 +236,9 @@ export default function EmpenhosClient({
                     </TableCell>
                     <TableCell>{commitment.appropriation.budgetUnit.name}</TableCell>
                     <TableCell>
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(commitment.value)}
+                       {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(commitment.value)}
                     </TableCell>
+                    <TableCell className="text-sm">{commitment.purchaseReceipt?.number ?? "-"}</TableCell>
                     <TableCell className="text-sm">{commitment.financialDocument?.number || "-"}</TableCell>
                     <TableCell className="text-sm">{commitment.obrasServices.map((service) => service.protocolo).join(", ") || "-"}</TableCell>
                     <TableCell>
@@ -346,12 +349,21 @@ export default function EmpenhosClient({
                 <Label htmlFor="reservationId">Reserva Orçamentária</Label>
                 <Select value={formData.reservationId} onValueChange={v => {
                   const reservation = reservations.find(r => r.id === v);
-                  setFormData({ ...formData, reservationId: v as string, appropriationId: reservation?.appropriationId ?? formData.appropriationId, value: reservation?.value ?? formData.value });
+                  const receipt = reservation?.expense?.purchaseReceipt;
+                  setFormData({
+                    ...formData,
+                    reservationId: v as string,
+                    appropriationId: reservation?.appropriationId ?? formData.appropriationId,
+                    value: reservation?.value ?? formData.value,
+                    supplierId: receipt?.contract.supplierId ?? formData.supplierId,
+                    contractId: receipt?.contractId ?? formData.contractId,
+                    history: receipt ? `Recebimento ${receipt.number}` : formData.history,
+                  });
                 }}>
                   <SelectTrigger><SelectValue placeholder="Selecione a reserva ativa" /></SelectTrigger>
                   <SelectContent>
                     {reservations.map(r => (
-                      <SelectItem key={r.id} value={r.id}>{r.number} - {r.appropriation.code} - {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(r.value)}</SelectItem>
+                      <SelectItem key={r.id} value={r.id}>{r.number} - {r.appropriation.code} - {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(r.value)}{r.expense?.purchaseReceipt ? ` · ${r.expense.purchaseReceipt.number}` : ""}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

@@ -17,8 +17,9 @@ export default async function LiquidacoesPage() {
               person: true,
               company: true
             }
-          }
-        }
+          },
+          purchaseReceipt: { select: { number: true } },
+        },
       },
       author: true,
       document: { select: { id: true, title: true } },
@@ -45,6 +46,7 @@ export default async function LiquidacoesPage() {
       },
       movements: { select: { type: true, valueDecimal: true } },
       settlements: { where: { status: "Liquidado" }, select: { valueDecimal: true, value: true } },
+      purchaseReceipt: { select: { number: true } },
     }
   })
 

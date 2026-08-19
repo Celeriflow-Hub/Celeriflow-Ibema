@@ -42,6 +42,7 @@ type Settlement = {
       company?: { corporateName: string } | null;
       person?: { fullName: string } | null;
     };
+    purchaseReceipt: { number: string } | null;
   };
   author: {
     id: string;
@@ -49,7 +50,7 @@ type Settlement = {
   };
 };
 
-type CommitmentOption = { id: string; number: string; availableToSettle: number };
+type CommitmentOption = { id: string; number: string; availableToSettle: number; purchaseReceipt: { number: string } | null };
 type EmployeeOption = { id: string; name: string };
 type RetentionRule = { id: string; code: string; type: string; description: string; calculationBasePercentage: number; ratePercentage: number; serviceCode: string | null };
 
@@ -226,7 +227,7 @@ export default function LiquidacoesClient({
             <TableHeader>
               <TableRow>
                 <TableHead>Data</TableHead>
-                <TableHead>Empenho Ref.</TableHead>
+                <TableHead>Empenho / recebimento</TableHead>
                 <TableHead>Fornecedor</TableHead>
                 <TableHead>Documento (NF/Recibo)</TableHead>
                 <TableHead>Responsável (Ateste)</TableHead>
@@ -250,7 +251,7 @@ export default function LiquidacoesClient({
                 filteredSettlements.map((settlement) => (
                   <TableRow key={settlement.id}>
                     <TableCell>{format(new Date(settlement.date), 'dd/MM/yyyy')}</TableCell>
-                    <TableCell className="font-medium">{settlement.commitment.number}</TableCell>
+                    <TableCell className="font-medium">{settlement.commitment.number}{settlement.commitment.purchaseReceipt && <span className="block text-xs text-muted-foreground">{settlement.commitment.purchaseReceipt.number}</span>}</TableCell>
                     <TableCell>
                       {settlement.commitment.supplier.company?.corporateName || settlement.commitment.supplier.person?.fullName || 'Não identificado'}
                     </TableCell>
@@ -310,7 +311,7 @@ export default function LiquidacoesClient({
                 <SelectTrigger><SelectValue placeholder="Selecione o empenho" /></SelectTrigger>
                 <SelectContent>
                   {commitments.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.number} - Saldo: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.availableToSettle)}</SelectItem>
+                    <SelectItem key={c.id} value={c.id}>{c.number}{c.purchaseReceipt ? ` · ${c.purchaseReceipt.number}` : ""} - Saldo: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.availableToSettle)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

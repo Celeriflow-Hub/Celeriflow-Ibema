@@ -10,7 +10,7 @@ export default async function PagamentosPage() {
   const payments = await prisma.payment.findMany({
     where: { commitment: { appropriation: appropriationFilter } },
     include: {
-      commitment: true,
+      commitment: { include: { purchaseReceipt: { select: { number: true } } } },
       settlement: { select: { id: true, documentRef: true, valueDecimal: true, value: true } },
       financialDocument: { select: { id: true, number: true, title: true } },
       bankAccount: true,
@@ -33,7 +33,7 @@ export default async function PagamentosPage() {
       status: { in: ["Emitido", "Liquidado", "Pago"] }
       , appropriation: appropriationFilter
     },
-    include: { movements: { select: { type: true, valueDecimal: true } } },
+    include: { movements: { select: { type: true, valueDecimal: true } }, purchaseReceipt: { select: { number: true } } },
   })
 
   const settlements = await prisma.settlement.findMany({

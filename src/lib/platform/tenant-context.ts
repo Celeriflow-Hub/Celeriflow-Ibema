@@ -224,6 +224,57 @@ async function resolveUser(principal: SessionPrincipal | null): Promise<AppConte
     });
   }
 
+  const systemAdminEmail = process.env.SYSTEM_ADMIN_EMAIL?.trim().toLowerCase();
+  if (!usuario && systemAdminEmail && principal.email === systemAdminEmail) {
+    const profile = await prisma.configuracaoPerfil.upsert({
+      where: { id: "system-administrator" },
+      create: {
+        id: "system-administrator",
+        codigo: SYSTEM_ADMIN_PROFILE_CODE,
+        nome: "Administrador",
+        descricao: "Acesso administrativo inicial do sistema.",
+        permissoes: JSON.stringify({ acesso: "total" }),
+        ativo: true,
+      },
+      update: {
+        codigo: SYSTEM_ADMIN_PROFILE_CODE,
+        nome: "Administrador",
+        descricao: "Acesso administrativo inicial do sistema.",
+        permissoes: JSON.stringify({ acesso: "total" }),
+        ativo: true,
+      },
+    });
+
+    usuario = await prisma.usuario.upsert({
+      where: { email: principal.email },
+      create: {
+        nome: principal.name,
+        email: principal.email,
+        senha: "firebase",
+        firebaseUid: principal.firebaseUid,
+        ativo: true,
+        perfilId: profile.id,
+      },
+      update: {
+        nome: principal.name,
+        firebaseUid: principal.firebaseUid,
+        ativo: true,
+        perfilId: profile.id,
+      },
+      include: {
+        perfil: true,
+        employee: true,
+        permissoesModulo: {
+          include: { modulo: { select: { codigo: true } } },
+        },
+        unidadesGestoras: {
+          select: { budgetUnitId: true },
+        },
+      },
+    });
+    allowedBudgetUnitIds = usuario.unidadesGestoras.map((ug) => ug.budgetUnitId);
+  }
+
   if (!usuario || !usuario.ativo || !usuario.perfil.ativo) {
     throw new AccessError("Usuario sem acesso ao sistema.", 403);
   }

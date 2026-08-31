@@ -9,6 +9,7 @@ import { MoneyInput } from "@/components/ui/MoneyInput";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { BookOpenCheck, CalendarClock, FileCog, History, Landmark, LayoutDashboard, Plus } from "lucide-react";
 import {
   actionAddActionPPA,
   actionAddGoalPPA,
@@ -95,6 +96,7 @@ export default function PlanejamentoClient({ plans, financialYears, fixations, b
   const [mbaForm, setMbaForm] = useState({ annualBudgetLawId: "", bimonth: "1", targetValue: 0 });
   const [amendmentForm, setAmendmentForm] = useState({ entityType: "PPA" as "PPA" | "LDO" | "LOA", entityId: "", reason: "", amendedSnapshot: "{}" });
   const [pending, setPending] = useState(false);
+  const [activeSection, setActiveSection] = useState("visao-geral");
 
   const programs = plans.flatMap((plan) => plan.programs);
   const objectives = programs.flatMap((program) => program.objectives);
@@ -109,6 +111,14 @@ export default function PlanejamentoClient({ plans, financialYears, fixations, b
       ? plans.flatMap((plan) => plan.guidelines.map((guideline) => ({ id: guideline.id, label: `LDO ${guideline.financialYear.year}`, snapshot: guideline })))
       : laws.map((law) => ({ id: law.id, label: `${law.year} / ${law.lawNumber}`, snapshot: law }));
   const selectedAmendmentEntity = amendmentEntities.find((entity) => entity.id === amendmentForm.entityId);
+  const sectionNav = [
+    { id: "visao-geral", label: "Visão geral", icon: LayoutDashboard },
+    { id: "ppa", label: "PPA", icon: BookOpenCheck },
+    { id: "ldo-loa", label: "LDO e LOA", icon: Landmark },
+    { id: "dotacoes", label: "Dotações", icon: FileCog },
+    { id: "execucao", label: "CMD e MBA", icon: CalendarClock },
+    { id: "historico", label: "Histórico", icon: History },
+  ];
 
   async function run(action: () => Promise<{ error?: string }>) {
     setPending(true);
@@ -192,40 +202,63 @@ export default function PlanejamentoClient({ plans, financialYears, fixations, b
     }
   };
 
-  return <div className="space-y-6 p-8 pt-6">
-    <div>
-      <h2 className="text-3xl font-bold tracking-tight">Planejamento Orçamentário</h2>
-      <p className="text-muted-foreground">Rastreabilidade do PPA até a LOA e suas dotações orçamentárias.</p>
-    </div>
+  return <div className="mx-auto w-full max-w-[1440px] space-y-3 p-2 sm:p-3 lg:p-4 [&_[data-slot=card]]:rounded-md [&_[data-slot=card]]:shadow-none [&_[data-slot=select-trigger]]:w-full">
+    <header className="border-b border-slate-300 bg-white px-4 py-3 shadow-sm sm:flex sm:items-center sm:justify-between">
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-700">Financeiro e contábil / Orçamento</p>
+        <h1 className="mt-0.5 text-xl font-bold tracking-tight text-slate-900">Planejamento Orçamentário</h1>
+        <p className="mt-0.5 text-sm text-slate-600">Cadastre, acompanhe e vincule o PPA, a LDO, a LOA e as dotações.</p>
+      </div>
+      {canEdit && (
+        <Button type="button" size="sm" className="mt-3 bg-emerald-700 hover:bg-emerald-800 sm:mt-0" onClick={() => setActiveSection("ppa")}>
+          <Plus className="size-3.5" />
+          Novo cadastro
+        </Button>
+      )}
+    </header>
 
-    <Card>
-      <CardHeader><CardTitle>Cadeia PPA, LDO e LOA</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
-        {plans.length === 0 && <p className="text-sm text-muted-foreground">Nenhum PPA cadastrado.</p>}
-        {plans.map((plan) => <div key={plan.id} className="rounded-md border p-4">
-          <p className="font-semibold">{plan.code} - {plan.name} ({plan.startYear}-{plan.endYear})</p>
-          {plan.programs.map((program) => <div key={program.id} className="mt-3 border-l-2 pl-3 text-sm">
-            <p className="font-medium">Programa {program.code} - {program.name}</p>
-            {program.objectives.map((objective) => <div key={objective.id} className="mt-2 text-muted-foreground">
-              <p>Objetivo {objective.code}: {objective.description}</p>
-              {objective.indicators.map((indicator) => <p key={indicator.id} className="pl-3">Indicador {indicator.name} ({indicator.unit}): referência {indicator.baselineValue}, meta {indicator.targetValue}</p>)}
-            </div>)}
-            {program.actions.map((action) => <div key={action.id} className="mt-2 text-muted-foreground">
-              <p>Ação {action.code}: {action.name}</p>
-              {action.goals.map((goal) => <p key={goal.id} className="pl-3">Meta {goal.year}: física {goal.physical}, financeira {currency.format(goal.financial)}</p>)}
-            </div>)}
-          </div>)}
-          {plan.guidelines.map((guideline) => <div key={guideline.id} className="mt-3 border-l-2 pl-3 text-sm">
-            <p className="font-medium">LDO {guideline.financialYear.year} ({guideline.financialYear.status})</p>
-            {guideline.priorities.map((priority) => <p key={priority.id} className="text-muted-foreground">Prioridade: {priority.description}{priority.targetValue !== null ? ` - ${currency.format(priority.targetValue)}` : ""}</p>)}
-            {guideline.risks.map((risk) => <p key={risk.id} className="text-muted-foreground">Risco: {risk.description} ({currency.format(risk.estimatedImpact)}) - mitigação: {risk.mitigation}</p>)}
-            {guideline.laws.map((law) => <p key={law.id} className="text-muted-foreground">LOA {law.lawNumber}: receita {currency.format(law.totalRevenue)}, despesa {currency.format(law.totalExpense)}, {law.revenueForecasts.length} previsão(ões) e {law.expenseFixations.length} fixação(ões).</p>)}
-          </div>)}
-        </div>)}
-      </CardContent>
-    </Card>
+    <nav className="flex gap-1 overflow-x-auto border border-slate-300 bg-white p-1" aria-label="Etapas do planejamento orçamentário">
+      {sectionNav.map((section) => {
+        const Icon = section.icon;
+        const isActive = activeSection === section.id;
+        return (
+          <button
+            key={section.id}
+            type="button"
+            onClick={() => setActiveSection(section.id)}
+            className={`flex shrink-0 items-center gap-1.5 rounded px-3 py-2 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 ${
+              isActive ? "bg-emerald-700 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            }`}
+          >
+            <Icon className="size-3.5" />
+            {section.label}
+          </button>
+        );
+      })}
+    </nav>
 
-    <Card>
+    {activeSection === "visao-geral" && <>
+      <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4" aria-label="Resumo do planejamento">
+        <div className="border border-slate-300 bg-white p-3"><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">PPAs cadastrados</p><p className="mt-1 text-2xl font-bold text-slate-900">{plans.length}</p></div>
+        <div className="border border-slate-300 bg-white p-3"><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Programas</p><p className="mt-1 text-2xl font-bold text-slate-900">{programs.length}</p></div>
+        <div className="border border-slate-300 bg-white p-3"><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">LOAs vinculadas</p><p className="mt-1 text-2xl font-bold text-slate-900">{laws.length}</p></div>
+        <div className="border border-slate-300 bg-white p-3"><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Fixações de despesa</p><p className="mt-1 text-2xl font-bold text-slate-900">{fixations.length}</p></div>
+      </section>
+
+      <Card size="sm">
+        <CardHeader className="border-b border-slate-200"><CardTitle>Cadeia PPA, LDO e LOA</CardTitle><p className="text-xs text-slate-500">Visão consolidada dos instrumentos já registrados.</p></CardHeader>
+        <CardContent className="space-y-3 pt-3">
+          {plans.length === 0 && <p className="text-sm text-muted-foreground">Nenhum PPA cadastrado. Use a aba PPA para iniciar o planejamento.</p>}
+          {plans.map((plan) => <div key={plan.id} className="border border-slate-300 bg-slate-50 p-3">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><p className="font-semibold text-slate-900">{plan.code} - {plan.name}</p><span className="w-fit rounded bg-slate-200 px-2 py-0.5 text-xs font-bold text-slate-700">{plan.startYear}-{plan.endYear}</span></div>
+            {plan.programs.map((program) => <div key={program.id} className="mt-3 border-l-2 border-emerald-600 pl-3 text-sm"><p className="font-medium text-slate-800">Programa {program.code} - {program.name}</p>{program.objectives.map((objective) => <div key={objective.id} className="mt-2 text-slate-600"><p>Objetivo {objective.code}: {objective.description}</p>{objective.indicators.map((indicator) => <p key={indicator.id} className="pl-3 text-xs">Indicador {indicator.name} ({indicator.unit}): referência {indicator.baselineValue}, meta {indicator.targetValue}</p>)}</div>)}{program.actions.map((action) => <div key={action.id} className="mt-2 text-slate-600"><p>Ação {action.code}: {action.name}</p>{action.goals.map((goal) => <p key={goal.id} className="pl-3 text-xs">Meta {goal.year}: física {goal.physical}, financeira {currency.format(goal.financial)}</p>)}</div>)}</div>)}
+            {plan.guidelines.map((guideline) => <div key={guideline.id} className="mt-3 border-l-2 border-blue-600 pl-3 text-sm"><p className="font-medium text-slate-800">LDO {guideline.financialYear.year} ({guideline.financialYear.status})</p>{guideline.priorities.map((priority) => <p key={priority.id} className="text-slate-600">Prioridade: {priority.description}{priority.targetValue !== null ? ` - ${currency.format(priority.targetValue)}` : ""}</p>)}{guideline.risks.map((risk) => <p key={risk.id} className="text-slate-600">Risco: {risk.description} ({currency.format(risk.estimatedImpact)}) - mitigação: {risk.mitigation}</p>)}{guideline.laws.map((law) => <p key={law.id} className="text-slate-600">LOA {law.lawNumber}: receita {currency.format(law.totalRevenue)}, despesa {currency.format(law.totalExpense)}, {law.revenueForecasts.length} previsão(ões) e {law.expenseFixations.length} fixação(ões).</p>)}</div>)}
+          </div>)}
+        </CardContent>
+      </Card>
+    </>}
+
+    {activeSection === "historico" && <Card size="sm">
       <CardHeader><CardTitle>Histórico Interno de Alterações</CardTitle></CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">Registro interno de versões para comparação. Não gera PDF nem substitui publicação, aprovação ou vigência legal.</p>
@@ -239,9 +272,9 @@ export default function PlanejamentoClient({ plans, financialYears, fixations, b
         </form>}
         {amendments.length === 0 ? <p className="text-sm text-muted-foreground">Nenhuma alteração interna registrada.</p> : amendments.map((amendment) => <details key={amendment.id} className="rounded-md border p-3"><summary className="cursor-pointer font-medium">{amendment.entityType} versão {amendment.version}: {amendment.reason}</summary><p className="mt-2 text-xs text-muted-foreground">Registrada em {new Date(amendment.createdAt).toLocaleString("pt-BR")}</p><div className="mt-3 grid gap-3 lg:grid-cols-2"><div><Label>Original preservado</Label><pre className="mt-1 max-h-64 overflow-auto rounded bg-muted p-3 text-xs">{JSON.stringify(amendment.originalSnapshot, null, 2)}</pre></div><div><Label>Versão proposta</Label><pre className="mt-1 max-h-64 overflow-auto rounded bg-muted p-3 text-xs">{JSON.stringify(amendment.amendedSnapshot, null, 2)}</pre></div></div></details>)}
       </CardContent>
-    </Card>
+    </Card>}
 
-    {canEdit && <div className="grid gap-4 xl:grid-cols-3">
+    {canEdit && activeSection === "ppa" && <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
       <Card><CardHeader><CardTitle>Novo PPA</CardTitle></CardHeader><CardContent><form onSubmit={submitPlan} className="space-y-3">
         <Input required placeholder="Código" value={planForm.code} onChange={(event) => setPlanForm({ ...planForm, code: event.target.value })} />
         <Input required placeholder="Nome" value={planForm.name} onChange={(event) => setPlanForm({ ...planForm, name: event.target.value })} />
@@ -262,7 +295,7 @@ export default function PlanejamentoClient({ plans, financialYears, fixations, b
       </CardContent></Card>
     </div>}
 
-    {canEdit && <div className="grid gap-4 xl:grid-cols-2">
+    {canEdit && activeSection === "ldo-loa" && <div className="grid gap-3 lg:grid-cols-2">
       <Card><CardHeader><CardTitle>Nova LDO</CardTitle></CardHeader><CardContent><form onSubmit={submitGuideline} className="space-y-3">
         <Select value={guidelineForm.multiYearPlanId} onValueChange={(value) => setGuidelineForm({ ...guidelineForm, multiYearPlanId: value ?? "" })}><SelectTrigger><SelectValue placeholder="PPA" /></SelectTrigger><SelectContent>{plans.map((plan) => <SelectItem key={plan.id} value={plan.id}>{plan.code} - {plan.name}</SelectItem>)}</SelectContent></Select>
         <Select value={guidelineForm.financialYearId} onValueChange={(value) => setGuidelineForm({ ...guidelineForm, financialYearId: value ?? "" })}><SelectTrigger><SelectValue placeholder="Exercício" /></SelectTrigger><SelectContent>{financialYears.map((year) => <SelectItem key={year.id} value={year.id}>{year.year} ({year.status})</SelectItem>)}</SelectContent></Select>
@@ -281,7 +314,8 @@ export default function PlanejamentoClient({ plans, financialYears, fixations, b
       </form></CardContent></Card>
     </div>}
 
-    {canEdit && <Card><CardHeader><CardTitle>Nova Dotação a Partir da LOA</CardTitle></CardHeader><CardContent><form onSubmit={submitAppropriation} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    {activeSection === "dotacoes" && <>
+    {canEdit && <Card size="sm"><CardHeader className="border-b border-slate-200"><CardTitle>Nova Dotação a Partir da LOA</CardTitle><p className="text-xs text-slate-500">Vincule a dotação à fixação da LOA, ao programa e à ação do PPA.</p></CardHeader><CardContent className="pt-3"><form onSubmit={submitAppropriation} className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       <div className="space-y-2 xl:col-span-2"><Label>Fixação de despesa da LOA</Label><Select value={appropriationForm.annualBudgetExpenseFixationId} onValueChange={(value) => setAppropriationForm({ ...appropriationForm, annualBudgetExpenseFixationId: value ?? "" })}><SelectTrigger><SelectValue placeholder="Selecione a fixação" /></SelectTrigger><SelectContent>{fixations.map((fixation) => <SelectItem key={fixation.id} value={fixation.id}>{fixation.annualBudgetLaw.financialYear} / {fixation.annualBudgetLaw.lawNumber} - {fixation.code} - saldo {currency.format(fixation.fixedValue - fixation.allocatedValue)}</SelectItem>)}</SelectContent></Select>{selectedFixation && <p className="text-xs text-muted-foreground">{selectedFixation.plan.code} - {selectedFixation.plan.name}: {selectedFixation.name}. Fixado {currency.format(selectedFixation.fixedValue)}, já alocado {currency.format(selectedFixation.allocatedValue)}.</p>}</div>
       <div className="space-y-2"><Label>Programa do PPA</Label><Select value={appropriationForm.programPPAId} onValueChange={(value) => setAppropriationForm({ ...appropriationForm, programPPAId: value ?? "", actionPPAId: "" })}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{programs.map((program) => <SelectItem key={program.id} value={program.id}>{program.code} - {program.name}</SelectItem>)}</SelectContent></Select></div>
       <div className="space-y-2"><Label>Ação do PPA</Label><Select value={appropriationForm.actionPPAId} onValueChange={(value) => setAppropriationForm({ ...appropriationForm, actionPPAId: value ?? "" })}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{selectedProgram?.actions.map((action) => <SelectItem key={action.id} value={action.id}>{action.code} - {action.name}</SelectItem>)}</SelectContent></Select></div>
@@ -293,13 +327,16 @@ export default function PlanejamentoClient({ plans, financialYears, fixations, b
       <div className="flex items-end"><Button type="submit" disabled={pending}>{pending ? "Criando..." : "Criar dotação"}</Button></div>
     </form></CardContent></Card>}
 
-    {canEdit && <div className="grid gap-4 xl:grid-cols-2">
+    <Card size="sm"><CardHeader className="border-b border-slate-200"><CardTitle>Fixações e Alocações</CardTitle></CardHeader><CardContent className="pt-3"><Table><TableHeader><TableRow><TableHead>PPA</TableHead><TableHead>LOA</TableHead><TableHead>Fixação</TableHead><TableHead className="text-right">Fixado</TableHead><TableHead className="text-right">Alocado</TableHead><TableHead className="text-right">Disponível</TableHead></TableRow></TableHeader><TableBody>{fixations.length === 0 ? <TableRow><TableCell colSpan={6} className="h-20 text-center text-muted-foreground">Nenhuma fixação de despesa vinculada a um PPA/LDO/LOA.</TableCell></TableRow> : fixations.map((fixation) => <TableRow key={fixation.id}><TableCell>{fixation.plan.code}</TableCell><TableCell>{fixation.annualBudgetLaw.financialYear} / {fixation.annualBudgetLaw.lawNumber}</TableCell><TableCell>{fixation.code} - {fixation.name}</TableCell><TableCell className="text-right">{currency.format(fixation.fixedValue)}</TableCell><TableCell className="text-right">{currency.format(fixation.allocatedValue)}</TableCell><TableCell className="text-right">{currency.format(fixation.fixedValue - fixation.allocatedValue)}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
+    </>}
+
+    {activeSection === "execucao" && <>
+    {canEdit && <div className="grid gap-3 lg:grid-cols-2">
       <Card><CardHeader><CardTitle>CMD - Cronograma Mensal de Desembolso</CardTitle></CardHeader><CardContent><form onSubmit={submitCmd} className="grid gap-3 md:grid-cols-2"><Select value={cmdForm.annualBudgetLawId} onValueChange={(value) => setCmdForm({ ...cmdForm, annualBudgetLawId: value ?? "" })}><SelectTrigger><SelectValue placeholder="LOA" /></SelectTrigger><SelectContent>{laws.map((law) => <SelectItem key={law.id} value={law.id}>{law.year} / {law.lawNumber}</SelectItem>)}</SelectContent></Select><Select value={cmdForm.budgetUnitId} onValueChange={(value) => setCmdForm({ ...cmdForm, budgetUnitId: value ?? "" })}><SelectTrigger><SelectValue placeholder="Unidade orçamentária" /></SelectTrigger><SelectContent>{budgetUnits.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.code} - {unit.name}</SelectItem>)}</SelectContent></Select><Select value={cmdForm.month} onValueChange={(value) => setCmdForm({ ...cmdForm, month: value ?? "1" })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Array.from({ length: 12 }, (_, index) => <SelectItem key={index + 1} value={String(index + 1)}>Mês {index + 1}</SelectItem>)}</SelectContent></Select><MoneyInput value={cmdForm.limitValue} onChange={(limitValue) => setCmdForm({ ...cmdForm, limitValue })} /><Button type="submit" disabled={pending}>Salvar CMD</Button></form></CardContent></Card>
       <Card><CardHeader><CardTitle>MBA - Meta Bimestral de Arrecadação</CardTitle></CardHeader><CardContent><form onSubmit={submitMba} className="grid gap-3 md:grid-cols-2"><Select value={mbaForm.annualBudgetLawId} onValueChange={(value) => setMbaForm({ ...mbaForm, annualBudgetLawId: value ?? "" })}><SelectTrigger><SelectValue placeholder="LOA" /></SelectTrigger><SelectContent>{laws.map((law) => <SelectItem key={law.id} value={law.id}>{law.year} / {law.lawNumber}</SelectItem>)}</SelectContent></Select><Select value={mbaForm.bimonth} onValueChange={(value) => setMbaForm({ ...mbaForm, bimonth: value ?? "1" })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Array.from({ length: 6 }, (_, index) => <SelectItem key={index + 1} value={String(index + 1)}>{index + 1}º bimestre</SelectItem>)}</SelectContent></Select><MoneyInput value={mbaForm.targetValue} onChange={(targetValue) => setMbaForm({ ...mbaForm, targetValue })} /><Button type="submit" disabled={pending}>Salvar MBA</Button></form></CardContent></Card>
     </div>}
 
-    <Card><CardHeader><CardTitle>Fixações e Alocações</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>PPA</TableHead><TableHead>LOA</TableHead><TableHead>Fixação</TableHead><TableHead className="text-right">Fixado</TableHead><TableHead className="text-right">Alocado</TableHead><TableHead className="text-right">Disponível</TableHead></TableRow></TableHeader><TableBody>{fixations.length === 0 ? <TableRow><TableCell colSpan={6} className="h-20 text-center text-muted-foreground">Nenhuma fixação de despesa vinculada a um PPA/LDO/LOA.</TableCell></TableRow> : fixations.map((fixation) => <TableRow key={fixation.id}><TableCell>{fixation.plan.code}</TableCell><TableCell>{fixation.annualBudgetLaw.financialYear} / {fixation.annualBudgetLaw.lawNumber}</TableCell><TableCell>{fixation.code} - {fixation.name}</TableCell><TableCell className="text-right">{currency.format(fixation.fixedValue)}</TableCell><TableCell className="text-right">{currency.format(fixation.allocatedValue)}</TableCell><TableCell className="text-right">{currency.format(fixation.fixedValue - fixation.allocatedValue)}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
-
-    <Card><CardHeader><CardTitle>CMD e MBA Registrados</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>LOA</TableHead><TableHead>CMD</TableHead><TableHead>MBA</TableHead></TableRow></TableHeader><TableBody>{laws.length === 0 ? <TableRow><TableCell colSpan={3} className="h-20 text-center text-muted-foreground">Nenhuma LOA vinculada a PPA/LDO.</TableCell></TableRow> : laws.map((law) => { const schedulesByUnit = new Map<string, typeof law.cmdSchedules>(); for (const schedule of law.cmdSchedules) schedulesByUnit.set(schedule.budgetUnit.code, [...(schedulesByUnit.get(schedule.budgetUnit.code) ?? []), schedule]); const mbaComplete = new Set(law.mbaTargets.map((target) => target.bimonth)).size === 6; return <TableRow key={law.id}><TableCell>{law.year} / {law.lawNumber}</TableCell><TableCell>{schedulesByUnit.size === 0 ? "Sem CMD" : Array.from(schedulesByUnit.entries()).map(([unitCode, schedules]) => <p key={unitCode}>{unitCode}: {new Set(schedules.map((schedule) => schedule.month)).size}/12 meses {new Set(schedules.map((schedule) => schedule.month)).size === 12 ? "completo" : "incompleto"}</p>)}</TableCell><TableCell>{new Set(law.mbaTargets.map((target) => target.bimonth)).size}/6 bimestres {mbaComplete ? "completa" : "incompleta"}</TableCell></TableRow>; })}</TableBody></Table></CardContent></Card>
+    <Card size="sm"><CardHeader className="border-b border-slate-200"><CardTitle>CMD e MBA Registrados</CardTitle></CardHeader><CardContent className="pt-3"><Table><TableHeader><TableRow><TableHead>LOA</TableHead><TableHead>CMD</TableHead><TableHead>MBA</TableHead></TableRow></TableHeader><TableBody>{laws.length === 0 ? <TableRow><TableCell colSpan={3} className="h-20 text-center text-muted-foreground">Nenhuma LOA vinculada a PPA/LDO.</TableCell></TableRow> : laws.map((law) => { const schedulesByUnit = new Map<string, typeof law.cmdSchedules>(); for (const schedule of law.cmdSchedules) schedulesByUnit.set(schedule.budgetUnit.code, [...(schedulesByUnit.get(schedule.budgetUnit.code) ?? []), schedule]); const mbaComplete = new Set(law.mbaTargets.map((target) => target.bimonth)).size === 6; return <TableRow key={law.id}><TableCell>{law.year} / {law.lawNumber}</TableCell><TableCell>{schedulesByUnit.size === 0 ? "Sem CMD" : Array.from(schedulesByUnit.entries()).map(([unitCode, schedules]) => <p key={unitCode}>{unitCode}: {new Set(schedules.map((schedule) => schedule.month)).size}/12 meses {new Set(schedules.map((schedule) => schedule.month)).size === 12 ? "completo" : "incompleto"}</p>)}</TableCell><TableCell>{new Set(law.mbaTargets.map((target) => target.bimonth)).size}/6 bimestres {mbaComplete ? "completa" : "incompleta"}</TableCell></TableRow>; })}</TableBody></Table></CardContent></Card>
+    </>}
   </div>;
 }

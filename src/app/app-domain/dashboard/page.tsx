@@ -20,7 +20,8 @@ import {
   HardHat,
   Palette,
   Shield,
-  Lock
+  Lock,
+  ArrowUpRight
 } from "lucide-react";
 import { canShowDashboardCard, canUseInactiveModule, canViewModule, getOptionalTenantContext, isModuleBlockedForUser, isPocEvaluator } from "@/lib/platform/tenant-context";
 
@@ -79,21 +80,21 @@ export default async function PainelPage() {
   const pocEvaluator = context ? isPocEvaluator(context.user) : false;
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto pt-2 pb-4 px-2 md:px-4 flex flex-col">
-      <header className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col px-1 py-1 md:px-2">
+      <header className="mb-3 flex flex-col gap-3 border-b border-slate-300 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">{pocEvaluator ? "POC São João do Ivaí" : "CeleriFlow"}</p>
-          <h1 className="mt-1 text-xl font-bold text-slate-900">Home</h1>
-          <p className="mt-1 text-sm text-slate-600">Acesse as funcionalidades disponíveis para o seu perfil.</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700">{pocEvaluator ? "POC São João do Ivaí" : "Sistema integrado municipal"}</p>
+          <h1 className="mt-1 text-lg font-bold text-slate-900">Painel de módulos</h1>
+          <p className="mt-0.5 text-sm text-slate-600">Selecione uma área de trabalho para continuar.</p>
         </div>
         {hasFinancialAccess && (
           <nav className="flex items-center gap-2" aria-label="Navegação principal da POC">
-            <Link href="/dashboard" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Home</Link>
-            <Link href="/financeiro/automacoes" className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Automações</Link>
+            <Link href="/dashboard" className="rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Início</Link>
+            <Link href="/financeiro/automacoes" className="rounded bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800">Automações</Link>
           </nav>
         )}
       </header>
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 w-full">
+      <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7">
         {visibleMenuItems.map((item) => {
           const isConfig = item.code === "CONFIGURACOES";
           const isProfileBlocked = !context || isModuleBlockedForUser(context.user, item.code) || !canViewModule(context.user, item.code);
@@ -104,25 +105,25 @@ export default async function PainelPage() {
               <div
                 key={item.name}
                 title={isProfileBlocked ? "Acesso bloqueado ou sem permissão de visualização neste perfil." : "Módulo não contratado nesta instância municipal. Ative em Configurações e Integrações > Módulos."}
-                className="relative overflow-hidden h-full bg-slate-100/90 dark:bg-slate-900/60 border border-dashed border-slate-300 dark:border-slate-800 rounded-[16px] flex flex-col justify-center text-center py-4 px-2 cursor-not-allowed opacity-60 grayscale select-none"
+                className="relative flex h-full min-h-[126px] cursor-not-allowed flex-col justify-center overflow-hidden rounded-md border border-dashed border-slate-300 bg-slate-100/90 px-2 py-3 text-center opacity-60 grayscale select-none dark:border-slate-800 dark:bg-slate-900/60"
               >
                 {/* Top Gray Bar */}
-                <div className="absolute top-0 left-0 w-full h-[4px] bg-slate-400/50" />
+                <div className="absolute top-0 left-0 h-[3px] w-full bg-slate-400/50" />
 
                 {/* Lock Badge */}
-                <div className="absolute top-2 right-2 p-1 bg-slate-200 dark:bg-slate-800 rounded-full text-slate-500 shadow-sm">
+                <div className="absolute right-2 top-2 rounded-full bg-slate-200 p-1 text-slate-500 dark:bg-slate-800">
                   <Lock className="w-3.5 h-3.5" />
                 </div>
 
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-[44px] h-[44px] rounded-[14px] flex items-center justify-center bg-slate-200 dark:bg-slate-800 ring-1 ring-inset ring-black/5">
-                    <item.icon className="h-[20px] w-[20px] text-slate-500" strokeWidth={2} />
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex size-10 items-center justify-center rounded-md bg-slate-200 ring-1 ring-inset ring-black/5 dark:bg-slate-800">
+                    <item.icon className="size-[19px] text-slate-500" strokeWidth={2} />
                   </div>
                   <div>
                     <h3 className="text-[12px] sm:text-[13px] font-bold leading-tight text-slate-600 dark:text-slate-400">
                       {item.name}
                     </h3>
-                    <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                    <span className="mt-1 inline-block rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-400">
                        {isProfileBlocked ? "Acesso Bloqueado" : "Não Contratado"}
                     </span>
                   </div>
@@ -132,24 +133,27 @@ export default async function PainelPage() {
           }
 
           return (
-            <Link key={item.name} href={item.href} className="block group outline-none">
-              <div className="relative overflow-hidden h-full bg-white dark:bg-slate-950 border border-slate-200/80 shadow-[0_2px_8px_rgba(15,23,42,0.04)] rounded-[16px] transition-all duration-200 hover:shadow-[0_12px_24px_rgba(15,23,42,0.1)] hover:-translate-y-1 hover:border-slate-300 active:scale-[0.98] active:shadow-sm active:translate-y-0 flex flex-col justify-center text-center py-4 px-2 cursor-pointer">
+            <Link key={item.name} href={item.href} className="group block outline-none">
+              <div className="relative flex h-full min-h-[126px] cursor-pointer flex-col justify-center overflow-hidden rounded-md border border-slate-300 bg-white px-2 py-3 text-center shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-emerald-600 active:bg-slate-100 dark:bg-slate-950">
                 
                 {/* Colored Top Bar */}
-                <div className={`absolute top-0 left-0 w-full h-[4px] ${item.solid} opacity-85`} />
+                <div className={`absolute top-0 left-0 h-[3px] w-full ${item.solid} opacity-85`} />
                 
-                <div className="flex flex-col items-center gap-3">
-                  <div className={`w-[44px] h-[44px] rounded-[14px] flex items-center justify-center ${item.bg} shadow-inner ring-1 ring-inset ring-black/5 transition-transform duration-200 group-hover:scale-110`}>
-                    <item.icon className={`h-[20px] w-[20px] ${item.color}`} strokeWidth={2.5} />
+                <div className="flex flex-col items-center gap-2">
+                  <div className={`flex size-10 items-center justify-center rounded-md ${item.bg} ring-1 ring-inset ring-black/5 transition-transform duration-200 group-hover:scale-105`}>
+                    <item.icon className={`size-[19px] ${item.color}`} strokeWidth={2.5} />
                   </div>
                   <div>
-                    <h3 className="text-[12px] sm:text-[13px] font-bold leading-tight text-slate-800 group-hover:text-primary transition-colors">
+                    <h3 className="text-[12px] font-bold leading-tight text-slate-800 transition-colors group-hover:text-primary sm:text-[13px]">
                       {item.name}
                     </h3>
-                    <p className="text-[10px] font-medium text-slate-500 leading-tight line-clamp-2 mt-1 px-1">
+                    <p className="mt-1 line-clamp-2 px-1 text-[10px] font-medium leading-tight text-slate-500">
                       {item.description}
                     </p>
                   </div>
+                  <span className="flex items-center justify-center gap-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 group-hover:text-emerald-700">
+                    Acessar <ArrowUpRight className="size-3" />
+                  </span>
                 </div>
               </div>
             </Link>

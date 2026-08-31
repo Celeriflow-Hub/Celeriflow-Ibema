@@ -66,59 +66,56 @@ export default function ClientLayout({
   const initials = getInitials(userName);
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-muted/40">
+    <div className="flex min-h-dvh w-full flex-col bg-slate-100">
       <UsageAuditTracker />
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-background/80 backdrop-blur-md px-4 sm:px-6 shadow-sm">
-        {/* Left: CeleriFlow Logo */}
-        <div className="w-1/3 flex justify-start items-center">
-          <Link href="/dashboard" className="flex items-center hover:opacity-80 transition-opacity py-1">
+      <header className="sticky top-0 z-30 flex h-15 shrink-0 items-center gap-3 border-b border-slate-300 bg-white px-3 shadow-sm sm:px-5">
+        <div className="flex min-w-0 flex-1 items-center">
+          <Link href="/dashboard" className="flex items-center rounded-sm py-1 outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-emerald-600">
             <Image 
               src="/favicon.png" 
               alt="CeleriFlow" 
-              width={160} 
+              width={148}
               height={50} 
-              className="object-contain h-10 sm:h-11 w-auto"
+              className="h-9 w-auto object-contain sm:h-10"
               priority
             />
           </Link>
         </div>
 
-        {/* Center: City Hall Logo & Title */}
-        <div className="w-1/3 flex justify-center items-center gap-3">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200 shrink-0 overflow-hidden">
+        <div className="hidden min-w-0 items-center justify-center gap-2.5 md:flex">
+          <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded border border-slate-300 bg-slate-50">
             {institution?.logoUrl ? (
               <Image src={institution.logoUrl} alt="Brasão" width={40} height={40} unoptimized className="w-full h-full object-cover" />
             ) : (
-              <Landmark className="w-4 h-4 sm:w-5 sm:h-5 text-slate-700" />
+              <Landmark className="size-4 text-slate-700" />
             )}
           </div>
-          <div className="hidden md:flex flex-col">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none mb-1">Sistema Integrado</span>
-            <span className="text-sm font-bold text-slate-800 uppercase tracking-tight leading-none">{institution?.name || "Prefeitura Municipal"}</span>
+          <div className="flex min-w-0 flex-col">
+            <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Sistema integrado</span>
+            <span className="truncate text-sm font-bold uppercase leading-tight text-slate-800">{institution?.name || "Prefeitura Municipal"}</span>
           </div>
         </div>
 
-        {/* Right: User Menu */}
-        <div className="w-1/3 flex justify-end items-center gap-2 sm:gap-4">
-          <Link href="/notificacoes" className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-emerald-700" aria-label="Notificações internas">
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 sm:gap-3">
+          <Link href="/notificacoes" className="rounded-md p-2 text-slate-500 outline-none hover:bg-slate-100 hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-600" aria-label="Notificações internas">
             <Bell className="h-5 w-5" />
           </Link>
-          <div className="hidden lg:flex flex-col text-right mr-1">
-            <span className="text-sm font-semibold text-slate-800 leading-tight">{userName}</span>
-            <span className="text-[11px] text-muted-foreground leading-tight">{userRole}</span>
+          <div className="mr-1 hidden min-w-0 flex-col text-right lg:flex">
+            <span className="truncate text-sm font-semibold leading-tight text-slate-800">{userName}</span>
+            <span className="truncate text-[11px] leading-tight text-slate-500">{userRole}</span>
           </div>
           
-          <div className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-tr from-primary to-primary/40 flex items-center justify-center text-white font-bold shadow-sm ring-2 ring-primary/20 text-xs">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-full border-2 border-slate-200 bg-slate-700 text-xs font-bold text-white">
             {initials}
           </div>
 
-          <div className="h-6 w-px bg-border hidden sm:block mx-1"></div>
+          <div className="mx-1 hidden h-6 w-px bg-slate-200 sm:block" />
 
-          <Button onClick={handleLogout} variant="ghost" size="sm" className="hidden sm:flex text-muted-foreground hover:text-destructive">
+          <Button onClick={handleLogout} variant="ghost" size="sm" className="hidden text-slate-600 hover:bg-red-50 hover:text-destructive sm:flex">
             <LogOut className="mr-2 h-4 w-4" />
             Sair
           </Button>
-          <Button onClick={handleLogout} variant="ghost" size="icon" className="sm:hidden text-muted-foreground hover:text-destructive shrink-0">
+          <Button onClick={handleLogout} variant="ghost" size="icon" className="shrink-0 text-slate-600 hover:bg-red-50 hover:text-destructive sm:hidden">
             <LogOut className="h-5 w-5" />
           </Button>
         </div>
@@ -126,13 +123,13 @@ export default function ClientLayout({
       
       <PocHeaderBanner />
       
-      <main className="flex-1 p-4 sm:px-6 sm:py-4 lg:px-8 lg:py-6 flex flex-col">
+      <main className="flex min-h-0 flex-1 flex-col p-2 sm:p-3">
         {children}
       </main>
 
-      <footer className="border-t py-3 text-center text-xs text-muted-foreground bg-background flex flex-col sm:flex-row items-center justify-between px-4 sm:px-6 gap-2">
+      <footer className="flex shrink-0 flex-col items-center justify-between gap-2 border-t border-slate-200 bg-white px-4 py-2 text-center text-[11px] text-slate-500 sm:flex-row sm:px-5">
         <span>&copy; {new Date().getFullYear()} CeleriFlow. Todos os direitos reservados.</span>
-        <span className="font-mono text-[11px] font-medium text-muted-foreground/80 bg-muted/60 px-2 py-0.5 rounded border border-border/50">
+        <span className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[10px] font-medium text-slate-500">
           Versão {APP_VERSION}
         </span>
       </footer>

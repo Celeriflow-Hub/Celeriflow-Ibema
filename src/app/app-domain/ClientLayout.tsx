@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { APP_VERSION } from "@/lib/version";
-import PocHeaderBanner from "@/components/layout/PocHeaderBanner";
 import UsageAuditTracker from "@/components/platform/UsageAuditTracker";
 
 type UserInfo = {
@@ -26,7 +25,6 @@ type UserInfo = {
 function getRoleLabel(role: string) {
   return role;
 }
-
 
 function getInitials(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -120,8 +118,6 @@ export default function ClientLayout({
           </Button>
         </div>
       </header>
-      
-      <PocHeaderBanner />
       
       <main className="flex min-h-0 flex-1 flex-col p-2 sm:p-3">
         {children}

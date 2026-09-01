@@ -23,7 +23,7 @@ import {
   Lock,
   ArrowUpRight
 } from "lucide-react";
-import { canShowDashboardCard, canUseInactiveModule, canViewModule, getOptionalTenantContext, isModuleBlockedForUser, isPocEvaluator } from "@/lib/platform/tenant-context";
+import { canShowDashboardCard, canUseInactiveModule, canViewModule, getOptionalTenantContext, isModuleBlockedForUser } from "@/lib/platform/tenant-context";
 
 export const dynamic = "force-dynamic";
 
@@ -76,24 +76,9 @@ export default async function PainelPage() {
   }
 
   const visibleMenuItems = menuItems.filter((item) => context && canShowDashboardCard(context.user, item.code));
-  const hasFinancialAccess = context ? canViewModule(context.user, "FINANCEIRO") : false;
-  const pocEvaluator = context ? isPocEvaluator(context.user) : false;
 
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col px-1 py-1 md:px-2">
-      <header className="mb-3 flex flex-col gap-3 border-b border-slate-300 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700">{pocEvaluator ? "POC São João do Ivaí" : "Sistema integrado municipal"}</p>
-          <h1 className="mt-1 text-lg font-bold text-slate-900">Painel de módulos</h1>
-          <p className="mt-0.5 text-sm text-slate-600">Selecione uma área de trabalho para continuar.</p>
-        </div>
-        {hasFinancialAccess && (
-          <nav className="flex items-center gap-2" aria-label="Navegação principal da POC">
-            <Link href="/dashboard" className="rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Início</Link>
-            <Link href="/financeiro/automacoes" className="rounded bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800">Automações</Link>
-          </nav>
-        )}
-      </header>
       <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7">
         {visibleMenuItems.map((item) => {
           const isConfig = item.code === "CONFIGURACOES";
@@ -163,4 +148,3 @@ export default async function PainelPage() {
     </div>
   );
 }
-

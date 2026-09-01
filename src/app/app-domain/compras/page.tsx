@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { buttonVariants } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { 
+import {
   ShoppingCart, 
   FileText, 
   ClipboardList, 
@@ -10,6 +10,8 @@ import {
   Clock
 } from "lucide-react"
 import Link from "next/link"
+import { PageFrame } from "@/components/app-ui/PageFrame"
+import { PageHeader } from "@/components/app-ui/PageHeader"
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 
 export default async function ComprasDashboard() {
@@ -20,24 +22,27 @@ export default async function ComprasDashboard() {
   const totalContracts = await prisma.contract.count().catch(() => 0)
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Compras e Contratos</h2>
-        <div className="flex items-center space-x-2">
-          <Link href="/compras/solicitacoes/novo" className={buttonVariants({ variant: "outline" })}>
-            <ShoppingCart className="mr-2 h-4 w-4" />
-            Nova Solicitação
-          </Link>
-          <Link href="/compras/processos/novo" className={buttonVariants()}>
-            <FileText className="mr-2 h-4 w-4" />
-            Novo Processo
-          </Link>
-        </div>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title="Compras e Contratos"
+        icon={<ShoppingCart className="size-4 shrink-0 text-emerald-600" />}
+        action={(
+          <>
+            <Link href="/compras/solicitacoes/novo" aria-label="Nova Solicitação" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              <ShoppingCart className="size-3.5" />
+              <span className="hidden sm:inline">Nova Solicitação</span>
+            </Link>
+            <Link href="/compras/processos/novo" aria-label="Novo Processo" className={buttonVariants({ size: "sm" })}>
+              <FileText className="size-3.5" />
+              <span className="hidden sm:inline">Novo Processo</span>
+            </Link>
+          </>
+        )}
+      />
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4">
+        <Card size="sm" className="rounded-md">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
             <CardTitle className="text-sm font-medium">Solicitações Abertas</CardTitle>
             <ShoppingCart className="h-4 w-4 text-emerald-500" />
           </CardHeader>
@@ -49,8 +54,8 @@ export default async function ComprasDashboard() {
           </CardContent>
         </Card>
         
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <Card size="sm" className="rounded-md">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
             <CardTitle className="text-sm font-medium">Processos em Andamento</CardTitle>
             <ClipboardList className="h-4 w-4 text-blue-500" />
           </CardHeader>
@@ -62,8 +67,8 @@ export default async function ComprasDashboard() {
           </CardContent>
         </Card>
         
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <Card size="sm" className="rounded-md">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
             <CardTitle className="text-sm font-medium">Licitações</CardTitle>
             <Gavel className="h-4 w-4 text-amber-500" />
           </CardHeader>
@@ -75,8 +80,8 @@ export default async function ComprasDashboard() {
           </CardContent>
         </Card>
         
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <Card size="sm" className="rounded-md">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
             <CardTitle className="text-sm font-medium">Contratos Vigentes</CardTitle>
             <Scale className="h-4 w-4 text-indigo-500" />
           </CardHeader>
@@ -89,73 +94,73 @@ export default async function ComprasDashboard() {
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
-          <CardHeader>
-            <CardTitle>Visão Geral</CardTitle>
-            <CardDescription>
+      <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-7">
+        <Card size="sm" className="rounded-md md:col-span-2 lg:col-span-4">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Visão Geral</CardTitle>
+            <CardDescription className="text-xs">
               Acesso rápido às rotinas do módulo de Compras e Contratos.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <Link href="/compras/solicitacoes" className="flex items-center p-4 border rounded-lg hover:bg-muted transition-colors">
-                <ShoppingCart className="h-6 w-6 mr-4 text-emerald-500" />
+            <div className="grid grid-cols-2 gap-2">
+              <Link href="/compras/solicitacoes" className="flex items-center rounded-md border p-3 hover:bg-muted transition-colors">
+                <ShoppingCart className="mr-3 size-5 text-emerald-500" />
                 <div>
                   <div className="font-semibold">Solicitações de Compra</div>
-                  <div className="text-sm text-muted-foreground">Pedidos das secretarias</div>
+                  <div className="text-xs text-muted-foreground">Pedidos das secretarias</div>
                 </div>
               </Link>
-              <Link href="/compras/processos" className="flex items-center p-4 border rounded-lg hover:bg-muted transition-colors">
-                <ClipboardList className="h-6 w-6 mr-4 text-blue-500" />
+              <Link href="/compras/processos" className="flex items-center rounded-md border p-3 hover:bg-muted transition-colors">
+                <ClipboardList className="mr-3 size-5 text-blue-500" />
                 <div>
                   <div className="font-semibold">Processos de Compra</div>
-                  <div className="text-sm text-muted-foreground">Gestão de ETP, TR e orçamentos</div>
+                  <div className="text-xs text-muted-foreground">Gestão de ETP, TR e orçamentos</div>
                 </div>
               </Link>
-              <Link href="/compras/licitacoes" className="flex items-center p-4 border rounded-lg hover:bg-muted transition-colors">
-                <Gavel className="h-6 w-6 mr-4 text-amber-500" />
+              <Link href="/compras/licitacoes" className="flex items-center rounded-md border p-3 hover:bg-muted transition-colors">
+                <Gavel className="mr-3 size-5 text-amber-500" />
                 <div>
                   <div className="font-semibold">Licitações e Dispensas</div>
-                  <div className="text-sm text-muted-foreground">Pregão, Concorrência, Dispensa</div>
+                  <div className="text-xs text-muted-foreground">Pregão, Concorrência, Dispensa</div>
                 </div>
               </Link>
-              <Link href="/compras/contratos" className="flex items-center p-4 border rounded-lg hover:bg-muted transition-colors">
-                <Scale className="h-6 w-6 mr-4 text-indigo-500" />
+              <Link href="/compras/contratos" className="flex items-center rounded-md border p-3 hover:bg-muted transition-colors">
+                <Scale className="mr-3 size-5 text-indigo-500" />
                 <div>
                   <div className="font-semibold">Gestão de Contratos</div>
-                  <div className="text-sm text-muted-foreground">Contratos, Aditivos, Vigência</div>
+                  <div className="text-xs text-muted-foreground">Contratos, Aditivos, Vigência</div>
                 </div>
               </Link>
-              <Link href="/compras/catalogo" className="flex items-center p-4 border rounded-lg hover:bg-muted transition-colors">
-                <FileText className="h-6 w-6 mr-4 text-slate-500" />
+              <Link href="/compras/catalogo" className="flex items-center rounded-md border p-3 hover:bg-muted transition-colors">
+                <FileText className="mr-3 size-5 text-slate-500" />
                 <div>
                   <div className="font-semibold">Catálogo de Itens</div>
-                  <div className="text-sm text-muted-foreground">Cadastro de materiais e serviços</div>
+                  <div className="text-xs text-muted-foreground">Cadastro de materiais e serviços</div>
                 </div>
               </Link>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="col-span-3">
-          <CardHeader>
-            <CardTitle>Últimas Movimentações</CardTitle>
-            <CardDescription>
+        <Card size="sm" className="rounded-md md:col-span-2 lg:col-span-3">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Últimas Movimentações</CardTitle>
+            <CardDescription className="text-xs">
               Acompanhamento do ciclo de compras.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-[300px]">
-              <div className="flex flex-col items-center justify-center h-full text-center p-4 text-muted-foreground">
-                <Clock className="h-8 w-8 mb-4 opacity-20" />
+            <ScrollArea className="h-[240px]">
+              <div className="flex h-full flex-col items-center justify-center p-3 text-center text-muted-foreground">
+                <Clock className="mb-2 size-7 opacity-20" />
                 <p>Nenhum histórico recente encontrado.</p>
-                <p className="text-sm">As movimentações de processos e contratos aparecerão aqui automaticamente.</p>
+                <p className="text-xs">As movimentações de processos e contratos aparecerão aqui automaticamente.</p>
               </div>
             </ScrollArea>
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageFrame>
   )
 }

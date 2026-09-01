@@ -1,19 +1,20 @@
 import { Users, Building2, FileText, Gift } from "lucide-react";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default function SocialDashboardPage() {
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Painel da Assistência Social</h1>
-        <p className="text-slate-500">Visão geral dos atendimentos, famílias cadastradas e unidades SUAS.</p>
-      </div>
+    <PageFrame className="space-y-2 px-1 py-1 md:px-2">
+      <PageHeader
+        title="Painel da Assistência Social"
+        icon={<Users className="size-4 shrink-0 text-blue-600" />}
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1 */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-blue-100 text-blue-600 rounded-lg">
-              <Users className="w-6 h-6" />
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-blue-100 p-2.5 text-blue-600">
+              <Users className="h-5 w-5" />
             </div>
             <div>
               <p className="text-sm font-medium text-slate-500">Famílias Cadastradas</p>
@@ -22,11 +23,10 @@ export default function SocialDashboardPage() {
           </div>
         </div>
 
-        {/* Card 2 */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-emerald-100 text-emerald-600 rounded-lg">
-              <Building2 className="w-6 h-6" />
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-emerald-100 p-2.5 text-emerald-600">
+              <Building2 className="h-5 w-5" />
             </div>
             <div>
               <p className="text-sm font-medium text-slate-500">Unidades CRAS/CREAS</p>
@@ -35,11 +35,10 @@ export default function SocialDashboardPage() {
           </div>
         </div>
 
-        {/* Card 3 */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-purple-100 text-purple-600 rounded-lg">
-              <FileText className="w-6 h-6" />
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-purple-100 p-2.5 text-purple-600">
+              <FileText className="h-5 w-5" />
             </div>
             <div>
               <p className="text-sm font-medium text-slate-500">Atendimentos no Mês</p>
@@ -48,11 +47,10 @@ export default function SocialDashboardPage() {
           </div>
         </div>
 
-        {/* Card 4 */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-amber-100 text-amber-600 rounded-lg">
-              <Gift className="w-6 h-6" />
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-amber-100 p-2.5 text-amber-600">
+              <Gift className="h-5 w-5" />
             </div>
             <div>
               <p className="text-sm font-medium text-slate-500">Benefícios Concedidos</p>
@@ -62,12 +60,12 @@ export default function SocialDashboardPage() {
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 mt-8">
-        <h2 className="text-lg font-bold text-slate-800 mb-4">Avisos e Ações Rápidas</h2>
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="mb-2 text-sm font-semibold text-slate-800">Avisos e Ações Rápidas</h2>
         <p className="text-slate-600">
           Bem-vindo ao módulo de Gestão SUAS. Utilize o menu lateral para navegar entre Famílias, Unidades, Prontuário Eletrônico e Concessão de Benefícios.
         </p>
       </div>
-    </div>
+    </PageFrame>
   );
 }

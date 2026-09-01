@@ -32,7 +32,7 @@ export default function ComprasLayout({ children }: { children: React.ReactNode 
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen w-full max-w-[1600px] mx-auto bg-slate-50/30 relative">
+    <div className="relative -my-2 mx-auto flex min-h-0 w-[calc(100%+1rem)] max-w-[calc(1600px+1rem)] flex-1 flex-col bg-slate-50/30 sm:-my-3 sm:w-[calc(100%+1.5rem)] sm:max-w-[calc(1600px+1.5rem)] md:flex-row">
       
       {/* Mobile Header with Hamburger */}
       <div className="md:hidden flex items-center justify-between bg-white border-b border-slate-200 p-4">
@@ -112,8 +112,8 @@ export default function ComprasLayout({ children }: { children: React.ReactNode 
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-h-0 bg-slate-50/50">
-        <div className="flex-1 overflow-y-auto">
+      <main className="flex min-w-0 flex-1 flex-col bg-slate-50/50">
+        <div className="flex-1 p-2 md:p-3">
           {children}
         </div>
       </main>

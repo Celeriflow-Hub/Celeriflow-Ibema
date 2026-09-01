@@ -2,6 +2,8 @@ import React from "react";
 import { Landmark, Users, Calendar, FileText, ArrowRight, Scale, Mic, Globe } from "lucide-react";
 import Link from "next/link";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function CamaraDashboard() {
   const { prisma } = await getTenantContextForModule("CAMARA");
@@ -22,20 +24,18 @@ export default async function CamaraDashboard() {
   ]);
 
   return (
-    <div className="flex-1 p-6 md:p-8">
-      <div className="flex items-center gap-3 mb-8">
-        <Landmark className="h-8 w-8 text-[#9333EA]" />
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Câmara Municipal</h1>
-          <p className="text-gray-500 dark:text-gray-400">Visão Geral da Gestão Legislativa</p>
-        </div>
-      </div>
+    <PageFrame className="space-y-2 px-1 py-1 md:px-2">
+      <PageHeader
+        title="Câmara Municipal"
+        icon={<Landmark className="size-4 shrink-0 text-[#9333EA]" />}
+        className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white"
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-[#9333EA]">
-              <Users className="h-6 w-6" />
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-purple-100 p-2.5 text-[#9333EA] dark:bg-purple-900/30">
+              <Users className="h-5 w-5" />
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Vereadores Ativos</p>
@@ -44,10 +44,10 @@ export default async function CamaraDashboard() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg text-indigo-600">
-              <Calendar className="h-6 w-6" />
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-indigo-100 p-2.5 text-indigo-600 dark:bg-indigo-900/30">
+              <Calendar className="h-5 w-5" />
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Sessões Realizadas</p>
@@ -56,10 +56,10 @@ export default async function CamaraDashboard() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-fuchsia-100 dark:bg-fuchsia-900/30 rounded-lg text-fuchsia-600">
-              <FileText className="h-6 w-6" />
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-fuchsia-100 p-2.5 text-fuchsia-600 dark:bg-fuchsia-900/30">
+              <FileText className="h-5 w-5" />
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Proposições Registradas</p>
@@ -68,10 +68,10 @@ export default async function CamaraDashboard() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg text-emerald-600">
-              <Scale className="h-6 w-6" />
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-emerald-100 p-2.5 text-emerald-600 dark:bg-emerald-900/30">
+              <Scale className="h-5 w-5" />
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Leis Promulgadas</p>
@@ -81,10 +81,10 @@ export default async function CamaraDashboard() {
         </div>
       </div>
 
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Módulos do Sistema Legislativo</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <h3 className="pt-1 text-sm font-semibold text-gray-900 dark:text-white">Módulos do Sistema Legislativo</h3>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         
-        <Link href="/camara/legislaturas" className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow group flex flex-col justify-between h-32">
+        <Link href="/camara/legislaturas" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
           <Landmark className="h-6 w-6 text-[#9333EA] mb-2" />
           <div>
             <h4 className="font-medium text-gray-900 dark:text-white group-hover:text-[#9333EA] transition-colors flex items-center justify-between">
@@ -95,7 +95,7 @@ export default async function CamaraDashboard() {
           </div>
         </Link>
 
-        <Link href="/camara/vereadores" className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow group flex flex-col justify-between h-32">
+        <Link href="/camara/vereadores" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
           <Users className="h-6 w-6 text-[#9333EA] mb-2" />
           <div>
             <h4 className="font-medium text-gray-900 dark:text-white group-hover:text-[#9333EA] transition-colors flex items-center justify-between">
@@ -106,7 +106,7 @@ export default async function CamaraDashboard() {
           </div>
         </Link>
 
-        <Link href="/camara/comissoes" className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow group flex flex-col justify-between h-32">
+        <Link href="/camara/comissoes" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
           <Users className="h-6 w-6 text-[#9333EA] mb-2" />
           <div>
             <h4 className="font-medium text-gray-900 dark:text-white group-hover:text-[#9333EA] transition-colors flex items-center justify-between">
@@ -117,7 +117,7 @@ export default async function CamaraDashboard() {
           </div>
         </Link>
 
-        <Link href="/camara/sessoes" className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow group flex flex-col justify-between h-32">
+        <Link href="/camara/sessoes" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
           <Calendar className="h-6 w-6 text-[#9333EA] mb-2" />
           <div>
             <h4 className="font-medium text-gray-900 dark:text-white group-hover:text-[#9333EA] transition-colors flex items-center justify-between">
@@ -128,7 +128,7 @@ export default async function CamaraDashboard() {
           </div>
         </Link>
 
-        <Link href="/camara/proposicoes" className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow group flex flex-col justify-between h-32">
+        <Link href="/camara/proposicoes" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
           <FileText className="h-6 w-6 text-[#9333EA] mb-2" />
           <div>
             <h4 className="font-medium text-gray-900 dark:text-white group-hover:text-[#9333EA] transition-colors flex items-center justify-between">
@@ -139,7 +139,7 @@ export default async function CamaraDashboard() {
           </div>
         </Link>
 
-        <Link href="/camara/leis" className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow group flex flex-col justify-between h-32">
+        <Link href="/camara/leis" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
           <Scale className="h-6 w-6 text-[#9333EA] mb-2" />
           <div>
             <h4 className="font-medium text-gray-900 dark:text-white group-hover:text-[#9333EA] transition-colors flex items-center justify-between">
@@ -150,7 +150,7 @@ export default async function CamaraDashboard() {
           </div>
         </Link>
 
-        <Link href="/camara/audiencias" className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow group flex flex-col justify-between h-32">
+        <Link href="/camara/audiencias" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
           <Mic className="h-6 w-6 text-[#9333EA] mb-2" />
           <div>
             <h4 className="font-medium text-gray-900 dark:text-white group-hover:text-[#9333EA] transition-colors flex items-center justify-between">
@@ -161,7 +161,7 @@ export default async function CamaraDashboard() {
           </div>
         </Link>
 
-        <Link href="/camara/portal" className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow group flex flex-col justify-between h-32">
+        <Link href="/camara/portal" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
           <Globe className="h-6 w-6 text-[#9333EA] mb-2" />
           <div>
             <h4 className="font-medium text-gray-900 dark:text-white group-hover:text-[#9333EA] transition-colors flex items-center justify-between">
@@ -173,6 +173,6 @@ export default async function CamaraDashboard() {
         </Link>
 
       </div>
-    </div>
+    </PageFrame>
   );
 }

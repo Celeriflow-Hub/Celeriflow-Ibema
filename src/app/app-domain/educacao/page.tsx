@@ -2,6 +2,8 @@ import React from "react";
 import { GraduationCap, School, Users, BookOpen, ClipboardCheck, Bus, Utensils, Calendar } from "lucide-react";
 import Link from "next/link";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function EducacaoDashboardPage() {
   const { prisma } = await getTenantContextForModule("EDUCACAO");
@@ -18,22 +20,17 @@ export default async function EducacaoDashboardPage() {
   ]);
 
   return (
-    <div className="flex-1 p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-          <GraduationCap className="h-8 w-8 text-blue-600" />
-          Educação
-        </h1>
-        <p className="text-gray-500 mt-2">
-          Gestão Escolar integrada à rede municipal de ensino.
-        </p>
-      </div>
+    <PageFrame className="space-y-2 px-1 py-1 md:px-2">
+      <PageHeader
+        title="Educação"
+        icon={<GraduationCap className="size-4 shrink-0 text-blue-600" />}
+        className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white"
+      />
 
-      {/* Cards de Resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg">
-            <School className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="rounded-md bg-indigo-100 p-2.5 dark:bg-indigo-900/50">
+            <School className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
           </div>
           <div>
             <p className="text-sm text-gray-500 dark:text-gray-400">Escolas</p>
@@ -41,9 +38,9 @@ export default async function EducacaoDashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
-            <Users className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+        <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="rounded-md bg-blue-100 p-2.5 dark:bg-blue-900/50">
+            <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
           </div>
           <div>
             <p className="text-sm text-gray-500 dark:text-gray-400">Alunos Ativos</p>
@@ -51,9 +48,9 @@ export default async function EducacaoDashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-emerald-100 dark:bg-emerald-900/50 rounded-lg">
-            <BookOpen className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+        <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="rounded-md bg-emerald-100 p-2.5 dark:bg-emerald-900/50">
+            <BookOpen className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div>
             <p className="text-sm text-gray-500 dark:text-gray-400">Turmas Abertas</p>
@@ -61,9 +58,9 @@ export default async function EducacaoDashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-amber-100 dark:bg-amber-900/50 rounded-lg">
-            <ClipboardCheck className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+        <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="rounded-md bg-amber-100 p-2.5 dark:bg-amber-900/50">
+            <ClipboardCheck className="h-5 w-5 text-amber-600 dark:text-amber-400" />
           </div>
           <div>
             <p className="text-sm text-gray-500 dark:text-gray-400">Diários Pendentes</p>
@@ -72,57 +69,56 @@ export default async function EducacaoDashboardPage() {
         </div>
       </div>
 
-      {/* Acessos Rápidos */}
-      <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Acesso Rápido</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <h2 className="pt-1 text-sm font-semibold text-gray-900 dark:text-white">Acesso Rápido</h2>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
         <Link href="/educacao/escolas" className="group">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition-all">
-            <School className="h-8 w-8 text-indigo-500 mb-4 group-hover:scale-110 transition-transform" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Gestão de Escolas</h3>
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
+            <School className="mb-3 h-6 w-6 text-indigo-500 transition-transform group-hover:scale-110" />
+            <h3 className="mb-1 text-base font-medium text-gray-900 dark:text-white">Gestão de Escolas</h3>
             <p className="text-sm text-gray-500">Unidades de ensino, infraestrutura e capacidade.</p>
           </div>
         </Link>
 
         <Link href="/educacao/matriculas" className="group">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition-all">
-            <Users className="h-8 w-8 text-blue-500 mb-4 group-hover:scale-110 transition-transform" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Matrículas e Turmas</h3>
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
+            <Users className="mb-3 h-6 w-6 text-blue-500 transition-transform group-hover:scale-110" />
+            <h3 className="mb-1 text-base font-medium text-gray-900 dark:text-white">Matrículas e Turmas</h3>
             <p className="text-sm text-gray-500">Gestão de turmas, vagas e alunos matriculados.</p>
           </div>
         </Link>
 
         <Link href="/educacao/professores" className="group">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition-all">
-            <BookOpen className="h-8 w-8 text-emerald-500 mb-4 group-hover:scale-110 transition-transform" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Professores</h3>
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
+            <BookOpen className="mb-3 h-6 w-6 text-emerald-500 transition-transform group-hover:scale-110" />
+            <h3 className="mb-1 text-base font-medium text-gray-900 dark:text-white">Professores</h3>
             <p className="text-sm text-gray-500">Corpo docente e alocação por turmas e escolas.</p>
           </div>
         </Link>
 
         <Link href="/educacao/calendario" className="group">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition-all">
-            <Calendar className="h-8 w-8 text-purple-500 mb-4 group-hover:scale-110 transition-transform" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Calendário Escolar</h3>
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
+            <Calendar className="mb-3 h-6 w-6 text-purple-500 transition-transform group-hover:scale-110" />
+            <h3 className="mb-1 text-base font-medium text-gray-900 dark:text-white">Calendário Escolar</h3>
             <p className="text-sm text-gray-500">Dias letivos, feriados, recessos e eventos.</p>
           </div>
         </Link>
 
         <Link href="/educacao/merenda" className="group">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition-all">
-            <Utensils className="h-8 w-8 text-orange-500 mb-4 group-hover:scale-110 transition-transform" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Merenda Escolar</h3>
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
+            <Utensils className="mb-3 h-6 w-6 text-orange-500 transition-transform group-hover:scale-110" />
+            <h3 className="mb-1 text-base font-medium text-gray-900 dark:text-white">Merenda Escolar</h3>
             <p className="text-sm text-gray-500">Controle de alimentação escolar e cardápios.</p>
           </div>
         </Link>
 
         <Link href="/educacao/transporte" className="group">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition-all">
-            <Bus className="h-8 w-8 text-amber-500 mb-4 group-hover:scale-110 transition-transform" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Transporte Escolar</h3>
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
+            <Bus className="mb-3 h-6 w-6 text-amber-500 transition-transform group-hover:scale-110" />
+            <h3 className="mb-1 text-base font-medium text-gray-900 dark:text-white">Transporte Escolar</h3>
             <p className="text-sm text-gray-500">Rotas e veículos para transporte de alunos.</p>
           </div>
         </Link>
       </div>
-    </div>
+    </PageFrame>
   );
 }

@@ -2,6 +2,8 @@ import React from "react";
 import { Droplets, FileText, Wrench, Receipt, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function SaneamentoDashboard() {
   const { prisma } = await getTenantContextForModule("SANEAMENTO");
@@ -12,20 +14,18 @@ export default async function SaneamentoDashboard() {
   ]);
 
   return (
-    <div className="flex-1 p-8">
-      <div className="flex items-center gap-3 mb-8">
-        <Droplets className="h-8 w-8 text-[#0284C7]" />
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Água e Saneamento</h1>
-          <p className="text-gray-500 dark:text-gray-400">Gestão de serviços de abastecimento de água e esgoto</p>
-        </div>
-      </div>
+    <PageFrame className="space-y-2 px-1 py-1 md:px-2">
+      <PageHeader
+        title="Água e Saneamento"
+        icon={<Droplets className="size-4 shrink-0 text-[#0284C7]" />}
+        className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white"
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-[#E0F2FE] dark:bg-[#0284C7]/20 rounded-lg text-[#0284C7]">
-              <Droplets className="h-6 w-6" />
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-[#E0F2FE] p-2.5 text-[#0284C7] dark:bg-[#0284C7]/20">
+              <Droplets className="h-5 w-5" />
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Unidades Consumidoras</p>
@@ -34,10 +34,10 @@ export default async function SaneamentoDashboard() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg text-emerald-600">
-              <FileText className="h-6 w-6" />
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-emerald-100 p-2.5 text-emerald-600 dark:bg-emerald-900/30">
+              <FileText className="h-5 w-5" />
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Leituras Registradas</p>
@@ -46,10 +46,10 @@ export default async function SaneamentoDashboard() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-lg text-amber-600">
-              <Wrench className="h-6 w-6" />
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-amber-100 p-2.5 text-amber-600 dark:bg-amber-900/30">
+              <Wrench className="h-5 w-5" />
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Ordens de Serviço (Total)</p>
@@ -59,9 +59,9 @@ export default async function SaneamentoDashboard() {
         </div>
       </div>
 
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Acesso Rápido</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Link href="/saneamento/unidades" className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow group flex flex-col justify-between h-32">
+      <h3 className="pt-1 text-sm font-semibold text-gray-900 dark:text-white">Acesso Rápido</h3>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <Link href="/saneamento/unidades" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
           <Droplets className="h-6 w-6 text-[#0284C7] mb-2" />
           <div>
             <h4 className="font-medium text-gray-900 dark:text-white group-hover:text-[#0284C7] transition-colors flex items-center justify-between">
@@ -72,7 +72,7 @@ export default async function SaneamentoDashboard() {
           </div>
         </Link>
 
-        <Link href="/saneamento/leituras" className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow group flex flex-col justify-between h-32">
+        <Link href="/saneamento/leituras" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
           <FileText className="h-6 w-6 text-[#0284C7] mb-2" />
           <div>
             <h4 className="font-medium text-gray-900 dark:text-white group-hover:text-[#0284C7] transition-colors flex items-center justify-between">
@@ -83,7 +83,7 @@ export default async function SaneamentoDashboard() {
           </div>
         </Link>
 
-        <Link href="/saneamento/faturas" className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow group flex flex-col justify-between h-32">
+        <Link href="/saneamento/faturas" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
           <Receipt className="h-6 w-6 text-[#0284C7] mb-2" />
           <div>
             <h4 className="font-medium text-gray-900 dark:text-white group-hover:text-[#0284C7] transition-colors flex items-center justify-between">
@@ -94,7 +94,7 @@ export default async function SaneamentoDashboard() {
           </div>
         </Link>
 
-        <Link href="/saneamento/servicos" className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow group flex flex-col justify-between h-32">
+        <Link href="/saneamento/servicos" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
           <Wrench className="h-6 w-6 text-[#0284C7] mb-2" />
           <div>
             <h4 className="font-medium text-gray-900 dark:text-white group-hover:text-[#0284C7] transition-colors flex items-center justify-between">
@@ -105,6 +105,6 @@ export default async function SaneamentoDashboard() {
           </div>
         </Link>
       </div>
-    </div>
+    </PageFrame>
   );
 }

@@ -38,7 +38,7 @@ export default function MeioAmbienteLayout({ children }: { children: React.React
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
 
   return (
-    <div className="flex flex-col md:flex-row h-[calc(100vh-56px)] w-full mx-auto bg-slate-50/30 relative">
+    <div className="relative -my-2 mx-auto flex min-h-0 w-[calc(100%+1rem)] max-w-[calc(1600px+1rem)] flex-1 flex-col bg-slate-50/30 sm:-my-3 sm:w-[calc(100%+1.5rem)] sm:max-w-[calc(1600px+1.5rem)] md:flex-row">
       
       {/* Mobile Header with Hamburger */}
       <div className="md:hidden flex items-center justify-between bg-white border-b border-slate-200 p-4 shrink-0">
@@ -56,7 +56,7 @@ export default function MeioAmbienteLayout({ children }: { children: React.React
       {/* Sidebar */}
       <aside className={`
         ${isDesktopCollapsed ? 'md:w-[80px]' : 'md:w-[260px]'} 
-        w-full md:shrink-0 md:border-r border-slate-200 bg-white py-6 px-4 shadow-[2px_0_8px_rgba(0,0,0,0.02)] z-10 relative flex flex-col transition-all duration-300 h-full
+        w-full md:shrink-0 md:border-r border-slate-200 bg-white py-6 px-4 shadow-[2px_0_8px_rgba(0,0,0,0.02)] z-10 relative flex flex-col transition-all duration-300
         ${isSidebarOpen ? 'block' : 'hidden md:flex'}
       `}>
         <div className="absolute top-4 right-[-14px] hidden md:flex items-center justify-center">
@@ -80,7 +80,7 @@ export default function MeioAmbienteLayout({ children }: { children: React.React
           )}
         </div>
         
-        <nav className="flex flex-col gap-1 flex-1 overflow-y-auto pr-2 pb-2">
+        <nav className="flex flex-col gap-1 flex-1 pr-2 pb-2">
           {sidebarNavItems.map((item) => {
             const isActive = item.href === "/meio-ambiente" 
               ? pathname === "/meio-ambiente" 
@@ -118,8 +118,8 @@ export default function MeioAmbienteLayout({ children }: { children: React.React
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-h-0 bg-slate-50/50 h-full">
-        <div className="flex-1 overflow-y-auto">
+      <main className="flex min-w-0 flex-1 flex-col bg-slate-50/50">
+        <div className="flex-1 p-2 md:p-3">
           {children}
         </div>
       </main>

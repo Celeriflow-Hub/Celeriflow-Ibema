@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function ObrasDashboard() {
   const { prisma } = await getTenantContextForModule("OBRAS");
@@ -23,20 +25,18 @@ export default async function ObrasDashboard() {
   ]);
 
   return (
-    <div className="flex-1 p-4 md:p-8">
-      <div className="flex items-center gap-3 mb-8">
-        <HardHat className="h-8 w-8 text-amber-600" />
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Obras e Serviços</h1>
-          <p className="text-slate-500 dark:text-slate-400">Gestão de infraestrutura, serviços urbanos e manutenção da cidade</p>
-        </div>
-      </div>
+    <PageFrame className="space-y-2 px-1 py-1 md:px-2">
+      <PageHeader
+        title="Obras e Serviços"
+        icon={<HardHat className="size-4 shrink-0 text-amber-600" />}
+        className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white"
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-xl text-amber-600">
-              <Building2 className="h-6 w-6" />
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-amber-100 p-2.5 text-amber-600 dark:bg-amber-900/30">
+              <Building2 className="h-5 w-5" />
             </div>
             <div>
               <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Obras em Andamento</p>
@@ -45,10 +45,10 @@ export default async function ObrasDashboard() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl text-blue-600">
-              <Ruler className="h-6 w-6" />
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-blue-100 p-2.5 text-blue-600 dark:bg-blue-900/30">
+              <Ruler className="h-5 w-5" />
             </div>
             <div>
               <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Medições Registradas</p>
@@ -57,10 +57,10 @@ export default async function ObrasDashboard() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl text-emerald-600">
-              <Pickaxe className="h-6 w-6" />
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-emerald-100 p-2.5 text-emerald-600 dark:bg-emerald-900/30">
+              <Pickaxe className="h-5 w-5" />
             </div>
             <div>
               <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Serviços Abertos</p>
@@ -70,9 +70,9 @@ export default async function ObrasDashboard() {
         </div>
       </div>
 
-      <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Acesso Rápido</h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Link href="/obras/obras-projetos" className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-amber-200 transition-all group flex flex-col justify-between h-36 relative overflow-hidden">
+      <h3 className="pt-1 text-sm font-semibold text-slate-900 dark:text-white">Acesso Rápido</h3>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Link href="/obras/obras-projetos" className="group relative flex h-32 flex-col justify-between overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-amber-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-800">
           <div className="absolute top-0 right-0 w-24 h-24 bg-amber-50 dark:bg-amber-900/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
           <Building2 className="h-7 w-7 text-amber-600 mb-3 relative z-10" />
           <div className="relative z-10">
@@ -84,7 +84,7 @@ export default async function ObrasDashboard() {
           </div>
         </Link>
 
-        <Link href="/obras/fiscalizacao-medicoes" className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-blue-200 transition-all group flex flex-col justify-between h-36 relative overflow-hidden">
+        <Link href="/obras/fiscalizacao-medicoes" className="group relative flex h-32 flex-col justify-between overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-blue-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-800">
           <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 dark:bg-blue-900/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
           <Ruler className="h-7 w-7 text-blue-600 mb-3 relative z-10" />
           <div className="relative z-10">
@@ -96,7 +96,7 @@ export default async function ObrasDashboard() {
           </div>
         </Link>
 
-        <Link href="/obras/servicos-urbanos" className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-emerald-200 transition-all group flex flex-col justify-between h-36 relative overflow-hidden">
+        <Link href="/obras/servicos-urbanos" className="group relative flex h-32 flex-col justify-between overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-emerald-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-800">
           <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 dark:bg-emerald-900/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
           <Pickaxe className="h-7 w-7 text-emerald-600 mb-3 relative z-10" />
           <div className="relative z-10">
@@ -108,7 +108,7 @@ export default async function ObrasDashboard() {
           </div>
         </Link>
 
-        <Link href="/obras/iluminacao-energia" className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-yellow-200 transition-all group flex flex-col justify-between h-36 relative overflow-hidden">
+        <Link href="/obras/iluminacao-energia" className="group relative flex h-32 flex-col justify-between overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-yellow-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-800">
           <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-50 dark:bg-yellow-900/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
           <Lightbulb className="h-7 w-7 text-yellow-500 mb-3 relative z-10" />
           <div className="relative z-10">
@@ -120,7 +120,7 @@ export default async function ObrasDashboard() {
           </div>
         </Link>
         
-        <Link href="/obras/ordens-servico" className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-indigo-200 transition-all group flex flex-col justify-between h-36 relative overflow-hidden">
+        <Link href="/obras/ordens-servico" className="group relative flex h-32 flex-col justify-between overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-indigo-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-800">
           <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50 dark:bg-indigo-900/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
           <ClipboardCheck className="h-7 w-7 text-indigo-600 mb-3 relative z-10" />
           <div className="relative z-10">
@@ -132,7 +132,7 @@ export default async function ObrasDashboard() {
           </div>
         </Link>
         
-        <Link href="/obras/maquinas-equipes" className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-orange-200 transition-all group flex flex-col justify-between h-36 relative overflow-hidden">
+        <Link href="/obras/maquinas-equipes" className="group relative flex h-32 flex-col justify-between overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-orange-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-800">
           <div className="absolute top-0 right-0 w-24 h-24 bg-orange-50 dark:bg-orange-900/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
           <Tractor className="h-7 w-7 text-orange-600 mb-3 relative z-10" />
           <div className="relative z-10">
@@ -144,7 +144,7 @@ export default async function ObrasDashboard() {
           </div>
         </Link>
         
-        <Link href="/obras/documentos" className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-slate-200 transition-all group flex flex-col justify-between h-36 relative overflow-hidden">
+        <Link href="/obras/documentos" className="group relative flex h-32 flex-col justify-between overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-slate-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-800">
           <div className="absolute top-0 right-0 w-24 h-24 bg-slate-50 dark:bg-slate-900/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
           <FileText className="h-7 w-7 text-slate-600 mb-3 relative z-10" />
           <div className="relative z-10">
@@ -156,7 +156,7 @@ export default async function ObrasDashboard() {
           </div>
         </Link>
         
-        <Link href="/obras/relatorios" className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-cyan-200 transition-all group flex flex-col justify-between h-36 relative overflow-hidden">
+        <Link href="/obras/relatorios" className="group relative flex h-32 flex-col justify-between overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-cyan-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-800">
           <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-50 dark:bg-cyan-900/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
           <BarChart3 className="h-7 w-7 text-cyan-600 mb-3 relative z-10" />
           <div className="relative z-10">
@@ -168,6 +168,6 @@ export default async function ObrasDashboard() {
           </div>
         </Link>
       </div>
-    </div>
+    </PageFrame>
   );
 }

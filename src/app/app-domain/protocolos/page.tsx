@@ -1,5 +1,7 @@
 import { AlertTriangle, Archive, ClipboardList, FileBox, FileText, Timer } from "lucide-react";
 import Link from "next/link";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 import { getProtocolContext, protocolScope } from "@/lib/protocols/access";
 
 export const dynamic = "force-dynamic";
@@ -28,27 +30,24 @@ export default async function ProtocolosDashboardPage() {
   ];
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Painel de Protocolos</h1>
-        <p className="text-slate-500 mt-2">Visão geral e tramitação do Processo Digital Municipal.</p>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Painel de Protocolos" icon={<ClipboardList className="size-4 shrink-0 text-indigo-600" />} />
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {stats.map((stat) => (
           <Link key={stat.title} href={stat.href} className="block group">
-            <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-200 flex items-center justify-between">
+            <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white p-3 shadow-sm transition-colors hover:border-slate-300 hover:shadow-md">
               <div>
                 <p className="text-sm font-medium text-slate-500">{stat.title}</p>
-                <p className="text-3xl font-bold text-slate-900 mt-2">{stat.value}</p>
+                <p className="mt-0.5 text-2xl font-bold text-slate-900">{stat.value}</p>
               </div>
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${stat.bg} ${stat.color} group-hover:scale-110 transition-transform duration-200`}>
-                <stat.icon className="w-6 h-6" strokeWidth={2.5} />
+              <div className={`flex size-9 items-center justify-center rounded-md ${stat.bg} ${stat.color} transition-transform duration-200 group-hover:scale-105`}>
+                <stat.icon className="size-5" strokeWidth={2.5} />
               </div>
             </div>
           </Link>
         ))}
       </div>
-    </div>
+    </PageFrame>
   );
 }

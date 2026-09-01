@@ -1,4 +1,6 @@
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function IndicadoresPage({ searchParams }: { searchParams: Promise<{ start?: string; end?: string }> }) {
   const { prisma } = await getTenantContextForModule("ADMINISTRACAO");
@@ -23,13 +25,14 @@ export default async function IndicadoresPage({ searchParams }: { searchParams: 
     ["Licenças ambientais", licenses.toString(), "Licenças emitidas ou em análise"],
   ];
   return (
-    <div className="space-y-6 p-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Indicadores</h1>
-        <p className="text-muted-foreground mt-2">BI executivo baseado em dados operacionais, com recorte temporal.</p>
-      </div>
-      <form className="flex flex-wrap gap-3 rounded-lg border bg-white p-4"><label className="text-sm">Início<input className="ml-2 rounded border p-2" name="start" type="date" defaultValue={params.start} /></label><label className="text-sm">Fim<input className="ml-2 rounded border p-2" name="end" type="date" defaultValue={params.end} /></label><button className="rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Aplicar</button></form>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{cards.map(([title, value, description]) => <section key={title} className="rounded-xl border bg-white p-5"><p className="text-sm text-muted-foreground">{title}</p><p className="mt-2 text-3xl font-bold">{value}</p><p className="mt-2 text-xs text-muted-foreground">{description}</p></section>)}</div>
-    </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Indicadores" />
+      <form className="flex flex-wrap items-end gap-2 rounded border border-slate-300 bg-white p-2.5 shadow-sm">
+        <label className="text-xs font-semibold text-slate-600">Início<input className="ml-1.5 h-8 rounded border border-slate-300 px-2 text-xs" name="start" type="date" defaultValue={params.start} /></label>
+        <label className="text-xs font-semibold text-slate-600">Fim<input className="ml-1.5 h-8 rounded border border-slate-300 px-2 text-xs" name="end" type="date" defaultValue={params.end} /></label>
+        <button className="h-8 rounded bg-slate-800 px-3 text-xs font-semibold text-white hover:bg-slate-900">Aplicar</button>
+      </form>
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{cards.map(([title, value, description]) => <section key={title} className="rounded border border-slate-300 bg-white p-3 shadow-sm"><p className="text-xs font-medium text-slate-500">{title}</p><p className="mt-1 text-2xl font-bold text-slate-800">{value}</p><p className="mt-1 text-[11px] text-slate-500">{description}</p></section>)}</div>
+    </PageFrame>
   );
 }

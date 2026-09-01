@@ -36,7 +36,7 @@ export default function AdministracaoLayout({ children }: { children: React.Reac
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen w-full max-w-[1600px] mx-auto bg-slate-50/30 relative">
+    <div className="relative mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col bg-slate-50/30 md:flex-row">
       
       {/* Mobile Header with Hamburger */}
       <div className="md:hidden flex items-center justify-between bg-white border-b border-slate-200 p-4">
@@ -117,8 +117,8 @@ export default function AdministracaoLayout({ children }: { children: React.Reac
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-h-0 bg-slate-50/50">
-        <div className="flex-1 p-6 md:p-8 overflow-y-auto">
+      <main className="flex min-w-0 flex-1 flex-col bg-slate-50/50">
+        <div className="flex-1 p-4 md:p-5">
           {children}
         </div>
       </main>

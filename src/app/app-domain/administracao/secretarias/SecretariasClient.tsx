@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Pencil, Trash2, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, RefreshCw, Search, Trash2 } from "lucide-react";
 import { updateSecretariat, deactivateSecretariat, activateSecretariat } from "../actions";
+
+const PAGE_SIZE = 20;
 
 type Secretariat = {
   id: string;
@@ -17,136 +19,158 @@ export default function SecretariasClient({ secretariats }: { secretariats: Secr
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: "", acronym: "", managerName: "" });
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const filteredSecretariats = secretariats.filter(sec => 
-    sec.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (sec.acronym && sec.acronym.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+  const filteredSecretariats = secretariats.filter((secretariat) => (
+    secretariat.name.toLowerCase().includes(normalizedSearchTerm)
+    || secretariat.acronym?.toLowerCase().includes(normalizedSearchTerm)
+    || secretariat.managerName?.toLowerCase().includes(normalizedSearchTerm)
+  ));
+  const totalPages = Math.max(1, Math.ceil(filteredSecretariats.length / PAGE_SIZE));
+  const activePage = Math.min(currentPage, totalPages);
+  const firstRecord = filteredSecretariats.length === 0 ? 0 : (activePage - 1) * PAGE_SIZE + 1;
+  const pageSecretariats = filteredSecretariats.slice(firstRecord - 1, firstRecord - 1 + PAGE_SIZE);
+  const lastRecord = firstRecord === 0 ? 0 : firstRecord + pageSecretariats.length - 1;
+  const messageRowCount = pageSecretariats.length === 0 ? 1 : 0;
+  const emptyRows = Math.max(0, PAGE_SIZE - pageSecretariats.length - messageRowCount);
 
-  const handleEditClick = (sec: Secretariat) => {
-    setEditingId(sec.id);
-    setEditForm({ 
-      name: sec.name, 
-      acronym: sec.acronym || "", 
-      managerName: sec.managerName || "" 
+  const handleEditClick = (secretariat: Secretariat) => {
+    setEditingId(secretariat.id);
+    setEditForm({
+      name: secretariat.name,
+      acronym: secretariat.acronym || "",
+      managerName: secretariat.managerName || "",
     });
   };
 
   const handleSaveEdit = async () => {
-    if (editingId && window.confirm("Tem certeza que deseja salvar estas alterações?")) {
-      const result = await updateSecretariat(editingId, editForm);
-      if (result.error) alert(result.error); else setEditingId(null);
-    }
+    if (!editingId || !window.confirm("Tem certeza que deseja salvar estas alterações?")) return;
+    const result = await updateSecretariat(editingId, editForm);
+    if (result.error) alert(result.error);
+    else setEditingId(null);
   };
 
   const handleDeactivate = async (id: string) => {
-    if (window.confirm("Tem certeza que deseja INATIVAR esta secretaria? Ela não será excluída do sistema, apenas desativada.")) {
-      const result = await deactivateSecretariat(id);
-      if (result.error) alert(result.error);
-    }
+    if (!window.confirm("Tem certeza que deseja inativar esta secretaria? Ela não será excluída do sistema.")) return;
+    const result = await deactivateSecretariat(id);
+    if (result.error) alert(result.error);
   };
 
   const handleActivate = async (id: string) => {
-    if (window.confirm("Deseja REATIVAR esta secretaria?")) {
-      const result = await activateSecretariat(id);
-      if (result.error) alert(result.error);
-    }
+    if (!window.confirm("Deseja reativar esta secretaria?")) return;
+    const result = await activateSecretariat(id);
+    if (result.error) alert(result.error);
   };
 
-  if (secretariats.length === 0) {
-    return (
-      <div className="bg-white border border-slate-200 rounded-xl p-12 text-center shadow-sm flex flex-col items-center justify-center">
-        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-          <Building2 className="text-slate-400 w-8 h-8" />
-        </div>
-        <h3 className="text-lg font-bold text-slate-700">Nenhum registro encontrado</h3>
-        <p className="text-slate-500 mt-1">Comece adicionando a primeira secretaria.</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <input 
-          type="text" 
-          placeholder="Buscar secretaria..." 
-          className="border border-slate-300 rounded-lg px-4 py-2 text-sm w-full md:w-72 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+    <section className="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm" aria-label="Listagem de secretarias">
+      <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-slate-800">Secretarias cadastradas</h2>
+          <p className="text-xs text-slate-500">Grade preparada para 20 registros por página.</p>
+        </div>
+        <label className="relative block w-full sm:w-80">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <span className="sr-only">Buscar secretaria</span>
+          <input
+            type="search"
+            placeholder="Buscar por nome, sigla ou responsável"
+            className="h-9 w-full rounded-md border border-slate-300 bg-white py-1 pl-8 pr-3 text-sm outline-none transition-colors placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
+            value={searchTerm}
+            onChange={(event) => {
+              setSearchTerm(event.target.value);
+              setCurrentPage(1);
+            }}
+          />
+        </label>
       </div>
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <table className="w-full text-left text-sm">
-        <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold">
+
+      <table className="w-full table-fixed text-left text-sm">
+        <colgroup>
+          <col className="w-[28%]" />
+          <col className="hidden md:table-column md:w-[10%]" />
+          <col className="hidden md:table-column md:w-[24%]" />
+          <col className="w-[12%]" />
+          <col className="w-[12%]" />
+          <col className="w-[14%]" />
+        </colgroup>
+        <thead className="border-b border-slate-200 bg-slate-100 text-[11px] font-bold uppercase tracking-[0.06em] text-slate-600">
           <tr>
-            <th className="px-6 py-4">Nome</th>
-            <th className="px-6 py-4">Sigla</th>
-            <th className="px-6 py-4">Responsável</th>
-            <th className="px-6 py-4 text-center">Departamentos</th>
-            <th className="px-6 py-4 text-center">Status</th>
-            <th className="px-6 py-4 text-right">Ações</th>
+            <th scope="col" className="h-10 px-3">Nome</th>
+            <th scope="col" className="hidden h-10 px-3 md:table-cell">Sigla</th>
+            <th scope="col" className="hidden h-10 px-3 md:table-cell">Responsável</th>
+            <th scope="col" className="h-10 px-3 text-center">Departamentos</th>
+            <th scope="col" className="h-10 px-3 text-center">Status</th>
+            <th scope="col" className="h-10 px-3 text-right">Ações</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
-          {filteredSecretariats.map(sec => (
-            <tr key={sec.id} className="hover:bg-slate-50">
-              <td className="px-6 py-4 font-medium text-slate-800">
-                {editingId === sec.id ? (
-                  <input className="border rounded px-2 py-1 w-full" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
-                ) : sec.name}
+        <tbody className="divide-y divide-slate-200">
+          {pageSecretariats.map((secretariat) => (
+            <tr key={secretariat.id} className="h-10 hover:bg-slate-50">
+              <td className="px-3 font-medium text-slate-800">
+                {editingId === secretariat.id ? (
+                  <input className="h-8 w-full rounded border border-slate-300 px-2 text-sm outline-none focus:border-blue-600" value={editForm.name} onChange={(event) => setEditForm({ ...editForm, name: event.target.value })} />
+                ) : <span className="block truncate" title={secretariat.name}>{secretariat.name}</span>}
               </td>
-              <td className="px-6 py-4 text-slate-600">
-                {editingId === sec.id ? (
-                  <input className="border rounded px-2 py-1 w-full" value={editForm.acronym} onChange={e => setEditForm({...editForm, acronym: e.target.value})} />
-                ) : (sec.acronym || "-")}
+              <td className="hidden px-3 text-slate-600 md:table-cell">
+                {editingId === secretariat.id ? (
+                  <input className="h-8 w-full rounded border border-slate-300 px-2 text-sm outline-none focus:border-blue-600" value={editForm.acronym} onChange={(event) => setEditForm({ ...editForm, acronym: event.target.value })} />
+                ) : <span className="block truncate">{secretariat.acronym || "-"}</span>}
               </td>
-              <td className="px-6 py-4 text-slate-600">
-                {editingId === sec.id ? (
-                  <input className="border rounded px-2 py-1 w-full" value={editForm.managerName} onChange={e => setEditForm({...editForm, managerName: e.target.value})} />
-                ) : (sec.managerName || "-")}
+              <td className="hidden px-3 text-slate-600 md:table-cell">
+                {editingId === secretariat.id ? (
+                  <input className="h-8 w-full rounded border border-slate-300 px-2 text-sm outline-none focus:border-blue-600" value={editForm.managerName} onChange={(event) => setEditForm({ ...editForm, managerName: event.target.value })} />
+                ) : <span className="block truncate" title={secretariat.managerName || undefined}>{secretariat.managerName || "-"}</span>}
               </td>
-              <td className="px-6 py-4 text-slate-600 text-center">{sec._count.departments}</td>
-              <td className="px-6 py-4 text-center">
-                <span className={`px-2 py-1 rounded-md text-xs font-semibold ${sec.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                  {sec.isActive ? 'Ativo' : 'Inativo'}
+              <td className="px-3 text-center text-slate-600">{secretariat._count.departments}</td>
+              <td className="px-3 text-center">
+                <span className={`inline-flex rounded px-2 py-0.5 text-[11px] font-bold ${secretariat.isActive ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                  {secretariat.isActive ? "Ativo" : "Inativo"}
                 </span>
               </td>
-              <td className="px-6 py-4 text-right flex justify-end gap-2">
-                {editingId === sec.id ? (
-                  <>
-                    <button onClick={handleSaveEdit} className="text-emerald-600 hover:text-emerald-700 font-medium text-xs bg-emerald-50 px-2 py-1 rounded">Salvar</button>
-                    <button onClick={() => setEditingId(null)} className="text-slate-500 hover:text-slate-700 font-medium text-xs bg-slate-100 px-2 py-1 rounded">Cancelar</button>
-                  </>
+              <td className="px-3">
+                {editingId === secretariat.id ? (
+                  <div className="flex justify-end gap-1">
+                    <button type="button" onClick={handleSaveEdit} className="h-7 rounded bg-emerald-700 px-2 text-xs font-semibold text-white hover:bg-emerald-800">Salvar</button>
+                    <button type="button" onClick={() => setEditingId(null)} className="h-7 rounded border border-slate-300 px-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">Cancelar</button>
+                  </div>
                 ) : (
-                  <>
-                    <button onClick={() => handleEditClick(sec)} className="text-blue-600 hover:text-blue-700 p-1" title="Editar">
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    {sec.isActive ? (
-                      <button onClick={() => handleDeactivate(sec.id)} className="text-red-500 hover:text-red-700 p-1" title="Inativar">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                  <div className="flex justify-end gap-1">
+                    <button type="button" onClick={() => handleEditClick(secretariat)} className="flex size-7 items-center justify-center rounded text-blue-700 hover:bg-blue-50" title="Editar secretaria" aria-label={`Editar ${secretariat.name}`}><Pencil className="size-3.5" /></button>
+                    {secretariat.isActive ? (
+                      <button type="button" onClick={() => handleDeactivate(secretariat.id)} className="flex size-7 items-center justify-center rounded text-red-700 hover:bg-red-50" title="Inativar secretaria" aria-label={`Inativar ${secretariat.name}`}><Trash2 className="size-3.5" /></button>
                     ) : (
-                      <button onClick={() => handleActivate(sec.id)} className="text-emerald-500 hover:text-emerald-700 p-1" title="Reativar">
-                        <RefreshCw className="w-4 h-4" />
-                      </button>
+                      <button type="button" onClick={() => handleActivate(secretariat.id)} className="flex size-7 items-center justify-center rounded text-emerald-700 hover:bg-emerald-50" title="Reativar secretaria" aria-label={`Reativar ${secretariat.name}`}><RefreshCw className="size-3.5" /></button>
                     )}
-                  </>
+                  </div>
                 )}
               </td>
             </tr>
           ))}
-          {filteredSecretariats.length === 0 && (
-            <tr>
-              <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
-                Nenhuma secretaria encontrada para &quot;{searchTerm}&quot;.
+          {pageSecretariats.length === 0 && (
+            <tr className="h-10">
+              <td colSpan={6} className="px-3 text-center text-sm text-slate-500">
+                {secretariats.length === 0 ? "Nenhuma secretaria cadastrada." : `Nenhuma secretaria encontrada para "${searchTerm}".`}
               </td>
             </tr>
           )}
+          {Array.from({ length: emptyRows }, (_, index) => (
+            <tr key={`empty-${index}`} aria-hidden="true" className="h-10">
+              <td colSpan={6} className="px-3">&nbsp;</td>
+            </tr>
+          ))}
         </tbody>
       </table>
-    </div>
-  </div>
+
+      <footer className="flex flex-col gap-2 border-t border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+        <span>{firstRecord === 0 ? "0 registros" : `Exibindo ${firstRecord}-${lastRecord} de ${filteredSecretariats.length} registros`}{normalizedSearchTerm && ` encontrados (${secretariats.length} cadastrados)`}</span>
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-slate-700">Página {activePage} de {totalPages}</span>
+          <button type="button" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={activePage === 1} className="flex size-7 items-center justify-center rounded border border-slate-300 bg-white hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Página anterior"><ChevronLeft className="size-4" /></button>
+          <button type="button" onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))} disabled={activePage === totalPages} className="flex size-7 items-center justify-center rounded border border-slate-300 bg-white hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Próxima página"><ChevronRight className="size-4" /></button>
+        </div>
+      </footer>
+    </section>
   );
 }

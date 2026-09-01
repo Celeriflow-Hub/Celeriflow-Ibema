@@ -7,275 +7,176 @@ import { saveInstitution } from "./actions";
 import { Save, Building2 } from "lucide-react";
 
 const UFS = [
-  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", 
-  "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG",
+  "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
 ];
 
 export function InstitutionForm({ institution }: { institution: Institution | null }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
-  
   const [cnpj, setCnpj] = useState(institution?.cnpj || "");
   const [zipCode, setZipCode] = useState(institution?.zipCode || "");
   const [phone, setPhone] = useState(institution?.phone || "");
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const handleCnpjChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let v = e.target.value.replace(/\D/g, '');
-    if (v.length > 14) v = v.substring(0, 14);
-    
-    let formatted = v;
-    if (v.length > 12) {
-      formatted = `${v.substring(0, 2)}.${v.substring(2, 5)}.${v.substring(5, 8)}/${v.substring(8, 12)}-${v.substring(12, 14)}`;
-    } else if (v.length > 8) {
-      formatted = `${v.substring(0, 2)}.${v.substring(2, 5)}.${v.substring(5, 8)}/${v.substring(8, 12)}`;
-    } else if (v.length > 5) {
-      formatted = `${v.substring(0, 2)}.${v.substring(2, 5)}.${v.substring(5, 8)}`;
-    } else if (v.length > 2) {
-      formatted = `${v.substring(0, 2)}.${v.substring(2, 5)}`;
-    }
+    let value = e.target.value.replace(/\D/g, "");
+    if (value.length > 14) value = value.substring(0, 14);
+
+    let formatted = value;
+    if (value.length > 12) formatted = `${value.substring(0, 2)}.${value.substring(2, 5)}.${value.substring(5, 8)}/${value.substring(8, 12)}-${value.substring(12, 14)}`;
+    else if (value.length > 8) formatted = `${value.substring(0, 2)}.${value.substring(2, 5)}.${value.substring(5, 8)}/${value.substring(8, 12)}`;
+    else if (value.length > 5) formatted = `${value.substring(0, 2)}.${value.substring(2, 5)}.${value.substring(5, 8)}`;
+    else if (value.length > 2) formatted = `${value.substring(0, 2)}.${value.substring(2, 5)}`;
     setCnpj(formatted);
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let v = e.target.value.replace(/\D/g, '');
-    if (v.length > 11) v = v.substring(0, 11);
-    
-    let formatted = v;
-    if (v.length > 10) {
-      formatted = `(${v.substring(0, 2)}) ${v.substring(2, 7)}-${v.substring(7, 11)}`;
-    } else if (v.length > 6) {
-      formatted = `(${v.substring(0, 2)}) ${v.substring(2, 6)}-${v.substring(6, 10)}`;
-    } else if (v.length > 2) {
-      formatted = `(${v.substring(0, 2)}) ${v.substring(2, 7)}`;
-    } else if (v.length > 0) {
-      formatted = `(${v.substring(0, 2)}`;
-    }
+    let value = e.target.value.replace(/\D/g, "");
+    if (value.length > 11) value = value.substring(0, 11);
+
+    let formatted = value;
+    if (value.length > 10) formatted = `(${value.substring(0, 2)}) ${value.substring(2, 7)}-${value.substring(7, 11)}`;
+    else if (value.length > 6) formatted = `(${value.substring(0, 2)}) ${value.substring(2, 6)}-${value.substring(6, 10)}`;
+    else if (value.length > 2) formatted = `(${value.substring(0, 2)}) ${value.substring(2, 7)}`;
+    else if (value.length > 0) formatted = `(${value.substring(0, 2)}`;
     setPhone(formatted);
   };
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setLoading(true);
     setMessage({ type: "", text: "" });
 
-    const formData = new FormData(e.currentTarget);
-    const result = await saveInstitution(formData);
-
+    const result = await saveInstitution(new FormData(event.currentTarget));
     if (result.error) {
       setMessage({ type: "error", text: result.error });
     } else {
       setMessage({ type: "success", text: "Dados salvos com sucesso!" });
-      // Reload page to update global header layout if needed
       window.location.reload();
     }
     setLoading(false);
   }
 
   const imageSrc = previewImage ?? institution?.logoUrl;
+  const labelClassName = "block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600";
+  const inputClassName = "h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15";
 
   return (
-    <form onSubmit={handleSubmit} encType="multipart/form-data" className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="px-6 py-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
-            <Building2 className="w-5 h-5" />
-          </div>
+    <form onSubmit={handleSubmit} encType="multipart/form-data" className="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+      <div className="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+        <div className="flex size-9 items-center justify-center rounded bg-blue-100 text-blue-700">
+          <Building2 className="size-5" />
+        </div>
+        <div>
+          <h2 className="text-base font-bold text-slate-800">Dados da Instituição</h2>
+          <p className="text-xs text-slate-500">Dados cadastrais e identidade visual da prefeitura.</p>
+        </div>
+      </div>
+
+      {message.text && (
+        <div className={`mx-4 mt-3 rounded-md border px-3 py-2 text-sm font-medium ${message.type === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+          {message.text}
+        </div>
+      )}
+
+      <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="space-y-4">
+          <section>
+            <h3 className="mb-3 border-b border-slate-200 pb-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Identificação e gestão</h3>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="space-y-1 xl:col-span-2">
+                <label htmlFor="institution-name" className={labelClassName}>Nome oficial ou fantasia *</label>
+                <input id="institution-name" type="text" name="name" required defaultValue={institution?.name || ""} placeholder="Ex.: Prefeitura Municipal de Tangará" className={inputClassName} />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="institution-legal-name" className={labelClassName}>Razão social</label>
+                <input id="institution-legal-name" type="text" name="legalName" defaultValue={institution?.legalName || ""} className={inputClassName} />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="institution-cnpj" className={labelClassName}>CNPJ</label>
+                <input id="institution-cnpj" type="text" name="cnpj" value={cnpj} onChange={handleCnpjChange} placeholder="00.000.000/0001-00" className={inputClassName} />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="institution-mayor" className={labelClassName}>Prefeito(a) atual</label>
+                <input id="institution-mayor" type="text" name="mayorName" defaultValue={institution?.mayorName || ""} className={inputClassName} />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="institution-manager" className={labelClassName}>Responsável administrativo</label>
+                <input id="institution-manager" type="text" name="managerName" defaultValue={institution?.managerName || ""} className={inputClassName} />
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h3 className="mb-3 border-b border-slate-200 pb-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Contato e endereço</h3>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="space-y-1">
+                <label htmlFor="institution-phone" className={labelClassName}>Telefone</label>
+                <input id="institution-phone" type="text" name="phone" value={phone} onChange={handlePhoneChange} placeholder="(00) 00000-0000" className={inputClassName} />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="institution-email" className={labelClassName}>E-mail institucional</label>
+                <input id="institution-email" type="email" name="email" defaultValue={institution?.email || ""} placeholder="contato@prefeitura.gov.br" className={inputClassName} />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="institution-website" className={labelClassName}>Site institucional</label>
+                <input id="institution-website" type="url" name="website" defaultValue={institution?.website || ""} placeholder="https://prefeitura.gov.br" className={inputClassName} />
+              </div>
+              <div className="space-y-1 md:col-span-2 xl:col-span-3">
+                <label htmlFor="institution-address" className={labelClassName}>Endereço completo</label>
+                <input id="institution-address" type="text" name="address" defaultValue={institution?.address || ""} className={inputClassName} />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="institution-city" className={labelClassName}>Cidade</label>
+                <input id="institution-city" type="text" name="city" defaultValue={institution?.city || ""} className={inputClassName} />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="institution-state" className={labelClassName}>Estado (UF)</label>
+                <select id="institution-state" name="state" defaultValue={institution?.state || ""} className={inputClassName}>
+                  <option value="">Selecione</option>
+                  {UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="institution-zip-code" className={labelClassName}>CEP</label>
+                <input id="institution-zip-code" type="text" name="zipCode" value={zipCode} onChange={(e) => setZipCode(e.target.value.replace(/\D/g, "").slice(0, 8))} placeholder="00000000" inputMode="numeric" className={inputClassName} />
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <aside className="flex flex-col border border-slate-200 bg-slate-50 p-3">
           <div>
-            <h3 className="text-lg font-bold text-slate-800">Dados da Instituição</h3>
-            <p className="text-sm text-slate-500">Informações principais da prefeitura ou órgão</p>
+            <h3 className="text-sm font-bold text-slate-800">Brasão ou logo</h3>
+            <p className="mt-0.5 text-xs text-slate-500">Imagem exibida em documentos e no cabeçalho.</p>
           </div>
-        </div>
-      </div>
-
-      <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-        {message.text && (
-          <div className={`col-span-full p-4 rounded-lg text-sm font-medium ${message.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
-            {message.text}
-          </div>
-        )}
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-700">Nome Oficial / Nome Fantasia *</label>
-          <input 
-            type="text" 
-            name="name" 
-            required
-            defaultValue={institution?.name || ""}
-            placeholder="Ex: Prefeitura Municipal de Tangará"
-            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-sm"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-700">Razão Social</label>
-          <input 
-            type="text" 
-            name="legalName" 
-            defaultValue={institution?.legalName || ""}
-            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-sm"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-700">CNPJ</label>
-          <input 
-            type="text" 
-            name="cnpj" 
-            value={cnpj}
-            onChange={handleCnpjChange}
-            placeholder="00.000.000/0001-00"
-            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-sm"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-700">Prefeito(a) Atual</label>
-          <input 
-            type="text" 
-            name="mayorName" 
-            defaultValue={institution?.mayorName || ""}
-            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-sm"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-700">Responsável Administrativo</label>
-          <input 
-            type="text" 
-            name="managerName" 
-            defaultValue={institution?.managerName || ""}
-            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-sm"
-          />
-        </div>
-
-        <div className="space-y-4 col-span-full bg-slate-50 p-4 rounded-xl border border-slate-200">
-          <label className="text-sm font-bold text-slate-700 block">Brasão / Logo da Prefeitura</label>
-          
-          {institution?.logoUrl && (
-            <div className="mb-4 flex items-center gap-4">
-              <div className="w-16 h-16 rounded-lg border border-slate-200 bg-white overflow-hidden flex items-center justify-center shadow-sm">
-                <Image src={institution.logoUrl} alt="Logo Atual" width={64} height={64} unoptimized className="w-full h-full object-contain" />
+          <div className="my-3 flex flex-1 items-center justify-center rounded border border-dashed border-slate-300 bg-white p-3">
+            <div className="flex flex-col items-center gap-2 text-center">
+              <div className="flex size-24 items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50">
+                {imageSrc ? <Image src={imageSrc} alt="Prévia do brasão" width={96} height={96} unoptimized className="size-full object-contain p-1" /> : <span className="px-2 text-xs text-slate-400">Sem imagem</span>}
               </div>
-              <span className="text-xs text-slate-500 font-medium">Logo atual em uso</span>
-            </div>
-          )}
-
-          <div className="flex gap-6 items-start">
-            <div className="flex-1 space-y-2">
-              <label className="text-xs font-semibold text-slate-600 block">Selecione o arquivo no seu computador</label>
-              <input 
-                type="file" 
-                name="logoFile" 
-                accept="image/*"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    const url = URL.createObjectURL(file);
-                    setPreviewImage(url);
-                  } else {
-                    setPreviewImage(null);
-                  }
-                }}
-                className="w-full px-4 py-2 rounded-lg border border-slate-300 bg-white file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-all text-slate-700 text-sm cursor-pointer"
-              />
-              <p className="text-xs text-slate-500 mt-1">Formatos aceitos: PNG, JPG, JPEG. Máximo de 2MB.</p>
-            </div>
-            
-            <div className="shrink-0 flex flex-col items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500">Preview</span>
-              <div className="w-20 h-20 rounded-lg border border-slate-300 bg-white shadow-inner flex items-center justify-center overflow-hidden relative">
-                {imageSrc ? (
-                   <Image src={imageSrc} alt="Preview" width={80} height={80} unoptimized className="w-full h-full object-contain p-1" />
-                ) : (
-                  <span className="text-xs text-slate-400 text-center px-2">Sem imagem</span>
-                )}
-              </div>
+              {institution?.logoUrl && !previewImage && <span className="text-[11px] font-medium text-slate-500">Imagem atual</span>}
             </div>
           </div>
-        </div>
-
-        <div className="col-span-full h-px bg-slate-200 my-2" />
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-700">Telefone</label>
-          <input 
-            type="text" 
-            name="phone" 
-            value={phone}
-            onChange={handlePhoneChange}
-            placeholder="(00) 00000-0000"
-            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-sm"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-700">E-mail Institucional</label>
-          <input 
-            type="email" 
-            name="email" 
-            defaultValue={institution?.email || ""}
-            placeholder="contato@prefeitura.gov.br"
-            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-sm"
-          />
-        </div>
-
-        <div className="space-y-2 md:col-span-2">
-          <label className="text-sm font-semibold text-slate-700">Endereço Completo</label>
-          <input 
-            type="text" 
-            name="address" 
-            defaultValue={institution?.address || ""}
-            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-sm"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-700">CEP</label>
+          <label htmlFor="institution-logo" className={labelClassName}>Selecionar arquivo</label>
           <input
-            type="text"
-            name="zipCode"
-            value={zipCode}
-            onChange={(e) => setZipCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
-            placeholder="00000000"
-            inputMode="numeric"
-            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-sm"
+            id="institution-logo"
+            type="file"
+            name="logoFile"
+            accept="image/png,image/jpeg"
+            onChange={(e) => setPreviewImage(e.target.files?.[0] ? URL.createObjectURL(e.target.files[0]) : null)}
+            className="mt-1 w-full cursor-pointer rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-600 file:mr-2 file:rounded file:border-0 file:bg-blue-50 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
           />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-700">Cidade</label>
-          <input 
-            type="text" 
-            name="city" 
-            defaultValue={institution?.city || ""}
-            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-sm"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-700">Estado (UF)</label>
-          <select 
-            name="state" 
-            defaultValue={institution?.state || ""}
-            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 text-sm bg-white"
-          >
-            <option value="">Selecione...</option>
-            {UFS.map(uf => (
-              <option key={uf} value={uf}>{uf}</option>
-            ))}
-          </select>
-        </div>
+          <p className="mt-1 text-[11px] leading-snug text-slate-500">PNG ou JPG, com até 2 MB.</p>
+        </aside>
       </div>
-      
-      <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end">
-        <button 
-          type="submit" 
-          disabled={loading}
-          className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
-        >
-          <Save className="w-4 h-4" />
-          {loading ? "Salvando..." : "Salvar Alterações"}
+
+      <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
+        <span className="text-xs text-slate-500">* Campo obrigatório</span>
+        <button type="submit" disabled={loading} className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-700 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-800 disabled:opacity-50">
+          <Save className="size-4" />
+          {loading ? "Salvando..." : "Salvar alterações"}
         </button>
       </div>
     </form>

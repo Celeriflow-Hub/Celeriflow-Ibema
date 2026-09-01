@@ -1,5 +1,8 @@
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import DemandasClient from "./DemandasClient";
+import { ClipboardList } from "lucide-react";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -20,23 +23,14 @@ export default async function DemandasPage() {
   const employees = await prisma.employee.findMany({ where: { isActive: true }, select: { id: true, name: true } });
 
   return (
-    <div className="max-w-6xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-6 flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Demandas Internas</h1>
-          <p className="text-slate-500 mt-1">Gerencie os registros de demandas internas.</p>
-        </div>
-        <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm">
-          Adicionar Novo
-        </button>
-      </div>
-      
+    <PageFrame className="space-y-2">
+      <PageHeader title="Demandas Internas" icon={<ClipboardList className="size-4 shrink-0 text-blue-600" />} action={<button type="button" className="inline-flex h-7 items-center rounded bg-blue-700 px-3 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-blue-800">Adicionar demanda</button>} />
       <DemandasClient 
         demands={demands} 
         secretariats={secretariats}
         departments={departments}
         employees={employees}
       />
-    </div>
+    </PageFrame>
   );
 }

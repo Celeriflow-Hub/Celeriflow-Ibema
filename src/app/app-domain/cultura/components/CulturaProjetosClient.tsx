@@ -12,6 +12,8 @@ import {
   FileSignature,
   UserRound
 } from "lucide-react";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export type CulturaProjetoListItem = {
   id: string;
@@ -115,21 +117,12 @@ export default function CulturaProjetosClient({ projetos }: { projetos: CulturaP
   });
 
   return (
-    <div className="flex-1 p-4 md:p-8">
-      <div className="mb-8">
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-indigo-100 p-2.5 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-300">
-            <FolderKanban className="h-6 w-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Fomento e Projetos</h1>
-            <p className="text-slate-500 dark:text-slate-400">Acompanhamento dos projetos culturais e de seus vínculos orçamentários e de contratação.</p>
-          </div>
-        </div>
-      </div>
+    <PageFrame className="space-y-3 px-1 py-1 md:px-2">
+      <PageHeader title="Fomento e Projetos" icon={<FolderKanban className="size-4 shrink-0 text-indigo-600 dark:text-indigo-300" />} className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white" />
+      <p className="text-sm text-slate-500 dark:text-slate-400">Acompanhamento dos projetos culturais e de seus vínculos orçamentários e de contratação.</p>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <div className="grid gap-3 border-b border-slate-100 bg-slate-50/70 p-4 dark:border-slate-700 dark:bg-slate-800/50 md:grid-cols-[minmax(0,1fr)_12rem_12rem] md:p-6">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="grid gap-3 border-b border-slate-100 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/50 md:grid-cols-[minmax(0,1fr)_12rem_12rem]">
           <label className="relative block">
             <span className="sr-only">Buscar projetos</span>
             <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
@@ -233,6 +226,6 @@ export default function CulturaProjetosClient({ projetos }: { projetos: CulturaP
           </>
         )}
       </section>
-    </div>
+    </PageFrame>
   );
 }

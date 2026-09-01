@@ -1,12 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
-import { Plus, Search } from "lucide-react"
+import { Gift, Plus, Search } from "lucide-react"
 import Link from "next/link"
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { Input } from "@/components/ui/input"
 import { BeneficioRowActions } from "./BeneficioRowActions"
 import type { Prisma } from "@prisma/client";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function BeneficiosPage(
   props: { searchParams?: Promise<{ q?: string }> }
@@ -35,28 +37,27 @@ export default async function BeneficiosPage(
   })
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Benefícios (Tipos)</h2>
-        <div className="flex items-center space-x-2">
-          <Link href="/rh/beneficios/novo" className={buttonVariants()}>
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title="Benefícios"
+        icon={<Gift className="size-4 shrink-0 text-violet-600" />}
+        action={<Link href="/rh/beneficios/novo" className={buttonVariants({ size: "sm" })}>
             <Plus className="mr-2 h-4 w-4" />
             Novo Tipo de Benefício
-          </Link>
-        </div>
-      </div>
+          </Link>}
+      />
 
-      <Card>
-        <CardHeader className="pb-4">
+      <Card size="sm" className="rounded-md shadow-none">
+        <CardHeader className="border-b pb-2">
           <CardTitle>Cadastro Master de Benefícios</CardTitle>
           <CardDescription>
             Cadastre os tipos de benefícios fornecidos (Vale Transporte, Plano de Saúde, etc.) e seus fornecedores parceiros.
             A concessão de cada benefício aos servidores é feita na própria ficha do Servidor.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form className="flex flex-wrap items-center gap-2 mb-4 bg-slate-50 p-3 rounded-lg border">
-            <div className="flex-1 min-w-[300px]">
+        <CardContent className="pt-3">
+          <form className="mb-3 flex flex-wrap items-center gap-2 rounded-md border bg-slate-50 p-2">
+            <div className="min-w-[12rem] flex-1">
               <Input 
                 name="q"
                 defaultValue={q}
@@ -70,7 +71,7 @@ export default async function BeneficiosPage(
             </button>
           </form>
 
-          <div className="rounded-md border overflow-x-auto max-h-[600px] overflow-y-auto">
+          <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm text-left">
               <thead className="bg-muted text-muted-foreground border-b sticky top-0 z-10">
                 <tr>
@@ -114,6 +115,6 @@ export default async function BeneficiosPage(
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   )
 }

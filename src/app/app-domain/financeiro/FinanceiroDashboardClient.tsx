@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { 
   ArrowUpCircle, 
   ArrowDownCircle,
@@ -47,9 +46,9 @@ export default function FinanceiroDashboardClient({ initialStats }: { initialSta
   }
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2 mb-6">
-        <h2 className="text-3xl font-bold tracking-tight">Painel Financeiro</h2>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <h2 className="sr-only">Painel Financeiro</h2>
         <div className="flex items-center space-x-2">
           <Select value={month} onValueChange={(value) => {
             if (value === null) return
@@ -94,8 +93,8 @@ export default function FinanceiroDashboardClient({ initialStats }: { initialSta
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-3">
-        <Card className={`${isLoading ? 'opacity-50' : ''}`}>
+      <div className="grid gap-2 md:grid-cols-3">
+        <Card size="sm" className={`rounded-md shadow-none ${isLoading ? 'opacity-50' : ''}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Receitas</CardTitle>
             <ArrowUpCircle className="h-4 w-4 text-emerald-500" />
@@ -108,7 +107,7 @@ export default function FinanceiroDashboardClient({ initialStats }: { initialSta
           </CardContent>
         </Card>
         
-        <Card className={`${isLoading ? 'opacity-50' : ''}`}>
+        <Card size="sm" className={`rounded-md shadow-none ${isLoading ? 'opacity-50' : ''}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Despesas</CardTitle>
             <ArrowDownCircle className="h-4 w-4 text-rose-500" />
@@ -121,7 +120,7 @@ export default function FinanceiroDashboardClient({ initialStats }: { initialSta
           </CardContent>
         </Card>
 
-        <Card className={`${isLoading ? 'opacity-50' : ''}`}>
+        <Card size="sm" className={`rounded-md shadow-none ${isLoading ? 'opacity-50' : ''}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Resultado Operacional</CardTitle>
             <Activity className={`h-4 w-4 ${stats.resultadoOperacional >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} />
@@ -137,8 +136,8 @@ export default function FinanceiroDashboardClient({ initialStats }: { initialSta
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7 mt-6">
-        <Card className="col-span-4">
+      <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-7">
+        <Card size="sm" className="rounded-md shadow-none md:col-span-2 lg:col-span-4">
           <CardHeader>
             <CardTitle>Acesso Rápido</CardTitle>
             <CardDescription>
@@ -146,36 +145,36 @@ export default function FinanceiroDashboardClient({ initialStats }: { initialSta
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <Link href="/financeiro/orcamento" className="flex items-center p-4 border rounded-lg hover:bg-muted transition-colors">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Link href="/financeiro/orcamento" className="flex items-center rounded-md border p-2.5 transition-colors hover:bg-muted">
                 <Scale className="h-6 w-6 mr-4 text-slate-500" />
                 <div>
                   <div className="font-semibold">Orçamento e Plano de Contas</div>
                   <div className="text-sm text-muted-foreground">Dotações e natureza</div>
                 </div>
               </Link>
-              <Link href="/financeiro/contas-bancarias" className="flex items-center p-4 border rounded-lg hover:bg-muted transition-colors">
+              <Link href="/financeiro/contas-bancarias" className="flex items-center rounded-md border p-2.5 transition-colors hover:bg-muted">
                 <Landmark className="h-6 w-6 mr-4 text-emerald-500" />
                 <div>
                   <div className="font-semibold">Tesouraria</div>
                   <div className="text-sm text-muted-foreground">Contas bancárias</div>
                 </div>
               </Link>
-              <Link href="/financeiro/empenhos" className="flex items-center p-4 border rounded-lg hover:bg-muted transition-colors">
+              <Link href="/financeiro/empenhos" className="flex items-center rounded-md border p-2.5 transition-colors hover:bg-muted">
                 <FileText className="h-6 w-6 mr-4 text-blue-500" />
                 <div>
                   <div className="font-semibold">Gestão de Empenhos</div>
                   <div className="text-sm text-muted-foreground">Emitir e consultar empenhos</div>
                 </div>
               </Link>
-              <Link href="/financeiro/liquidacoes" className="flex items-center p-4 border rounded-lg hover:bg-muted transition-colors">
+              <Link href="/financeiro/liquidacoes" className="flex items-center rounded-md border p-2.5 transition-colors hover:bg-muted">
                 <Receipt className="h-6 w-6 mr-4 text-indigo-500" />
                 <div>
                   <div className="font-semibold">Liquidações</div>
                   <div className="text-sm text-muted-foreground">Atestar notas e serviços</div>
                 </div>
               </Link>
-              <Link href="/financeiro/pagamentos" className="flex items-center p-4 border rounded-lg hover:bg-muted transition-colors">
+              <Link href="/financeiro/pagamentos" className="flex items-center rounded-md border p-2.5 transition-colors hover:bg-muted">
                 <WalletCards className="h-6 w-6 mr-4 text-amber-500" />
                 <div>
                   <div className="font-semibold">Pagamentos</div>
@@ -186,7 +185,7 @@ export default function FinanceiroDashboardClient({ initialStats }: { initialSta
           </CardContent>
         </Card>
 
-        <Card className="col-span-3">
+        <Card size="sm" className="rounded-md shadow-none md:col-span-2 lg:col-span-3">
           <CardHeader>
             <CardTitle>Atividades Recentes</CardTitle>
             <CardDescription>
@@ -194,14 +193,12 @@ export default function FinanceiroDashboardClient({ initialStats }: { initialSta
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-[300px]">
-              <div className="flex flex-col items-center justify-center h-full text-center p-4 text-muted-foreground">
+            <div className="flex min-h-40 flex-col items-center justify-center p-4 text-center text-muted-foreground">
                 <BadgeDollarSign className="h-8 w-8 mb-4 opacity-20" />
                 <p>Nenhuma movimentação encontrada.</p>
                 <p className="text-sm">Os lançamentos aparecerão aqui automaticamente.</p>
               </div>
-            </ScrollArea>
-          </CardContent>
+            </CardContent>
         </Card>
       </div>
     </div>

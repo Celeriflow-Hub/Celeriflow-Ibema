@@ -47,14 +47,14 @@ export function LicenciamentoInteractiveClient() {
   }
 
   return (
-    <div className="bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-900 text-white rounded-xl p-5 shadow-lg space-y-4 mb-6 border border-emerald-800/40">
-      <div className="flex justify-between items-start border-b border-emerald-900/60 pb-3">
+    <section className="space-y-3 rounded-md border border-emerald-800/40 bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-900 p-4 text-white shadow-lg">
+      <div className="flex flex-col gap-2 border-b border-emerald-900/60 pb-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
             Motor de Licenciamento Ambiental Digital (LP / LI / LO)
           </span>
-          <h2 className="text-xl font-bold mt-1 flex items-center gap-2">
-            <ShieldCheck className="w-6 h-6 text-emerald-400" />
+          <h2 className="mt-1 flex items-center gap-2 text-base font-bold sm:text-lg">
+            <ShieldCheck className="size-5 text-emerald-400" />
             Emissão Oficial de Licença com Autenticação QR Code &amp; SHA-256
           </h2>
         </div>
@@ -134,11 +134,11 @@ export function LicenciamentoInteractiveClient() {
           />
         </div>
 
-        <div className="sm:col-span-3 flex justify-end">
+        <div className="flex sm:col-span-3 sm:justify-end">
           <button
             type="submit"
             disabled={loading}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-6 rounded-lg flex items-center gap-2 shadow text-sm transition-all"
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-bold text-white shadow transition-colors hover:bg-emerald-500 sm:w-auto"
           >
             <FileCheck className="w-4 h-4" /> Emitir Licença Ambiental Digital com QR Code
           </button>
@@ -166,6 +166,6 @@ export function LicenciamentoInteractiveClient() {
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }

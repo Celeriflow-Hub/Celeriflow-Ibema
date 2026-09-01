@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { FileText, Save, ArrowLeft } from "lucide-react";
 import { createDiary } from "../actions";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default function NovoDiarioPage() {
   const router = useRouter();
@@ -28,29 +30,23 @@ export default function NovoDiarioPage() {
   }
 
   return (
-    <div className="max-w-4xl animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
-      <div className="flex items-center gap-4">
-        <Link href="/transparencia/diario-oficial" className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
-          <ArrowLeft className="w-5 h-5 text-slate-600" />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <FileText className="w-6 h-6 text-emerald-600" />
-            Nova Edição
-          </h1>
-          <p className="text-slate-500 mt-1">Publique uma nova edição do Diário Oficial.</p>
-        </div>
-      </div>
+    <PageFrame className="max-w-4xl space-y-2">
+      <PageHeader
+        title="Nova edição"
+        icon={<FileText className="size-4 shrink-0 text-emerald-600" />}
+        action={<Link href="/transparencia/diario-oficial" className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900"><ArrowLeft className="size-3.5" />Voltar</Link>}
+      />
+      <p className="px-1 text-sm text-slate-500">Publique uma nova edição do Diário Oficial.</p>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <div className="p-4 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
               {error}
             </div>
           )}
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-700">Número da Edição</label>
               <input 
@@ -58,7 +54,7 @@ export default function NovoDiarioPage() {
                 type="number"
                 min="1"
                 required
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600"
+                className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600"
                 placeholder="Ex: 1543"
               />
             </div>
@@ -67,7 +63,7 @@ export default function NovoDiarioPage() {
               <label className="text-sm font-semibold text-slate-700">Status</label>
               <select 
                 name="status"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600"
+                className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600"
               >
                 <option value="Rascunho">Rascunho</option>
                 <option value="Publicado">Publicado</option>
@@ -80,14 +76,14 @@ export default function NovoDiarioPage() {
                 name="pdfUrl"
                 type="url"
                 required
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600"
+                className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600"
                 placeholder="https://exemplo.com/diario-1543.pdf"
               />
               <p className="text-xs text-slate-500">Insira o link direto para visualizar o arquivo PDF do diário.</p>
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+          <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:justify-end">
             <Link 
               href="/transparencia/diario-oficial"
               className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition-colors"
@@ -104,6 +100,6 @@ export default function NovoDiarioPage() {
           </div>
         </form>
       </div>
-    </div>
+    </PageFrame>
   );
 }

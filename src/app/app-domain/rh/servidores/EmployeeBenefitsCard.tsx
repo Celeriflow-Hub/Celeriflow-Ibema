@@ -39,7 +39,7 @@ export function EmployeeBenefitsCard({ employee, benefitConfigs }: { employee: E
   };
 
   return (
-    <Card className="md:col-span-2 mt-6">
+    <Card size="sm" className="mt-1 rounded-md shadow-none md:col-span-2">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle>Benefícios Concedidos</CardTitle>
         
@@ -80,7 +80,7 @@ export function EmployeeBenefitsCard({ employee, benefitConfigs }: { employee: E
       </CardHeader>
       <CardContent>
         {employee.benefits && employee.benefits.length > 0 ? (
-          <div className="rounded-md border overflow-hidden">
+          <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm text-left">
               <thead className="bg-muted text-muted-foreground border-b">
                 <tr>

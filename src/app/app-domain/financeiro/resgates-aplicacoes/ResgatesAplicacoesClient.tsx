@@ -92,24 +92,24 @@ export default function ResgatesAplicacoesClient({ initialItems = [] }: { initia
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="mx-auto max-w-[1600px] space-y-2 px-1 py-1 sm:px-2">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+      <div className="flex flex-col gap-2 border-b border-slate-300 bg-white px-3 py-2 shadow-sm md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mt-1 flex items-center gap-2">
-            <ArrowRightLeft className="w-7 h-7 text-blue-600 dark:text-blue-400" />
+          <h1 className="mt-0.5 flex items-center gap-2 text-sm font-bold tracking-tight text-slate-900">
+            <ArrowRightLeft className="size-4 text-blue-600" />
             Motor de Classificação de Resgates e Aplicações
           </h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
+          <p className="text-xs text-slate-600">
             Classificação automática dos lançamentos, cálculo de valores, prévia contábil e registro real no CeleriFlow com recibo e vínculo bidirecional.
           </p>
         </div>
       </div>
 
       {/* Grid: Extratos & Painel de Classificação */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-12">
         {/* Tabela de Extratos Importados */}
-        <div className="lg:col-span-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+        <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3 shadow-none lg:col-span-6">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
             <span className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-slate-600" />
@@ -120,7 +120,7 @@ export default function ResgatesAplicacoesClient({ initialItems = [] }: { initia
             </span>
           </h2>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid gap-2 sm:grid-cols-2">
             <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
               Conta do extrato
               <select value={accountFilter} onChange={(event) => setAccountFilter(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm dark:border-slate-700 dark:bg-slate-800">
@@ -138,7 +138,7 @@ export default function ResgatesAplicacoesClient({ initialItems = [] }: { initia
             </label>
           </div>
 
-          <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+          <div className="max-h-[calc(100dvh-16rem)] space-y-2 overflow-y-auto pr-1">
             {filteredItems.length === 0 ? (
               <p className="text-sm text-slate-500 italic p-4 text-center">Nenhum lançamento corresponde aos filtros. Baixe o extrato da conta desejada na funcionalidade de Extratos Bancários.</p>
             ) : (
@@ -151,7 +151,7 @@ export default function ResgatesAplicacoesClient({ initialItems = [] }: { initia
                   <div
                     key={item.id}
                     onClick={() => handleClassify(item)}
-                    className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                    className={`cursor-pointer rounded-md border p-3 transition-all ${
                       isSelected
                         ? "border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 ring-2 ring-blue-500/20"
                         : "border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700"
@@ -203,7 +203,7 @@ export default function ResgatesAplicacoesClient({ initialItems = [] }: { initia
 
         {/* Motor de Classificação & Prévia Contábil */}
         <div className="lg:col-span-6 space-y-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+          <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3 shadow-none">
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
               <Sparkles className="w-5 h-5 text-amber-500" />
               Resultado do Motor de Classificação

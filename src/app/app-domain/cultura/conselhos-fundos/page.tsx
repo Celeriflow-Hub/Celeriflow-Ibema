@@ -3,6 +3,8 @@ import { Coins, FileText, Landmark, Search, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type ConselhosFundosPageProps = {
   searchParams?: Promise<{ q?: string; tipo?: string }>;
@@ -93,15 +95,11 @@ export default async function ConselhosFundosPage({
   const hasFilters = Boolean(q || tipo);
 
   return (
-    <div className="flex-1 p-4 md:p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Conselhos e Fundos</h1>
-        <p className="text-slate-500 dark:text-slate-400">
-          Conselhos vinculados, seus documentos e referências orçamentárias dos fundos culturais.
-        </p>
-      </div>
+    <PageFrame className="space-y-3 px-1 py-1 md:px-2">
+      <PageHeader title="Conselhos e Fundos" icon={<ShieldCheck className="size-4 shrink-0 text-emerald-600 dark:text-emerald-300" />} className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white" />
+      <p className="text-sm text-slate-500 dark:text-slate-400">Conselhos vinculados, seus documentos e referências orçamentárias dos fundos culturais.</p>
 
-      <form className="mb-6 flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:flex-row sm:items-end">
+      <form className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:flex-row sm:items-end">
         <div className="w-full sm:flex-1">
           <label htmlFor="q" className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Buscar
@@ -151,9 +149,9 @@ export default async function ConselhosFundosPage({
         </div>
       </form>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-3 xl:grid-cols-2">
         {showConselhos && (
-          <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
             <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-4 py-4 dark:border-slate-700 dark:bg-slate-800/50 md:px-6">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-5 w-5 text-emerald-600" />
@@ -210,7 +208,7 @@ export default async function ConselhosFundosPage({
         )}
 
         {showFundos && (
-          <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
             <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-4 py-4 dark:border-slate-700 dark:bg-slate-800/50 md:px-6">
               <div className="flex items-center gap-2">
                 <Coins className="h-5 w-5 text-amber-600" />
@@ -284,6 +282,6 @@ export default async function ConselhosFundosPage({
           </section>
         )}
       </div>
-    </div>
+    </PageFrame>
   );
 }

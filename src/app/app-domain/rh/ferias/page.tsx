@@ -1,13 +1,15 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
-import { Plus } from "lucide-react"
+import { CalendarDays, Plus } from "lucide-react"
 import Link from "next/link"
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { FeriasRowActions } from "./FeriasRowActions"
 import { format } from "date-fns"
 import { FeriasFilters } from "./FeriasFilters"
 import type { Prisma } from "@prisma/client";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function FeriasPage({ searchParams }: { searchParams: Promise<{ q?: string, status?: string }> }) {
   const { prisma } = await getTenantContextForModule("RH");
@@ -31,28 +33,27 @@ export default async function FeriasPage({ searchParams }: { searchParams: Promi
   })
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Férias</h2>
-        <div className="flex items-center space-x-2">
-          <Link href="/rh/ferias/novo" className={buttonVariants()}>
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title="Férias"
+        icon={<CalendarDays className="size-4 shrink-0 text-violet-600" />}
+        action={<Link href="/rh/ferias/novo" className={buttonVariants({ size: "sm" })}>
             <Plus className="mr-2 h-4 w-4" />
             Programar Férias
-          </Link>
-        </div>
-      </div>
+          </Link>}
+      />
 
       <FeriasFilters />
 
-      <Card>
-        <CardHeader>
+      <Card size="sm" className="rounded-md shadow-none">
+        <CardHeader className="border-b pb-2">
           <CardTitle>Programação e Controle de Férias</CardTitle>
           <CardDescription>
             Gerencie os períodos aquisitivos e de gozo dos servidores.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-md border overflow-x-auto max-h-[600px] overflow-y-auto">
+        <CardContent className="pt-3">
+          <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm text-left">
               <thead className="bg-muted text-muted-foreground border-b sticky top-0 z-10 shadow-sm">
                 <tr>
@@ -110,6 +111,6 @@ export default async function FeriasPage({ searchParams }: { searchParams: Promi
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   )
 }

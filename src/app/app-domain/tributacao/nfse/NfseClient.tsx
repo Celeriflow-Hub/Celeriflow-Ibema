@@ -119,7 +119,7 @@ export default function NfseClient({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm whitespace-nowrap">
+            <table className="min-w-[980px] w-full text-left text-sm whitespace-nowrap">
               <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="px-6 py-3">Nº NFS-e</th>

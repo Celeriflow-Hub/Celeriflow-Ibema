@@ -8,7 +8,7 @@ export default async function FinanceiroDashboard() {
   const initialStats = await getFinanceiroDashboardStats("", currentYear)
 
   return (
-    <PageFrame className="space-y-2 px-1 py-1 md:px-2 [&>div]:space-y-4 [&>div]:p-0 [&>div>div:first-child]:mb-0 [&>div>div:first-child]:justify-end [&>div>div:first-child>h2]:hidden">
+    <PageFrame className="space-y-2 px-1 py-1 md:px-2 [&>div]:space-y-2 [&>div]:p-0 [&>div>div:first-child]:justify-end [&>div>div:first-child>h2]:hidden">
       <PageHeader title="Painel Financeiro" />
       <FinanceiroDashboardClient initialStats={initialStats} />
     </PageFrame>

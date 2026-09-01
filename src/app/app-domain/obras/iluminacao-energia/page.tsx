@@ -1,5 +1,6 @@
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { IluminacaoEnergiaClient } from "../components/IluminacaoEnergiaClient";
+import { PageFrame } from "@/components/app-ui/PageFrame";
 
 export default async function IluminacaoEnergiaPage() {
   const { prisma } = await getTenantContextForModule("OBRAS");
@@ -20,5 +21,5 @@ export default async function IluminacaoEnergiaPage() {
     },
   });
 
-  return <IluminacaoEnergiaClient servicos={servicos} />;
+  return <PageFrame className="px-1 py-1 md:px-2"><IluminacaoEnergiaClient servicos={servicos} /></PageFrame>;
 }

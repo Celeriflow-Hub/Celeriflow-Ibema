@@ -19,13 +19,13 @@ export default function DocumentUpload({ entityType, entityId }: { entityType: "
     window.location.reload();
   }
 
-  return <form action={upload} className="space-y-2">
+  return <form action={upload} className="space-y-2 rounded border border-slate-200 bg-slate-50 p-2.5">
     <input type="hidden" name="entityType" value={entityType} />
     <input type="hidden" name="entityId" value={entityId} />
-    <input name="title" required placeholder="Titulo do documento" className="w-full p-2 border rounded-lg text-sm" />
-    <div className="flex gap-2"><input name="documentType" defaultValue="Anexo" className="w-1/2 p-2 border rounded-lg text-sm" /><input name="purpose" placeholder="Finalidade" className="w-1/2 p-2 border rounded-lg text-sm" /></div>
+    <input name="title" required placeholder="Titulo do documento" className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-xs outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-600/15" />
+    <div className="grid gap-2 sm:grid-cols-2"><input name="documentType" defaultValue="Anexo" className="h-7 rounded border border-slate-300 bg-white px-2 text-xs outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-600/15" /><input name="purpose" placeholder="Finalidade" className="h-7 rounded border border-slate-300 bg-white px-2 text-xs outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-600/15" /></div>
     <input name="file" type="file" required className="w-full text-sm" />
     {error && <p className="text-sm text-red-600">{error}</p>}
-    <button disabled={uploading} className="w-full p-2 border rounded-lg text-sm disabled:opacity-50">{uploading ? "Enviando..." : "Anexar via GED"}</button>
+    <button disabled={uploading} className="h-7 w-full rounded border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50">{uploading ? "Enviando..." : "Anexar via GED"}</button>
   </form>;
 }

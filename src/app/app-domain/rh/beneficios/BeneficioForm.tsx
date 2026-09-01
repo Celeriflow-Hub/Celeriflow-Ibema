@@ -13,6 +13,8 @@ import Link from "next/link";
 import { ArrowLeft, Save } from "lucide-react";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import type { BenefitConfig, Company, Person, Supplier } from "@prisma/client";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type SupplierWithIdentity = Supplier & { company: Company | null; person: Person | null };
 
@@ -44,24 +46,22 @@ export function BeneficioForm({ data, suppliers = [] }: { data?: BenefitConfig, 
   }
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center space-x-4 mb-4">
-        <Link href="/rh/beneficios">
-          <Button variant="outline" size="icon">
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title={data ? "Editar Benefício" : "Novo Benefício"}
+        action={<Link href="/rh/beneficios">
+          <Button variant="outline" size="icon-sm" aria-label="Voltar para benefícios">
             <ArrowLeft className="h-4 w-4" />
           </Button>
-        </Link>
-        <h2 className="text-3xl font-bold tracking-tight">
-          {data ? "Editar Benefício" : "Novo Benefício"}
-        </h2>
-      </div>
+        </Link>}
+      />
 
-      <Card className="max-w-2xl">
-        <CardHeader>
+      <Card size="sm" className="max-w-2xl rounded-md shadow-none">
+        <CardHeader className="border-b pb-2">
           <CardTitle>Configuração do Benefício</CardTitle>
         </CardHeader>
-        <CardContent>
-          <form action={handleSubmit} className="space-y-6">
+        <CardContent className="pt-3">
+          <form action={handleSubmit} className="space-y-4">
             {data && <input type="hidden" name="id" value={data.id} />}
             
             <div className="space-y-2">
@@ -69,7 +69,7 @@ export function BeneficioForm({ data, suppliers = [] }: { data?: BenefitConfig, 
               <Input id="name" name="name" defaultValue={data?.name || ""} placeholder="Ex: Vale Refeição Ticket" required />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="type">Categoria / Tipo <span className="text-red-500">*</span></Label>
                 <Select name="type" defaultValue={data?.type || ""}>
@@ -119,7 +119,7 @@ export function BeneficioForm({ data, suppliers = [] }: { data?: BenefitConfig, 
               </Select>
             </div>
 
-            <div className="flex items-center space-x-2 border p-4 rounded-lg bg-slate-50">
+            <div className="flex items-center gap-2 rounded-md border bg-slate-50 p-3">
               <Switch 
                 id="isActive" 
                 checked={isActive} 
@@ -130,7 +130,7 @@ export function BeneficioForm({ data, suppliers = [] }: { data?: BenefitConfig, 
               </Label>
             </div>
 
-            <div className="flex justify-end space-x-2">
+            <div className="flex justify-end gap-2 border-t pt-3">
               <Link href="/rh/beneficios">
                 <Button type="button" variant="outline">Cancelar</Button>
               </Link>
@@ -141,6 +141,6 @@ export function BeneficioForm({ data, suppliers = [] }: { data?: BenefitConfig, 
           </form>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   );
 }

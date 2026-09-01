@@ -2,6 +2,8 @@ import { ArrowLeft, Headphones } from "lucide-react";
 import Link from "next/link";
 import { getAttendanceContext } from "@/lib/attendance/access";
 import { createTicket } from "../actions";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 import NovoChamadoForm from "./NovoChamadoForm";
 
 export const dynamic = "force-dynamic";
@@ -15,15 +17,9 @@ export default async function NovoChamadoPage() {
   ]);
 
   return (
-    <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-6">
-        <Link href="/atendimento/central" className="text-violet-600 hover:text-violet-700 text-sm font-semibold flex items-center gap-2 mb-4 w-fit transition-colors">
-          <ArrowLeft className="w-4 h-4" /> Voltar para a Central
-        </Link>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2"><Headphones className="w-6 h-6 text-violet-600" /> Novo Atendimento</h1>
-        <p className="text-slate-500 mt-1">Registre a demanda, o solicitante e o setor responsavel.</p>
-      </div>
+    <PageFrame className="max-w-4xl space-y-2">
+      <PageHeader title="Novo Atendimento" icon={<Headphones className="size-4 shrink-0 text-violet-600" />} action={<Link href="/atendimento/central" className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><ArrowLeft className="size-3.5" />Voltar</Link>} />
       <NovoChamadoForm channels={channels} departments={departments} subjects={subjects} createTicketAction={createTicket} />
-    </div>
+    </PageFrame>
   );
 }

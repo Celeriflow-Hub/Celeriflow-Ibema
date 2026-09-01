@@ -1,8 +1,9 @@
 import React from "react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { FileText, Search } from "lucide-react";
-import Link from "next/link";
 import { NewProposicaoSheet } from "../components/NewProposicaoSheet";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function ProposicoesPage() {
   const { prisma } = await getTenantContextForModule("CAMARA");
@@ -18,30 +19,22 @@ export default async function ProposicoesPage() {
   ]);
 
   return (
-    <div className="flex-1 p-8">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Link href="/camara" className="text-gray-500 hover:text-gray-700">Câmara Municipal</Link>
-            <span className="text-gray-400">/</span>
-            <span className="text-gray-900 font-medium">Proposições Legislativas</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <FileText className="h-6 w-6 text-[#9333EA]" />
-            Proposições Legislativas
-          </h1>
-        </div>
-        <NewProposicaoSheet vereadores={vereadores} />
-      </div>
+    <PageFrame className="space-y-3 px-1 py-1 md:px-2">
+      <PageHeader
+        title="Proposições Legislativas"
+        icon={<FileText className="size-4 shrink-0 text-[#9333EA]" />}
+        action={<NewProposicaoSheet vereadores={vereadores} />}
+        className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white"
+      />
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="flex items-center border-b border-slate-100 bg-slate-50 p-3 dark:border-gray-700 dark:bg-gray-800/50">
           <div className="relative w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input 
               type="text" 
               placeholder="Buscar proposição..." 
-              className="w-full pl-9 pr-4 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
+              className="w-full rounded-md border border-slate-300 bg-white py-1.5 pl-9 pr-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-[#9333EA]/20 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
             />
           </div>
         </div>
@@ -53,7 +46,7 @@ export default async function ProposicoesPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
+            <table className="w-full min-w-[760px] text-left text-sm">
               <thead className="text-xs text-gray-500 uppercase bg-gray-50 dark:bg-gray-800">
                 <tr>
                   <th className="px-6 py-3">Número/Ano</th>
@@ -89,6 +82,6 @@ export default async function ProposicoesPage() {
           </div>
         )}
       </div>
-    </div>
+    </PageFrame>
   );
 }

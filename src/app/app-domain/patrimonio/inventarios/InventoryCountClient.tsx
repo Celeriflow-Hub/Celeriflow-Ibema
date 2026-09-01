@@ -54,7 +54,7 @@ export function InventoryCountClient({ sessionId, status, items }: { sessionId: 
     <div className="space-y-4">
       {message && <p className="rounded-md border bg-muted p-3 text-sm">{message}</p>}
       <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-left text-sm">
+        <table className="min-w-[900px] w-full text-left text-sm">
           <thead className="border-b bg-muted text-muted-foreground"><tr><th className="p-3">Material</th><th className="p-3">Lote</th><th className="p-3">Esperado</th><th className="p-3">Contado</th><th className="p-3">Divergência e evidência</th><th className="p-3">Ação</th></tr></thead>
           <tbody>
             {items.map((item) => (

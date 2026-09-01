@@ -1,7 +1,8 @@
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { Globe } from "lucide-react";
-import Link from "next/link";
 import { PortalClient } from "../components/PortalClient";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function PortalPage() {
   const { prisma } = await getTenantContextForModule("SANEAMENTO");
@@ -24,9 +25,10 @@ export default async function PortalPage() {
   }));
 
   return (
-    <div className="flex-1 p-6">
-      <div className="mb-6"><div className="flex items-center gap-2 text-xs text-gray-400"><Link href="/saneamento" className="hover:text-gray-600">Água e Saneamento</Link><span>/</span><span className="text-gray-600 font-medium">Portal do Consumidor</span></div><h1 className="mt-1 flex items-center gap-2 text-xl font-bold text-gray-900 dark:text-white"><Globe className="h-5 w-5 text-indigo-500" />Portal do Consumidor</h1><p className="mt-1 text-xs text-gray-400">{requests.length} {requests.length === 1 ? "solicitação registrada" : "solicitações registradas"}</p></div>
+    <PageFrame className="space-y-2 px-1 py-1 md:px-2">
+      <PageHeader title="Portal do Consumidor" icon={<Globe className="size-4 shrink-0 text-indigo-500" />} className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white" />
+      <p className="px-1 text-xs text-gray-500 dark:text-gray-400">{requests.length} {requests.length === 1 ? "solicitação registrada" : "solicitações registradas"}</p>
       <PortalClient requests={serializedRequests} />
-    </div>
+    </PageFrame>
   );
 }

@@ -166,30 +166,30 @@ export default function EmpenhosClient({
   };
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
+    <div className="space-y-2 px-1 py-1 sm:px-2">
+      <div className="flex flex-col gap-2 border-b border-slate-300 bg-white px-3 py-2 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Empenhos</h2>
-          <p className="text-muted-foreground">Gestão de empenhos da execução orçamentária</p>
+          <h1 className="text-sm font-bold tracking-tight text-slate-900">Empenhos</h1>
+          <p className="text-xs text-muted-foreground">Gestão de empenhos da execução orçamentária</p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button onClick={handleOpenNew}>
+          <Button size="sm" onClick={handleOpenNew}>
             <Plus className="mr-2 h-4 w-4" />
             Novo Empenho
           </Button>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
+      <Card size="sm" className="rounded-md shadow-none">
+        <CardHeader className="border-b pb-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle>Listagem de Empenhos</CardTitle>
             <div className="flex space-x-2">
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input 
                   placeholder="Buscar por fornecedor ou número..." 
-                  className="pl-8 w-[280px]" 
+                  className="w-full pl-8 sm:w-[280px]"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                 />
@@ -200,7 +200,7 @@ export default function EmpenhosClient({
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-3">
           <Table>
             <TableHeader>
               <TableRow>
@@ -264,13 +264,13 @@ export default function EmpenhosClient({
       </Card>
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>{editingId ? "Editar Empenho" : "Novo Empenho"}</DialogTitle>
             <DialogDescription>Todo empenho novo deve consumir uma reserva ativa de mesmo valor.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="number">Número do Empenho</Label>
                 <Input id="number" required value={formData.number} onChange={e => setFormData({...formData, number: e.target.value})} />
@@ -314,7 +314,7 @@ export default function EmpenhosClient({
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="type">Tipo</Label>
                 <Select value={formData.type} onValueChange={v => setFormData({...formData, type: v as string})}>
@@ -389,7 +389,7 @@ export default function EmpenhosClient({
               <Input id="history" required value={formData.history} onChange={e => setFormData({...formData, history: e.target.value})} />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="processId">Processo (opcional)</Label>
                 <Select value={formData.processId} onValueChange={v => setFormData({...formData, processId: v as string})}>

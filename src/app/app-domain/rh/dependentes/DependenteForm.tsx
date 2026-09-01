@@ -12,6 +12,8 @@ import Link from "next/link";
 import { ArrowLeft, Save } from "lucide-react";
 import { MaskedInput } from "@/components/ui/MaskedInput";
 import type { Dependent, Employee } from "@prisma/client";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export function DependenteForm({ data, employees = [], defaultEmployeeId }: { data?: Dependent, employees?: Employee[], defaultEmployeeId?: string }) {
   const router = useRouter();
@@ -39,24 +41,22 @@ export function DependenteForm({ data, employees = [], defaultEmployeeId }: { da
   const effectiveEmployee = effectiveEmployeeId ? employees.find(e => e.id === effectiveEmployeeId) : null;
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center space-x-4 mb-4">
-        <Link href="/rh/dependentes">
-          <Button variant="outline" size="icon">
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title={data ? "Editar Dependente" : "Cadastrar Dependente"}
+        action={<Link href="/rh/dependentes">
+          <Button variant="outline" size="icon-sm" aria-label="Voltar para dependentes">
             <ArrowLeft className="h-4 w-4" />
           </Button>
-        </Link>
-        <h2 className="text-3xl font-bold tracking-tight">
-          {data ? "Editar Dependente" : "Cadastrar Dependente"}
-        </h2>
-      </div>
+        </Link>}
+      />
 
-      <Card className="max-w-4xl">
-        <CardHeader>
+      <Card size="sm" className="max-w-4xl rounded-md shadow-none">
+        <CardHeader className="border-b pb-2">
           <CardTitle>Dados do Dependente</CardTitle>
         </CardHeader>
-        <CardContent>
-          <form action={handleSubmit} className="space-y-6">
+        <CardContent className="pt-3">
+          <form action={handleSubmit} className="space-y-4">
             {data && <input type="hidden" name="id" value={data.id} />}
             
             <div className="space-y-2">
@@ -84,7 +84,7 @@ export function DependenteForm({ data, employees = [], defaultEmployeeId }: { da
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="name">Nome Completo</Label>
                 <Input id="name" name="name" defaultValue={data?.name || ""} placeholder="Nome do dependente" required />
@@ -102,7 +102,7 @@ export function DependenteForm({ data, employees = [], defaultEmployeeId }: { da
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="birthDate">Data de Nascimento</Label>
                 <Input type="date" id="birthDate" name="birthDate" defaultValue={formatDateForInput(data?.birthDate)} required />
@@ -124,7 +124,7 @@ export function DependenteForm({ data, employees = [], defaultEmployeeId }: { da
               </div>
             </div>
 
-            <div className="flex justify-end space-x-2">
+            <div className="flex justify-end gap-2 border-t pt-3">
               <Link href="/rh/dependentes">
                 <Button type="button" variant="outline">Cancelar</Button>
               </Link>
@@ -135,6 +135,6 @@ export function DependenteForm({ data, employees = [], defaultEmployeeId }: { da
           </form>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   );
 }

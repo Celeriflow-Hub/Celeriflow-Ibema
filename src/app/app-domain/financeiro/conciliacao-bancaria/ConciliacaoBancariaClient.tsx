@@ -103,24 +103,24 @@ export default function ConciliacaoBancariaClient({ initialSessions = [] }: { in
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="mx-auto max-w-[1600px] space-y-2 px-1 py-1 sm:px-2">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+      <div className="flex flex-col gap-2 border-b border-slate-300 bg-white px-3 py-2 shadow-sm md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mt-1 flex items-center gap-2">
-            <GitCompare className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />
+          <h1 className="mt-0.5 flex items-center gap-2 text-sm font-bold tracking-tight text-slate-900">
+            <GitCompare className="size-4 text-emerald-600" />
             Motor Avançado de Conciliação Bancária
           </h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
+          <p className="text-xs text-slate-600">
             Abertura de conciliação bancária, leitura do extrato, cálculo de saldos e confronto com o razão bancário analítico.
           </p>
         </div>
       </div>
 
       {/* Grid: Abertura & Painel de Saldos */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-12">
         {/* Form Abertura */}
-        <div className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+        <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3 shadow-none lg:col-span-4">
           <h2 className="text-base font-bold text-slate-900 dark:text-white border-b border-slate-100 dark:border-slate-800 pb-3 flex items-center gap-2">
             <FileSpreadsheet className="w-5 h-5 text-emerald-600" /> Abertura de Conciliação
           </h2>
@@ -137,7 +137,7 @@ export default function ConciliacaoBancariaClient({ initialSessions = [] }: { in
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               <div>
                 <label className="block font-semibold uppercase mb-1">Agência</label>
                 <input
@@ -160,7 +160,7 @@ export default function ConciliacaoBancariaClient({ initialSessions = [] }: { in
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               <div>
                 <label className="block font-semibold uppercase mb-1">Período (AAAA-MM)</label>
                 <input
@@ -195,13 +195,13 @@ export default function ConciliacaoBancariaClient({ initialSessions = [] }: { in
         </div>
 
         {/* Dashboard de Saldos & Motor de Match */}
-        <div className="lg:col-span-8 space-y-4">
+          <div className="space-y-3 lg:col-span-8">
           {!activeSession ? (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-8 text-center text-slate-500 italic">
               Preencha os dados e clique em &quot;Abrir Conciliação &amp; Carregar Razão Bancário&quot; para iniciar.
             </div>
           ) : (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+            <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3 shadow-none">
               {/* Header Sessão */}
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
                 <div>
@@ -298,7 +298,7 @@ export default function ConciliacaoBancariaClient({ initialSessions = [] }: { in
 
       {/* Tabela de Lançamentos Conciliados e Correspondências (9 Regras) */}
       {matchResults.length > 0 && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+          <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3 shadow-none">
           <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
             <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <ArrowRightLeft className="w-5 h-5 text-emerald-600" />

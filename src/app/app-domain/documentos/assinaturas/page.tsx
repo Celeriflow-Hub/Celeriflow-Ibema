@@ -1,6 +1,8 @@
 import { FileSignature, Search } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import AssinaturasClient from "./AssinaturasClient";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -28,19 +30,12 @@ export default async function AssinaturasPage() {
   }));
 
   return (
-    <div className="max-w-6xl animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <FileSignature className="w-6 h-6 text-indigo-600" />
-            Assinaturas Eletrônicas
-          </h1>
-          <p className="text-slate-500 mt-1">Registre uma manifestação interna vinculada a uma versão imutável do documento.</p>
-        </div>
-      </div>
+    <PageFrame className="max-w-6xl space-y-2">
+      <PageHeader title="Assinaturas Eletrônicas" icon={<FileSignature className="size-4 shrink-0 text-indigo-600" />} />
+      <p className="text-xs text-slate-500">Registre uma manifestação interna vinculada a uma versão imutável do documento.</p>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row items-center gap-4 bg-slate-50/50">
+      <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col items-center gap-2 border-b border-slate-200 bg-slate-50/50 p-3 sm:flex-row">
           <div className="relative w-full max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
@@ -61,6 +56,6 @@ export default async function AssinaturasPage() {
           )}
         </div>
       </div>
-    </div>
+    </PageFrame>
   );
 }

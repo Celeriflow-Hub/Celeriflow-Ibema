@@ -12,6 +12,8 @@ import Link from "next/link";
 import { ArrowLeft, Save, Plus, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MoneyInput } from "@/components/ui/MoneyInput";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type RequestItem = {
   catalogItemId: string;
@@ -113,25 +115,16 @@ export function SolicitacaoForm({ data, catalogItems = [], secretarias = [], dep
   }
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center space-x-4 mb-4">
-        <Link href="/compras/solicitacoes">
-          <Button variant="outline" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <h2 className="text-3xl font-bold tracking-tight">
-          {data ? "Editar Solicitação" : "Nova Solicitação"}
-        </h2>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title={data ? "Editar Solicitação" : "Nova Solicitação"} action={<Link href="/compras/solicitacoes" aria-label="Voltar"><Button variant="outline" size="icon"><ArrowLeft className="size-4" /></Button></Link>} />
 
-      <Card className="max-w-4xl">
-        <CardHeader>
-          <CardTitle>Dados da Solicitação</CardTitle>
+      <Card className="max-w-5xl rounded-md">
+        <CardHeader className="border-b p-3">
+          <CardTitle className="text-sm">Dados da Solicitação</CardTitle>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
+        <CardContent className="p-3">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="number">Número da Solicitação</Label>
                 <Input id="number" name="number" defaultValue={data?.number || ""} placeholder="Ex: REQ-2026-001 (Auto-gerado se vazio)" />
@@ -182,9 +175,9 @@ export function SolicitacaoForm({ data, catalogItems = [], secretarias = [], dep
               <Textarea id="justification" name="justification" defaultValue={data?.justification || ""} required rows={3} placeholder="Por que essa contratação/compra é necessária?" />
             </div>
 
-            <div className="pt-4 border-t border-slate-200">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium">Itens da Solicitação</h3>
+            <div className="border-t border-slate-200 pt-3">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">Itens da Solicitação</h3>
                 <Button type="button" variant="outline" size="sm" onClick={handleAddItem}>
                   <Plus className="mr-2 h-4 w-4" /> Adicionar Item
                 </Button>
@@ -195,10 +188,10 @@ export function SolicitacaoForm({ data, catalogItems = [], secretarias = [], dep
                   Nenhum item adicionado. Clique em &quot;Adicionar Item&quot;.
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {items.map((item, index) => (
-                    <div key={index} className="flex items-start gap-4 p-4 border rounded-lg bg-slate-50 relative">
-                      <div className="flex-1 grid grid-cols-12 gap-4">
+                    <div key={index} className="relative flex items-start gap-3 rounded-md border bg-slate-50 p-3">
+                      <div className="grid flex-1 grid-cols-12 gap-3">
                         <div className="col-span-12 md:col-span-6 space-y-2">
                           <Label>Produto ou Serviço *</Label>
                           <Select 
@@ -261,7 +254,7 @@ export function SolicitacaoForm({ data, catalogItems = [], secretarias = [], dep
               )}
             </div>
 
-            <div className="flex justify-end space-x-2 pt-4">
+            <div className="flex justify-end gap-2 border-t pt-3">
               <Link href="/compras/solicitacoes">
                 <Button type="button" variant="outline">Cancelar</Button>
               </Link>
@@ -272,6 +265,6 @@ export function SolicitacaoForm({ data, catalogItems = [], secretarias = [], dep
           </form>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   );
 }

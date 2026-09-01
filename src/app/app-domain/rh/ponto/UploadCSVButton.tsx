@@ -33,9 +33,10 @@ export function UploadCSVButton() {
         ref={fileInputRef} 
         onChange={handleUpload} 
       />
-      <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+      <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
         <Upload className="mr-2 h-4 w-4" />
-        {isUploading ? "Processando..." : "Importar Arquivo de Relógio (CSV)"}
+        <span className="hidden sm:inline">{isUploading ? "Processando..." : "Importar Arquivo de Relógio (CSV)"}</span>
+        <span className="sm:hidden">{isUploading ? "Processando" : "Importar CSV"}</span>
       </Button>
     </>
   );

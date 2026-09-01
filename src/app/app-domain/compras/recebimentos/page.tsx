@@ -1,5 +1,8 @@
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { ReceiptForm } from "./ReceiptForm";
+import { PackageCheck } from "lucide-react";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function RecebimentosPage() {
   const { prisma } = await getTenantContextForModule("COMPRAS");
@@ -15,5 +18,5 @@ export default async function RecebimentosPage() {
     prisma.purchaseReceipt.findMany({ include: { contract: { select: { number: true } }, items: { include: { material: { select: { name: true } } } } }, orderBy: { receivedAt: "desc" }, take: 30 }),
   ]);
 
-  return <div className="space-y-6 p-8 pt-6"><div><h1 className="text-3xl font-bold tracking-tight">Recebimentos de Compra</h1><p className="mt-1 text-sm text-muted-foreground">O recebimento aprovado gera a entrada rastreável no almoxarifado.</p></div><div className="rounded-lg border bg-white p-6"><ReceiptForm contracts={contracts} documents={documents} employees={employees} warehouses={warehouses} /></div><section className="rounded-lg border bg-white p-6"><h2 className="mb-4 text-lg font-semibold">Recebimentos recentes</h2><div className="space-y-2">{receipts.length ? receipts.map((receipt) => <div key={receipt.id} className="flex flex-wrap justify-between gap-2 rounded border p-3 text-sm"><span className="font-medium">{receipt.number} · {receipt.contract.number}</span><span>{receipt.items.map((item) => `${item.material.name} (${item.quantity})`).join(", ")}</span><span>{receipt.status}</span></div>) : <p className="text-sm text-muted-foreground">Nenhum recebimento registrado.</p>}</div></section></div>;
+  return <PageFrame className="space-y-2"><PageHeader title="Recebimentos de Compra" icon={<PackageCheck className="size-4 shrink-0 text-emerald-600" />} /><p className="text-xs text-muted-foreground">O recebimento aprovado gera a entrada rastreável no almoxarifado.</p><div className="rounded-md border bg-white p-3"><ReceiptForm contracts={contracts} documents={documents} employees={employees} warehouses={warehouses} /></div><section className="rounded-md border bg-white p-3"><h2 className="mb-3 text-sm font-semibold">Recebimentos recentes</h2><div className="space-y-2">{receipts.length ? receipts.map((receipt) => <div key={receipt.id} className="flex flex-wrap justify-between gap-2 rounded border p-3 text-sm"><span className="font-medium">{receipt.number} · {receipt.contract.number}</span><span>{receipt.items.map((item) => `${item.material.name} (${item.quantity})`).join(", ")}</span><span>{receipt.status}</span></div>) : <p className="text-sm text-muted-foreground">Nenhum recebimento registrado.</p>}</div></section></PageFrame>;
 }

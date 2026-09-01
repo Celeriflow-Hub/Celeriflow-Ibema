@@ -59,16 +59,16 @@ export default function RestosAPagarClient({ payables, years, payments }: { paya
     setNotice(result.error ?? "Reinscrição registrada no histórico do RAP.");
   }
 
-  return <div className="flex-1 space-y-6 p-6 md:p-8">
-    <div className="flex gap-3 items-start"><ClipboardList className="w-7 h-7 text-emerald-700 mt-1" /><div><h1 className="text-2xl font-bold text-slate-900">Restos a Pagar</h1><p className="text-sm text-slate-500">Acompanhamento interno de RAP por tipo e exercício de origem. Não executa pagamento nem gera lançamento contábil.</p></div></div>
+  return <div className="space-y-2 px-1 py-1 sm:px-2">
+    <header className="flex gap-2 border-b border-slate-300 bg-white px-3 py-2 shadow-sm"><ClipboardList className="mt-0.5 size-4 text-emerald-700" /><div><h1 className="text-sm font-bold tracking-tight text-slate-900">Restos a Pagar</h1><p className="text-xs text-slate-500">Acompanhamento interno de RAP por tipo e exercício de origem. Não executa pagamento nem gera lançamento contábil.</p></div></header>
     {notice && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{notice}</div>}
-    <div className="grid gap-4 lg:grid-cols-[1fr_1.35fr]">
-      <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
+    <div className="grid gap-2 lg:grid-cols-[1fr_1.35fr]">
+      <section className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
         <h2 className="font-bold text-slate-800">Consulta</h2>
         <div className="grid gap-3 sm:grid-cols-2"><select value={originYear} onChange={(event) => setOriginYear(event.target.value)} className="rounded-lg border p-2 text-sm"><option value="ALL">Todos os anos de origem</option>{years.map((year) => <option key={year.id} value={year.id}>{year.year}</option>)}</select><select value={type} onChange={(event) => setType(event.target.value)} className="rounded-lg border p-2 text-sm"><option value="ALL">Todos os tipos</option><option value="PROCESSADO">Processado</option><option value="NAO_PROCESSADO">Não processado</option></select></div>
         <p className="text-sm text-slate-500">{visiblePayables.length} registro(s) encontrado(s).</p>
       </section>
-      <form onSubmit={submitTracking} className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
+      <form onSubmit={submitTracking} className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
         <h2 className="font-bold text-slate-800">Vincular pagamento já efetivado</h2>
         <select required value={tracking.payableCarryForwardId} onChange={(event) => setTracking({ payableCarryForwardId: event.target.value, paymentId: "", value: "" })} className="w-full rounded-lg border p-2 text-sm"><option value="">Selecione o RAP pendente</option>{payables.filter((payable) => ["PENDENTE", "PAGAMENTO_PARCIAL_RASTREADO"].includes(payable.status)).map((payable) => <option key={payable.id} value={payable.id}>{payable.originFinancialYear.year} · {payable.commitment.number} · {typeLabel(payable.type)} · {currency(payable.value)}</option>)}</select>
         <div className="grid gap-3 sm:grid-cols-2"><select required disabled={!selectedPayable} value={tracking.paymentId} onChange={(event) => { const payment = selectablePayments.find((item) => item.id === event.target.value); setTracking({ ...tracking, paymentId: event.target.value, value: payment?.value ?? "" }); }} className="rounded-lg border p-2 text-sm"><option value="">Pagamento efetivado</option>{selectablePayments.map((payment) => <option key={payment.id} value={payment.id}>{payment.orderNumber} · {currency(payment.value)}</option>)}</select><input required min="0.01" step="0.01" type="number" value={tracking.value} onChange={(event) => setTracking({ ...tracking, value: event.target.value })} placeholder="Valor a acompanhar" className="rounded-lg border p-2 text-sm" /></div>

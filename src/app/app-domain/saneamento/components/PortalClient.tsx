@@ -94,26 +94,26 @@ export function PortalClient({ requests }: { requests: PortalRequest[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
+    <section className="overflow-hidden rounded-md border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800" aria-label="Lista de solicitações do portal">
+      <div className="flex flex-col gap-2 border-b border-gray-100 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          <div className="relative w-full sm:w-64">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
             <input
               type="search"
               placeholder="Buscar solicitação, solicitante..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="w-60 rounded-md border py-1.5 pl-8 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-[#0284C7]"
+              className="h-9 w-full rounded-md border bg-white py-1.5 pl-8 pr-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0284C7] dark:bg-gray-900 dark:text-white"
             />
           </div>
           <div className="flex items-center gap-1">
             <Filter className="h-3.5 w-3.5 text-gray-400" />
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-md border px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#0284C7]">
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filtrar solicitações por status" className="h-9 rounded-md border bg-white px-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0284C7] dark:bg-gray-900 dark:text-white">
               {statuses.map((status) => <option key={status}>{status}</option>)}
             </select>
           </div>
-          <select value={activeFilter} onChange={(event) => setActiveFilter(event.target.value)} className="rounded-md border px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#0284C7]">
+          <select value={activeFilter} onChange={(event) => setActiveFilter(event.target.value)} aria-label="Filtrar solicitações por situação" className="h-9 rounded-md border bg-white px-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0284C7] dark:bg-gray-900 dark:text-white">
             <option>Todos</option>
             <option>Ativas</option>
             <option>Inativas</option>
@@ -144,24 +144,24 @@ export function PortalClient({ requests }: { requests: PortalRequest[] }) {
       )}
 
       <Sheet open={editingRequest !== null} onOpenChange={(open) => !open && setEditingRequest(null)}>
-        <SheetContent side="right" className="w-[400px] overflow-y-auto sm:w-[540px]">
+        <SheetContent side="right" className="w-[calc(100vw-1rem)] overflow-y-auto sm:w-[34rem]">
           <SheetHeader>
             <SheetTitle>Editar Solicitação</SheetTitle>
             <SheetDescription>Atualize os dados da solicitação do portal.</SheetDescription>
           </SheetHeader>
           {editingRequest && (
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <form onSubmit={handleSubmit} className="mt-4 space-y-3 pb-2">
               <Field label="Solicitação"><input name="requestType" required defaultValue={editingRequest.requestType} className="w-full rounded-md border p-2 text-sm" /></Field>
               <Field label="Solicitante"><input name="requesterName" required defaultValue={editingRequest.requesterName} className="w-full rounded-md border p-2 text-sm" /></Field>
               <Field label="Data"><input type="date" name="requestedAt" required defaultValue={editingRequest.requestedAt} className="w-full rounded-md border p-2 text-sm" /></Field>
               <Field label="Origem"><input name="source" required defaultValue={editingRequest.source} className="w-full rounded-md border p-2 text-sm" /></Field>
               <Field label="Status"><input name="status" required defaultValue={editingRequest.status} className="w-full rounded-md border p-2 text-sm" /></Field>
-              <div className="flex justify-end gap-2 pt-4"><button type="button" onClick={() => setEditingRequest(null)} className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">Cancelar</button><button type="submit" disabled={saving} className="rounded-md bg-[#0284C7] px-4 py-2 text-sm font-medium text-white hover:bg-[#0369A1] disabled:opacity-50">{saving ? "Salvando..." : "Salvar Alterações"}</button></div>
+              <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end"><button type="button" onClick={() => setEditingRequest(null)} className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">Cancelar</button><button type="submit" disabled={saving} className="rounded-md bg-[#0284C7] px-4 py-2 text-sm font-medium text-white hover:bg-[#0369A1] disabled:opacity-50">{saving ? "Salvando..." : "Salvar Alterações"}</button></div>
             </form>
           )}
         </SheetContent>
       </Sheet>
-    </div>
+    </section>
   );
 }
 

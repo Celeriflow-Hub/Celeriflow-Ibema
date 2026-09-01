@@ -2,9 +2,11 @@ import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Edit } from "lucide-react";
+import { ArrowLeft, Edit, Gavel } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function DispensaDetalhesPage({ params }: { params: Promise<{ id: string }> }) {
   const { prisma } = await getTenantContextForModule("COMPRAS");
@@ -22,29 +24,15 @@ export default async function DispensaDetalhesPage({ params }: { params: Promise
   }
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center space-x-4 mb-4">
-        <Link href="/compras/licitacoes">
-          <Button variant="outline" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <h2 className="text-3xl font-bold tracking-tight">Detalhes da Dispensa</h2>
-        <div className="flex-1 flex justify-end">
-          <Link href={`/compras/dispensas/${dispensa.id}/editar`}>
-            <Button>
-              <Edit className="mr-2 h-4 w-4" /> Editar
-            </Button>
-          </Link>
-        </div>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Detalhes da Dispensa" icon={<Gavel className="size-4 shrink-0 text-amber-600" />} action={<><Link href="/compras/licitacoes" aria-label="Voltar"><Button variant="outline" size="icon"><ArrowLeft className="size-4" /></Button></Link><Link href={`/compras/dispensas/${dispensa.id}/editar`}><Button size="sm"><Edit className="size-3.5" /><span className="hidden sm:inline">Editar</span></Button></Link></>} />
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Informações Gerais</CardTitle>
+      <div className="grid gap-2 md:grid-cols-2">
+        <Card className="rounded-md">
+          <CardHeader className="border-b p-3">
+            <CardTitle className="text-sm">Informações Gerais</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3 p-3 text-sm">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Tipo</p>
               <p className="text-lg">{dispensa.type}</p>
@@ -61,11 +49,11 @@ export default async function DispensaDetalhesPage({ params }: { params: Promise
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Fornecedor e Justificativa</CardTitle>
+        <Card className="rounded-md">
+          <CardHeader className="border-b p-3">
+            <CardTitle className="text-sm">Fornecedor e Justificativa</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3 p-3 text-sm">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Fornecedor</p>
               <p>{dispensa.supplier ? (dispensa.supplier.company?.corporateName || dispensa.supplier.company?.tradeName) : "A Definir"}</p>
@@ -77,6 +65,6 @@ export default async function DispensaDetalhesPage({ params }: { params: Promise
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageFrame>
   );
 }

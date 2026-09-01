@@ -55,7 +55,7 @@ export function EditUnitSheet({ unit }: { unit: Unit }) {
       <SheetTrigger render={<button className="p-1.5 text-slate-400 hover:text-[#0284C7] hover:bg-blue-50 rounded transition-colors" title="Editar" />}>
         <Pencil className="h-3.5 w-3.5" />
       </SheetTrigger>
-      <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
+      <SheetContent side="right" className="w-[calc(100vw-1rem)] overflow-y-auto sm:w-[34rem]">
         <SheetHeader>
           <SheetTitle>Editar Unidade Consumidora</SheetTitle>
           <SheetDescription>
@@ -63,7 +63,7 @@ export function EditUnitSheet({ unit }: { unit: Unit }) {
           </SheetDescription>
         </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-4 space-y-3 pb-2">
           <div className="space-y-2">
             <label className="text-sm font-medium">Código (Ligação)</label>
             <input
@@ -82,7 +82,7 @@ export function EditUnitSheet({ unit }: { unit: Unit }) {
               className="w-full p-2 border rounded-md text-sm"
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium">Categoria</label>
               <select name="category" required defaultValue={unit.category} className="w-full p-2 border rounded-md text-sm">
@@ -109,7 +109,7 @@ export function EditUnitSheet({ unit }: { unit: Unit }) {
               className="w-full p-2 border rounded-md text-sm"
             />
           </div>
-          <div className="pt-4 flex justify-end gap-2">
+          <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={() => setOpen(false)}

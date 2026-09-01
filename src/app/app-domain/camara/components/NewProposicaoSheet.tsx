@@ -40,11 +40,11 @@ export function NewProposicaoSheet({ vereadores }: { vereadores: { id: string; n
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger render={<button className="flex items-center gap-2 bg-[#9333EA] hover:bg-[#7E22CE] text-white px-4 py-2 rounded-lg font-medium transition-colors" />}>
-        <FileText className="h-5 w-5" />
+      <SheetTrigger render={<button className="flex h-8 items-center gap-2 rounded-md bg-[#9333EA] px-3 text-sm font-medium text-white transition-colors hover:bg-[#7E22CE]" />}>
+        <FileText className="h-4 w-4" />
         Nova Proposição
       </SheetTrigger>
-      <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
+      <SheetContent side="right" className="w-full max-w-[540px] overflow-y-auto sm:w-[540px]">
         <SheetHeader>
           <SheetTitle>Registrar Proposição</SheetTitle>
           <SheetDescription>
@@ -52,19 +52,19 @@ export function NewProposicaoSheet({ vereadores }: { vereadores: { id: string; n
           </SheetDescription>
         </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-5 space-y-3">
           <div className="space-y-2">
             <label className="text-sm font-medium">Número/Ano</label>
             <input
               name="numero"
               required
-              className="w-full p-2 border rounded-md"
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
               placeholder="Ex: PL-001/2026"
             />
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">Tipo de Proposição</label>
-            <select name="tipo" required className="w-full p-2 border rounded-md">
+            <select name="tipo" required className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-gray-600 dark:bg-gray-900 dark:text-white">
               <option value="Projeto de Lei">Projeto de Lei</option>
               <option value="Requerimento">Requerimento</option>
               <option value="Indicação">Indicação</option>
@@ -74,7 +74,7 @@ export function NewProposicaoSheet({ vereadores }: { vereadores: { id: string; n
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">Vereador(a) Autor(a)</label>
-            <select name="autorId" required className="w-full p-2 border rounded-md">
+            <select name="autorId" required className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-gray-600 dark:bg-gray-900 dark:text-white">
               <option value="">Selecione...</option>
               {vereadores.map(ver => (
                 <option key={ver.id} value={ver.id}>
@@ -89,7 +89,7 @@ export function NewProposicaoSheet({ vereadores }: { vereadores: { id: string; n
               name="ementa"
               required
               rows={3}
-              className="w-full p-2 border rounded-md"
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
               placeholder="Dispõe sobre..."
             />
           </div>
@@ -98,12 +98,12 @@ export function NewProposicaoSheet({ vereadores }: { vereadores: { id: string; n
             <textarea
               name="texto"
               rows={5}
-              className="w-full p-2 border rounded-md"
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
               placeholder="Art. 1º - Fica instituído..."
             />
           </div>
 
-          <div className="pt-4 flex justify-end gap-2">
+          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 dark:border-gray-700">
             <button
               type="button"
               onClick={() => setOpen(false)}

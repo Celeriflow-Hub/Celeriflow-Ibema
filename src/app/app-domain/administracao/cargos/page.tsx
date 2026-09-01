@@ -1,6 +1,8 @@
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import Link from "next/link";
 import CargosClient from "./CargosClient";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -12,17 +14,9 @@ export default async function CargosPage() {
   });
 
   return (
-    <div className="max-w-6xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-6 flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Cargos e Funções</h1>
-          <p className="text-slate-500 mt-1">Gerencie os cargos disponíveis na prefeitura.</p>
-        </div>
-        <Link href="/administracao/cargos/novo" className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors">
-          Adicionar Novo
-        </Link>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Cargos e Funções" action={<Link href="/administracao/cargos/novo" className="inline-flex h-7 items-center rounded bg-purple-700 px-3 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-purple-800">Adicionar cargo</Link>} />
       <CargosClient roles={roles} />
-    </div>
+    </PageFrame>
   );
 }

@@ -19,6 +19,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { saveCatalogItem, toggleCatalogItemStatus } from "./actions";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type CatalogItem = {
   id: string;
@@ -109,43 +111,30 @@ export default function CatalogoClient({ items }: { items: CatalogItem[] }) {
   };
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Catálogo de Itens</h2>
-          <p className="text-muted-foreground">
-            Gerenciamento de produtos, materiais e serviços cadastrados para compras.
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Button onClick={handleOpenNew}>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Item
-          </Button>
-        </div>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Catálogo de Itens" icon={<FileText className="size-4 shrink-0 text-emerald-600" />} action={<Button size="sm" onClick={handleOpenNew}><Plus className="size-3.5" /><span className="hidden sm:inline">Novo Item</span></Button>} />
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+      <Card className="rounded-md">
+        <CardHeader className="flex flex-col gap-2 space-y-0 border-b p-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle>Itens Cadastrados</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-sm">Itens Cadastrados</CardTitle>
+            <CardDescription className="text-xs">
               Lista de todos os itens disponíveis no catálogo.
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <div className="relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2 top-2.5 size-4 text-muted-foreground" />
               <Input 
                 placeholder="Buscar por nome ou código..." 
-                className="pl-8 w-[250px]" 
+                className="w-full pl-8"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
               />
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-3">
           {filteredItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground">
               <FileText className="h-10 w-10 mb-4 opacity-20" />
@@ -153,8 +142,8 @@ export default function CatalogoClient({ items }: { items: CatalogItem[] }) {
               <p className="text-sm">Tente mudar sua busca ou clique em &quot;Novo Item&quot;.</p>
             </div>
           ) : (
-            <div className="rounded-md border">
-              <Table>
+            <div className="overflow-x-auto rounded-md border">
+              <Table className="min-w-[760px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Código</TableHead>
@@ -256,6 +245,6 @@ export default function CatalogoClient({ items }: { items: CatalogItem[] }) {
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageFrame>
   );
 }

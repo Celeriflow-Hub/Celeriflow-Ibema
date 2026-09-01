@@ -142,24 +142,24 @@ export default function ReceitasConstitucionaisClient({
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="mx-auto max-w-[1600px] space-y-2 px-1 py-1 sm:px-2">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+      <div className="flex flex-col gap-2 border-b border-slate-300 bg-white px-3 py-2 shadow-sm md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mt-1 flex items-center gap-2">
-            <Landmark className="w-7 h-7 text-purple-600 dark:text-purple-400" />
+          <h1 className="mt-0.5 flex items-center gap-2 text-sm font-bold tracking-tight text-slate-900">
+            <Landmark className="size-4 text-purple-600" />
             Receitas Constitucionais e Legais
           </h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
+          <p className="text-xs text-slate-600">
             Tabela de regras configurável para FPM, ICMS, Fundeb, IPVA, ITR, Royalties, ADO LC 176/20 e Fila de Exceções para variação de descrições.
           </p>
         </div>
 
         {/* Tab Buttons */}
-        <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+        <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-md border border-slate-300 bg-slate-50 p-1">
           <button
             onClick={() => setActiveTab("regras")}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
+            className={`shrink-0 px-3 py-1.5 text-xs font-bold rounded transition-all ${
               activeTab === "regras" ? "bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow-sm" : "text-slate-600 dark:text-slate-400"
             }`}
           >
@@ -167,7 +167,7 @@ export default function ReceitasConstitucionaisClient({
           </button>
           <button
             onClick={() => setActiveTab("nova")}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-1 ${
+            className={`flex shrink-0 items-center gap-1 rounded px-3 py-1.5 text-xs font-bold transition-all ${
               activeTab === "nova" ? "bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow-sm" : "text-slate-600 dark:text-slate-400"
             }`}
           >
@@ -175,7 +175,7 @@ export default function ReceitasConstitucionaisClient({
           </button>
           <button
             onClick={() => setActiveTab("excecoes")}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-1 ${
+            className={`flex shrink-0 items-center gap-1 rounded px-3 py-1.5 text-xs font-bold transition-all ${
               activeTab === "excecoes" ? "bg-purple-600 text-white shadow-sm" : "text-slate-600 dark:text-slate-400"
             }`}
           >
@@ -186,7 +186,7 @@ export default function ReceitasConstitucionaisClient({
 
       {/* TAB 1: Tabela de Regras (9 Campos Obrigatórios do Edital) */}
       {activeTab === "regras" && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+          <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3 shadow-none">
           <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
             <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <ListFilter className="w-5 h-5 text-purple-600" />
@@ -276,13 +276,13 @@ export default function ReceitasConstitucionaisClient({
 
       {/* TAB 2: Nova Regra */}
       {activeTab === "nova" && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm max-w-3xl mx-auto space-y-4">
+          <div className="mx-auto max-w-3xl space-y-3 rounded-md border border-slate-200 bg-white p-3 shadow-none">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white border-b border-slate-100 dark:border-slate-800 pb-3">
             Cadastrar Nova Regra de Receita Orçamentária
           </h2>
 
           <form onSubmit={handleCreateRule} className="space-y-4 text-xs">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="block font-semibold uppercase mb-1">Texto Procurado (Keywords)</label>
                 <input
@@ -312,7 +312,7 @@ export default function ReceitasConstitucionaisClient({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="block font-semibold uppercase mb-1">Tipo de Receita</label>
                 <input
@@ -335,7 +335,7 @@ export default function ReceitasConstitucionaisClient({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="block font-semibold uppercase mb-1">Fonte de Recurso</label>
                 <input
@@ -358,7 +358,7 @@ export default function ReceitasConstitucionaisClient({
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 pt-2">
+            <div className="grid gap-3 pt-2 sm:grid-cols-3">
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -408,7 +408,7 @@ export default function ReceitasConstitucionaisClient({
 
       {/* TAB 3: Fila de Exceções */}
       {activeTab === "excecoes" && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+          <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3 shadow-none">
           <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -429,7 +429,7 @@ export default function ReceitasConstitucionaisClient({
               Nenhuma exceção pendente! Todas as receitas foram classificadas automaticamente.
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid gap-3 md:grid-cols-2">
               {exceptions.map((item) => {
                 const valor = typeof item.valorDecimal === "object" ? Number(item.valorDecimal) : Number(item.valorDecimal || 0);
 

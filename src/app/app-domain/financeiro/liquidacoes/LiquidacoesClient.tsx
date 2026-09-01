@@ -157,22 +157,22 @@ export default function LiquidacoesClient({
   };
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
+    <div className="space-y-2 px-1 py-1 sm:px-2">
+      <div className="flex flex-col gap-2 border-b border-slate-300 bg-white px-3 py-2 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Liquidações</h2>
-          <p className="text-muted-foreground">Ateste de notas fiscais e recebimento de serviços</p>
+          <h1 className="text-sm font-bold tracking-tight text-slate-900">Liquidações</h1>
+          <p className="text-xs text-muted-foreground">Ateste de notas fiscais e recebimento de serviços</p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button onClick={handleOpenNew}>
+          <Button size="sm" onClick={handleOpenNew}>
             <Plus className="mr-2 h-4 w-4" />
             Nova Liquidação
           </Button>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
+      <Card size="sm" className="rounded-md shadow-none">
+        <CardHeader className="border-b pb-2">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <CardTitle>Listagem de Liquidações</CardTitle>
             <div className="flex flex-wrap items-center gap-2">
@@ -222,7 +222,7 @@ export default function LiquidacoesClient({
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-3">
           <Table>
             <TableHeader>
               <TableRow>
@@ -288,13 +288,13 @@ export default function LiquidacoesClient({
       </Card>
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <DialogContent className="sm:max-w-[680px]">
+          <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[680px]">
           <DialogHeader>
             <DialogTitle>{editingId ? "Editar Liquidação" : "Nova Liquidação"}</DialogTitle>
             <DialogDescription>Ateste o recebimento de materiais ou serviços vinculados a um empenho.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="date">Data da Liquidação</Label>
                 <Input id="date" type="date" required value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
@@ -317,7 +317,7 @@ export default function LiquidacoesClient({
               </Select>
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="documentId">Documento GED</Label>
                 <Select value={formData.documentId} onValueChange={v => setFormData({...formData, documentId: v as string})}>
@@ -348,7 +348,7 @@ export default function LiquidacoesClient({
 
             <div className="rounded-md border p-3 space-y-3">
               <p className="text-sm font-medium">Dados do documento fiscal</p>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="fiscalDocumentNumber">Número</Label>
                   <Input id="fiscalDocumentNumber" value={formData.fiscalDocumentNumber} onChange={e => setFormData({ ...formData, fiscalDocumentNumber: e.target.value })} />

@@ -11,6 +11,8 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import { ArrowLeft, Save } from "lucide-react";
 import type { AttendanceRecord, Employee } from "@prisma/client";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export function PontoForm({ data, employees = [] }: { data?: AttendanceRecord, employees?: Employee[] }) {
   const router = useRouter();
@@ -53,27 +55,25 @@ export function PontoForm({ data, employees = [] }: { data?: AttendanceRecord, e
   }, [entryTime, exitTime]);
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center space-x-4 mb-4">
-        <Link href="/rh/ponto">
-          <Button variant="outline" size="icon">
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title={data ? "Editar Ponto" : "Registrar Ponto"}
+        action={<Link href="/rh/ponto">
+          <Button variant="outline" size="icon-sm" aria-label="Voltar para registro de ponto">
             <ArrowLeft className="h-4 w-4" />
           </Button>
-        </Link>
-        <h2 className="text-3xl font-bold tracking-tight">
-          {data ? "Editar Ponto" : "Registrar Ponto"}
-        </h2>
-      </div>
+        </Link>}
+      />
 
-      <Card className="max-w-4xl">
-        <CardHeader>
+      <Card size="sm" className="max-w-4xl rounded-md shadow-none">
+        <CardHeader className="border-b pb-2">
           <CardTitle>Registro Diário de Ponto</CardTitle>
         </CardHeader>
-        <CardContent>
-          <form action={handleSubmit} className="space-y-6">
+        <CardContent className="pt-3">
+          <form action={handleSubmit} className="space-y-4">
             {data && <input type="hidden" name="id" value={data.id} />}
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="employeeId">Servidor</Label>
                 <Select name="employeeId" value={employeeId} onValueChange={(v) => setEmployeeId(v || "")} required>
@@ -95,7 +95,7 @@ export function PontoForm({ data, employees = [] }: { data?: AttendanceRecord, e
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 p-4 border rounded-lg bg-slate-50/50">
+            <div className="grid gap-3 rounded-md border bg-slate-50/50 p-3 sm:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="entryTime">Hora de Entrada</Label>
                 <Input type="time" id="entryTime" value={entryTime} onChange={(e) => setEntryTime(e.target.value)} />
@@ -128,7 +128,7 @@ export function PontoForm({ data, employees = [] }: { data?: AttendanceRecord, e
               </Select>
             </div>
 
-            <div className="flex justify-end space-x-2">
+            <div className="flex justify-end gap-2 border-t pt-3">
               <Link href="/rh/ponto">
                 <Button type="button" variant="outline">Cancelar</Button>
               </Link>
@@ -139,6 +139,6 @@ export function PontoForm({ data, employees = [] }: { data?: AttendanceRecord, e
           </form>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   );
 }

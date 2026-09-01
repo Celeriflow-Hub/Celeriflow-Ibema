@@ -84,7 +84,7 @@ export default function FinanceiroLayout({ children }: { children: React.ReactNo
   const [openGroup, setOpenGroup] = useState<string | null>(activeGroup);
 
   return (
-    <div className="relative mx-auto flex w-full max-w-[1600px] flex-1 flex-col overflow-visible bg-slate-100 xl:flex-row">
+    <div data-module-shell className="relative mx-auto flex w-full max-w-[1600px] flex-1 flex-col overflow-visible bg-slate-100 xl:flex-row">
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-slate-300 bg-white px-3 xl:hidden">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-700">Módulo setorial</p>
@@ -167,7 +167,7 @@ export default function FinanceiroLayout({ children }: { children: React.ReactNo
                     }}
                     className={`mb-0.5 flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] font-medium transition-colors outline-none ${
                       isActive
-                        ? "bg-emerald-500 text-white"
+                        ? "bg-emerald-700 text-white"
                         : "text-slate-300 hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-emerald-400"
                     }`}
                   >

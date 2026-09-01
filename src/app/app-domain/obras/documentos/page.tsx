@@ -1,5 +1,6 @@
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { ObrasDocumentosClient } from "../components/ObrasDocumentosClient";
+import { PageFrame } from "@/components/app-ui/PageFrame";
 
 export default async function DocumentosPage() {
   const { prisma } = await getTenantContextForModule("OBRAS");
@@ -13,5 +14,5 @@ export default async function DocumentosPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  return <ObrasDocumentosClient documentos={documentos} />;
+  return <PageFrame className="px-1 py-1 md:px-2"><ObrasDocumentosClient documentos={documentos} /></PageFrame>;
 }

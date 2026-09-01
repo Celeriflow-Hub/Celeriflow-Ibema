@@ -15,15 +15,15 @@ export default async function FinanceiroRelatoriosPage() {
   const reportOptions = financialReportOptions.filter((report) => pocReportTypes.has(report.type));
 
   return (
-    <div className="max-w-3xl space-y-6 p-6 md:p-8">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Relatórios Financeiros</h1>
-        <p className="mt-1 text-sm text-slate-500">Prévia e emissão interna em PDF, CSV, XLSX, TXT ou impressão para os relatórios básicos da POC.</p>
-      </div>
-      <section className="rounded-xl border border-slate-200 bg-white p-5">
+    <div className="max-w-4xl space-y-2 px-1 py-1 sm:px-2">
+      <header className="border-b border-slate-300 bg-white px-3 py-2 shadow-sm">
+        <h1 className="text-sm font-bold tracking-tight text-slate-900">Relatórios Financeiros</h1>
+        <p className="mt-0.5 text-xs text-slate-500">Prévia e emissão interna em PDF, CSV, XLSX, TXT ou impressão para os relatórios básicos da POC.</p>
+      </header>
+      <section className="rounded-md border border-slate-200 bg-white p-3">
         <h2 className="font-semibold text-slate-800">Emitir relatório básico</h2>
         {canIssue ? (
-          <form action="/api/financeiro/relatorios" method="get" className="mt-4 grid gap-4 sm:grid-cols-2">
+          <form action="/api/financeiro/relatorios" method="get" className="mt-3 grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-medium text-slate-700">
               Exercício financeiro
               <select name="financialYearId" required defaultValue="" className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm">

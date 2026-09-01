@@ -1,5 +1,6 @@
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { OrdensServicoClient } from "../components/OrdensServicoClient";
+import { PageFrame } from "@/components/app-ui/PageFrame";
 
 export default async function OrdensServicoPage() {
   const { prisma } = await getTenantContextForModule("OBRAS");
@@ -38,9 +39,9 @@ export default async function OrdensServicoPage() {
     },
   });
 
-  return <OrdensServicoClient ordens={ordens.map((ordem) => ({
+  return <PageFrame className="px-1 py-1 md:px-2"><OrdensServicoClient ordens={ordens.map((ordem) => ({
     ...ordem,
     scheduledFor: ordem.scheduledFor?.toISOString() ?? null,
     completedAt: ordem.completedAt?.toISOString() ?? null,
-  }))} />;
+  }))} /></PageFrame>;
 }

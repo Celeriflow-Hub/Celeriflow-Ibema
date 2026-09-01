@@ -1,26 +1,24 @@
 import { ArrowLeft, Save, UserRound } from "lucide-react";
 import Link from "next/link";
 import { MaskedInput } from "@/components/ui/MaskedInput";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 import { createPerson } from "../../actions";
 
 export default function NovaPessoaFisicaPage() {
   return (
-    <div className="max-w-3xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-6">
-        <Link href="/cadastros/pessoas-fisicas" className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800"><ArrowLeft className="w-4 h-4" />Voltar para listagem</Link>
-        <h1 className="mt-2 flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900"><UserRound className="w-6 h-6 text-indigo-600" />Nova Pessoa Física</h1>
-        <p className="mt-1 text-slate-500">Cadastre uma pessoa na base única municipal.</p>
-      </div>
-      <form action={createPerson} className="space-y-6">
-        <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm md:grid-cols-2">
+    <PageFrame className="max-w-3xl space-y-2">
+      <PageHeader title="Nova Pessoa Física" icon={<UserRound className="size-4 shrink-0 text-indigo-600" />} action={<Link href="/cadastros/pessoas-fisicas" className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><ArrowLeft className="size-3.5" />Voltar</Link>} />
+      <form action={createPerson} className="space-y-2">
+        <div className="grid grid-cols-1 gap-2 rounded border border-slate-300 bg-white p-3 shadow-sm md:grid-cols-2">
           <label className="field md:col-span-2">Nome completo *<input name="fullName" required className="input" /></label>
           <label className="field">CPF *<MaskedInput maskType="cpf" name="cpf" required placeholder="000.000.000-00" className="input" /></label>
           <label className="field">Data de nascimento<input name="birthDate" type="date" className="input" /></label>
           <label className="field">E-mail<input name="email" type="email" className="input" /></label>
           <label className="field">Telefone<MaskedInput maskType="phone" name="phonePrimary" className="input" /></label>
         </div>
-        <div className="flex justify-end gap-3"><Link href="/cadastros/pessoas-fisicas" className="rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-600">Cancelar</Link><button className="flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700"><Save className="w-4 h-4" />Salvar pessoa</button></div>
+        <div className="flex h-10 justify-end gap-2 rounded border border-slate-200 bg-slate-50 px-3"><Link href="/cadastros/pessoas-fisicas" className="inline-flex h-7 items-center self-center rounded border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">Cancelar</Link><button className="inline-flex h-7 items-center gap-1.5 self-center rounded bg-indigo-700 px-3 text-xs font-semibold text-white shadow-sm hover:bg-indigo-800"><Save className="size-3.5" />Salvar pessoa</button></div>
       </form>
-    </div>
+    </PageFrame>
   );
 }

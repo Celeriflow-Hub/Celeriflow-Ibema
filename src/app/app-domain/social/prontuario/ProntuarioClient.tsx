@@ -4,6 +4,8 @@ import { useState } from "react";
 import { FileText, Search, ClipboardList, Lock, Clock, CheckCircle2, XCircle, SearchCode, HeartHandshake } from "lucide-react";
 import { createAttendance, updateAttendance, toggleAttendanceStatus } from "../actions";
 import { searchCadUnicoAction, saveRmaRecordAction } from "./cadunico-actions";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type Family = { id: string; familyCode: string | null; nis: string | null };
 type Person = { id: string; fullName: string };
@@ -146,44 +148,44 @@ export default function ProntuarioClient({ atendimentosInicial, familias, person
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <PageFrame className="space-y-2">
       {/* CadÚnico & SUAS Engine Card */}
-      <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-xl p-5 shadow-md space-y-4">
-        <div className="flex justify-between items-start border-b border-blue-800 pb-3">
-          <div>
+      <section className="space-y-3 rounded-xl border border-blue-900 bg-slate-950 p-3 text-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-blue-900 pb-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <span className="bg-blue-500/30 text-blue-200 text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
               Integração Federal — CadÚnico (MDS) &amp; SUAS
             </span>
-            <h2 className="text-xl font-bold mt-1 flex items-center gap-2">
-              <SearchCode className="w-6 h-6 text-blue-400" />
+            <h2 className="mt-2 flex items-center gap-2 text-base font-bold">
+              <SearchCode className="size-5 text-blue-400" />
               Consulta Unificada CadÚnico &amp; Emissão RMA
             </h2>
           </div>
-          <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs px-3 py-1 rounded-full font-bold">
+          <span className="w-fit shrink-0 rounded-full border border-emerald-500/40 bg-emerald-500/20 px-2.5 py-1 text-xs font-bold text-emerald-300">
             Sincronizado MDS
           </span>
         </div>
 
-        <form onSubmit={handleSearchCadUnico} className="flex flex-col sm:flex-row gap-3">
+        <form onSubmit={handleSearchCadUnico} className="flex flex-col gap-2 sm:flex-row">
           <input
             type="text"
             placeholder="Digite o NIS ou CPF do cidadão para consulta CadÚnico..."
             value={searchNis}
             onChange={(e) => setSearchNis(e.target.value)}
-            className="flex-1 bg-slate-950/70 border border-blue-700/80 rounded-lg px-4 py-2.5 text-sm text-white placeholder-blue-300/60 focus:ring-2 focus:ring-blue-400 font-mono"
+            className="h-9 flex-1 rounded-md border border-blue-700/80 bg-slate-900 px-3 font-mono text-sm text-white placeholder-blue-300/60 focus:ring-2 focus:ring-blue-400"
             required
           />
           <button
             type="submit"
             disabled={cadLoading}
-            className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm shadow transition-all"
+            className="inline-flex h-9 items-center justify-center rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
           >
             {cadLoading ? "Consultando..." : "Consultar CadÚnico"}
           </button>
         </form>
 
         {cadUnicoResult && (
-          <div className="bg-slate-950/80 border border-blue-700/80 rounded-xl p-4 space-y-3 text-xs">
+          <div className="space-y-3 rounded-lg border border-blue-700/80 bg-slate-900 p-3 text-xs">
             <div className="flex justify-between items-center border-b border-slate-800 pb-2">
               <span className="font-bold text-blue-300 text-sm">{cadUnicoResult.nomeCompleto}</span>
               <span className="bg-emerald-600 text-white px-2 py-0.5 rounded font-mono font-bold">
@@ -235,63 +237,54 @@ export default function ProntuarioClient({ atendimentosInicial, familias, person
             {rmaSuccessMsg && <div className="text-emerald-400 font-bold p-2 bg-emerald-950/60 rounded border border-emerald-800">{rmaSuccessMsg}</div>}
           </div>
         )}
-      </div>
+      </section>
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-            <FileText className="w-6 h-6 text-blue-600" />
-            Prontuário Eletrônico SUAS
-          </h1>
-          <p className="text-slate-500">Histórico de atendimentos, visitas e acompanhamentos técnicos.</p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input 
-              type="text" 
-              placeholder="Buscar por código da família ou nome..." 
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 w-full md:w-72"
-            />
-          </div>
-          <button onClick={() => handleOpenModal()} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
-            <ClipboardList className="w-4 h-4" />
-            <span className="hidden sm:inline">Novo Atendimento</span>
-          </button>
+      <PageHeader
+        title="Prontuário Eletrônico SUAS"
+        icon={<FileText className="size-4 shrink-0 text-blue-600" />}
+        action={<button onClick={() => handleOpenModal()} className="inline-flex h-7 items-center gap-1 rounded-md bg-blue-600 px-2.5 text-xs font-semibold text-white hover:bg-blue-700"><ClipboardList className="size-3.5" />Novo atendimento</button>}
+      />
+      <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-slate-500">Histórico de atendimentos, visitas e acompanhamentos técnicos.</p>
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            placeholder="Buscar por código da família ou nome..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="h-8 w-full rounded-md border border-slate-200 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+          />
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <table className="w-full table-fixed text-left">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider">
-                <th className="p-4 font-semibold">Data</th>
-                <th className="p-4 font-semibold">Unidade</th>
-                <th className="p-4 font-semibold">Família/Código</th>
-                <th className="p-4 font-semibold">Tipo</th>
-                <th className="p-4 font-semibold">Relato</th>
-                <th className="p-4 font-semibold text-center">Status</th>
-                <th className="p-4 font-semibold text-center">Ações</th>
+                <th className="p-3 font-semibold">Data</th>
+                <th className="hidden p-3 font-semibold md:table-cell">Unidade</th>
+                <th className="p-3 font-semibold">Família/Código</th>
+                <th className="p-3 font-semibold">Tipo</th>
+                <th className="hidden p-3 font-semibold lg:table-cell">Relato</th>
+                <th className="hidden p-3 text-center font-semibold sm:table-cell">Status</th>
+                <th className="p-3 text-right font-semibold">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {filtered.length > 0 ? (
                 filtered.map((atendimento) => (
                   <tr key={atendimento.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="p-4">
+                    <td className="p-3">
                       <p className="font-semibold text-slate-800 flex items-center gap-1 text-xs">
                         <Clock className="w-3.5 h-3.5 text-slate-400" />
                         {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(atendimento.date))}
                       </p>
                     </td>
-                    <td className="p-4 text-xs text-slate-600">
+                    <td className="hidden p-3 text-xs text-slate-600 md:table-cell">
                       {atendimento.unit.name}
                     </td>
-                    <td className="p-4">
+                    <td className="p-3">
                       <p className="font-medium text-slate-800 text-xs">
                         {atendimento.person ? atendimento.person.fullName : `Família ${atendimento.family.familyCode}`}
                       </p>
@@ -299,7 +292,7 @@ export default function ProntuarioClient({ atendimentosInicial, familias, person
                         Cód: {atendimento.family.familyCode}
                       </p>
                     </td>
-                    <td className="p-4">
+                    <td className="p-3">
                       <div className="flex items-center gap-2">
                         <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium border border-indigo-100">
                           {atendimento.type}
@@ -311,12 +304,12 @@ export default function ProntuarioClient({ atendimentosInicial, familias, person
                         )}
                       </div>
                     </td>
-                    <td className="p-4 max-w-xs">
+                    <td className="hidden p-3 lg:table-cell">
                       <p className="text-xs text-slate-600 truncate" title={atendimento.description}>
                         {atendimento.description}
                       </p>
                     </td>
-                    <td className="p-4 text-center">
+                    <td className="hidden p-3 text-center sm:table-cell">
                       {atendimento.isActive !== false ? (
                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 rounded-md text-xs font-medium border border-emerald-200">
                            <CheckCircle2 className="w-3 h-3" /> Ativo
@@ -327,8 +320,8 @@ export default function ProntuarioClient({ atendimentosInicial, familias, person
                          </span>
                       )}
                     </td>
-                    <td className="p-4">
-                      <div className="flex justify-center gap-2">
+                    <td className="p-3">
+                      <div className="flex justify-end gap-1">
                         <button onClick={() => handleOpenModal(atendimento)} className="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded-lg transition-colors text-xs font-medium">
                           Editar
                         </button>
@@ -351,7 +344,6 @@ export default function ProntuarioClient({ atendimentosInicial, familias, person
               )}
             </tbody>
           </table>
-        </div>
       </div>
 
       {isModalOpen && (
@@ -435,6 +427,6 @@ export default function ProntuarioClient({ atendimentosInicial, familias, person
           </div>
         </div>
       )}
-    </div>
+    </PageFrame>
   );
 }

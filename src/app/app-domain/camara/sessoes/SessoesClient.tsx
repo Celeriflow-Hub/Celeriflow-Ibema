@@ -5,6 +5,8 @@ import { Calendar, Search, Plus, Filter, FileText, CheckCircle2 } from "lucide-r
 import { format } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type Sessao = {
   id: string;
@@ -37,29 +39,18 @@ export default function SessoesClient({ sessoes }: { sessoes: Sessao[] }) {
   );
 
   return (
-    <div className="p-6 md:p-8 flex-1">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-gray-500">Câmara Municipal</span>
-            <span className="text-gray-400">/</span>
-            <span className="text-gray-900 font-medium">Sessões Plenárias</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Calendar className="h-6 w-6 text-[#9333EA]" />
-            Sessões Plenárias
-          </h1>
-        </div>
-        <button className="flex items-center gap-2 bg-[#9333EA] hover:bg-[#7E22CE] text-white px-4 py-2 rounded-lg font-medium transition-colors">
-          <Plus className="h-5 w-5" />
-          Nova Sessão
-        </button>
-      </div>
+    <PageFrame className="space-y-3 px-1 py-1 md:px-2">
+      <PageHeader
+        title="Sessões Plenárias"
+        icon={<Calendar className="size-4 shrink-0 text-[#9333EA]" />}
+        action={<button className="flex h-8 items-center gap-2 rounded-md bg-[#9333EA] px-3 text-sm font-medium text-white transition-colors hover:bg-[#7E22CE]"><Plus className="h-4 w-4" />Nova Sessão</button>}
+        className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white"
+      />
 
-      <div className="flex gap-4 border-b border-gray-200 dark:border-gray-700 mb-6">
+      <div className="flex gap-1 overflow-x-auto border-b border-gray-200 dark:border-gray-700">
         <button
           onClick={() => setActiveTab("sessoes")}
-          className={`pb-4 px-2 text-sm font-medium transition-colors relative ${
+          className={`relative whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors ${
             activeTab === "sessoes" ? "text-[#9333EA]" : "text-gray-500 hover:text-gray-700"
           }`}
         >
@@ -70,7 +61,7 @@ export default function SessoesClient({ sessoes }: { sessoes: Sessao[] }) {
         </button>
         <button
           onClick={() => setActiveTab("pautas")}
-          className={`pb-4 px-2 text-sm font-medium transition-colors relative ${
+          className={`relative whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors ${
             activeTab === "pautas" ? "text-[#9333EA]" : "text-gray-500 hover:text-gray-700"
           }`}
         >
@@ -81,7 +72,7 @@ export default function SessoesClient({ sessoes }: { sessoes: Sessao[] }) {
         </button>
         <button
           onClick={() => setActiveTab("atas")}
-          className={`pb-4 px-2 text-sm font-medium transition-colors relative ${
+          className={`relative whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors ${
             activeTab === "atas" ? "text-[#9333EA]" : "text-gray-500 hover:text-gray-700"
           }`}
         >
@@ -92,8 +83,8 @@ export default function SessoesClient({ sessoes }: { sessoes: Sessao[] }) {
         </button>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 p-3 dark:border-gray-700 dark:bg-gray-800/50">
           <div className="relative w-full md:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input 
@@ -101,7 +92,7 @@ export default function SessoesClient({ sessoes }: { sessoes: Sessao[] }) {
               placeholder="Buscar sessão..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
+              className="w-full rounded-md border border-slate-300 bg-white py-1.5 pl-9 pr-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-[#9333EA]/20 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
             />
           </div>
           <button className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md">
@@ -117,7 +108,7 @@ export default function SessoesClient({ sessoes }: { sessoes: Sessao[] }) {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
+              <table className="w-full min-w-[820px] text-left text-sm">
                 <thead className="text-xs text-gray-500 uppercase bg-gray-50 dark:bg-gray-800">
                   <tr>
                     <th className="px-6 py-3">Número / Tipo</th>
@@ -190,7 +181,7 @@ export default function SessoesClient({ sessoes }: { sessoes: Sessao[] }) {
                     {s.proposicoes.length === 0 ? (
                       <p className="p-4 text-sm text-gray-500 italic">Nenhuma matéria pautada para esta sessão.</p>
                     ) : (
-                      <table className="w-full text-sm">
+                        <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-sm">
                         <tbody>
                           {s.proposicoes.map((prop, idx) => (
                             <tr key={idx} className="border-b last:border-0 border-gray-100 dark:border-gray-800">
@@ -206,7 +197,7 @@ export default function SessoesClient({ sessoes }: { sessoes: Sessao[] }) {
                             </tr>
                           ))}
                         </tbody>
-                      </table>
+                        </table></div>
                     )}
                   </div>
                 </div>
@@ -264,6 +255,6 @@ export default function SessoesClient({ sessoes }: { sessoes: Sessao[] }) {
           </div>
         )}
       </div>
-    </div>
+    </PageFrame>
   );
 }

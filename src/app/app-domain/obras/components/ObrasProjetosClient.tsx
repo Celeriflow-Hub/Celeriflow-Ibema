@@ -69,12 +69,12 @@ function ObraSheet({ obra, open, onOpenChange }: { obra?: Obra; open: boolean; o
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
+      <SheetContent side="right" className="w-[calc(100vw-1rem)] overflow-y-auto sm:w-[34rem]">
         <SheetHeader>
           <SheetTitle>{obra ? "Editar obra" : "Nova obra"}</SheetTitle>
           <SheetDescription>{obra ? "Atualize os dados e o status da obra." : "Cadastre uma nova obra ou projeto."}</SheetDescription>
         </SheetHeader>
-        <form key={`${obra?.id ?? "new"}-${open}`} onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <form key={`${obra?.id ?? "new"}-${open}`} onSubmit={handleSubmit} className="mt-4 space-y-3 pb-2">
           {error && <div className="rounded-md bg-red-100 p-3 text-sm text-red-700">{error}</div>}
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Número"><input name="numero" required defaultValue={obra?.numero} className={fieldClass} /></Field>
@@ -87,7 +87,7 @@ function ObraSheet({ obra, open, onOpenChange }: { obra?: Obra; open: boolean; o
             <Field label="Valor estimado (R$)"><input name="valorEstimado" type="number" min="0" step="0.01" required defaultValue={obra?.valorEstimado ?? ""} className={fieldClass} /></Field>
             {obra && <Field label="Status"><select name="status" required defaultValue={obra.status} className={fieldClass}>{statusOptions.map((status) => <option key={status}>{status}</option>)}</select></Field>}
           </div>
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end">
             <button type="button" onClick={() => handleOpenChange(false)} className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200">Cancelar</button>
             <button type="submit" disabled={saving} className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50">{saving ? "Salvando..." : "Salvar"}</button>
           </div>
@@ -133,9 +133,9 @@ export function ObrasProjetosClient({ obras }: { obras: Obra[] }) {
 
   return (
     <>
-      <div className="mb-4 flex justify-end"><button type="button" onClick={() => setNewOpen(true)} className="flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 font-medium text-white transition-colors hover:bg-amber-700"><Plus className="h-4 w-4" />Nova obra</button></div>
-      <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <div className="flex flex-col items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-800/50 md:flex-row md:p-6">
+      <div className="mb-2 flex justify-end"><button type="button" onClick={() => setNewOpen(true)} className="flex h-8 items-center gap-2 rounded-md bg-amber-600 px-3 text-sm font-medium text-white transition-colors hover:bg-amber-700"><Plus className="h-4 w-4" />Nova obra</button></div>
+      <section className="overflow-hidden rounded-md border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800" aria-label="Lista de obras">
+        <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/50 md:flex-row md:items-center md:justify-between">
           <div className="relative w-full md:max-w-sm"><Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por número, nome ou local..." className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-10 pr-4 text-slate-900 outline-none transition-all focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 dark:border-slate-600 dark:bg-slate-700 dark:text-white" /></div>
           <div className="grid w-full gap-2 sm:grid-cols-3 md:w-auto"><Filter value={tipo} onChange={setTipo} options={["Todos", ...tipos]} label="Tipo" /><Filter value={status} onChange={setStatus} options={["Todos", ...statusOptions]} label="Status" /><Filter value={active} onChange={setActive} options={["Todos", "Ativas", "Inativas"]} label="Situação" /></div>
         </div>
@@ -144,7 +144,7 @@ export function ObrasProjetosClient({ obras }: { obras: Obra[] }) {
           {filteredObras.map((obra) => <tr key={obra.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/50"><td className="px-6 py-4"><div className="font-semibold text-slate-900 dark:text-white">{obra.nome}</div><div className="mt-1 text-xs text-slate-500">Nº {obra.numero}{obra.local ? ` · ${obra.local}` : ""}</div>{obra.descricao && <div className="mt-1 max-w-sm truncate text-xs text-slate-500">{obra.descricao}</div>}</td><td className="px-6 py-4"><span className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-900/30">{obra.tipo}</span></td><td className="px-6 py-4"><StatusBadge status={obra.status} /></td><td className="px-6 py-4 font-medium text-slate-700 dark:text-slate-300">{obra.valorEstimado === null ? "Não informado" : money.format(obra.valorEstimado)}</td><td className="px-6 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${obra.active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{obra.active ? "Ativa" : "Inativa"}</span></td><td className="px-6 py-4"><div className="flex justify-end gap-1"><button type="button" onClick={() => setEditing(obra)} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-amber-50 hover:text-amber-600" title="Editar"><Pencil className="h-4 w-4" /></button><button type="button" onClick={() => handleInactivate(obra)} disabled={!obra.active || inactivatingId === obra.id} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40" title="Inativar">{inactivatingId === obra.id ? "..." : <PowerOff className="h-4 w-4" />}</button></div></td></tr>)}
           {filteredObras.length === 0 && <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-500">Nenhuma obra encontrada.</td></tr>}
         </tbody></table></div>
-      </div>
+      </section>
       <ObraSheet open={newOpen} onOpenChange={setNewOpen} />
       {editing && <ObraSheet obra={editing} open onOpenChange={(open) => { if (!open) setEditing(null); }} />}
     </>

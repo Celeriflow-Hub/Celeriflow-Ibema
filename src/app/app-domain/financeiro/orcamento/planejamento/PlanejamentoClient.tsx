@@ -202,12 +202,12 @@ export default function PlanejamentoClient({ plans, financialYears, fixations, b
     }
   };
 
-  return <div className="mx-auto w-full max-w-[1440px] space-y-3 p-2 sm:p-3 lg:p-4 [&_[data-slot=card]]:rounded-md [&_[data-slot=card]]:shadow-none [&_[data-slot=select-trigger]]:w-full">
-    <header className="border-b border-slate-300 bg-white px-4 py-3 shadow-sm sm:flex sm:items-center sm:justify-between">
+  return <div className="mx-auto w-full max-w-[1600px] space-y-2 px-1 py-1 sm:px-2 [&_[data-slot=card]]:rounded-md [&_[data-slot=card]]:shadow-none [&_[data-slot=select-trigger]]:w-full">
+    <header className="border-b border-slate-300 bg-white px-3 py-2 shadow-sm sm:flex sm:items-center sm:justify-between">
       <div>
         <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-700">Financeiro e contábil / Orçamento</p>
-        <h1 className="mt-0.5 text-xl font-bold tracking-tight text-slate-900">Planejamento Orçamentário</h1>
-        <p className="mt-0.5 text-sm text-slate-600">Cadastre, acompanhe e vincule o PPA, a LDO, a LOA e as dotações.</p>
+        <h1 className="mt-0.5 text-sm font-bold tracking-tight text-slate-900">Planejamento Orçamentário</h1>
+        <p className="mt-0.5 text-xs text-slate-600">Cadastre, acompanhe e vincule o PPA, a LDO, a LOA e as dotações.</p>
       </div>
       {canEdit && (
         <Button type="button" size="sm" className="mt-3 bg-emerald-700 hover:bg-emerald-800 sm:mt-0" onClick={() => setActiveSection("ppa")}>

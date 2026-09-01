@@ -44,8 +44,8 @@ export default function AtividadesEsporteLazerClient({ activities }: { activitie
   });
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-      <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-800/50 md:flex-row md:items-center md:justify-between md:p-6">
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/50 md:flex-row md:items-center md:justify-between">
         <div className="relative w-full md:max-w-md">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
           <input
@@ -76,7 +76,7 @@ export default function AtividadesEsporteLazerClient({ activities }: { activitie
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-sm">
+          <table className="w-full min-w-[820px] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-800 dark:text-slate-400">
               <tr>
                 <th className="px-6 py-4 font-medium">Atividade</th>

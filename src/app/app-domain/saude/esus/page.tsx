@@ -1,19 +1,15 @@
-import React from 'react';
 import { Activity } from 'lucide-react';
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default function Page() {
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
-        <Activity className="h-6 w-6 text-emerald-600" />
-        Integração e-SUS
-      </h1>
-      
-      <div className="bg-white p-6 rounded shadow flex flex-col gap-4">
-        <p className="text-gray-500">Ferramenta para exportação de arquivos no formato Thrift para o e-SUS APS.</p>
-        <button className="bg-blue-600 text-white px-4 py-2 rounded w-fit">Gerar Lote e-SUS</button>
-      </div>
-    
-    </div>
+    <PageFrame className="space-y-2 px-1 py-1 md:px-2">
+      <PageHeader title="Integração e-SUS" icon={<Activity className="size-4 shrink-0 text-emerald-600" />} className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white" />
+      <section className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <p className="text-sm text-gray-500 dark:text-gray-400">Ferramenta para exportação de arquivos no formato Thrift para o e-SUS APS.</p>
+        <button type="button" className="h-9 w-fit rounded-md bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700">Gerar Lote e-SUS</button>
+      </section>
+    </PageFrame>
   );
 }

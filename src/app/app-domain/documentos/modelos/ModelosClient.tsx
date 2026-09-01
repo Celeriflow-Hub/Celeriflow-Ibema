@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { FileText, Plus, FileEdit, Trash2, X, Check, ToggleLeft, ToggleRight } from "lucide-react";
 import { updateModelo, deleteModelo, createModelo } from "./actions";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type Modelo = {
   id: string;
@@ -83,25 +85,11 @@ export default function ModelosClient({ initialModelos }: { initialModelos: Mode
   };
 
   return (
-    <div className="max-w-6xl animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <FileText className="w-6 h-6 text-indigo-600" />
-            Modelos de Documentos
-          </h1>
-          <p className="text-slate-500 mt-1">Crie e gerencie os templates padrão da prefeitura.</p>
-        </div>
-        <button
-          onClick={() => setShowNewModal(true)}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Novo Modelo
-        </button>
-      </div>
+    <PageFrame className="max-w-6xl space-y-2">
+      <PageHeader title="Modelos de Documentos" icon={<FileText className="size-4 shrink-0 text-indigo-600" />} action={<button onClick={() => setShowNewModal(true)} className="inline-flex h-7 items-center gap-1 rounded-md bg-indigo-600 px-2 text-xs font-semibold text-white hover:bg-indigo-700"><Plus className="size-3.5" /><span className="hidden sm:inline">Novo Modelo</span></button>} />
+      <p className="text-xs text-slate-500">Crie e gerencie os templates padrão da prefeitura.</p>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           {modelos.length === 0 ? (
             <div className="p-10 text-center">
@@ -112,7 +100,7 @@ export default function ModelosClient({ initialModelos }: { initialModelos: Mode
               </button>
             </div>
           ) : (
-            <table className="w-full text-left text-sm whitespace-nowrap">
+            <table className="min-w-[720px] w-full text-left text-sm whitespace-nowrap">
               <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="px-6 py-3">Nome do Modelo</th>
@@ -282,6 +270,6 @@ export default function ModelosClient({ initialModelos }: { initialModelos: Mode
           </div>
         </div>
       )}
-    </div>
+    </PageFrame>
   );
 }

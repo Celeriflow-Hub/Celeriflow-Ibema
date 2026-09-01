@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { FileOutput, Save, ArrowLeft } from "lucide-react";
 import { createPage } from "../actions";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default function NovaPaginaPage() {
   const router = useRouter();
@@ -28,35 +30,29 @@ export default function NovaPaginaPage() {
   }
 
   return (
-    <div className="max-w-4xl animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
-      <div className="flex items-center gap-4">
-        <Link href="/transparencia/paginas" className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
-          <ArrowLeft className="w-5 h-5 text-slate-600" />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <FileOutput className="w-6 h-6 text-purple-600" />
-            Nova Página
-          </h1>
-          <p className="text-slate-500 mt-1">Crie uma nova página institucional para o portal.</p>
-        </div>
-      </div>
+    <PageFrame className="max-w-4xl space-y-2">
+      <PageHeader
+        title="Nova página"
+        icon={<FileOutput className="size-4 shrink-0 text-purple-600" />}
+        action={<Link href="/transparencia/paginas" className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900"><ArrowLeft className="size-3.5" />Voltar</Link>}
+      />
+      <p className="px-1 text-sm text-slate-500">Crie uma nova página institucional para o portal.</p>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <div className="p-4 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
               {error}
             </div>
           )}
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2 col-span-full">
               <label className="text-sm font-semibold text-slate-700">Título da Página</label>
-              <input 
+              <input
                 name="title"
                 required
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-600/20 focus:border-purple-600"
+                className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600/20 focus:border-purple-600"
                 placeholder="Ex: História do Município"
               />
             </div>
@@ -65,7 +61,7 @@ export default function NovaPaginaPage() {
               <label className="text-sm font-semibold text-slate-700">Status</label>
               <select 
                 name="status"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-600/20 focus:border-purple-600"
+                className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600/20 focus:border-purple-600"
               >
                 <option value="Rascunho">Salvar como Rascunho</option>
                 <option value="Publicado">Publicar Imediatamente</option>
@@ -78,13 +74,13 @@ export default function NovaPaginaPage() {
             <textarea 
               name="content"
               required
-              rows={15}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-600/20 focus:border-purple-600 resize-y font-mono text-sm"
+              rows={12}
+              className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-purple-600/20 focus:border-purple-600"
               placeholder="<h1>Nossa História</h1><p>A cidade foi fundada em...</p>"
             ></textarea>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+          <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:justify-end">
             <Link 
               href="/transparencia/paginas"
               className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition-colors"
@@ -101,6 +97,6 @@ export default function NovaPaginaPage() {
           </div>
         </form>
       </div>
-    </div>
+    </PageFrame>
   );
 }

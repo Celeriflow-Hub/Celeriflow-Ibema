@@ -1,6 +1,7 @@
-import Link from "next/link";
 import { Scale } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 function formatDate(date: Date | null) {
   return date ? new Intl.DateTimeFormat("pt-BR").format(date) : "-";
@@ -14,24 +15,17 @@ export default async function LeisPage() {
   });
 
   return (
-    <div className="flex-1 p-8">
-      <div className="mb-8">
-        <div className="mb-2 flex items-center gap-2 text-sm">
-          <Link href="/camara" className="text-gray-500 hover:text-gray-700">Câmara Municipal</Link>
-          <span className="text-gray-400">/</span>
-          <span className="font-medium text-gray-900">Leis e Atos</span>
+    <PageFrame className="space-y-3 px-1 py-1 md:px-2">
+      <PageHeader title="Leis e Atos Normativos" icon={<Scale className="size-4 shrink-0 text-[#9333EA]" />} className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white" />
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-gray-800"><tr><th className="px-4 py-3">Número</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Ementa</th><th className="px-4 py-3">Publicação</th><th className="px-4 py-3">Situação</th></tr></thead>
+            <tbody>{leis.map((lei) => <tr key={lei.id} className="border-t border-slate-100 transition-colors hover:bg-slate-50 dark:border-gray-700 dark:hover:bg-gray-800/50"><td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{lei.numero}</td><td className="px-4 py-3 text-slate-600 dark:text-gray-300">{lei.tipo}</td><td className="max-w-xl truncate px-4 py-3 text-slate-600 dark:text-gray-300">{lei.ementa}</td><td className="px-4 py-3 text-slate-600 dark:text-gray-300">{formatDate(lei.dataPublicacao)}</td><td className="px-4 py-3"><span className="rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700 dark:bg-green-950/40 dark:text-green-300">{lei.status}</span></td></tr>)}</tbody>
+          </table>
         </div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <Scale className="h-6 w-6 text-[#9333EA]" /> Leis e Atos Normativos
-        </h1>
+        {leis.length === 0 && <p className="p-12 text-center text-gray-500 dark:text-gray-400">Nenhuma lei ou ato cadastrado.</p>}
       </div>
-      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-6 py-3">Número</th><th className="px-6 py-3">Tipo</th><th className="px-6 py-3">Ementa</th><th className="px-6 py-3">Publicação</th><th className="px-6 py-3">Situação</th></tr></thead>
-          <tbody>{leis.map((lei) => <tr key={lei.id} className="border-t border-gray-100"><td className="px-6 py-4 font-medium text-gray-900">{lei.numero}</td><td className="px-6 py-4 text-gray-600">{lei.tipo}</td><td className="max-w-xl truncate px-6 py-4 text-gray-600">{lei.ementa}</td><td className="px-6 py-4 text-gray-600">{formatDate(lei.dataPublicacao)}</td><td className="px-6 py-4"><span className="rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">{lei.status}</span></td></tr>)}</tbody>
-        </table>
-        {leis.length === 0 && <p className="p-12 text-center text-gray-500">Nenhuma lei ou ato cadastrado.</p>}
-      </div>
-    </div>
+    </PageFrame>
   );
 }

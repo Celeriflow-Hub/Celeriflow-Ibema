@@ -62,29 +62,29 @@ export default function DownloadExtratosClient({ initialHistory = [] }: { initia
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="mx-auto max-w-[1600px] space-y-2 px-1 py-1 sm:px-2">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+      <div className="flex flex-col gap-2 border-b border-slate-300 bg-white px-3 py-2 shadow-sm md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mt-1 flex items-center gap-2">
-            <Download className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />
+          <h1 className="mt-0.5 flex items-center gap-2 text-sm font-bold tracking-tight text-slate-900">
+            <Download className="size-4 text-emerald-600" />
             Automação de Download de Extratos Bancários
           </h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
+          <p className="text-xs text-slate-600">
             Acesso automatizado ao banco simulado externo, com arquivamento privado do extrato original e registro de auditoria.
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-12">
         {/* Form Container */}
-        <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+        <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3 shadow-none lg:col-span-5">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
             <Building2 className="w-5 h-5 text-blue-600" />
             Parâmetros da Automação
           </h2>
 
-          <form onSubmit={handleExecuteAutomation} className="space-y-4">
+          <form onSubmit={handleExecuteAutomation} className="space-y-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
                 Instituição Bancária
@@ -95,7 +95,7 @@ export default function DownloadExtratosClient({ initialHistory = [] }: { initia
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Banco externo de testes exclusivo desta POC.</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
                   Agência
@@ -122,7 +122,7 @@ export default function DownloadExtratosClient({ initialHistory = [] }: { initia
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1 flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5 text-slate-500" /> Período Início
@@ -178,7 +178,7 @@ export default function DownloadExtratosClient({ initialHistory = [] }: { initia
         {/* Console Log & Evidence Panel */}
         <div className="lg:col-span-7 space-y-6">
           {/* Real-time Automation Terminal */}
-          <div className="bg-slate-950 rounded-xl border border-slate-800 p-4 font-mono text-xs text-slate-300 shadow-lg">
+          <div className="rounded-md border border-slate-800 bg-slate-950 p-3 font-mono text-xs text-slate-300 shadow-none">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
               <span className="flex items-center gap-2 text-emerald-400 font-bold">
                 <Terminal className="w-4 h-4" /> Console de Execução do Bot de Automação
@@ -188,7 +188,7 @@ export default function DownloadExtratosClient({ initialHistory = [] }: { initia
               </span>
             </div>
 
-            <div className="h-44 overflow-y-auto space-y-1 bg-slate-900/50 p-3 rounded border border-slate-800/80">
+            <div className="space-y-1 rounded border border-slate-800/80 bg-slate-900/50 p-3">
               {loading && (
                 <div className="text-amber-400 animate-pulse">
                   &gt; Estabelecendo handshake SSL/TLS com o servidor bancário...
@@ -210,7 +210,7 @@ export default function DownloadExtratosClient({ initialHistory = [] }: { initia
 
           {/* Panel: Evidências para Aprovação da Comissão */}
           {currentResult && (
-            <div className="bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-500/40 rounded-xl p-5 space-y-4 shadow-md">
+            <div className="space-y-3 rounded-md border border-emerald-500/40 bg-emerald-50 p-3 shadow-none">
               <div className="flex items-center justify-between border-b border-emerald-200 dark:border-emerald-800 pb-3">
                 <h3 className="text-base font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
                   <ShieldCheck className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
@@ -280,7 +280,7 @@ export default function DownloadExtratosClient({ initialHistory = [] }: { initia
       </div>
 
       {/* History Table */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+      <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3 shadow-none">
         <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
           <Eye className="w-5 h-5 text-slate-600" />
           Histórico de Execuções e Downloads de Extratos

@@ -31,8 +31,8 @@ export default async function CulturaDashboard() {
         className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white"
       />
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-3">
             <div className="rounded-md bg-pink-100 p-2.5 text-pink-600 dark:bg-pink-900/30">
               <Users className="h-5 w-5" />
@@ -44,7 +44,7 @@ export default async function CulturaDashboard() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-3">
             <div className="rounded-md bg-indigo-100 p-2.5 text-indigo-600 dark:bg-indigo-900/30">
               <MapPin className="h-5 w-5" />
@@ -56,7 +56,7 @@ export default async function CulturaDashboard() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-3">
             <div className="rounded-md bg-rose-100 p-2.5 text-rose-600 dark:bg-rose-900/30">
               <Calendar className="h-5 w-5" />
@@ -70,7 +70,7 @@ export default async function CulturaDashboard() {
       </div>
 
       <h3 className="pt-1 text-sm font-semibold text-slate-900 dark:text-white">Acesso Rápido</h3>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <Link href="/cultura/gestao-cultural" className="group relative flex h-32 flex-col justify-between overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-pink-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-800">
           <div className="absolute top-0 right-0 w-24 h-24 bg-pink-50 dark:bg-pink-900/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
           <Palette className="h-7 w-7 text-pink-600 mb-3 relative z-10" />

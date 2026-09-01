@@ -161,29 +161,29 @@ export default function RendimentosClient({ initialHistory = [] }: { initialHist
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="mx-auto max-w-[1600px] space-y-2 px-1 py-1 sm:px-2">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+      <div className="flex flex-col gap-2 border-b border-slate-300 bg-white px-3 py-2 shadow-sm md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mt-1 flex items-center gap-2">
-            <TrendingUp className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />
+          <h1 className="mt-0.5 flex items-center gap-2 text-sm font-bold tracking-tight text-slate-900">
+            <TrendingUp className="size-4 text-emerald-600" />
             Gestão de Rendimentos de Aplicação Financeira
           </h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
+          <p className="text-xs text-slate-600">
             Leitura do extrato de aplicação, apuração de Rendimento Bruto, Líquido, IRRF, IOF, Correção Monetária e Acumulado com classificação contábil e transmissão municipal.
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-12">
         {/* Form Calculadora */}
-        <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+        <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3 shadow-none lg:col-span-5">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
             <Calculator className="w-5 h-5 text-emerald-600" />
             Apuração de Rendimentos do Extrato
           </h2>
 
-          <form onSubmit={handleCalculate} className="space-y-4">
+          <form onSubmit={handleCalculate} className="space-y-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
                 Conta da Aplicação Financeira
@@ -197,7 +197,7 @@ export default function RendimentosClient({ initialHistory = [] }: { initialHist
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">Início do período</label>
                 <input type="date" value={periodoInicio} onChange={(e) => setPeriodoInicio(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg p-2.5 text-sm" />
@@ -227,7 +227,7 @@ export default function RendimentosClient({ initialHistory = [] }: { initialHist
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
                   Rendimento Bruto (R$)
@@ -251,7 +251,7 @@ export default function RendimentosClient({ initialHistory = [] }: { initialHist
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
                   IOF Retido (R$)
@@ -310,13 +310,13 @@ export default function RendimentosClient({ initialHistory = [] }: { initialHist
         </div>
 
         {/* Quadro Demonstrativo & Classificação Contábil */}
-        <div className="lg:col-span-7 space-y-4">
+          <div className="space-y-3 lg:col-span-7">
           {!calculation ? (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-8 text-center text-slate-500 dark:text-slate-400 italic">
               Preencha os valores do extrato e clique em &quot;Calcular &amp; Gerar Demonstrativo&quot;.
             </div>
           ) : (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+            <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3 shadow-none">
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
                 <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <Percent className="w-5 h-5 text-emerald-600" />
@@ -421,7 +421,7 @@ export default function RendimentosClient({ initialHistory = [] }: { initialHist
       </div>
 
       {/* Histórico */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+      <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3 shadow-none">
         <h3 className="text-base font-bold text-slate-900 dark:text-white">Histórico de Rendimentos Apurados</h3>
         {history.length === 0 ? (
           <p className="text-sm text-slate-500 italic">Nenhum rendimento transmitido ainda.</p>

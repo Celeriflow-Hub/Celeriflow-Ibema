@@ -1,6 +1,8 @@
 import React from "react";
 import { ClipboardList, Clock, ShieldAlert } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 import { NewAttendanceSheet } from "../components/NewAttendanceSheet";
 
@@ -33,68 +35,61 @@ export default async function SocialAtendimentosPage() {
   });
 
   return (
-    <div className="flex-1 p-8">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-            <ClipboardList className="h-8 w-8 text-emerald-600" />
-            Atendimentos e Acompanhamentos
-          </h1>
-          <p className="text-gray-500 mt-2">
-            Registro de acolhimento, PAIF, PAEFI e atendimentos técnicos (Psicologia / Serviço Social).
-          </p>
-        </div>
-        <NewAttendanceSheet families={families} units={units} professionals={professionals} />
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title="Atendimentos e acompanhamentos"
+        icon={<ClipboardList className="size-4 shrink-0 text-emerald-600" />}
+        action={<NewAttendanceSheet families={families} units={units} professionals={professionals} />}
+      />
+      <p className="px-1 text-sm text-slate-500">Registro de acolhimento, PAIF, PAEFI e atendimentos técnicos.</p>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <table className="w-full table-fixed text-left">
             <thead>
-              <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700">
-                <th className="p-4 font-medium text-gray-500 dark:text-gray-400">Data e Hora</th>
-                <th className="p-4 font-medium text-gray-500 dark:text-gray-400">Família / Indivíduo</th>
-                <th className="p-4 font-medium text-gray-500 dark:text-gray-400">Tipo de Atendimento</th>
-                <th className="p-4 font-medium text-gray-500 dark:text-gray-400">Unidade e Técnico</th>
-                <th className="p-4 font-medium text-gray-500 dark:text-gray-400">Sigilo</th>
+              <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <th className="p-3 font-semibold">Data e hora</th>
+                <th className="p-3 font-semibold">Família / indivíduo</th>
+                <th className="p-3 font-semibold">Tipo</th>
+                <th className="hidden p-3 font-semibold lg:table-cell">Unidade e técnico</th>
+                <th className="p-3 font-semibold">Sigilo</th>
               </tr>
             </thead>
             <tbody>
               {attendances.map((att) => (
-                <tr key={att.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  <td className="p-4">
-                    <div className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-gray-400" />
+                <tr key={att.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                  <td className="p-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+                      <Clock className="size-3.5 text-slate-400" />
                       {att.date.toLocaleDateString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                     </div>
                   </td>
-                  <td className="p-4">
-                    <div className="font-medium text-gray-900 dark:text-white">
+                  <td className="p-3">
+                    <div className="break-words font-medium text-slate-900">
                       Família de {att.family.representative.fullName}
                     </div>
                     {att.person && (
-                      <div className="text-sm text-gray-500 mt-1">
+                      <div className="mt-1 text-xs text-slate-500">
                         Foco: {att.person.fullName}
                       </div>
                     )}
                   </td>
-                  <td className="p-4">
-                    <div className="text-sm font-medium text-gray-900 dark:text-white">
+                  <td className="p-3">
+                    <div className="text-sm font-medium text-slate-900">
                       {att.type}
                     </div>
-                    <div className="text-xs text-gray-500 mt-1 truncate max-w-xs">
+                    <div className="mt-1 hidden text-xs text-slate-500 lg:block">
                       {att.description}
                     </div>
                   </td>
-                  <td className="p-4">
-                    <div className="text-sm text-gray-900 dark:text-white">
+                  <td className="hidden p-3 lg:table-cell">
+                    <div className="text-sm text-slate-900">
                       {att.unit.name}
                     </div>
-                    <div className="text-xs text-gray-500 mt-1">
+                    <div className="mt-1 text-xs text-slate-500">
                       {att.professional.person?.fullName || "Sem técnico designado"}
                     </div>
                   </td>
-                  <td className="p-4">
+                  <td className="p-3">
                     {att.secrecyLevel === "Normal" ? (
                       <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400">
                         Normal
@@ -111,15 +106,14 @@ export default async function SocialAtendimentosPage() {
 
               {attendances.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-gray-500">
+                    <td colSpan={5} className="p-6 text-center text-slate-500">
                     Nenhum atendimento registrado.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-        </div>
       </div>
-    </div>
+    </PageFrame>
   );
 }

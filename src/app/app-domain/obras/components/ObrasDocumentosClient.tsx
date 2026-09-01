@@ -53,8 +53,8 @@ export function ObrasDocumentosClient({ documentos }: { documentos: DocumentoObr
   });
 
   return (
-    <div className="flex-1 p-4 md:p-8">
-      <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+    <div className="space-y-2">
+      <div className="flex flex-col items-start justify-between gap-2 md:flex-row md:items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Documentos de Obras</h1>
           <p className="text-slate-500 dark:text-slate-400">Documentos vinculados aos serviços de Obras e Serviços.</p>
@@ -65,8 +65,8 @@ export function ObrasDocumentosClient({ documentos }: { documentos: DocumentoObr
         </Link>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-800/50 md:flex-row md:items-center md:p-6">
+      <section className="overflow-hidden rounded-md border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800" aria-label="Documentos de obras">
+        <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/50 md:flex-row md:items-center">
           <div className="relative w-full md:max-w-md">
             <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Buscar por documento, pasta ou serviço..." className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-10 pr-4 text-slate-900 outline-none transition-all focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/20 dark:border-slate-600 dark:bg-slate-700 dark:text-white" />
@@ -120,7 +120,7 @@ export function ObrasDocumentosClient({ documentos }: { documentos: DocumentoObr
             </ul>
           )}
         </div>
-      </div>
+      </section>
     </div>
   );
 }

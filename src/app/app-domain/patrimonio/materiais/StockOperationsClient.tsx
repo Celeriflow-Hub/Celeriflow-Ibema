@@ -44,7 +44,7 @@ export function StockOperationsClient({ materials, warehouses, settlements }: { 
 
   const labels = { ENTRY: "Entrada", EXIT: "Saída", ADJUSTMENT: "Ajuste" } as const;
   return (
-    <form action={submit} className="grid gap-3 md:grid-cols-2">
+    <form action={submit} className="grid gap-3 text-sm md:grid-cols-2">
       <div className="md:col-span-2 flex flex-wrap gap-2" role="group" aria-label="Tipo de movimentação">
         {(Object.keys(labels) as Operation[]).map((kind) => (
           <button

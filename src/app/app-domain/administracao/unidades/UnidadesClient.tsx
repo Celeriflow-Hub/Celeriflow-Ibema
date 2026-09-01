@@ -57,55 +57,57 @@ export default function UnidadesClient({
 
   if (units.length === 0) {
     return (
-      <div className="bg-white border border-slate-200 rounded-xl p-12 text-center shadow-sm flex flex-col items-center justify-center">
-        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-          <Building className="text-slate-400 w-8 h-8" />
+      <div className="flex flex-col items-center justify-center rounded-md border border-slate-300 bg-white p-8 text-center shadow-sm">
+        <div className="mb-2 flex size-9 items-center justify-center rounded bg-slate-100">
+          <Building className="size-5 text-slate-400" />
         </div>
-        <h3 className="text-lg font-bold text-slate-700">Nenhum registro encontrado</h3>
-        <p className="text-slate-500 mt-1">Comece adicionando a primeira unidade.</p>
+        <h2 className="text-sm font-bold text-slate-700">Nenhum registro encontrado</h2>
+        <p className="mt-0.5 text-xs text-slate-500">Comece adicionando a primeira unidade.</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
+    <section className="overflow-hidden rounded border border-slate-300 bg-white shadow-sm" aria-label="Listagem de unidades administrativas">
+      <div className="flex min-h-9 items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+        <h2 className="text-xs font-bold text-slate-800">Unidades cadastradas</h2>
         <input 
           type="text" 
           placeholder="Buscar unidade..." 
-          className="border border-slate-300 rounded-lg px-4 py-2 text-sm w-full md:w-72 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          aria-label="Buscar unidade"
+          className="h-7 w-full max-w-72 rounded border border-slate-300 bg-white px-2.5 text-xs shadow-sm outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/15"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
       </div>
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-left text-xs">
+          <thead className="border-b border-slate-200 bg-slate-100 text-[10px] font-bold uppercase tracking-[0.06em] text-slate-600">
             <tr>
-              <th className="px-6 py-4">Nome</th>
-              <th className="px-6 py-4">Tipo</th>
-              <th className="px-6 py-4">Secretaria Vinculada</th>
-              <th className="px-6 py-4">Responsável</th>
-              <th className="px-6 py-4 text-center">Status</th>
-              <th className="px-6 py-4 text-right">Ações</th>
+              <th className="h-8 px-3">Nome</th>
+              <th className="h-8 px-3">Tipo</th>
+              <th className="h-8 px-3">Secretaria Vinculada</th>
+              <th className="h-8 px-3">Responsável</th>
+              <th className="h-8 px-3 text-center">Status</th>
+              <th className="h-8 px-3 text-right">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filteredUnits.map(unit => (
-              <tr key={unit.id} className="hover:bg-slate-50">
-                <td className="px-6 py-4 font-medium text-slate-800">
+              <tr key={unit.id} className="h-9 hover:bg-slate-50">
+                <td className="px-3 font-medium text-slate-800">
                   {editingId === unit.id ? (
                     <input className="border rounded px-2 py-1 w-full" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
                   ) : unit.name}
                 </td>
-                <td className="px-6 py-4 text-slate-600">
+                <td className="px-3 text-slate-600">
                   {editingId === unit.id ? (
                     <input className="border rounded px-2 py-1 w-full" value={editForm.type} onChange={e => setEditForm({...editForm, type: e.target.value})} />
                   ) : (
                     <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-md text-xs font-medium">{unit.type}</span>
                   )}
                 </td>
-                <td className="px-6 py-4 text-slate-600">
+                <td className="px-3 text-slate-600">
                   {editingId === unit.id ? (
                     <select 
                       className="border rounded px-2 py-1 w-full" 
@@ -119,15 +121,15 @@ export default function UnidadesClient({
                     </select>
                   ) : unit.secretariat?.name || "-"}
                 </td>
-                <td className="px-6 py-4 text-slate-600">
+                <td className="px-3 text-slate-600">
                   {editingId === unit.id ? (
                     <input className="border rounded px-2 py-1 w-full" value={editForm.managerName} onChange={e => setEditForm({...editForm, managerName: e.target.value})} />
                   ) : unit.managerName || "-"}
                 </td>
-                <td className="px-6 py-4 text-center">
+                <td className="px-3 text-center">
                   <span className={`px-2 py-1 rounded-md text-xs font-semibold ${unit.isActive ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>{unit.isActive ? "Ativa" : "Inativa"}</span>
                 </td>
-                <td className="px-6 py-4 text-right flex justify-end gap-2">
+                <td className="px-3 text-right">
                   {editingId === unit.id ? (
                     <>
                       <button onClick={handleSaveEdit} className="text-emerald-600 hover:text-emerald-700 font-medium text-xs bg-emerald-50 px-2 py-1 rounded">Salvar</button>
@@ -148,7 +150,7 @@ export default function UnidadesClient({
             ))}
             {filteredUnits.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                <td colSpan={6} className="px-3 py-6 text-center text-xs text-slate-500">
                   Nenhuma unidade encontrada.
                 </td>
               </tr>
@@ -156,6 +158,6 @@ export default function UnidadesClient({
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
   );
 }

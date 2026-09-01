@@ -29,8 +29,8 @@ export function EmployeeFilters({ roles, departments }: { roles: Role[], departm
   };
 
   return (
-    <form onSubmit={handleSearch} className="flex flex-wrap items-center gap-2 mb-4 bg-slate-50 p-3 rounded-lg border">
-      <div className="flex-1 min-w-[200px]">
+    <form onSubmit={handleSearch} className="mb-3 grid gap-2 rounded-md border bg-slate-50 p-2 sm:grid-cols-2 xl:grid-cols-[minmax(12rem,1fr)_9rem_14rem_14rem_auto]">
+      <div className="min-w-0">
         <Input 
           placeholder="Buscar por nome, CPF ou Matrícula..." 
           value={q}
@@ -39,7 +39,7 @@ export function EmployeeFilters({ roles, departments }: { roles: Role[], departm
         />
       </div>
       
-      <div className="w-[180px] shrink-0">
+      <div className="min-w-0">
         <Select value={status === "all" ? "" : status} onValueChange={(v) => setStatus(v || "all")}>
           <SelectTrigger className="bg-white">
             <span className="flex-1 text-left line-clamp-1">
@@ -54,7 +54,7 @@ export function EmployeeFilters({ roles, departments }: { roles: Role[], departm
         </Select>
       </div>
 
-      <div className="w-[280px] shrink-0">
+      <div className="min-w-0">
         <Select value={departmentId === "all" ? "" : departmentId} onValueChange={(v) => setDepartmentId(v || "all")}>
           <SelectTrigger className="bg-white">
             <span className="flex-1 text-left line-clamp-1">
@@ -70,7 +70,7 @@ export function EmployeeFilters({ roles, departments }: { roles: Role[], departm
         </Select>
       </div>
 
-      <div className="w-[280px] shrink-0">
+      <div className="min-w-0">
         <Select value={roleId === "all" ? "" : roleId} onValueChange={(v) => setRoleId(v || "all")}>
           <SelectTrigger className="bg-white">
             <span className="flex-1 text-left line-clamp-1">
@@ -86,7 +86,7 @@ export function EmployeeFilters({ roles, departments }: { roles: Role[], departm
         </Select>
       </div>
 
-      <Button type="submit">
+      <Button type="submit" size="sm" className="w-full xl:w-auto">
         <Search className="h-4 w-4 mr-2" />
         Filtrar
       </Button>

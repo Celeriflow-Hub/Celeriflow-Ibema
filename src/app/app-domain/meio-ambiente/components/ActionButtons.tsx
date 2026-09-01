@@ -36,7 +36,7 @@ export function ActionButtons({
   };
 
   return (
-    <div className="flex justify-end gap-1 items-center">
+    <div className="flex items-center justify-end gap-1">
       {error && <span className="text-xs text-red-600 max-w-[140px] text-right mr-1">{error}</span>}
 
       {/* Editar */}
@@ -45,6 +45,7 @@ export function ActionButtons({
           onClick={onEdit}
           className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
           title="Editar"
+          aria-label="Editar registro"
           type="button"
         >
           <Pencil className="w-4 h-4" />
@@ -58,6 +59,7 @@ export function ActionButtons({
           disabled={isPending}
           className="p-1.5 text-amber-600 hover:bg-amber-50 rounded transition-colors disabled:opacity-40"
           title={inactivateLabel}
+          aria-label={inactivateLabel}
           type="button"
         >
           {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}
@@ -71,6 +73,7 @@ export function ActionButtons({
           disabled={isPending}
           className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-40"
           title={deleteLabel}
+          aria-label={deleteLabel}
           type="button"
         >
           {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}

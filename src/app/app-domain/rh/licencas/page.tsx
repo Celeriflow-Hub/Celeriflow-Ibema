@@ -1,13 +1,15 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
-import { Plus } from "lucide-react"
+import { HeartPulse, Plus } from "lucide-react"
 import Link from "next/link"
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { LicencaRowActions } from "./LicencaRowActions"
 import { format } from "date-fns"
 import { LicencasFilters } from "./LicencasFilters"
 import type { Prisma } from "@prisma/client";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function LicencasPage({ searchParams }: { searchParams: Promise<{ q?: string, status?: string }> }) {
   const { prisma } = await getTenantContextForModule("RH");
@@ -31,28 +33,27 @@ export default async function LicencasPage({ searchParams }: { searchParams: Pro
   })
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Licenças e Afastamentos</h2>
-        <div className="flex items-center space-x-2">
-          <Link href="/rh/licencas/novo" className={buttonVariants()}>
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title="Licenças e Afastamentos"
+        icon={<HeartPulse className="size-4 shrink-0 text-violet-600" />}
+        action={<Link href="/rh/licencas/novo" className={buttonVariants({ size: "sm" })}>
             <Plus className="mr-2 h-4 w-4" />
             Registrar Licença
-          </Link>
-        </div>
-      </div>
+          </Link>}
+      />
 
       <LicencasFilters />
 
-      <Card>
-        <CardHeader>
+      <Card size="sm" className="rounded-md shadow-none">
+        <CardHeader className="border-b pb-2">
           <CardTitle>Histórico de Afastamentos</CardTitle>
           <CardDescription>
             Controle de licenças médicas, prêmio, sem vencimento e outros afastamentos.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-md border overflow-x-auto max-h-[600px] overflow-y-auto">
+        <CardContent className="pt-3">
+          <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm text-left">
               <thead className="bg-muted text-muted-foreground border-b sticky top-0 z-10 shadow-sm">
                 <tr>
@@ -99,6 +100,6 @@ export default async function LicencasPage({ searchParams }: { searchParams: Pro
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   )
 }

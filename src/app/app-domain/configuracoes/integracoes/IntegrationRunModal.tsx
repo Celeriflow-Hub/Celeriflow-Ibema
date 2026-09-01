@@ -53,7 +53,7 @@ export default function IntegrationRunModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl text-slate-100 space-y-6 max-h-[90vh] overflow-y-auto">
+      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-4xl space-y-4 overflow-y-auto rounded-lg border border-slate-800 bg-slate-900 p-4 text-slate-100 shadow-2xl">
         {/* Header */}
         <div className="flex items-start justify-between border-b border-slate-800 pb-4">
           <div className="flex items-center gap-3">
@@ -82,7 +82,7 @@ export default function IntegrationRunModal({
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 text-xs bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+        <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs sm:grid-cols-2">
           <div>
             <span className="text-slate-400">Ambiente</span>
             <p className="font-semibold text-white mt-0.5">{run.environment || environment}</p>

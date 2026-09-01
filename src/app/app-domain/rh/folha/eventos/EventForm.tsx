@@ -12,6 +12,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Save } from "lucide-react";
 import type { PayrollEvent } from "@prisma/client";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export function EventForm({ data }: { data?: PayrollEvent }) {
   const router = useRouter();
@@ -33,27 +35,25 @@ export function EventForm({ data }: { data?: PayrollEvent }) {
   }
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center space-x-4 mb-4">
-        <Link href="/rh/folha/eventos">
-          <Button variant="outline" size="icon">
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title={data ? "Editar Evento" : "Novo Evento"}
+        action={<Link href="/rh/folha/eventos">
+          <Button variant="outline" size="icon-sm" aria-label="Voltar para eventos da folha">
             <ArrowLeft className="h-4 w-4" />
           </Button>
-        </Link>
-        <h2 className="text-3xl font-bold tracking-tight">
-          {data ? "Editar Evento" : "Novo Evento"}
-        </h2>
-      </div>
+        </Link>}
+      />
 
-      <Card className="max-w-2xl">
-        <CardHeader>
+      <Card size="sm" className="max-w-2xl rounded-md shadow-none">
+        <CardHeader className="border-b pb-2">
           <CardTitle>Configuração do Evento / Rubrica</CardTitle>
         </CardHeader>
-        <CardContent>
-          <form action={handleSubmit} className="space-y-6">
+        <CardContent className="pt-3">
+          <form action={handleSubmit} className="space-y-4">
             {data && <input type="hidden" name="id" value={data.id} />}
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="code">Código <span className="text-red-500">*</span></Label>
                 <Input id="code" name="code" defaultValue={data?.code || ""} placeholder="Ex: 001" required />
@@ -88,7 +88,7 @@ export function EventForm({ data }: { data?: PayrollEvent }) {
               </p>
             </div>
 
-            <div className="flex items-center space-x-2 border p-4 rounded-lg bg-slate-50">
+            <div className="flex items-center gap-2 rounded-md border bg-slate-50 p-3">
               <Switch 
                 id="isActive" 
                 checked={isActive} 
@@ -99,7 +99,7 @@ export function EventForm({ data }: { data?: PayrollEvent }) {
               </Label>
             </div>
 
-            <div className="flex justify-end space-x-2">
+            <div className="flex justify-end gap-2 border-t pt-3">
               <Link href="/rh/folha/eventos">
                 <Button type="button" variant="outline">Cancelar</Button>
               </Link>
@@ -110,6 +110,6 @@ export function EventForm({ data }: { data?: PayrollEvent }) {
           </form>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   );
 }

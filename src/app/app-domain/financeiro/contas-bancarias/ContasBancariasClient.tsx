@@ -128,23 +128,23 @@ export default function ContasBancariasClient({
   };
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
+    <div className="space-y-2 px-1 py-1 sm:px-2">
+      <div className="flex flex-col gap-2 border-b border-slate-300 bg-white px-3 py-2 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Contas Bancárias</h2>
-          <p className="text-muted-foreground">Gestão da tesouraria, com contas separadas por finalidade, área e fonte de recurso.</p>
+          <h1 className="text-sm font-bold tracking-tight text-slate-900">Contas Bancárias</h1>
+          <p className="text-xs text-muted-foreground">Gestão da tesouraria, com contas separadas por finalidade, área e fonte de recurso.</p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button onClick={handleOpenNew}>
+          <Button size="sm" onClick={handleOpenNew}>
             <Plus className="mr-2 h-4 w-4" />
             Nova Conta
           </Button>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
+      <Card size="sm" className="rounded-md shadow-none">
+        <CardHeader className="border-b pb-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>Listagem de Contas</CardTitle>
               <CardDescription>As contas da POC são segregadas por finalidade operacional, como saúde, educação, convênios, arrecadação e aplicações.</CardDescription>
@@ -153,14 +153,14 @@ export default function ContasBancariasClient({
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input 
                 placeholder="Buscar por banco ou agência..." 
-                className="pl-8 w-[250px]" 
+                className="w-full pl-8 sm:w-[250px]"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
               />
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-3">
           <Table>
             <TableHeader>
               <TableRow>
@@ -219,7 +219,7 @@ export default function ContasBancariasClient({
       </Card>
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>{editingId ? "Editar Conta Bancária" : "Nova Conta Bancária"}</DialogTitle>
             <DialogDescription>O saldo é derivado dos movimentos. O saldo de abertura só pode ser informado na inclusão e fica auditado.</DialogDescription>
@@ -229,7 +229,7 @@ export default function ContasBancariasClient({
               <Label htmlFor="bankName">Nome do Banco</Label>
               <Input id="bankName" required value={formData.bankName} onChange={e => setFormData({...formData, bankName: e.target.value})} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="agency">Agência</Label>
                 <Input id="agency" required value={formData.agency} onChange={e => setFormData({...formData, agency: e.target.value})} />
@@ -239,7 +239,7 @@ export default function ContasBancariasClient({
                 <Input id="accountNumber" required value={formData.accountNumber} onChange={e => setFormData({...formData, accountNumber: e.target.value})} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="accountType">Tipo de Conta</Label>
                 <Select value={formData.accountType} onValueChange={v => setFormData({...formData, accountType: v as string})}>

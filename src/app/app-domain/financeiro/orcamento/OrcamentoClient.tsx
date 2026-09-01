@@ -156,13 +156,13 @@ export default function OrcamentoClient({
   const activeYear = financialYears.find((y) => y.status === "Aberto") || financialYears[0];
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
+    <div className="space-y-2 px-1 py-1 sm:px-2 [&_[data-slot=card]]:rounded-md [&_[data-slot=card]]:shadow-none [&_[data-slot=card-header]]:pb-2">
+      <div className="flex flex-col gap-2 border-b border-slate-300 bg-white px-3 py-2 shadow-sm lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Orçamento e Plano de Contas</h2>
-          <p className="text-muted-foreground">Gestão de dotações orçamentárias e alterações com segregação de funções</p>
+          <h1 className="text-sm font-bold tracking-tight text-slate-900">Orçamento e Plano de Contas</h1>
+          <p className="text-xs text-muted-foreground">Gestão de dotações orçamentárias e alterações com segregação de funções</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           {activeYear && canEdit && (
             <CreditRequestDialog
               financialYearId={activeYear.id}
@@ -171,7 +171,7 @@ export default function OrcamentoClient({
               legalDocuments={legalDocuments}
             />
           )}
-          <Link href="/financeiro/orcamento/cadastros" className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium shadow-sm hover:bg-accent">Cadastros Orçamentários</Link>
+          <Link href="/financeiro/orcamento/cadastros" className="inline-flex h-7 items-center justify-center rounded-md border border-input bg-background px-2.5 text-xs font-medium hover:bg-accent">Cadastros Orçamentários</Link>
         </div>
       </div>
 

@@ -14,6 +14,8 @@ import { Edit, Save, Plus, ArrowLeft } from "lucide-react";
 import { EmployeeBenefitsCard } from "./EmployeeBenefitsCard";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import type { BenefitConfig, Department, Dependent, Employee, PayrollBenefit, Role, Secretariat } from "@prisma/client";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 // Formata CPF: 000.000.000-00
 const formatCPF = (value: string) => {
@@ -81,28 +83,26 @@ export function ServidorForm({
   }
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center space-x-4 mb-4">
-        <Link href="/rh/servidores">
-          <Button variant="outline" size="icon">
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title={data ? "Editar Servidor" : "Novo Servidor"}
+        action={<Link href="/rh/servidores">
+          <Button variant="outline" size="icon-sm" aria-label="Voltar para servidores">
             <ArrowLeft className="h-4 w-4" />
           </Button>
-        </Link>
-        <h2 className="text-3xl font-bold tracking-tight">
-          {data ? "Editar Servidor" : "Novo Servidor"}
-        </h2>
-      </div>
+        </Link>}
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="md:col-span-2">
-          <CardHeader>
+      <div className="grid gap-3 md:grid-cols-2">
+        <Card size="sm" className="rounded-md shadow-none md:col-span-2">
+          <CardHeader className="border-b pb-2">
             <CardTitle>Dados do Servidor</CardTitle>
           </CardHeader>
-          <CardContent>
-            <form action={handleSubmit} className="space-y-6">
+          <CardContent className="pt-3">
+            <form action={handleSubmit} className="space-y-4">
               {data && <input type="hidden" name="id" value={data.id} />}
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="name">Nome Completo <span className="text-red-500">*</span></Label>
                   <Input id="name" name="name" defaultValue={data?.name || ""} placeholder="Ex: João da Silva" required />
@@ -120,7 +120,7 @@ export function ServidorForm({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-2">
                   <Label htmlFor="registration">Matrícula</Label>
                   <Input id="registration" name="registration" defaultValue={data?.registration || ""} placeholder="Ex: 12345" />
@@ -142,7 +142,7 @@ export function ServidorForm({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="salaryBase">Salário Base (R$)</Label>
                   <MoneyInput id="salaryBase" name="salaryBase" value={salaryBase} onChange={setSalaryBase} />
@@ -153,7 +153,7 @@ export function ServidorForm({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-2">
                   <Label htmlFor="secretariatId">Secretaria</Label>
                   <Select name="secretariatId" value={secretariatId} onValueChange={(v) => setSecretariatId(v || "")}>
@@ -201,7 +201,7 @@ export function ServidorForm({
                 </div>
               </div>
 
-              <div className="flex items-center space-x-2 border p-4 rounded-lg bg-slate-50">
+              <div className="flex flex-wrap items-center gap-2 rounded-md border bg-slate-50 p-3">
                 <Switch 
                   id="isActive" 
                   checked={isActive} 
@@ -210,12 +210,12 @@ export function ServidorForm({
                 <Label htmlFor="isActive" className="font-semibold cursor-pointer">
                   Servidor Ativo
                 </Label>
-                <p className="text-sm text-slate-500 ml-4 hidden md:block">
+                <p className="hidden text-sm text-slate-500 sm:ml-2 md:block">
                   Desative esta opção para servidores desligados ou inativos, preservando o histórico.
                 </p>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-4 border-t">
+              <div className="flex justify-end gap-2 border-t pt-3">
                 <Link href="/rh/servidores">
                   <Button type="button" variant="outline">Cancelar</Button>
                 </Link>
@@ -229,7 +229,7 @@ export function ServidorForm({
 
         {/* Cadastro de Dependentes Interno */}
         {data && (
-          <Card className="md:col-span-2 mt-6">
+          <Card size="sm" className="mt-1 rounded-md shadow-none md:col-span-2">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle>Dependentes do Servidor</CardTitle>
               <Link href={`/rh/dependentes/novo?employeeId=${data.id}`}>
@@ -240,7 +240,7 @@ export function ServidorForm({
             </CardHeader>
             <CardContent>
               {data.dependents && data.dependents.length > 0 ? (
-                <div className="rounded-md border overflow-hidden">
+                  <div className="overflow-x-auto rounded-md border">
                   <table className="w-full text-sm text-left">
                     <thead className="bg-muted text-muted-foreground border-b">
                       <tr>
@@ -278,10 +278,8 @@ export function ServidorForm({
         )}
 
         {/* Benefícios Concedidos Interno */}
-        {data && (
-          <EmployeeBenefitsCard employee={data} benefitConfigs={benefitConfigs} />
-        )}
+        {data && <EmployeeBenefitsCard employee={data} benefitConfigs={benefitConfigs} />}
       </div>
-    </div>
+    </PageFrame>
   );
 }

@@ -1,6 +1,7 @@
-import React from 'react';
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { Calendar } from 'lucide-react';
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function Page() {
   const { prisma } = await getTenantContextForModule("SAUDE");
@@ -10,13 +11,10 @@ export default async function Page() {
   });
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
-        <Calendar className="h-6 w-6 text-emerald-600" />
-        Agenda e Agendamentos
-      </h1>
-
-      <div className="bg-white rounded shadow overflow-x-auto">
+    <PageFrame className="space-y-2 px-1 py-1 md:px-2">
+      <PageHeader title="Agenda e Agendamentos" icon={<Calendar className="size-4 shrink-0 text-emerald-600" />} className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white" />
+      <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800" aria-label="Lista de agendamentos">
+        <div className="overflow-x-auto">
         <table className="w-full text-left text-sm whitespace-nowrap">
           <thead className="bg-gray-50">
             <tr>
@@ -41,7 +39,8 @@ export default async function Page() {
             )}
           </tbody>
         </table>
-      </div>
-    </div>
+        </div>
+      </section>
+    </PageFrame>
   );
 }

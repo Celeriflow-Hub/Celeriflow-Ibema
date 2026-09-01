@@ -11,6 +11,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Save } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type ContractData = {
   id: string;
@@ -69,27 +71,18 @@ export function ContratoForm({ data, processos = [], secretarias = [], fornecedo
   }
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center space-x-4 mb-4">
-        <Link href="/compras/contratos">
-          <Button variant="outline" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <h2 className="text-3xl font-bold tracking-tight">
-          {data ? "Editar Contrato" : "Novo Contrato"}
-        </h2>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title={data ? "Editar Contrato" : "Novo Contrato"} action={<Link href="/compras/contratos" aria-label="Voltar"><Button variant="outline" size="icon"><ArrowLeft className="size-4" /></Button></Link>} />
 
-      <Card className="max-w-3xl">
-        <CardHeader>
-          <CardTitle>Dados do Contrato Administrativo</CardTitle>
+      <Card className="max-w-5xl rounded-md">
+        <CardHeader className="border-b p-3">
+          <CardTitle className="text-sm">Dados do Contrato Administrativo</CardTitle>
         </CardHeader>
-        <CardContent>
-          <form action={handleSubmit} className="space-y-6">
+        <CardContent className="p-3">
+          <form action={handleSubmit} className="space-y-4">
             {data && <input type="hidden" name="id" value={data.id} />}
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="number">Número do Contrato</Label>
                 <Input id="number" name="number" defaultValue={data?.number || ""} placeholder="Ex: CONT 001/2026 (Auto-gerado se vazio)" />
@@ -109,7 +102,7 @@ export function ContratoForm({ data, processos = [], secretarias = [], fornecedo
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid gap-3 md:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="startDate">Início da vigência</Label>
                 <Input id="startDate" name="startDate" type="date" required defaultValue={dateValue(data?.startDate)} />
@@ -131,7 +124,7 @@ export function ContratoForm({ data, processos = [], secretarias = [], fornecedo
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="supplierId">Fornecedor</Label>
                 <Select name="supplierId" defaultValue={data?.supplierId || ""} required>
@@ -173,7 +166,7 @@ export function ContratoForm({ data, processos = [], secretarias = [], fornecedo
               <Textarea id="object" name="object" defaultValue={data?.object || ""} required rows={4} />
             </div>
 
-            <div className="flex justify-end space-x-2">
+            <div className="flex justify-end gap-2 border-t pt-3">
               <Link href="/compras/contratos">
                 <Button type="button" variant="outline">Cancelar</Button>
               </Link>
@@ -184,6 +177,6 @@ export function ContratoForm({ data, processos = [], secretarias = [], fornecedo
           </form>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   );
 }

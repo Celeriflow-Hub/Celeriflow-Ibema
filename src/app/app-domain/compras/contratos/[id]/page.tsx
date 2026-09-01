@@ -2,11 +2,13 @@ import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Edit } from "lucide-react";
+import { ArrowLeft, Edit, Scale } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function ContratoDetalhesPage({ params }: { params: Promise<{ id: string }> }) {
   const { prisma } = await getTenantContextForModule("COMPRAS");
@@ -57,28 +59,15 @@ export default async function ContratoDetalhesPage({ params }: { params: Promise
   const formatMoney = (value: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center space-x-4 mb-4">
-        <Link href="/compras/contratos">
-          <Button variant="outline" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <h2 className="text-3xl font-bold tracking-tight">Detalhes do Contrato</h2>
-        <div className="flex-1" />
-        <Link href={`/compras/contratos/${contrato.id}/editar`}>
-          <Button variant="outline">
-            <Edit className="mr-2 h-4 w-4" /> Editar
-          </Button>
-        </Link>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Detalhes do Contrato" icon={<Scale className="size-4 shrink-0 text-indigo-600" />} action={<><Link href="/compras/contratos" aria-label="Voltar"><Button variant="outline" size="icon"><ArrowLeft className="size-4" /></Button></Link><Link href={`/compras/contratos/${contrato.id}/editar`}><Button variant="outline" size="sm"><Edit className="size-3.5" /><span className="hidden sm:inline">Editar</span></Button></Link></>} />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Informações Gerais</CardTitle>
+      <Card className="rounded-md">
+        <CardHeader className="border-b p-3">
+          <CardTitle className="text-sm">Informações Gerais</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <CardContent className="space-y-3 p-3 text-sm">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Número do Contrato</p>
               <p className="text-lg">{contrato.number}</p>
@@ -165,6 +154,6 @@ export default async function ContratoDetalhesPage({ params }: { params: Promise
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   );
 }

@@ -1,27 +1,19 @@
 import { Building2, Save, ArrowLeft, Building, Briefcase, Phone, Mail } from "lucide-react";
 import Link from "next/link";
 import { MaskedInput } from "@/components/ui/MaskedInput";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 import { createCompany } from "../../actions";
 
 export default function NovaPessoaJuridicaPage() {
   return (
-    <div className="max-w-4xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-6">
-        <Link href="/cadastros/pessoas-juridicas" className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800 transition-colors mb-2">
-          <ArrowLeft className="w-4 h-4" />
-          Voltar para listagem
-        </Link>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-          <Building2 className="w-6 h-6 text-emerald-600" />
-          Nova Pessoa Jurídica
-        </h1>
-        <p className="text-slate-500 mt-1">Cadastre uma nova empresa, entidade ou instituição.</p>
-      </div>
+    <PageFrame className="max-w-4xl space-y-2">
+      <PageHeader title="Nova Pessoa Jurídica" icon={<Building2 className="size-4 shrink-0 text-emerald-600" />} action={<Link href="/cadastros/pessoas-juridicas" className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><ArrowLeft className="size-3.5" />Voltar</Link>} />
 
-      <form action={createCompany} className="space-y-6">
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-          <div className="flex items-center gap-2 text-emerald-700 font-semibold mb-4 border-b border-slate-100 pb-2">
-            <Building className="w-5 h-5" />
+      <form action={createCompany} className="space-y-2">
+        <div className="rounded border border-slate-300 bg-white p-3 shadow-sm">
+          <div className="mb-2 flex items-center gap-2 border-b border-slate-200 pb-1.5 text-xs font-bold uppercase tracking-[0.08em] text-emerald-700">
+            <Building className="size-4" />
             Dados Básicos
           </div>
           
@@ -62,9 +54,9 @@ export default function NovaPessoaJuridicaPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-          <div className="flex items-center gap-2 text-emerald-700 font-semibold mb-4 border-b border-slate-100 pb-2">
-            <Briefcase className="w-5 h-5" />
+        <div className="rounded border border-slate-300 bg-white p-3 shadow-sm">
+          <div className="mb-2 flex items-center gap-2 border-b border-slate-200 pb-1.5 text-xs font-bold uppercase tracking-[0.08em] text-emerald-700">
+            <Briefcase className="size-4" />
             Contatos
           </div>
           
@@ -81,16 +73,16 @@ export default function NovaPessoaJuridicaPage() {
           </div>
         </div>
 
-        <div className="flex justify-end gap-3">
-          <Link href="/cadastros/pessoas-juridicas" className="px-5 py-2.5 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+        <div className="flex h-10 justify-end gap-2 rounded border border-slate-200 bg-slate-50 px-3">
+          <Link href="/cadastros/pessoas-juridicas" className="inline-flex h-7 items-center self-center rounded border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
             Cancelar
           </Link>
-          <button type="submit" className="px-5 py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg flex items-center gap-2 transition-colors shadow-sm">
-            <Save className="w-4 h-4" />
+          <button type="submit" className="inline-flex h-7 items-center gap-1.5 self-center rounded bg-emerald-700 px-3 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-emerald-800">
+            <Save className="size-3.5" />
             Salvar Empresa
           </button>
         </div>
       </form>
-    </div>
+    </PageFrame>
   );
 }

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Building2, CalendarDays, Clock3, FileText, MapPin, Search, UserRound } from "lucide-react";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type Reserva = {
   id: string;
@@ -100,15 +102,12 @@ export function ReservasAgendaClient({ reservas }: { reservas: Reserva[] }) {
   });
 
   return (
-    <main className="flex-1 p-4 md:p-8">
-      <header className="mb-8">
-        <p className="text-sm font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Agenda pública</p>
-        <h1 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">Espaços e Reservas</h1>
-        <p className="mt-2 max-w-3xl text-slate-600 dark:text-slate-400">Consulta somente leitura da agenda dos espaços, das solicitações do Cadastro Geral e dos termos vinculados no GED.</p>
-      </header>
+    <PageFrame className="space-y-3 px-1 py-1 md:px-2">
+      <PageHeader title="Espaços e Reservas" icon={<CalendarDays className="size-4 shrink-0 text-emerald-600 dark:text-emerald-300" />} className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white" />
+      <p className="text-sm text-slate-500 dark:text-slate-400">Consulta da agenda dos espaços, das solicitações do Cadastro Geral e dos termos vinculados no GED.</p>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 p-4 dark:border-slate-700 dark:bg-slate-800/50 md:flex-row md:items-center md:p-6">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-800/50 md:flex-row md:items-center">
           <div className="relative min-w-0 flex-1">
             <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Buscar espaço, solicitante, evento ou termo do GED..." className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition-colors focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 dark:border-slate-600 dark:bg-slate-700 dark:text-white" />
@@ -125,7 +124,7 @@ export function ReservasAgendaClient({ reservas }: { reservas: Reserva[] }) {
           </div>
         </div>
 
-        <div className="p-4 md:p-6">
+        <div className="p-3 md:p-4">
           <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">{filteredReservas.length} {filteredReservas.length === 1 ? "reserva encontrada" : "reservas encontradas"} na agenda.</p>
           {filteredReservas.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center dark:border-slate-700 dark:bg-slate-800/50">
@@ -194,6 +193,6 @@ export function ReservasAgendaClient({ reservas }: { reservas: Reserva[] }) {
           )}
         </div>
       </section>
-    </main>
+    </PageFrame>
   );
 }

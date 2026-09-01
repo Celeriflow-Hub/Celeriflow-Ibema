@@ -48,22 +48,22 @@ export default function PocControlClient({ initialCounts }: PocControlClientProp
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* Header Banner Card */}
-      <div className="rounded-2xl border border-indigo-500/20 bg-gradient-to-r from-indigo-900/40 via-purple-900/30 to-blue-900/40 p-6 shadow-xl backdrop-blur-md">
+      <div className="rounded-md border border-indigo-500/20 bg-gradient-to-r from-indigo-900/40 via-purple-900/30 to-blue-900/40 p-3 shadow-sm backdrop-blur-md">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-start gap-4">
-            <div className="p-3 rounded-xl bg-indigo-600/30 text-indigo-400 border border-indigo-500/30">
-              <Database className="w-8 h-8" />
+            <div className="rounded bg-indigo-600/30 p-2 text-indigo-400">
+              <Database className="size-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-bold text-white">Console Admin — Modo POC & Demonstração</h2>
+                <h2 className="text-sm font-bold text-white">Console Admin: Modo POC e Demonstração</h2>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                   ATIVO
                 </span>
               </div>
-              <p className="text-sm text-slate-300 mt-1 max-w-2xl">
+              <p className="mt-0.5 max-w-2xl text-xs text-slate-300">
                 Gerencie o ambiente de demonstração, verifique a volumetria de dados simulados e limpe os registros financeiros locais da POC. O banco virtual externo possui reset administrativo próprio.
               </p>
             </div>
@@ -72,7 +72,7 @@ export default function PocControlClient({ initialCounts }: PocControlClientProp
           <button
             onClick={handleReset}
             disabled={loading}
-            className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium shadow-lg hover:shadow-emerald-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            className="inline-flex h-7 items-center justify-center gap-1.5 rounded bg-emerald-700 px-3 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw className={`w-5 h-5 ${loading ? "animate-spin" : ""}`} />
             {loading ? "Restaurando Base POC..." : "Restaurar Base de Dados POC"}
@@ -99,8 +99,8 @@ export default function PocControlClient({ initialCounts }: PocControlClientProp
       )}
 
       {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="p-5 rounded-xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
+       <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+        <div className="rounded border border-slate-800 bg-slate-900/60 p-3 backdrop-blur-sm">
           <div className="flex items-center justify-between">
             <span className="text-sm text-slate-400 font-medium">Ambiente Ativo</span>
             <Server className="w-5 h-5 text-indigo-400" />
@@ -109,7 +109,7 @@ export default function PocControlClient({ initialCounts }: PocControlClientProp
           <span className="text-xs text-slate-400">Isolado da Produção</span>
         </div>
 
-        <div className="p-5 rounded-xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
+        <div className="rounded border border-slate-800 bg-slate-900/60 p-3 backdrop-blur-sm">
           <div className="flex items-center justify-between">
             <span className="text-sm text-slate-400 font-medium">Cobertura de Módulos</span>
             <Layers className="w-5 h-5 text-teal-400" />
@@ -118,7 +118,7 @@ export default function PocControlClient({ initialCounts }: PocControlClientProp
           <span className="text-xs text-slate-400">100+ registros cada / 200 RH</span>
         </div>
 
-        <div className="p-5 rounded-xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
+        <div className="rounded border border-slate-800 bg-slate-900/60 p-3 backdrop-blur-sm">
           <div className="flex items-center justify-between">
             <span className="text-sm text-slate-400 font-medium">Sandbox de Notificação</span>
             <ShieldAlert className="w-5 h-5 text-purple-400" />
@@ -129,11 +129,11 @@ export default function PocControlClient({ initialCounts }: PocControlClientProp
       </div>
 
       {/* Metrics Section */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-6 space-y-4">
+      <div className="space-y-3 rounded border border-slate-800 bg-slate-900/70 p-3">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-bold text-white">Volumetria de Dados por Módulo (Mínimo 100 / 200 RH)</h3>
-            <p className="text-sm text-slate-400">Visão em tempo real do banco de dados populado para apresentações públicas</p>
+            <h3 className="text-sm font-bold text-white">Volumetria de Dados por Módulo (Mínimo 100 / 200 RH)</h3>
+            <p className="text-xs text-slate-400">Visão em tempo real do banco de dados populado para apresentações públicas</p>
           </div>
           <button
             onClick={handleRefreshMetrics}
@@ -145,7 +145,7 @@ export default function PocControlClient({ initialCounts }: PocControlClientProp
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
           {Object.entries(counts).map(([label, count]) => {
             const isRh = label.includes("Servidores");
             const minRequired = isRh ? 200 : 100;
@@ -154,7 +154,7 @@ export default function PocControlClient({ initialCounts }: PocControlClientProp
             return (
               <div
                 key={label}
-                className="flex items-center justify-between p-3.5 rounded-xl bg-slate-950/50 border border-slate-800/80"
+                className="flex items-center justify-between rounded border border-slate-800/80 bg-slate-950/50 p-2.5"
               >
                 <div>
                   <p className="text-sm font-medium text-slate-200">{label}</p>

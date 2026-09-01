@@ -109,8 +109,8 @@ export function MaquinasEquipesClient({ teams, assets }: { teams: Team[]; assets
   const allocatedAssets = assets.filter((asset) => asset.serviceEquipment.length > 0).length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+    <div className="space-y-3">
+      <div className="flex flex-col justify-between gap-2 lg:flex-row lg:items-end">
         <div>
           <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-700 dark:text-amber-400">
             <Tractor className="h-4 w-4" />
@@ -134,7 +134,7 @@ export function MaquinasEquipesClient({ teams, assets }: { teams: Team[]; assets
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5">
+      <div className="rounded-md border border-slate-100 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_190px_220px]">
           <label className="relative block"><span className="sr-only">Buscar máquinas e equipes</span><Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por equipe, servidor, patrimônio ou serviço..." className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 dark:border-slate-600 dark:bg-slate-700 dark:text-white" /></label>
           <select value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)} aria-label="Filtrar por departamento" className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"><option value="all">Todos os departamentos</option>{departments.map((department) => <option key={department} value={department}>{department}</option>)}</select>

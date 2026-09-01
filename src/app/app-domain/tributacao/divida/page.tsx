@@ -1,5 +1,6 @@
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import DividaClient from "./DividaClient";
+import { PageFrame } from "@/components/app-ui/PageFrame";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +24,8 @@ export default async function DividaPage() {
   }));
 
   return (
-    <div className="max-w-7xl animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+    <PageFrame className="space-y-3">
       <DividaClient activeDebts={activeDebts} taxpayers={taxpayers} />
-    </div>
+    </PageFrame>
   );
 }

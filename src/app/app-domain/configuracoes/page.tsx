@@ -21,8 +21,8 @@ export default async function ConfiguracoesDashboard() {
         className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white"
       />
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="flex items-center gap-3">
             <div className="rounded-md bg-gray-100 p-2.5 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
               <Building2 className="h-5 w-5" />
@@ -34,7 +34,7 @@ export default async function ConfiguracoesDashboard() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="flex items-center gap-3">
             <div className="rounded-md bg-zinc-100 p-2.5 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
               <Blocks className="h-5 w-5" />
@@ -46,7 +46,7 @@ export default async function ConfiguracoesDashboard() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="flex items-center gap-3">
             <div className="rounded-md bg-slate-100 p-2.5 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
               <KeyRound className="h-5 w-5" />
@@ -60,7 +60,7 @@ export default async function ConfiguracoesDashboard() {
       </div>
 
       <h3 className="pt-1 text-sm font-semibold text-gray-900 dark:text-white">Acesso Rápido</h3>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
         <Link href="/configuracoes/instancia" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
           <Building2 className="h-6 w-6 text-gray-700 dark:text-gray-300 mb-2" />
           <div>

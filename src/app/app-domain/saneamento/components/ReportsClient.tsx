@@ -83,26 +83,26 @@ export function ReportsClient({ reports }: { reports: Report[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
+    <section className="overflow-hidden rounded-md border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800" aria-label="Lista de relatórios">
+      <div className="flex flex-col gap-2 border-b border-gray-100 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          <div className="relative w-full sm:w-64">
             <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
             <input
               type="search"
               placeholder="Buscar relatório..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="w-52 rounded-md border py-1.5 pr-3 pl-8 text-xs focus:ring-2 focus:ring-[#0284C7] focus:outline-none"
+              className="h-9 w-full rounded-md border bg-white py-1.5 pr-3 pl-8 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0284C7] dark:bg-gray-900 dark:text-white"
             />
           </div>
           <div className="flex items-center gap-1">
             <Filter className="h-3.5 w-3.5 text-gray-400" />
-            <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="rounded-md border px-2 py-1.5 text-xs focus:ring-2 focus:ring-[#0284C7] focus:outline-none">
+            <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} aria-label="Filtrar relatórios por tipo" className="h-9 rounded-md border bg-white px-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0284C7] dark:bg-gray-900 dark:text-white">
               {types.map((type) => <option key={type}>{type}</option>)}
             </select>
           </div>
-          <select value={activeFilter} onChange={(event) => setActiveFilter(event.target.value)} className="rounded-md border px-2 py-1.5 text-xs focus:ring-2 focus:ring-[#0284C7] focus:outline-none">
+          <select value={activeFilter} onChange={(event) => setActiveFilter(event.target.value)} aria-label="Filtrar relatórios por situação" className="h-9 rounded-md border bg-white px-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0284C7] dark:bg-gray-900 dark:text-white">
             <option>Ativos</option>
             <option>Inativos</option>
             <option>Todos</option>
@@ -144,21 +144,21 @@ export function ReportsClient({ reports }: { reports: Report[] }) {
       )}
 
       <Sheet open={selectedReport !== null} onOpenChange={(open) => !open && closeSheet()}>
-        <SheetContent side="right" className="w-[400px] overflow-y-auto sm:w-[540px]">
+        <SheetContent side="right" className="w-[calc(100vw-1rem)] overflow-y-auto sm:w-[34rem]">
           <SheetHeader>
             <SheetTitle>Editar Relatório</SheetTitle>
             <SheetDescription>Atualize os dados do relatório salvo.</SheetDescription>
           </SheetHeader>
-          {selectedReport && <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          {selectedReport && <form onSubmit={handleSubmit} className="mt-4 space-y-3 pb-2">
             {error && <div className="rounded-md bg-red-100 p-3 text-sm text-red-700">{error}</div>}
             <div className="space-y-2"><label className="text-sm font-medium">Nome</label><input name="name" required defaultValue={selectedReport.name} className="w-full rounded-md border p-2 text-sm" /></div>
             <div className="space-y-2"><label className="text-sm font-medium">Tipo</label><input name="type" required defaultValue={selectedReport.type} className="w-full rounded-md border p-2 text-sm" /></div>
             <div className="space-y-2"><label className="text-sm font-medium">Período</label><input name="period" required defaultValue={selectedReport.period} className="w-full rounded-md border p-2 text-sm" /></div>
             <div className="space-y-2"><label className="text-sm font-medium">Formato</label><input name="format" required defaultValue={selectedReport.format} className="w-full rounded-md border p-2 text-sm" /></div>
-            <div className="flex justify-end gap-2 pt-4"><button type="button" onClick={closeSheet} className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">Cancelar</button><button type="submit" disabled={saving} className="rounded-md bg-[#0284C7] px-4 py-2 text-sm font-medium text-white hover:bg-[#0369A1] disabled:opacity-50">{saving ? "Salvando..." : "Salvar Alterações"}</button></div>
+            <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end"><button type="button" onClick={closeSheet} className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">Cancelar</button><button type="submit" disabled={saving} className="rounded-md bg-[#0284C7] px-4 py-2 text-sm font-medium text-white hover:bg-[#0369A1] disabled:opacity-50">{saving ? "Salvando..." : "Salvar Alterações"}</button></div>
           </form>}
         </SheetContent>
       </Sheet>
-    </div>
+    </section>
   );
 }

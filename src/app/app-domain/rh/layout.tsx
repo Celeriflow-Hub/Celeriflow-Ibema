@@ -36,16 +36,18 @@ export default function RhLayout({ children }: { children: React.ReactNode }) {
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
 
   return (
-    <div className="relative -my-2 mx-auto flex min-h-0 w-[calc(100%+1rem)] max-w-[calc(1600px+1rem)] flex-1 flex-col bg-slate-50/30 sm:-my-3 sm:w-[calc(100%+1.5rem)] sm:max-w-[calc(1600px+1.5rem)] md:flex-row">
+    <div data-module-shell className="relative -my-2 mx-auto flex min-h-0 w-[calc(100%+1rem)] max-w-[calc(1600px+1rem)] flex-1 flex-col bg-slate-50/30 sm:-my-3 sm:w-[calc(100%+1.5rem)] sm:max-w-[calc(1600px+1.5rem)] md:flex-row">
       
       {/* Mobile Header with Hamburger */}
-      <div className="md:hidden flex items-center justify-between bg-white border-b border-slate-200 p-4">
+      <div className="flex h-11 items-center justify-between border-b border-slate-200 bg-white px-3 md:hidden">
         <div>
-          <h2 className="text-base font-bold text-slate-800 leading-tight">RH e Folha</h2>
+          <h2 className="text-sm font-bold leading-tight text-slate-800">RH e Folha</h2>
         </div>
-        <button 
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+         <button
+           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+           aria-label="Alternar menu de RH e Folha"
+           aria-expanded={isSidebarOpen}
+             className="flex size-8 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-slate-100"
         >
           {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
@@ -54,7 +56,7 @@ export default function RhLayout({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside className={`
         ${isDesktopCollapsed ? 'md:w-[80px]' : 'md:w-[260px]'} 
-        w-full md:shrink-0 md:border-r border-slate-200 bg-white py-6 px-4 shadow-[2px_0_8px_rgba(0,0,0,0.02)] z-10 relative flex flex-col transition-all duration-300
+        w-full md:shrink-0 md:border-r border-slate-200 bg-white px-3 py-4 shadow-[2px_0_8px_rgba(0,0,0,0.02)] z-10 relative flex flex-col transition-all duration-300
         ${isSidebarOpen ? 'block' : 'hidden md:flex'}
       `}>
         <div className="absolute top-4 right-[-14px] hidden md:flex items-center justify-center">
@@ -66,11 +68,11 @@ export default function RhLayout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        <div className={`mb-8 px-2 hidden md:block ${isDesktopCollapsed ? 'text-center' : ''}`}>
+        <div className={`mb-5 px-2 hidden md:block ${isDesktopCollapsed ? 'text-center' : ''}`}>
           {!isDesktopCollapsed && (
             <>
-              <h2 className="text-lg font-bold text-slate-800 tracking-tight leading-tight">RH e Folha</h2>
-              <p className="text-xs font-semibold text-slate-500 mt-1 uppercase tracking-wider">Gestão Pública</p>
+              <h2 className="text-base font-bold tracking-tight text-slate-800">RH e Folha</h2>
+              <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Gestão Pública</p>
             </>
           )}
           {isDesktopCollapsed && (
@@ -78,7 +80,7 @@ export default function RhLayout({ children }: { children: React.ReactNode }) {
           )}
         </div>
         
-        <nav className="flex flex-col gap-1.5 flex-1">
+        <nav className="flex flex-1 flex-col gap-1">
           {sidebarNavItems.map((item) => {
             const isActive = item.href === "/rh" 
               ? pathname === "/rh" 
@@ -89,7 +91,7 @@ export default function RhLayout({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 onClick={() => setIsSidebarOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 outline-none ${
+                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold transition-all duration-200 outline-none ${
                   isActive
                     ? "bg-violet-600 text-white shadow-md shadow-violet-600/20"
                     : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-violet-600/50"
@@ -103,11 +105,11 @@ export default function RhLayout({ children }: { children: React.ReactNode }) {
         </nav>
 
         {/* Bottom Menu items */}
-        <div className="mt-6 pt-6 border-t border-slate-100">
+        <div className="mt-4 border-t border-slate-100 pt-4">
           <Link
             href="/dashboard"
             onClick={() => setIsSidebarOpen(false)}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all duration-200"
+            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900"
           >
             <ArrowLeft className="shrink-0 h-[18px] w-[18px] text-slate-400" strokeWidth={2} />
             {!isDesktopCollapsed && <span>Voltar ao Dashboard</span>}
@@ -117,7 +119,7 @@ export default function RhLayout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content Area */}
       <main className="flex min-w-0 flex-1 flex-col bg-slate-50/50">
-        <div className="flex-1 p-2 md:p-3">
+        <div className="flex-1 p-1 sm:p-2">
           {children}
         </div>
       </main>

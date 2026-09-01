@@ -63,41 +63,43 @@ export default function CalendarioClient({ events }: { events: CalendarEvent[] }
 
   if (events.length === 0) {
     return (
-      <div className="bg-white border border-slate-200 rounded-xl p-12 text-center shadow-sm flex flex-col items-center justify-center">
-        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-          <Calendar className="text-slate-400 w-8 h-8" />
+      <div className="flex flex-col items-center justify-center rounded-md border border-slate-300 bg-white p-8 text-center shadow-sm">
+        <div className="mb-2 flex size-9 items-center justify-center rounded bg-slate-100">
+          <Calendar className="size-5 text-slate-400" />
         </div>
-        <h3 className="text-lg font-bold text-slate-700">Nenhum evento encontrado</h3>
-        <p className="text-slate-500 mt-1">Comece adicionando o primeiro evento ao calendário.</p>
+        <h2 className="text-sm font-bold text-slate-700">Nenhum evento encontrado</h2>
+        <p className="mt-0.5 text-xs text-slate-500">Comece adicionando o primeiro evento ao calendário.</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
+    <section className="overflow-hidden rounded border border-slate-300 bg-white shadow-sm" aria-label="Listagem de eventos institucionais">
+      <div className="flex min-h-9 items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+        <h2 className="text-xs font-bold text-slate-800">Eventos cadastrados</h2>
         <input 
           type="text" 
           placeholder="Buscar evento..." 
-          className="border border-slate-300 rounded-lg px-4 py-2 text-sm w-full md:w-72 shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+          aria-label="Buscar evento"
+          className="h-7 w-full max-w-72 rounded border border-slate-300 bg-white px-2.5 text-xs shadow-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
       </div>
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-left text-xs">
+          <thead className="border-b border-slate-200 bg-slate-100 text-[10px] font-bold uppercase tracking-[0.06em] text-slate-600">
             <tr>
-              <th className="px-6 py-4 w-40">Data</th>
-              <th className="px-6 py-4">Evento</th>
-              <th className="px-6 py-4">Tipo</th>
-              <th className="px-6 py-4 text-right">Ações</th>
+              <th className="h-8 w-40 px-3">Data</th>
+              <th className="h-8 px-3">Evento</th>
+              <th className="h-8 px-3">Tipo</th>
+              <th className="h-8 px-3 text-right">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filteredEvents.map(event => (
               <tr key={event.id} className="hover:bg-slate-50">
-                <td className="px-6 py-4 whitespace-nowrap text-slate-800 font-medium">
+                <td className="px-3 py-2 whitespace-nowrap font-medium text-slate-800">
                   {editingId === event.id ? (
                     <input 
                       type="date"
@@ -109,7 +111,7 @@ export default function CalendarioClient({ events }: { events: CalendarEvent[] }
                     format(new Date(event.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
                   )}
                 </td>
-                <td className="px-6 py-4">
+                <td className="px-3 py-2">
                   {editingId === event.id ? (
                     <div className="flex flex-col gap-2">
                       <input 
@@ -134,7 +136,7 @@ export default function CalendarioClient({ events }: { events: CalendarEvent[] }
                     </>
                   )}
                 </td>
-                <td className="px-6 py-4 text-slate-600">
+                <td className="px-3 py-2 text-slate-600">
                   {editingId === event.id ? (
                     <div className="flex flex-col gap-2">
                       <select 
@@ -166,7 +168,7 @@ export default function CalendarioClient({ events }: { events: CalendarEvent[] }
                     </span>
                   )}
                 </td>
-                <td className="px-6 py-4 text-right">
+                <td className="px-3 py-2 text-right">
                   {editingId === event.id ? (
                     <div className="flex items-center justify-end gap-2">
                       <button onClick={handleSaveEdit} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded" title="Salvar">
@@ -191,7 +193,7 @@ export default function CalendarioClient({ events }: { events: CalendarEvent[] }
             ))}
             {filteredEvents.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
+                <td colSpan={4} className="px-3 py-6 text-center text-xs text-slate-500">
                   Nenhum evento encontrado para &quot;{searchTerm}&quot;.
                 </td>
               </tr>
@@ -199,6 +201,6 @@ export default function CalendarioClient({ events }: { events: CalendarEvent[] }
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
   );
 }

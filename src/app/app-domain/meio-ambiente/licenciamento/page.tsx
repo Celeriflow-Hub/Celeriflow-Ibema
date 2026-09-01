@@ -1,12 +1,13 @@
 import React from "react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { ShieldCheck, Search } from "lucide-react";
-import Link from "next/link";
 import { NewLicenseSheet } from "../components/NewLicenseSheet";
 import { QuickFilters } from "../components/QuickFilters";
 import { LicenseRowActions } from "../components/LicenseRowActions";
 import { LicenciamentoInteractiveClient } from "./LicenciamentoInteractiveClient";
 import type { Prisma } from "@prisma/client";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -20,30 +21,17 @@ export default async function LicenciamentoPage(props: { searchParams: Promise<{
   const enterprises = await prisma.envEnterprise.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } });
 
   return (
-    <div className="flex-1 p-8">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Link href="/meio-ambiente" className="text-gray-500 hover:text-gray-700">Meio Ambiente</Link>
-            <span className="text-gray-400">/</span>
-            <span className="text-gray-900 font-medium">Licenciamento</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <ShieldCheck className="h-6 w-6 text-blue-600" />
-            Licenciamento Ambiental
-          </h1>
-        </div>
-        <NewLicenseSheet enterprises={enterprises} />
-      </div>
+    <PageFrame className="space-y-2 px-1 py-1 md:px-2">
+      <PageHeader title="Licenciamento Ambiental" icon={<ShieldCheck className="size-4 shrink-0 text-blue-600" />} action={<NewLicenseSheet enterprises={enterprises} />} className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white" />
 
       {/* Interactive Engine Component */}
       <LicenciamentoInteractiveClient />
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50 flex-wrap gap-4">
-          <div className="relative w-64">
+      <section className="overflow-hidden rounded-md border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800" aria-label="Lista de licenças ambientais">
+        <div className="flex flex-col gap-2 border-b border-gray-100 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input type="text" placeholder="Buscar licenca..." className="w-full pl-9 pr-4 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="search" aria-label="Buscar licença" placeholder="Buscar licença..." className="h-9 w-full rounded-md border bg-white pl-9 pr-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-900 dark:text-white" />
           </div>
           <QuickFilters filters={[
             { name: "status", label: "Status", options: [{ value: "Emitida", label: "Emitida" }, { value: "Em Analise", label: "Em Analise" }, { value: "Vencida", label: "Vencida" }, { value: "Suspensa", label: "Suspensa" }, { value: "Cassada", label: "Cassada" }] }
@@ -88,7 +76,7 @@ export default async function LicenciamentoPage(props: { searchParams: Promise<{
             </table>
           </div>
         )}
-      </div>
-    </div>
+      </section>
+    </PageFrame>
   );
 }

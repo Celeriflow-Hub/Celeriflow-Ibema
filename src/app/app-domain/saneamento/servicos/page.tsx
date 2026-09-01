@@ -1,8 +1,8 @@
-import React from "react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { Wrench } from "lucide-react";
-import Link from "next/link";
 import { ServicosClient } from "../components/ServicosClient";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function ServicosPage() {
   const { prisma } = await getTenantContextForModule("SANEAMENTO");
@@ -18,21 +18,10 @@ export default async function ServicosPage() {
   ]);
 
   return (
-    <div className="flex-1 p-6">
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-1 text-xs text-gray-400">
-          <Link href="/saneamento" className="hover:text-gray-600 transition-colors">Água e Saneamento</Link>
-          <span>/</span>
-          <span className="text-gray-600 font-medium">Ordens de Serviço</span>
-        </div>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-          <Wrench className="h-5 w-5 text-[#0284C7]" />
-          Serviços e Manutenção
-        </h1>
-        <p className="text-xs text-gray-400 mt-0.5">{orders.length} ordem{orders.length !== 1 ? "s" : ""} de serviço</p>
-      </div>
-
+    <PageFrame className="space-y-2 px-1 py-1 md:px-2">
+      <PageHeader title="Serviços e Manutenção" icon={<Wrench className="size-4 shrink-0 text-[#0284C7]" />} className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white" />
+      <p className="px-1 text-xs text-gray-500 dark:text-gray-400">{orders.length} ordem{orders.length !== 1 ? "s" : ""} de serviço</p>
       <ServicosClient orders={orders} units={units} />
-    </div>
+    </PageFrame>
   );
 }

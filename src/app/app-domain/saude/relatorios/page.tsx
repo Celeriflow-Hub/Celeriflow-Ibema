@@ -1,18 +1,14 @@
-import React from 'react';
 import { FileText } from 'lucide-react';
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default function Page() {
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
-        <FileText className="h-6 w-6 text-emerald-600" />
-        Relatórios Básicos
-      </h1>
-      
-      <div className="bg-white p-6 rounded shadow">
-        <p className="text-gray-500">Módulo de relatórios em desenvolvimento. Em breve você poderá exportar estatísticas de atendimentos, dispensação e vacinação em PDF e Excel.</p>
-      </div>
-    
-    </div>
+    <PageFrame className="space-y-2 px-1 py-1 md:px-2">
+      <PageHeader title="Relatórios Básicos" icon={<FileText className="size-4 shrink-0 text-emerald-600" />} className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white" />
+      <section className="rounded-md border border-slate-200 bg-white p-4 text-sm text-gray-500 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-gray-400">
+        Módulo de relatórios em desenvolvimento. Em breve você poderá exportar estatísticas de atendimentos, dispensação e vacinação em PDF e Excel.
+      </section>
+    </PageFrame>
   );
 }

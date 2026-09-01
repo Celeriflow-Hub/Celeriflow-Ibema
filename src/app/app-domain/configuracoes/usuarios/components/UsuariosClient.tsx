@@ -4,6 +4,8 @@ import { useState } from "react";
 import { UserCog, Plus, Search, Shield, X } from "lucide-react";
 import { upsertUsuario, toggleUsuarioStatus } from "../actions";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type Perfil = { id: string; nome: string; codigo: string | null };
 type Modulo = { id: string; nome: string; codigo: string };
@@ -128,26 +130,17 @@ export default function UsuariosClient({
   }
 
   return (
-    <div className="flex-1 p-6 md:p-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <UserCog className="h-6 w-6 text-gray-700" />
-            Gestão de Usuários
-          </h1>
-          <p className="text-gray-500 text-sm mt-1">Gerencie acessos, perfis e permissões dos servidores.</p>
-        </div>
-        <button 
-          onClick={openNewModal}
-          className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-        >
-          <Plus className="h-5 w-5" />
-          Novo Usuário
-        </button>
-      </div>
+    <PageFrame className="space-y-3 px-1 py-1 md:px-2">
+      <PageHeader
+        title="Gestão de Usuários"
+        icon={<UserCog className="size-4 shrink-0 text-slate-700 dark:text-slate-300" />}
+        action={<button onClick={openNewModal} className="flex h-8 items-center gap-2 rounded-md bg-slate-900 px-3 text-sm font-medium text-white transition-colors hover:bg-slate-800 dark:bg-white dark:text-slate-900"><Plus className="h-4 w-4" />Novo Usuário</button>}
+        className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white"
+      />
+      <p className="text-sm text-slate-500 dark:text-slate-400">Gerencie acessos, perfis e permissões dos servidores.</p>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="border-b border-slate-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
           <div className="relative w-full md:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input 
@@ -155,14 +148,14 @@ export default function UsuariosClient({
               placeholder="Buscar por nome ou e-mail..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+              className="w-full rounded-md border border-slate-300 bg-white py-1.5 pl-9 pr-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/20 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-gray-500 uppercase bg-gray-50">
+          <table className="w-full min-w-[680px] text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-800">
               <tr>
                 <th className="px-6 py-3">Nome / E-mail</th>
                 <th className="px-6 py-3">Perfil</th>
@@ -172,10 +165,10 @@ export default function UsuariosClient({
             </thead>
             <tbody>
               {filteredUsuarios.map((u) => (
-                <tr key={u.id} className="border-b hover:bg-gray-50">
+                <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/50">
                   <td className="px-6 py-4">
-                    <div className="font-bold text-gray-900">{u.nome}</div>
-                    <div className="text-gray-500">{u.email}</div>
+                      <div className="font-bold text-slate-900 dark:text-white">{u.nome}</div>
+                      <div className="text-slate-500 dark:text-slate-400">{u.email}</div>
                   </td>
                   <td className="px-6 py-4">
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
@@ -217,9 +210,9 @@ export default function UsuariosClient({
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center p-6 border-b border-gray-100">
-              <h2 className="text-xl font-bold text-gray-900">
+          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-4xl flex-col overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-700">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
                 {formData.id ? "Editar Usuário" : "Novo Usuário"}
               </h2>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
@@ -227,8 +220,8 @@ export default function UsuariosClient({
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <form onSubmit={handleSubmit} className="p-4">
+              <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Nome Completo</label>
                   <input 
@@ -292,7 +285,7 @@ export default function UsuariosClient({
 
               {!isAdmin && (
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Permissões por Módulo</h3>
+                  <h3 className="mb-3 border-b border-slate-200 pb-2 text-base font-semibold text-slate-900 dark:border-slate-700 dark:text-white">Permissões por Módulo</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {modulos.map(modulo => {
                       const perm = formData.permissoes[modulo.id] || { canView: false, canEdit: false };
@@ -365,7 +358,7 @@ export default function UsuariosClient({
               )}
             </form>
 
-            <div className="p-6 border-t border-gray-100 flex justify-end gap-3 bg-gray-50 rounded-b-xl">
+            <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
               <button 
                 type="button"
                 onClick={() => setIsModalOpen(false)}
@@ -385,6 +378,6 @@ export default function UsuariosClient({
           </div>
         </div>
       )}
-    </div>
+    </PageFrame>
   );
 }

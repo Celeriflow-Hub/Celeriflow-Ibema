@@ -7,6 +7,8 @@ import {
   Wrench,
 } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -64,18 +66,9 @@ export default async function RelatoriosPage() {
   );
 
   return (
-    <div className="flex-1 space-y-8 p-4 md:p-8">
-      <div className="flex items-start gap-3">
-        <div className="rounded-xl bg-cyan-100 p-3 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400">
-          <BarChart3 className="h-7 w-7" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Relatórios de Obras</h1>
-          <p className="mt-1 text-slate-500 dark:text-slate-400">
-            Acompanhamento operacional de obras, medições, serviços e materiais emitidos.
-          </p>
-        </div>
-      </div>
+    <PageFrame className="space-y-4 px-1 py-1 md:px-2">
+      <PageHeader title="Relatórios de Obras" icon={<BarChart3 className="size-4 shrink-0 text-cyan-600" />} className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white" />
+      <p className="px-1 text-sm text-slate-500 dark:text-slate-400">Acompanhamento operacional de obras, medições, serviços e materiais emitidos.</p>
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Resumo operacional">
         <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
@@ -219,6 +212,6 @@ export default async function RelatoriosPage() {
           </table>
         </div>
       </section>
-    </div>
+    </PageFrame>
   );
 }

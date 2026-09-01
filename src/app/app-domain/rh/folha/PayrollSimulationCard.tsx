@@ -22,8 +22,8 @@ export function PayrollSimulationCard({ payrollId, status }: { payrollId: string
   };
 
   return (
-    <Card className="max-w-3xl mt-6 border-blue-200">
-      <CardHeader className="bg-blue-50/50 pb-4">
+    <Card size="sm" className="mt-1 max-w-3xl rounded-md border-blue-200 shadow-none">
+      <CardHeader className="border-b bg-blue-50/50 pb-2">
         <CardTitle className="text-blue-800 flex items-center">
           <Calculator className="w-5 h-5 mr-2" />
           Simulação e Processamento
@@ -32,7 +32,7 @@ export function PayrollSimulationCard({ payrollId, status }: { payrollId: string
           Calcule automaticamente os vencimentos e descontos para todos os servidores ativos com base nas regras cadastradas (Salário Base e Benefícios).
         </CardDescription>
       </CardHeader>
-      <CardContent className="pt-6 flex flex-col items-center justify-center space-y-4">
+      <CardContent className="flex flex-col items-center justify-center space-y-3 pt-3">
         {status === "Fechada" || status === "Paga" ? (
           <div className="flex flex-col items-center justify-center p-4 text-emerald-700 bg-emerald-50 rounded-lg w-full">
             <CheckCircle2 className="h-8 w-8 mb-2" />

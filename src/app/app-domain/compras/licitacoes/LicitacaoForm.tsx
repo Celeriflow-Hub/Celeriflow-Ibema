@@ -11,6 +11,8 @@ import Link from "next/link";
 import { ArrowLeft, Save } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type BiddingData = {
   id: string;
@@ -50,27 +52,18 @@ export function LicitacaoForm({ data, processos = [] }: { data?: BiddingData; pr
   }
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center space-x-4 mb-4">
-        <Link href="/compras/licitacoes">
-          <Button variant="outline" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <h2 className="text-3xl font-bold tracking-tight">
-          {data ? "Editar Licitação" : "Nova Licitação"}
-        </h2>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title={data ? "Editar Licitação" : "Nova Licitação"} action={<Link href="/compras/licitacoes" aria-label="Voltar"><Button variant="outline" size="icon"><ArrowLeft className="size-4" /></Button></Link>} />
 
-      <Card className="max-w-3xl">
-        <CardHeader>
-          <CardTitle>Dados do Certame</CardTitle>
+      <Card className="max-w-4xl rounded-md">
+        <CardHeader className="border-b p-3">
+          <CardTitle className="text-sm">Dados do Certame</CardTitle>
         </CardHeader>
-        <CardContent>
-          <form action={handleSubmit} className="space-y-6">
+        <CardContent className="p-3">
+          <form action={handleSubmit} className="space-y-4">
             {data && <input type="hidden" name="id" value={data.id} />}
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="number">Número do Edital / Certame</Label>
                 <Input id="number" name="number" defaultValue={data?.number || ""} placeholder="Ex: PE 001/2026 (Auto-gerado se vazio)" />
@@ -94,7 +87,7 @@ export function LicitacaoForm({ data, processos = [] }: { data?: BiddingData; pr
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="status">Status</Label>
                 <Select name="status" defaultValue={data?.status || "Aberto"}>
@@ -134,7 +127,7 @@ export function LicitacaoForm({ data, processos = [] }: { data?: BiddingData; pr
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="publicationDate">Data de Publicação</Label>
                 <Input 
@@ -155,7 +148,7 @@ export function LicitacaoForm({ data, processos = [] }: { data?: BiddingData; pr
               </div>
             </div>
 
-            <div className="flex justify-end space-x-2">
+            <div className="flex justify-end gap-2 border-t pt-3">
               <Link href="/compras/licitacoes">
                 <Button type="button" variant="outline">Cancelar</Button>
               </Link>
@@ -166,6 +159,6 @@ export function LicitacaoForm({ data, processos = [] }: { data?: BiddingData; pr
           </form>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   );
 }

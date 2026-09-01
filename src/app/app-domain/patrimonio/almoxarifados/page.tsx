@@ -9,6 +9,8 @@ import {
 import Link from "next/link"
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import type { Prisma } from "@prisma/client";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function AlmoxarifadosPage(
   props: { searchParams?: Promise<{ q?: string }> }
@@ -31,27 +33,19 @@ export default async function AlmoxarifadosPage(
   })
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Almoxarifados</h2>
-        <div className="flex items-center space-x-2">
-          <Link href="/patrimonio/almoxarifados/novo" className={buttonVariants()}>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Almoxarifado
-          </Link>
-        </div>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Almoxarifados" action={<Link href="/patrimonio/almoxarifados/novo" className={buttonVariants({ size: "sm" })}><Plus className="size-3.5" /><span className="hidden sm:inline">Novo Almoxarifado</span></Link>} />
 
-      <Card>
-        <CardHeader className="pb-4">
-          <CardTitle>Centros de Distribuição</CardTitle>
-          <CardDescription>
+      <Card className="rounded-md">
+        <CardHeader className="border-b p-3">
+          <CardTitle className="text-sm">Centros de Distribuição</CardTitle>
+          <CardDescription className="text-xs">
             Gestão dos depósitos físicos e locais de armazenamento.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form className="flex flex-wrap items-center gap-2 mb-4 bg-slate-50 p-3 rounded-lg border">
-            <div className="flex-1 min-w-[300px]">
+        <CardContent className="p-3">
+          <form className="mb-3 flex flex-wrap items-center gap-2 rounded-md border bg-slate-50 p-2">
+            <div className="min-w-0 flex-1 sm:min-w-72">
               <Input 
                 name="q"
                 defaultValue={q}
@@ -65,8 +59,8 @@ export default async function AlmoxarifadosPage(
             </button>
           </form>
 
-          <div className="rounded-md border overflow-x-auto">
-            <table className="w-full text-sm text-left">
+          <div className="overflow-x-auto rounded-md border">
+            <table className="min-w-[620px] w-full text-sm text-left">
               <thead className="bg-muted text-muted-foreground border-b">
                 <tr>
                   <th className="font-medium p-4 whitespace-nowrap">Nome</th>
@@ -103,6 +97,6 @@ export default async function AlmoxarifadosPage(
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   )
 }

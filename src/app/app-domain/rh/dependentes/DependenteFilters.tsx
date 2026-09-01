@@ -21,8 +21,8 @@ export function DependenteFilters() {
   };
 
   return (
-    <form onSubmit={handleSearch} className="flex flex-wrap items-center gap-2 mb-4 bg-slate-50 p-3 rounded-lg border">
-      <div className="flex-1 min-w-[300px]">
+    <form onSubmit={handleSearch} className="mb-3 grid gap-2 rounded-md border bg-slate-50 p-2 sm:grid-cols-[minmax(12rem,1fr)_auto]">
+      <div className="min-w-0">
         <Input 
           placeholder="Buscar por nome do dependente ou nome do servidor..." 
           value={q}
@@ -30,7 +30,7 @@ export function DependenteFilters() {
           className="bg-white"
         />
       </div>
-      <Button type="submit">
+      <Button type="submit" size="sm" className="w-full sm:w-auto">
         <Search className="h-4 w-4 mr-2" />
         Filtrar
       </Button>

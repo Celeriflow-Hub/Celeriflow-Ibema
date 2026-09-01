@@ -36,8 +36,8 @@ export function InstanceConfigurationForm({ instanceId, initialValues }: Instanc
   }
 
   return (
-    <form action={handleSubmit} className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-      <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-5 sm:flex-row sm:items-start sm:justify-between dark:border-slate-700">
+    <form action={handleSubmit} className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between dark:border-slate-700">
         <div className="flex gap-3">
           <div className="rounded-lg bg-indigo-100 p-2 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
             <SlidersHorizontal className="h-5 w-5" />
@@ -53,7 +53,7 @@ export function InstanceConfigurationForm({ instanceId, initialValues }: Instanc
         </button>
       </div>
 
-      <div className="grid gap-6 p-6 md:grid-cols-2">
+      <div className="grid gap-4 p-4 md:grid-cols-2">
         {message && (
           <p role={message.type === "error" ? "alert" : "status"} className={`md:col-span-2 rounded-lg border px-4 py-3 text-sm ${message.type === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
             {message.text}

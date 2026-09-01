@@ -2,6 +2,8 @@ import { ArrowLeft, Save } from "lucide-react";
 import Link from "next/link";
 import { getProtocolContext } from "@/lib/protocols/access";
 import { createProtocol } from "../../actions";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -28,23 +30,17 @@ export default async function NovoProtocoloPage() {
   });
 
   return (
-    <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-6">
-        <Link href="/protocolos/processos" className="text-emerald-600 hover:text-emerald-700 text-sm font-semibold flex items-center gap-2 mb-4 w-fit transition-colors">
-          <ArrowLeft className="w-4 h-4" />
-          Voltar para a Caixa do Setor
-        </Link>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Novo Protocolo</h1>
-        <p className="text-slate-500 mt-1">Abra um novo processo digital e encaminhe para o setor responsável.</p>
-      </div>
+    <PageFrame className="max-w-5xl space-y-2">
+      <PageHeader title="Novo Protocolo" action={<Link href="/protocolos/processos" aria-label="Voltar" className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><ArrowLeft className="size-3.5" /><span className="hidden sm:inline">Voltar</span></Link>} />
+      <p className="text-xs text-slate-500">Abra um novo processo digital e encaminhe para o setor responsável.</p>
 
-      <form action={createProtocol} className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="p-6 md:p-8 space-y-8">
+      <form action={createProtocol} className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+        <div className="space-y-5 p-3 md:p-4">
           
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-slate-800 border-b border-slate-100 pb-2">1. Identificação</h3>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-slate-700 block">Interessado (Pessoa física)</label>
                 <select name="personId" className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all">
@@ -131,7 +127,7 @@ export default async function NovoProtocoloPage() {
 
         </div>
 
-        <div className="bg-slate-50 border-t border-slate-200 p-6 flex items-center justify-end gap-3">
+        <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50 p-3">
           <Link href="/protocolos/processos" className="px-5 py-2.5 text-sm font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200/50 rounded-lg transition-colors">
             Cancelar
           </Link>
@@ -141,6 +137,6 @@ export default async function NovoProtocoloPage() {
           </button>
         </div>
       </form>
-    </div>
+    </PageFrame>
   );
 }

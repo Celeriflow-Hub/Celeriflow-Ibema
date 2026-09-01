@@ -5,6 +5,8 @@ import { CheckCircle2, FileSignature, X } from "lucide-react";
 import { EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import { signProcessDocumentInternally } from "../actions";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type PendingSignature = {
   id: string;
@@ -50,18 +52,11 @@ export default function AssinaturasClient({ initialDocuments }: { initialDocumen
   }
 
   return (
-    <div className="max-w-6xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <FileSignature className="w-6 h-6 text-emerald-600" />
-            Assinaturas Pendentes
-          </h1>
-          <p className="text-slate-500 mt-1">Documentos de processos usam a mesma manifestação central do GED.</p>
-        </div>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Assinaturas Pendentes" icon={<FileSignature className="size-4 shrink-0 text-emerald-600" />} />
+      <p className="text-xs text-slate-500">Documentos de processos usam a mesma manifestação central do GED.</p>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
         {documents.length === 0 ? (
           <div className="p-12 text-center flex flex-col items-center justify-center">
             <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
@@ -72,7 +67,7 @@ export default function AssinaturasClient({ initialDocuments }: { initialDocumen
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm whitespace-nowrap">
+            <table className="min-w-[680px] w-full text-left text-sm whitespace-nowrap">
               <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="px-6 py-3">Documento / Processo</th>
@@ -106,6 +101,6 @@ export default function AssinaturasClient({ initialDocuments }: { initialDocumen
         )}
       </div>
       {selectedDocument && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-lg rounded-xl bg-white shadow-xl"><div className="flex items-center justify-between border-b border-slate-200 p-5"><h2 className="flex items-center gap-2 text-lg font-bold text-slate-900"><FileSignature className="h-5 w-5 text-emerald-600" />Assinar documento</h2><button onClick={close} disabled={isPending} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button></div><div className="space-y-4 p-5 text-sm text-slate-700"><p><strong>{selectedDocument.title}</strong> esta vinculado a uma versao bloqueada com hash SHA-256.</p><label className="block text-sm font-medium text-slate-700">Senha da conta<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" /></label>{error && <p className="rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}</div><div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 p-5"><button onClick={close} disabled={isPending} className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600">Cancelar</button><button onClick={sign} disabled={!password || isPending} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{isPending ? "Registrando..." : "Registrar assinatura"}</button></div></div></div>}
-    </div>
+    </PageFrame>
   );
 }

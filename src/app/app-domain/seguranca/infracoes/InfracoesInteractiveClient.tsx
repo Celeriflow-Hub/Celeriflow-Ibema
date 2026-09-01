@@ -40,23 +40,23 @@ export function InfracoesInteractiveClient() {
   }
 
   return (
-    <div className="bg-gradient-to-r from-slate-900 via-cyan-950 to-slate-900 text-white rounded-xl p-5 shadow-lg space-y-4 mb-6 border border-cyan-800/40">
-      <div className="flex justify-between items-start border-b border-cyan-900/60 pb-3">
-        <div>
+    <section className="rounded-xl border border-cyan-900/60 bg-slate-950 p-3 text-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-cyan-900/60 pb-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <span className="bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
             Talão Eletrônico AIT — SNA / Senatran (Guarda Municipal)
           </span>
-          <h2 className="text-xl font-bold mt-1 flex items-center gap-2">
-            <Car className="w-6 h-6 text-cyan-400" />
+          <h2 className="mt-2 flex items-center gap-2 text-base font-bold">
+            <Car className="h-5 w-5 text-cyan-400" />
             Emissão Instantânea de Auto de Infração de Trânsito com Pix
           </h2>
         </div>
-        <span className="bg-cyan-500 text-white text-xs px-3 py-1 rounded-full font-bold shadow">
+        <span className="w-fit shrink-0 rounded-full bg-cyan-500 px-2.5 py-1 text-xs font-bold text-white shadow">
           SNA Transmitido
         </span>
       </div>
 
-      <form onSubmit={handleIssueTicket} className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+      <form onSubmit={handleIssueTicket} className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
         <div>
           <label className="block text-slate-300 font-semibold mb-1">Placa do Veículo</label>
           <input
@@ -112,7 +112,7 @@ export function InfracoesInteractiveClient() {
           />
         </div>
 
-        <div className="sm:col-span-3 flex justify-end">
+        <div className="flex justify-end sm:col-span-3">
           <button
             type="submit"
             disabled={loading}
@@ -124,7 +124,7 @@ export function InfracoesInteractiveClient() {
       </form>
 
       {result && (
-        <div className="bg-slate-950 p-4 rounded-xl border border-cyan-800/80 text-xs space-y-3">
+        <div className="mt-3 space-y-3 rounded-lg border border-cyan-800/80 bg-slate-900 p-3 text-xs">
           <div className="flex justify-between items-center border-b border-slate-800 pb-2">
             <span className="font-bold text-cyan-300">AIT N° {result.numeroAit} ({result.placaVeiculo})</span>
             <span className="bg-emerald-950 text-emerald-300 border border-emerald-800 text-[10px] font-bold px-2.5 py-0.5 rounded">
@@ -144,6 +144,6 @@ export function InfracoesInteractiveClient() {
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }

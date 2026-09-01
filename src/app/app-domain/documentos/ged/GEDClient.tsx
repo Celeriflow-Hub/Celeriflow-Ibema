@@ -142,7 +142,7 @@ export default function GEDClient({
   return (
     <>
       {/* Action Buttons */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setShowFolderModal(true)}
           className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-colors"
@@ -215,8 +215,8 @@ export default function GEDClient({
             </button>
           </div>
         ) : (
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            <table className="w-full text-sm text-left">
+          <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
+            <table className="min-w-[620px] w-full text-sm text-left">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold">
                 <tr>
                   <th className="px-4 py-3">Nome</th>
@@ -435,8 +435,8 @@ export default function GEDClient({
         </div>
       )}
       {signatureDocument && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => !loading && setSignatureDocument(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4" onClick={() => !loading && setSignatureDocument(null)}>
+          <div className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-slate-900">Solicitar assinaturas internas</h2>
             <p className="mt-1 text-sm text-slate-600">{signatureDocument.title}</p>
             {qrValidationUrl ? (
@@ -447,7 +447,7 @@ export default function GEDClient({
                 </label>
               </div>
             ) : (
-              <div className="mt-4 max-h-56 space-y-2 overflow-y-auto rounded-lg border border-slate-200 p-3">
+              <div className="mt-4 max-h-56 space-y-2 overflow-y-auto rounded-lg border border-slate-200 p-3 pr-2">
                 {signers.map((signer) => (
                   <label key={signer.id} className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
                     <input type="checkbox" checked={selectedSignerIds.includes(signer.id)} onChange={() => toggleSigner(signer.id)} />

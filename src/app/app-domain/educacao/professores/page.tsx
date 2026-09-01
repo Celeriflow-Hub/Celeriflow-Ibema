@@ -1,6 +1,8 @@
 import React from "react";
 import { BookOpen, Search, Filter, Plus, Edit2, Trash2, Building } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -17,26 +19,11 @@ export default async function ProfessoresPage() {
   });
 
   return (
-    <div className="flex-1 p-8">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-            <BookOpen className="h-8 w-8 text-emerald-600" />
-            Professores
-          </h1>
-          <p className="text-gray-500 mt-2">
-            Gestão do corpo docente, alocação em turmas e escolas.
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <button className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-            <Plus className="h-5 w-5" />
-            Novo Professor
-          </button>
-        </div>
-      </div>
+    <PageFrame className="space-y-3 px-1 py-1 md:px-2">
+      <PageHeader title="Professores" icon={<BookOpen className="size-4 shrink-0 text-emerald-600 dark:text-emerald-300" />} action={<button className="flex h-8 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white transition-colors hover:bg-emerald-700"><Plus className="h-4 w-4" />Novo Professor</button>} className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white" />
+      <p className="text-sm text-gray-500 dark:text-gray-400">Gestão do corpo docente, alocação em turmas e escolas.</p>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 mb-6 flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:flex-row">
         <div className="relative flex-1">
           <Search className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -53,9 +40,9 @@ export default async function ProfessoresPage() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full min-w-[760px] border-collapse text-left text-sm">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700">
                 <th className="p-4 font-medium text-gray-500 dark:text-gray-400">Professor(a) / Matrícula</th>
@@ -142,6 +129,6 @@ export default async function ProfessoresPage() {
           </table>
         </div>
       </div>
-    </div>
+    </PageFrame>
   );
 }

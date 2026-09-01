@@ -55,7 +55,7 @@ export function EditReadingSheet({ reading }: { reading: Reading }) {
       <SheetTrigger render={<button className="p-1.5 text-slate-400 hover:text-[#0284C7] hover:bg-blue-50 rounded transition-colors" title="Editar leitura" />}>
         <Pencil className="h-3.5 w-3.5" />
       </SheetTrigger>
-      <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
+      <SheetContent side="right" className="w-[calc(100vw-1rem)] overflow-y-auto sm:w-[34rem]">
         <SheetHeader>
           <SheetTitle>Editar Leitura</SheetTitle>
           <SheetDescription>
@@ -63,7 +63,7 @@ export function EditReadingSheet({ reading }: { reading: Reading }) {
           </SheetDescription>
         </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-4 space-y-3 pb-2">
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-500">Leitura Anterior (somente leitura)</label>
             <input
@@ -102,7 +102,7 @@ export function EditReadingSheet({ reading }: { reading: Reading }) {
             />
           </div>
 
-          <div className="pt-4 flex justify-end gap-2">
+          <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={() => setOpen(false)}

@@ -2,6 +2,8 @@ import React from "react";
 import { Utensils, AlertCircle, Calendar as CalendarIcon, DollarSign } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import Link from "next/link";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -20,19 +22,12 @@ export default async function MerendaEscolarPage() {
   const totalCostOverall = meals.reduce((acc, curr) => acc + (curr.totalCost || 0), 0);
 
   return (
-    <div className="flex-1 p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-          <Utensils className="h-8 w-8 text-orange-600" />
-          Merenda Escolar
-        </h1>
-        <p className="text-gray-500 mt-2">
-          Gestão financeira e controle de refeições servidas nas escolas.
-        </p>
-      </div>
+    <PageFrame className="space-y-3 px-1 py-1 md:px-2">
+      <PageHeader title="Merenda Escolar" icon={<Utensils className="size-4 shrink-0 text-orange-600 dark:text-orange-300" />} action={<Link href="/educacao/merenda/novo" className="flex h-8 items-center rounded-md bg-orange-600 px-3 text-sm font-medium text-white transition-colors hover:bg-orange-700">Registrar alimentação</Link>} className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white" />
+      <p className="text-sm text-gray-500 dark:text-gray-400">Gestão financeira e controle de refeições servidas nas escolas.</p>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg text-orange-600 dark:text-orange-400">
               <Utensils className="h-5 w-5" />
@@ -42,7 +37,7 @@ export default async function MerendaEscolarPage() {
           <p className="text-2xl font-bold text-gray-900 dark:text-white">{mealsCount}</p>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
               <AlertCircle className="h-5 w-5" />
@@ -52,7 +47,7 @@ export default async function MerendaEscolarPage() {
           <p className="text-2xl font-bold text-gray-900 dark:text-white">{studentsWithSpecialMeal}</p>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg text-emerald-600 dark:text-emerald-400">
               <DollarSign className="h-5 w-5" />
@@ -65,19 +60,19 @@ export default async function MerendaEscolarPage() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-8">
-        <div className="flex justify-between items-center mb-6">
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
             <CalendarIcon className="h-5 w-5 text-gray-400" />
             Últimos Registros de Alimentação
           </h2>
-          <Link href="/educacao/merenda/novo" className="py-2 px-4 bg-orange-600 text-white font-medium rounded-lg hover:bg-orange-700 transition-colors">
+          <Link href="/educacao/merenda/novo" className="hidden rounded-md bg-orange-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-orange-700 sm:block">
             Registrar Alimentação Servida
           </Link>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full min-w-[700px] border-collapse text-left text-sm">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700">
                 <th className="p-4 font-medium text-gray-500 dark:text-gray-400">Data</th>
@@ -119,7 +114,7 @@ export default async function MerendaEscolarPage() {
         </div>
       </div>
       
-      <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-900/30 flex gap-3">
+      <div className="flex gap-3 rounded-lg border border-blue-100 bg-blue-50 p-3 dark:border-blue-900/30 dark:bg-blue-900/20">
         <AlertCircle className="h-6 w-6 text-blue-600 dark:text-blue-400 shrink-0" />
         <div>
           <h3 className="font-medium text-blue-900 dark:text-blue-300">Integração Financeira</h3>
@@ -128,6 +123,6 @@ export default async function MerendaEscolarPage() {
           </p>
         </div>
       </div>
-    </div>
+    </PageFrame>
   );
 }

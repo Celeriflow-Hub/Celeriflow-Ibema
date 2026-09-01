@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { FileBox, Search, Plus, FileText } from "lucide-react";
 import { receiveProcess } from "../actions";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type Processo = {
   id: string;
@@ -51,23 +53,12 @@ export default function ProcessosClient({ initialProcessos, canReceive, canCreat
   }
 
   return (
-    <div className="max-w-6xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <FileBox className="w-6 h-6 text-emerald-600" />
-            Caixa do Setor
-          </h1>
-          <p className="text-slate-500 mt-1">Gerencie os processos e protocolos que estão sob responsabilidade do seu setor.</p>
-        </div>
-        {canCreate && <Link href="/protocolos/processos/novo" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-colors">
-          <Plus className="w-4 h-4" />
-          Novo Protocolo
-        </Link>}
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Caixa do Setor" icon={<FileBox className="size-4 shrink-0 text-emerald-600" />} action={canCreate ? <Link href="/protocolos/processos/novo" className="inline-flex h-7 items-center gap-1 rounded-md bg-emerald-600 px-2 text-xs font-semibold text-white hover:bg-emerald-700"><Plus className="size-3.5" /><span className="hidden sm:inline">Novo Protocolo</span></Link> : undefined} />
+      <p className="text-xs text-slate-500">Gerencie os processos e protocolos que estão sob responsabilidade do seu setor.</p>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row items-center gap-4 bg-slate-50/50">
+      <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col items-center gap-2 border-b border-slate-200 bg-slate-50/50 p-3 sm:flex-row">
           <div className="relative w-full max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
@@ -78,7 +69,7 @@ export default function ProcessosClient({ initialProcessos, canReceive, canCreat
               className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600"
             />
           </div>
-          <div className="flex gap-2 w-full sm:w-auto">
+          <div className="flex w-full gap-2 sm:w-auto">
             <select 
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -104,7 +95,7 @@ export default function ProcessosClient({ initialProcessos, canReceive, canCreat
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm whitespace-nowrap">
+            <table className="min-w-[760px] w-full text-left text-sm whitespace-nowrap">
               <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="px-6 py-3">Nº Protocolo</th>
@@ -164,6 +155,6 @@ export default function ProcessosClient({ initialProcessos, canReceive, canCreat
           </div>
         )}
       </div>
-    </div>
+    </PageFrame>
   );
 }

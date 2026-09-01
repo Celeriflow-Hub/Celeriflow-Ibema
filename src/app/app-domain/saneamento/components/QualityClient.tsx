@@ -96,17 +96,17 @@ export function QualityClient({ analyses }: { analyses: QualityAnalysis[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
+    <section className="overflow-hidden rounded-md border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800" aria-label="Lista de análises de qualidade">
+      <div className="flex flex-col gap-2 border-b border-gray-100 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          <div className="relative w-full sm:w-64">
             <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
             <input
               type="search"
               placeholder="Buscar ponto, parâmetro..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="w-52 rounded-md border py-1.5 pr-3 pl-8 text-xs focus:ring-2 focus:ring-[#0284C7] focus:outline-none"
+              className="h-9 w-full rounded-md border bg-white py-1.5 pr-3 pl-8 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0284C7] dark:bg-gray-900 dark:text-white"
             />
           </div>
           <div className="flex items-center gap-1">
@@ -115,7 +115,7 @@ export function QualityClient({ analyses }: { analyses: QualityAnalysis[] }) {
               value={complianceFilter}
               onChange={(event) => setComplianceFilter(event.target.value)}
               aria-label="Filtrar por conformidade"
-              className="rounded-md border px-2 py-1.5 text-xs focus:ring-2 focus:ring-[#0284C7] focus:outline-none"
+              className="h-9 rounded-md border bg-white px-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0284C7] dark:bg-gray-900 dark:text-white"
             >
               <option value="Todos">Todas as conformidades</option>
               <option value="Conforme">Conforme</option>
@@ -126,7 +126,7 @@ export function QualityClient({ analyses }: { analyses: QualityAnalysis[] }) {
             value={activeFilter}
             onChange={(event) => setActiveFilter(event.target.value)}
             aria-label="Filtrar por situação"
-            className="rounded-md border px-2 py-1.5 text-xs focus:ring-2 focus:ring-[#0284C7] focus:outline-none"
+            className="h-9 rounded-md border bg-white px-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0284C7] dark:bg-gray-900 dark:text-white"
           >
             <option value="Todos">Ativas e inativas</option>
             <option value="Ativas">Ativas</option>
@@ -192,13 +192,13 @@ export function QualityClient({ analyses }: { analyses: QualityAnalysis[] }) {
       )}
 
       <Sheet open={editingAnalysis !== null} onOpenChange={(open) => !open && setEditingAnalysis(null)}>
-        <SheetContent side="right" className="w-[400px] overflow-y-auto sm:w-[540px]">
+        <SheetContent side="right" className="w-[calc(100vw-1rem)] overflow-y-auto sm:w-[34rem]">
           <SheetHeader>
             <SheetTitle>Editar Análise de Qualidade</SheetTitle>
             <SheetDescription>Atualize os dados da análise selecionada.</SheetDescription>
           </SheetHeader>
           {editingAnalysis && (
-            <form onSubmit={handleUpdate} className="mt-6 space-y-4">
+            <form onSubmit={handleUpdate} className="mt-4 space-y-3 pb-2">
               <div className="space-y-2">
                 <label htmlFor="collectionPoint" className="text-sm font-medium">Ponto de coleta</label>
                 <input id="collectionPoint" name="collectionPoint" required defaultValue={editingAnalysis.collectionPoint} className="w-full rounded-md border p-2 text-sm" />
@@ -211,7 +211,7 @@ export function QualityClient({ analyses }: { analyses: QualityAnalysis[] }) {
                 <label htmlFor="parameter" className="text-sm font-medium">Parâmetro</label>
                 <input id="parameter" name="parameter" required defaultValue={editingAnalysis.parameter} className="w-full rounded-md border p-2 text-sm" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <label htmlFor="result" className="text-sm font-medium">Resultado</label>
                   <input id="result" name="result" required defaultValue={editingAnalysis.result} className="w-full rounded-md border p-2 text-sm" />
@@ -228,7 +228,7 @@ export function QualityClient({ analyses }: { analyses: QualityAnalysis[] }) {
                   <option value="Não Conforme">Não Conforme</option>
                 </select>
               </div>
-              <div className="flex justify-end gap-2 pt-4">
+              <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end">
                 <SheetTrigger render={<button type="button" className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200" />}>
                   Cancelar
                 </SheetTrigger>
@@ -240,6 +240,6 @@ export function QualityClient({ analyses }: { analyses: QualityAnalysis[] }) {
           )}
         </SheetContent>
       </Sheet>
-    </div>
+    </section>
   );
 }

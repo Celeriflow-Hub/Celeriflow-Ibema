@@ -122,8 +122,8 @@ export function IluminacaoEnergiaClient({ servicos }: { servicos: IluminacaoServ
   });
 
   return (
-    <main className="flex-1 p-4 md:p-8">
-      <header className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+    <main className="space-y-2">
+      <header className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mb-2 flex items-center gap-2 text-amber-700 dark:text-amber-400"><Lightbulb className="h-5 w-5" /><span className="text-sm font-semibold">Obras</span></div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Iluminação e Energia</h1>
@@ -132,12 +132,12 @@ export function IluminacaoEnergiaClient({ servicos }: { servicos: IluminacaoServ
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"><strong>{servicos.length}</strong> {servicos.length === 1 ? "ordem encontrada" : "ordens encontradas"}</div>
       </header>
 
-      <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 md:flex-row md:items-center">
+      <div className="flex flex-col gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800 md:flex-row md:items-center">
         <div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Buscar protocolo, local ou referência..." className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 outline-none focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 dark:border-slate-600 dark:bg-slate-700 dark:text-white" /></div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:w-auto"><select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filtrar por status" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"><option>Todos</option>{statuses.map((item) => <option key={item}>{item}</option>)}</select><select value={active} onChange={(event) => setActive(event.target.value)} aria-label="Filtrar por situação" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"><option>Todos</option><option>Ativos</option><option>Inativos</option></select></div>
       </div>
 
-      <div className="space-y-5">
+      <div className="space-y-3">
         {filteredServicos.map((servico) => {
           const imovel = servico.targetAsset?.realEstate;
           const enderecoImovel = imovel ? [imovel.streetName, imovel.number].filter(Boolean).join(", ") : "";

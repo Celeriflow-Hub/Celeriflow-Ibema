@@ -105,8 +105,8 @@ export function OrdensServicoClient({ ordens }: { ordens: OrdemServico[] }) {
   });
 
   return (
-    <main className="flex-1 p-4 md:p-8">
-      <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <main className="space-y-2">
+      <header className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Operação de campo</p>
           <h1 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">Ordens de Serviço</h1>
@@ -118,8 +118,8 @@ export function OrdensServicoClient({ ordens }: { ordens: OrdemServico[] }) {
         </Link>
       </header>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 p-4 dark:border-slate-700 dark:bg-slate-800/50 md:flex-row md:items-center md:p-6">
+      <section className="overflow-hidden rounded-md border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800" aria-label="Ordens de serviço">
+        <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-800/50 md:flex-row md:items-center">
           <div className="relative min-w-0 flex-1">
             <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Buscar protocolo, local ou entidade vinculada..." className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition-colors focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 dark:border-slate-600 dark:bg-slate-700 dark:text-white" />

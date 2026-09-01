@@ -1,11 +1,12 @@
 ﻿import React from "react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { GraduationCap, Search } from "lucide-react";
-import Link from "next/link";
 import { NewEduProgramSheet } from "../components/NewEduProgramSheet";
 import { QuickFilters } from "../components/QuickFilters";
 import { EduProgramRowActions } from "../components/EduProgramRowActions";
 import type { Prisma } from "@prisma/client";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -18,26 +19,13 @@ export default async function EducacaoAmbientalPage(props: { searchParams: Promi
   const programs = await prisma.envEduProgram.findMany({ where, orderBy: { startDate: "desc" } });
 
   return (
-    <div className="flex-1 p-8">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Link href="/meio-ambiente" className="text-gray-500 hover:text-gray-700">Meio Ambiente</Link>
-            <span className="text-gray-400">/</span>
-            <span className="text-gray-900 font-medium">Educacao Ambiental</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <GraduationCap className="h-6 w-6 text-green-600" />
-            Educacao Ambiental
-          </h1>
-        </div>
-        <NewEduProgramSheet />
-      </div>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50 flex-wrap gap-4">
-          <div className="relative w-64">
+    <PageFrame className="space-y-2 px-1 py-1 md:px-2">
+      <PageHeader title="Educação Ambiental" icon={<GraduationCap className="size-4 shrink-0 text-green-600" />} action={<NewEduProgramSheet />} className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white" />
+      <section className="overflow-hidden rounded-md border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800" aria-label="Lista de ações de educação ambiental">
+        <div className="flex flex-col gap-2 border-b border-gray-100 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input type="text" placeholder="Buscar campanhas..." className="w-full pl-9 pr-4 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+            <input type="search" aria-label="Buscar campanha" placeholder="Buscar campanhas..." className="h-9 w-full rounded-md border bg-white pl-9 pr-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-900 dark:text-white" />
           </div>
           <QuickFilters filters={[
             { name: "status", label: "Status", options: [{ value: "Planejado", label: "Planejado" }, { value: "Em Execucao", label: "Em Execucao" }, { value: "Concluido", label: "Concluido" }, { value: "Cancelado", label: "Cancelado" }] }
@@ -85,7 +73,7 @@ export default async function EducacaoAmbientalPage(props: { searchParams: Promi
             </table>
           </div>
         )}
-      </div>
-    </div>
+      </section>
+    </PageFrame>
   );
 }

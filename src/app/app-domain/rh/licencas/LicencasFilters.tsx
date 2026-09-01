@@ -24,8 +24,8 @@ export function LicencasFilters() {
   };
 
   return (
-    <form onSubmit={handleSearch} className="flex flex-wrap items-center gap-2 mb-4 bg-slate-50 p-3 rounded-lg border">
-      <div className="flex-1 min-w-[300px]">
+    <form onSubmit={handleSearch} className="mb-3 grid gap-2 rounded-md border bg-slate-50 p-2 sm:grid-cols-[minmax(12rem,1fr)_10rem_auto]">
+      <div className="min-w-0">
         <Input 
           placeholder="Buscar por nome do servidor..." 
           value={q}
@@ -33,7 +33,7 @@ export function LicencasFilters() {
           className="bg-white"
         />
       </div>
-      <div className="w-[200px]">
+      <div className="min-w-0">
         <Select value={status} onValueChange={(val) => setStatus(val || "")}>
           <SelectTrigger className="bg-white">
             <span className="flex-1 text-left line-clamp-1">
@@ -48,7 +48,7 @@ export function LicencasFilters() {
           </SelectContent>
         </Select>
       </div>
-      <Button type="submit">
+      <Button type="submit" size="sm" className="w-full sm:w-auto">
         <Search className="h-4 w-4 mr-2" />
         Filtrar
       </Button>

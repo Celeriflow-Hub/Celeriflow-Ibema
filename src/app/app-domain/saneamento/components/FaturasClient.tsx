@@ -40,18 +40,18 @@ export function FaturasClient({ invoices }: { invoices: Invoice[] }) {
   }, [invoices, search, statusFilter]);
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+    <section className="overflow-hidden rounded-md border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800" aria-label="Lista de faturas">
       {/* Toolbar */}
-      <div className="p-3 border-b border-gray-100 dark:border-gray-700 flex flex-wrap gap-2 items-center justify-between bg-gray-50 dark:bg-gray-800/50">
-        <div className="flex flex-wrap gap-2 items-center">
-          <div className="relative">
+      <div className="flex flex-col gap-2 border-b border-gray-100 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          <div className="relative w-full sm:w-64">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
             <input
               type="text"
               placeholder="Buscar nº fatura, UC..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 pr-3 py-1.5 border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-[#0284C7] w-52"
+              className="h-9 w-full rounded-md border bg-white pl-8 pr-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0284C7] dark:bg-gray-900 dark:text-white"
             />
           </div>
           <div className="flex items-center gap-1">
@@ -59,7 +59,8 @@ export function FaturasClient({ invoices }: { invoices: Invoice[] }) {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="py-1.5 px-2 border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-[#0284C7]"
+              aria-label="Filtrar faturas por status"
+              className="h-9 rounded-md border bg-white px-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0284C7] dark:bg-gray-900 dark:text-white"
             >
               {statuses.map((s) => <option key={s}>{s}</option>)}
             </select>
@@ -110,6 +111,6 @@ export function FaturasClient({ invoices }: { invoices: Invoice[] }) {
           </table>
         </div>
       )}
-    </div>
+    </section>
   );
 }

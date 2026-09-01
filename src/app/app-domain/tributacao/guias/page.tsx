@@ -1,5 +1,6 @@
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import GuiasClient from "./GuiasClient";
+import { PageFrame } from "@/components/app-ui/PageFrame";
 
 export const dynamic = "force-dynamic";
 
@@ -30,8 +31,8 @@ export default async function GuiasPage() {
   });
 
   return (
-    <div className="max-w-7xl animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+    <PageFrame className="space-y-3">
       <GuiasClient guias={displayGuides} />
-    </div>
+    </PageFrame>
   );
 }

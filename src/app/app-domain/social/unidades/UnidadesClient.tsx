@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Building2, Search, Plus, Phone, Mail, CheckCircle2, XCircle } from "lucide-react";
 import { createSocialUnit, updateSocialUnit, toggleSocialUnitStatus } from "../actions";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type SocialUnit = {
   id: string;
@@ -80,79 +82,67 @@ export default function UnidadesClient({ unidadesInicial, realEstates, employees
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-            <Building2 className="w-6 h-6 text-blue-600" />
-            Unidades SUAS
-          </h1>
-          <p className="text-slate-500">Gerencie CRAS, CREAS, Centros POP e Acolhimentos.</p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input 
-              type="text" 
-              placeholder="Buscar unidade..." 
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 w-full md:w-64"
-            />
-          </div>
-          <button 
-            onClick={() => handleOpenModal()}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Nova Unidade</span>
-          </button>
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title="Unidades SUAS"
+        icon={<Building2 className="size-4 shrink-0 text-blue-600" />}
+        action={<button onClick={() => handleOpenModal()} className="inline-flex h-7 items-center gap-1 rounded-md bg-blue-600 px-2.5 text-xs font-semibold text-white hover:bg-blue-700"><Plus className="size-3.5" />Nova unidade</button>}
+      />
+      <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-slate-500">Gerencie CRAS, CREAS, Centros POP e acolhimentos.</p>
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            placeholder="Buscar unidade..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-8 w-full rounded-md border border-slate-200 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+          />
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <table className="w-full table-fixed text-left">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider">
-                <th className="p-4 font-semibold">Unidade</th>
-                <th className="p-4 font-semibold">Tipo</th>
-                <th className="p-4 font-semibold">Telefone</th>
-                <th className="p-4 font-semibold">Email</th>
-                <th className="p-4 font-semibold">Imóvel (Patrimônio)</th>
-                <th className="p-4 font-semibold">Gestor (RH)</th>
-                <th className="p-4 font-semibold text-center">Status</th>
-                <th className="p-4 font-semibold text-center">Ações</th>
+                <th className="p-3 font-semibold">Unidade</th>
+                <th className="p-3 font-semibold">Tipo</th>
+                <th className="hidden p-3 font-semibold md:table-cell">Telefone</th>
+                <th className="hidden p-3 font-semibold lg:table-cell">E-mail</th>
+                <th className="hidden p-3 font-semibold xl:table-cell">Imóvel</th>
+                <th className="hidden p-3 font-semibold xl:table-cell">Gestor</th>
+                <th className="hidden p-3 text-center font-semibold sm:table-cell">Status</th>
+                <th className="p-3 text-right font-semibold">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {filtered.length > 0 ? (
                 filtered.map((unidade) => (
                   <tr key={unidade.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="p-4"><p className="font-semibold text-slate-800">{unidade.name}</p></td>
-                    <td className="p-4">
+                    <td className="p-3"><p className="break-words font-semibold text-slate-800">{unidade.name}</p><p className="mt-1 text-xs text-slate-500 sm:hidden">{unidade.isActive ? "Ativa" : "Inativa"}</p></td>
+                    <td className="p-3">
                       <span className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-medium">
                         {unidade.type}
                       </span>
                     </td>
-                    <td className="p-4 text-slate-600">
+                    <td className="hidden p-3 text-slate-600 md:table-cell">
                       {unidade.phone ? (
                         <p className="flex items-center gap-1 text-xs"><Phone className="w-3 h-3" /> {unidade.phone}</p>
                       ) : '-'}
                     </td>
-                    <td className="p-4 text-slate-600">
+                    <td className="hidden p-3 text-slate-600 lg:table-cell">
                       {unidade.email ? (
                         <p className="flex items-center gap-1 text-xs"><Mail className="w-3 h-3" /> {unidade.email}</p>
                       ) : '-'}
                     </td>
-                    <td className="p-4 text-slate-600 text-xs">
+                    <td className="hidden p-3 text-xs text-slate-600 xl:table-cell">
                       {unidade.realEstate?.streetName ? unidade.realEstate.streetName + ', ' + unidade.realEstate.number : '-'}
                     </td>
-                    <td className="p-4 text-slate-600 text-xs">
+                    <td className="hidden p-3 text-xs text-slate-600 xl:table-cell">
                       {unidade.manager?.name || '-'}
                     </td>
-                    <td className="p-4 text-center">
+                    <td className="hidden p-3 text-center sm:table-cell">
                       {unidade.isActive ? (
                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 rounded-md text-xs font-medium border border-emerald-200">
                            <CheckCircle2 className="w-3 h-3" /> Ativo
@@ -163,8 +153,8 @@ export default function UnidadesClient({ unidadesInicial, realEstates, employees
                          </span>
                       )}
                     </td>
-                    <td className="p-4">
-                      <div className="flex justify-center gap-2">
+                    <td className="p-3">
+                      <div className="flex justify-end gap-1">
                         <button 
                           onClick={() => handleOpenModal(unidade)}
                           className="text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg transition-colors text-xs font-medium"
@@ -190,7 +180,6 @@ export default function UnidadesClient({ unidadesInicial, realEstates, employees
               )}
             </tbody>
           </table>
-        </div>
       </div>
 
       {isModalOpen && (
@@ -256,6 +245,6 @@ export default function UnidadesClient({ unidadesInicial, realEstates, employees
           </div>
         </div>
       )}
-    </div>
+    </PageFrame>
   );
 }

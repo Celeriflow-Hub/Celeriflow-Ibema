@@ -1,7 +1,8 @@
-import React from 'react';
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { Stethoscope } from 'lucide-react';
 import ProfissionaisClient from './ProfissionaisClient';
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function Page() {
   const { prisma } = await getTenantContextForModule("SAUDE");
@@ -17,13 +18,9 @@ export default async function Page() {
   });
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
-        <Stethoscope className="h-6 w-6 text-emerald-600" />
-        Profissionais de Saúde
-      </h1>
-
+    <PageFrame className="space-y-2 px-1 py-1 md:px-2">
+      <PageHeader title="Profissionais de Saúde" icon={<Stethoscope className="size-4 shrink-0 text-emerald-600" />} className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white" />
       <ProfissionaisClient professionals={items} employees={employees} />
-    </div>
+    </PageFrame>
   );
 }

@@ -199,28 +199,28 @@ export default function PagamentosClient({
   };
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
+    <div className="space-y-2 px-1 py-1 sm:px-2">
+      <div className="flex flex-col gap-2 border-b border-slate-300 bg-white px-3 py-2 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Pagamentos</h2>
-          <p className="text-muted-foreground">Ordens de pagamento e execução financeira</p>
+          <h1 className="text-sm font-bold tracking-tight text-slate-900">Pagamentos</h1>
+          <p className="text-xs text-muted-foreground">Ordens de pagamento e execução financeira</p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           {pendingWithholdings.length > 0 && (
-            <Button variant="outline" onClick={() => setIsRetentionModalOpen(true)}>
+            <Button size="sm" variant="outline" onClick={() => setIsRetentionModalOpen(true)}>
               <Wallet className="mr-2 h-4 w-4 text-amber-500" />
               Recolher Retenções Pendentes ({pendingWithholdings.length})
             </Button>
           )}
-          <Button onClick={handleOpenNew}>
+          <Button size="sm" onClick={handleOpenNew}>
             <Plus className="mr-2 h-4 w-4" />
             Nova Ordem de Pagamento
           </Button>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
+      <Card size="sm" className="rounded-md shadow-none">
+        <CardHeader className="border-b pb-2">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <CardTitle>Listagem de Pagamentos</CardTitle>
             <div className="flex flex-wrap items-center gap-2">
@@ -290,7 +290,7 @@ export default function PagamentosClient({
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-3">
           <Table>
             <TableHeader>
               <TableRow>
@@ -366,13 +366,13 @@ export default function PagamentosClient({
       </Card>
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Nova Ordem de Pagamento</DialogTitle>
             <DialogDescription>Crie uma ordem de pagamento vinculada a um empenho.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="orderNumber">Número da Ordem</Label>
                 <Input id="orderNumber" required value={formData.orderNumber} onChange={e => setFormData({...formData, orderNumber: e.target.value})} />
@@ -382,7 +382,7 @@ export default function PagamentosClient({
                 <Input id="date" type="date" required value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="paymentMethod">Forma de Pagamento</Label>
                 <Select value={formData.paymentMethod} onValueChange={v => setFormData({...formData, paymentMethod: v as string})}>
@@ -464,7 +464,7 @@ export default function PagamentosClient({
       </Dialog>
 
       <Dialog open={isRetentionModalOpen} onOpenChange={setIsRetentionModalOpen}>
-        <DialogContent className="sm:max-w-[700px]">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[700px]">
           <DialogHeader>
             <DialogTitle>Recolhimento de Retenções Tributárias</DialogTitle>
             <DialogDescription>Selecione a conta bancária e confirme a quitação da retenção tributária / consignação.</DialogDescription>

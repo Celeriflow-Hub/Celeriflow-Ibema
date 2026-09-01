@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 import { createSegMobItem, toggleSegMobItemStatus, updateSegMobItem } from "../actions";
 import type { SegMobFormData, SegMobItem, SegMobPageConfig } from "../types";
 
@@ -155,23 +157,22 @@ export default function SegMobCrudClient({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">{config.title}</h1>
-          <p className="text-sm text-slate-500">{config.description}</p>
-        </div>
-        <Button onClick={openNew} className={`${config.accentClass} text-white`}>
-          <Plus className="mr-2 h-4 w-4" />
-          {config.newLabel}
-        </Button>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title={config.title}
+        action={(
+          <Button size="sm" onClick={openNew} className={`${config.accentClass} text-white`}>
+            <Plus />
+            {config.newLabel}
+          </Button>
+        )}
+      />
 
-      <Card className="rounded-lg">
-        <CardHeader className="gap-4">
+      <Card size="sm">
+        <CardHeader className="gap-3 border-b">
           <div>
             <CardTitle>Registros administrativos</CardTitle>
-            <CardDescription>Dados internos da prefeitura para acompanhamento, despacho e auditoria operacional.</CardDescription>
+            <CardDescription>{config.description}</CardDescription>
           </div>
           <div className="grid gap-3 md:grid-cols-[1fr_180px_180px_140px]">
             <div className="relative">
@@ -197,7 +198,7 @@ export default function SegMobCrudClient({
             </select>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="hidden pt-0 md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -253,6 +254,35 @@ export default function SegMobCrudClient({
               )}
             </TableBody>
           </Table>
+        </CardContent>
+        <CardContent className="space-y-2 pt-0 md:hidden">
+          {filteredItems.length === 0 ? (
+            <p className="py-6 text-center text-sm text-slate-500">Nenhum registro encontrado.</p>
+          ) : (
+            filteredItems.map((item) => (
+              <article key={item.id} className="rounded-lg border border-slate-200 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-slate-500">{item.code}</p>
+                    <h2 className="truncate font-semibold text-slate-900">{item.title}</h2>
+                  </div>
+                  <Badge className={`${statusClass(item.status, item.isActive)} shrink-0`}>{item.status}</Badge>
+                </div>
+                <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                  <div><dt className="text-slate-500">{config.typeLabel || "Tipo"}</dt><dd className="font-medium text-slate-700">{item.type || "-"}</dd></div>
+                  <div><dt className="text-slate-500">Data</dt><dd className="font-medium text-slate-700">{formatDate(item.date)}</dd></div>
+                  <div className="col-span-2"><dt className="text-slate-500">{config.locationLabel || "Local/Equipe"}</dt><dd className="font-medium text-slate-700">{item.location || item.district || "-"}</dd></div>
+                </dl>
+                <div className="mt-3 flex justify-end gap-1 border-t border-slate-100 pt-2">
+                  <Button variant="ghost" size="sm" onClick={() => toggleActive(item)}>
+                    {item.isActive ? <X className="text-rose-500" /> : <Check className="text-emerald-600" />}
+                    {item.isActive ? "Inativar" : "Ativar"}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => openEdit(item)}><Pencil className="text-cyan-700" />Editar</Button>
+                </div>
+              </article>
+            ))
+          )}
         </CardContent>
       </Card>
 
@@ -375,6 +405,6 @@ export default function SegMobCrudClient({
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageFrame>
   );
 }

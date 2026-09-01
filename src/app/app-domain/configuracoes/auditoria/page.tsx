@@ -3,6 +3,8 @@ import { getTenantContextForSystemAdministration } from "@/lib/platform/tenant-c
 import { auditEventTypes } from "@/lib/platform/audit-evidence";
 import { createAuditEventSearchParams, parseAuditEventQuery } from "@/lib/platform/audit-query";
 import { getAuditEventPage } from "@/lib/platform/audit-query-service";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -71,40 +73,26 @@ export default async function AuditUsagePage({
   });
 
   return (
-    <div className="flex-1 p-5 sm:p-8">
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="rounded-xl bg-amber-100 p-3 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
-            <Activity className="h-7 w-7" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Auditoria de uso</h1>
-            <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-              Histórico imutável de acessos e interações realizadas no CeleriFlow.
-            </p>
-          </div>
-        </div>
-        <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-          Exibindo até 50 registros por página
-        </p>
-      </div>
+    <PageFrame className="space-y-3 px-1 py-1 md:px-2">
+      <PageHeader title="Auditoria de uso" icon={<Activity className="size-4 shrink-0 text-amber-700 dark:text-amber-300" />} action={<span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">Até 50 por página</span>} className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white" />
+      <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">Histórico imutável de acessos e interações realizadas no CeleriFlow.</p>
 
-      <div className="mb-8 grid gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400"><Activity className="h-5 w-5" /><span className="text-sm font-medium">Eventos registrados</span></div>
           <p className="mt-3 text-3xl font-bold text-slate-900 dark:text-white">{totalEvents}</p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400"><MousePointerClick className="h-5 w-5" /><span className="text-sm font-medium">Últimas 24 horas</span></div>
           <p className="mt-3 text-3xl font-bold text-slate-900 dark:text-white">{eventsLast24Hours}</p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400"><Users className="h-5 w-5" /><span className="text-sm font-medium">Usuários ativos</span></div>
           <p className="mt-3 text-3xl font-bold text-slate-900 dark:text-white">{activeUsers.length}</p>
         </div>
       </div>
 
-      <form method="get" className="mb-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-2 lg:grid-cols-3 dark:border-slate-700 dark:bg-slate-800">
+      <form method="get" className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-3 dark:border-slate-700 dark:bg-slate-800">
         <label className="space-y-1.5">
           <span className="block text-xs font-medium text-slate-600 dark:text-slate-300">ID do usuário</span>
           <input name="actorUsuarioId" defaultValue={auditQuery.filters.actorUsuarioId} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-white" />
@@ -138,7 +126,7 @@ export default async function AuditUsagePage({
         </div>
       </form>
 
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
         <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-700">
           <h2 className="font-semibold text-slate-900 dark:text-white">Histórico recente</h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Não são armazenados valores de campos, parâmetros de URL, IP ou user-agent.</p>
@@ -186,6 +174,6 @@ export default async function AuditUsagePage({
           </div>
         )}
       </section>
-    </div>
+    </PageFrame>
   );
 }

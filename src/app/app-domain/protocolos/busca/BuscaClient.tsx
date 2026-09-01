@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { FileSearch, Search } from "lucide-react";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type Processo = {
   id: string;
@@ -15,19 +17,12 @@ type Processo = {
 
 export default function BuscaClient({ initialProcessos, query }: { initialProcessos: Processo[], query: string }) {
   return (
-    <div className="max-w-6xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <FileSearch className="w-6 h-6 text-emerald-600" />
-            Buscar Processo
-          </h1>
-          <p className="text-slate-500 mt-1">Pesquise por processos e protocolos em todo o sistema.</p>
-        </div>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Buscar Processo" icon={<FileSearch className="size-4 shrink-0 text-emerald-600" />} />
+      <p className="text-xs text-slate-500">Pesquise por processos e protocolos em todo o sistema.</p>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-6">
-        <div className="p-6 bg-slate-50/50">
+      <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+        <div className="bg-slate-50/50 p-3">
           <form className="max-w-2xl" action="/protocolos/busca" method="GET">
             <label className="block text-sm font-semibold text-slate-700 mb-2">
               Termo de Busca
@@ -51,8 +46,8 @@ export default function BuscaClient({ initialProcessos, query }: { initialProces
         </div>
       </div>
         
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex justify-between items-center">
+      <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/50 p-3">
           <h3 className="font-semibold text-slate-800">Resultados da Busca</h3>
           <span className="text-xs font-medium bg-slate-200 text-slate-600 px-2 py-1 rounded-md">{initialProcessos.length} encontrados</span>
         </div>
@@ -67,7 +62,7 @@ export default function BuscaClient({ initialProcessos, query }: { initialProces
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm whitespace-nowrap">
+            <table className="min-w-[700px] w-full text-left text-sm whitespace-nowrap">
               <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="px-6 py-3">Nº Protocolo</th>
@@ -116,6 +111,6 @@ export default function BuscaClient({ initialProcessos, query }: { initialProces
           </div>
         )}
       </div>
-    </div>
+    </PageFrame>
   );
 }

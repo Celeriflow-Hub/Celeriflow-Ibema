@@ -2,6 +2,8 @@ import Link from "next/link";
 import { AlertTriangle, Clock3, Eye, FileSearch, Inbox, Timer } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import { getProtocolContext, protocolScope } from "@/lib/protocols/access";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -84,20 +86,18 @@ export default async function AcompanhamentoPage({ searchParams }: { searchParam
   ];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900"><FileSearch className="h-6 w-6 text-emerald-600" />Acompanhamento de Processos</h1>
-        <p className="mt-1 text-sm text-slate-500">Visão interna de status, prazo, setor atual e última tramitação.</p>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Acompanhamento de Processos" icon={<FileSearch className="size-4 shrink-0 text-emerald-600" />} />
+      <p className="text-xs text-slate-500">Visão interna de status, prazo, setor atual e última tramitação.</p>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        {cards.map(card => <Link key={card.label} href={card.href} className={`rounded-xl border border-slate-200 p-4 transition-shadow hover:shadow-sm ${card.className}`}>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {cards.map(card => <Link key={card.label} href={card.href} className={`rounded-md border border-slate-200 p-3 transition-shadow hover:shadow-sm ${card.className}`}>
           <div className="flex items-center justify-between"><p className="text-sm font-semibold">{card.label}</p><card.icon className="h-5 w-5" /></div>
           <p className="mt-2 text-3xl font-bold">{card.value}</p>
         </Link>)}
       </div>
 
-      <form className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-5" action="/protocolos/acompanhamento" method="GET">
+      <form className="grid gap-2 rounded-md border border-slate-200 bg-white p-3 md:grid-cols-5" action="/protocolos/acompanhamento" method="GET">
         <input name="q" defaultValue={filters.q} placeholder="Protocolo, interessado, CPF/CNPJ..." className="rounded-lg border border-slate-200 px-3 py-2 text-sm md:col-span-2" />
         <select name="status" defaultValue={filters.status || ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm"><option value="">Todos os status</option><option>Aguardando Recebimento</option><option>Recebido</option><option>Em Analise</option><option>Concluido</option><option>Arquivado</option></select>
         <select name="priority" defaultValue={filters.priority || ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm"><option value="">Todas as prioridades</option><option>Normal</option><option>Alta</option><option>Urgente</option></select>
@@ -105,8 +105,8 @@ export default async function AcompanhamentoPage({ searchParams }: { searchParam
         {isAdmin && <select name="departmentId" defaultValue={filters.departmentId || ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm md:col-span-2"><option value="">Todos os setores</option>{departments.map(department => <option key={department.id} value={department.id}>{department.name}</option>)}</select>}
       </form>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table className="w-full text-left text-sm">
+      <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
+        <table className="min-w-[980px] w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Protocolo</th><th className="px-4 py-3">Interessado</th><th className="px-4 py-3">Setor / Responsável</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Prazo</th><th className="px-4 py-3">Última movimentação</th><th className="px-4 py-3"></th></tr></thead>
           <tbody className="divide-y divide-slate-100">
             {processes.map(process => {
@@ -120,6 +120,6 @@ export default async function AcompanhamentoPage({ searchParams }: { searchParam
       </div>
       {!isAdmin && !user.departmentId && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Vincule seu usuário a um servidor com departamento para acompanhar processos.</p>}
       <p className="flex items-center gap-1 text-xs text-slate-500"><Timer className="h-3.5 w-3.5" />Acompanhamento interno. A consulta pública permanece fora do escopo.</p>
-    </div>
+    </PageFrame>
   );
 }

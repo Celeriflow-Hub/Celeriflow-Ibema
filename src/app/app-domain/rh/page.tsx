@@ -1,5 +1,4 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { 
   Users, 
   FileText, 
@@ -36,7 +35,7 @@ export default async function RHDashboard() {
             <Users className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{activeEmployees}</div>
+              <div className="text-xl font-bold">{activeEmployees}</div>
             <p className="text-xs text-muted-foreground">
               de {totalEmployees} servidores no total
             </p>
@@ -49,7 +48,7 @@ export default async function RHDashboard() {
             <Banknote className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{activePayrolls}</div>
+              <div className="text-xl font-bold">{activePayrolls}</div>
             <p className="text-xs text-muted-foreground">
               Aguardando fechamento
             </p>
@@ -62,7 +61,7 @@ export default async function RHDashboard() {
             <HeartPulse className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{vacationRequests}</div>
+              <div className="text-xl font-bold">{vacationRequests}</div>
             <p className="text-xs text-muted-foreground">
               Programadas para aprovação
             </p>
@@ -75,7 +74,7 @@ export default async function RHDashboard() {
             <Briefcase className="h-4 w-4 text-indigo-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{activeRoles}</div>
+              <div className="text-xl font-bold">{activeRoles}</div>
             <p className="text-xs text-muted-foreground">
               de {totalRoles} cargos cadastrados
             </p>
@@ -92,43 +91,43 @@ export default async function RHDashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-2">
-              <Link href="/rh/servidores" className="flex items-center rounded-md border p-3 hover:bg-muted transition-colors">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Link href="/rh/servidores" className="flex items-center rounded-md border p-2.5 transition-colors hover:bg-muted">
                 <Users className="mr-3 size-5 text-emerald-500" />
                 <div>
                   <div className="font-semibold">Servidores</div>
                   <div className="text-xs text-muted-foreground">Gestão de pessoal</div>
                 </div>
               </Link>
-              <Link href="/rh/folha" className="flex items-center rounded-md border p-3 hover:bg-muted transition-colors">
+              <Link href="/rh/folha" className="flex items-center rounded-md border p-2.5 transition-colors hover:bg-muted">
                 <Banknote className="mr-3 size-5 text-blue-500" />
                 <div>
                   <div className="font-semibold">Folha de Pagamento</div>
                   <div className="text-xs text-muted-foreground">Cálculos e holerites</div>
                 </div>
               </Link>
-              <Link href="/rh/ponto" className="flex items-center rounded-md border p-3 hover:bg-muted transition-colors">
+              <Link href="/rh/ponto" className="flex items-center rounded-md border p-2.5 transition-colors hover:bg-muted">
                 <Clock className="mr-3 size-5 text-amber-500" />
                 <div>
                   <div className="font-semibold">Controle de Ponto</div>
                   <div className="text-xs text-muted-foreground">Frequência e espelho ({totalAttendances} registros)</div>
                 </div>
               </Link>
-              <Link href="/rh/ferias" className="flex items-center rounded-md border p-3 hover:bg-muted transition-colors">
+              <Link href="/rh/ferias" className="flex items-center rounded-md border p-2.5 transition-colors hover:bg-muted">
                 <HeartPulse className="mr-3 size-5 text-rose-500" />
                 <div>
                   <div className="font-semibold">Férias e Licenças</div>
                   <div className="text-xs text-muted-foreground">Afastamentos legais</div>
                 </div>
               </Link>
-              <Link href="/rh/cargos" className="flex items-center rounded-md border p-3 hover:bg-muted transition-colors">
+              <Link href="/rh/cargos" className="flex items-center rounded-md border p-2.5 transition-colors hover:bg-muted">
                 <Briefcase className="mr-3 size-5 text-indigo-500" />
                 <div>
                   <div className="font-semibold">Cargos e Salários</div>
                   <div className="text-xs text-muted-foreground">Estrutura organizacional</div>
                 </div>
               </Link>
-              <Link href="/rh/treinamentos" className="flex items-center rounded-md border p-3 hover:bg-muted transition-colors">
+              <Link href="/rh/treinamentos" className="flex items-center rounded-md border p-2.5 transition-colors hover:bg-muted">
                 <GraduationCap className="mr-3 size-5 text-slate-500" />
                 <div>
                   <div className="font-semibold">Treinamentos</div>
@@ -147,14 +146,12 @@ export default async function RHDashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-[240px]">
-              <div className="flex h-full flex-col items-center justify-center p-3 text-center text-muted-foreground">
+            <div className="flex min-h-40 flex-col items-center justify-center p-3 text-center text-muted-foreground">
                 <FileText className="mb-2 size-7 opacity-20" />
                 <p>Nenhum evento recente encontrado.</p>
                 <p className="text-xs">As movimentações de pessoal e folha aparecerão aqui automaticamente.</p>
               </div>
-            </ScrollArea>
-          </CardContent>
+            </CardContent>
         </Card>
       </div>
     </PageFrame>

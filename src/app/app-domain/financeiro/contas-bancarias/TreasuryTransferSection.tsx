@@ -61,13 +61,13 @@ export default function TreasuryTransferSection({ accounts, transfers }: { accou
   }
 
   return (
-    <Card>
-      <CardHeader>
+    <Card size="sm" className="rounded-md shadow-none">
+      <CardHeader className="border-b pb-2">
         <CardTitle className="flex items-center gap-2"><ArrowRightLeft className="h-5 w-5" />Transferência entre contas</CardTitle>
         <CardDescription>Movimente valores entre contas acessíveis com a mesma fonte de recursos.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
+      <CardContent className="space-y-3 pt-3">
+        <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="transfer-date">Data</Label>
             <Input id="transfer-date" type="date" required value={formData.date} onChange={(event) => setFormData({ ...formData, date: event.target.value })} />
@@ -90,11 +90,11 @@ export default function TreasuryTransferSection({ accounts, transfers }: { accou
               <SelectContent>{activeAccounts.map((account) => <SelectItem key={account.id} value={account.id}>{accountLabel(account)}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div className="space-y-2 md:col-span-2">
+          <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="transfer-history">Histórico</Label>
             <Input id="transfer-history" maxLength={500} value={formData.history} onChange={(event) => setFormData({ ...formData, history: event.target.value })} placeholder="Motivo ou referência da transferência" />
           </div>
-          <div className="md:col-span-2 flex justify-end">
+          <div className="flex justify-end sm:col-span-2">
             <Button type="submit" disabled={isSubmitting || activeAccounts.length < 2}>{isSubmitting ? "Transferindo..." : "Registrar transferência"}</Button>
           </div>
         </form>

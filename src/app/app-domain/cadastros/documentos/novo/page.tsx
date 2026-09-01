@@ -3,6 +3,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import type { Prisma } from "@prisma/client";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function NovoDocumentoPage() {
   const { prisma } = await getTenantContextForModule("CADASTROS");
@@ -53,23 +55,13 @@ export default async function NovoDocumentoPage() {
   }
 
   return (
-    <div className="max-w-4xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-6">
-        <Link href="/cadastros/documentos" className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800 transition-colors mb-2">
-          <ArrowLeft className="w-4 h-4" />
-          Voltar para listagem
-        </Link>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-          <File className="w-6 h-6 text-rose-600" />
-          Novo Documento / Anexo
-        </h1>
-        <p className="text-slate-500 mt-1">Registre um documento e faça o upload do anexo.</p>
-      </div>
+    <PageFrame className="max-w-4xl space-y-2">
+      <PageHeader title="Novo Documento / Anexo" icon={<File className="size-4 shrink-0 text-rose-600" />} action={<Link href="/cadastros/documentos" className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><ArrowLeft className="size-3.5" />Voltar</Link>} />
 
-      <form action={createDocument} className="space-y-6">
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-          <div className="flex items-center gap-2 text-rose-700 font-semibold mb-4 border-b border-slate-100 pb-2">
-            <User className="w-5 h-5" />
+      <form action={createDocument} className="space-y-2">
+        <div className="rounded border border-slate-300 bg-white p-3 shadow-sm">
+          <div className="mb-2 flex items-center gap-2 border-b border-slate-200 pb-1.5 text-xs font-bold uppercase tracking-[0.08em] text-rose-700">
+            <User className="size-4" />
             Vínculo (Obrigatório escolher um)
           </div>
           
@@ -96,9 +88,9 @@ export default async function NovoDocumentoPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-          <div className="flex items-center gap-2 text-rose-700 font-semibold mb-4 border-b border-slate-100 pb-2">
-            <File className="w-5 h-5" />
+        <div className="rounded border border-slate-300 bg-white p-3 shadow-sm">
+          <div className="mb-2 flex items-center gap-2 border-b border-slate-200 pb-1.5 text-xs font-bold uppercase tracking-[0.08em] text-rose-700">
+            <File className="size-4" />
             Dados do Documento
           </div>
           
@@ -134,13 +126,13 @@ export default async function NovoDocumentoPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-          <div className="flex items-center gap-2 text-rose-700 font-semibold mb-4 border-b border-slate-100 pb-2">
-            <Upload className="w-5 h-5" />
+        <div className="rounded border border-slate-300 bg-white p-3 shadow-sm">
+          <div className="mb-2 flex items-center gap-2 border-b border-slate-200 pb-1.5 text-xs font-bold uppercase tracking-[0.08em] text-rose-700">
+            <Upload className="size-4" />
             Upload de Arquivo
           </div>
           
-          <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
+          <div className="cursor-pointer rounded border border-dashed border-slate-300 bg-slate-50 p-5 text-center transition-colors hover:bg-slate-100">
             <input type="file" id="file" name="file" className="hidden" />
             <label htmlFor="file" className="cursor-pointer flex flex-col items-center">
               <Upload className="w-10 h-10 text-slate-400 mb-3" />
@@ -150,16 +142,16 @@ export default async function NovoDocumentoPage() {
           </div>
         </div>
 
-        <div className="flex justify-end gap-3">
-          <Link href="/cadastros/documentos" className="px-5 py-2.5 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+        <div className="flex h-10 justify-end gap-2 rounded border border-slate-200 bg-slate-50 px-3">
+          <Link href="/cadastros/documentos" className="inline-flex h-7 items-center self-center rounded border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
             Cancelar
           </Link>
-          <button type="submit" className="px-5 py-2.5 text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-lg flex items-center gap-2 transition-colors shadow-sm">
-            <Save className="w-4 h-4" />
+          <button type="submit" className="inline-flex h-7 items-center gap-1.5 self-center rounded bg-rose-700 px-3 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-rose-800">
+            <Save className="size-3.5" />
             Salvar Documento
           </button>
         </div>
       </form>
-    </div>
+    </PageFrame>
   );
 }

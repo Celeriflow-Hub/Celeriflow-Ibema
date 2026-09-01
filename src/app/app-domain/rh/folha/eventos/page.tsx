@@ -1,9 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
-import { Plus, ArrowLeft } from "lucide-react"
+import { Plus, ArrowLeft, ReceiptText } from "lucide-react"
 import Link from "next/link"
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function EventosPage() {
   const { prisma } = await getTenantContextForModule("RH");
@@ -12,32 +14,30 @@ export default async function EventosPage() {
   })
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center space-x-4 mb-4">
-        <Link href="/rh/folha">
-          <button className={buttonVariants({ variant: "outline", size: "icon" })}>
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title="Eventos da Folha"
+        icon={<ReceiptText className="size-4 shrink-0 text-violet-600" />}
+        action={<div className="flex items-center gap-1.5">
+          <Link href="/rh/folha" className={buttonVariants({ variant: "outline", size: "icon-sm" })} aria-label="Voltar para folha de pagamento">
             <ArrowLeft className="h-4 w-4" />
-          </button>
-        </Link>
-        <h2 className="text-3xl font-bold tracking-tight">Eventos da Folha</h2>
-      </div>
-
-      <div className="flex justify-end mb-4">
-        <Link href="/rh/folha/eventos/novo" className={buttonVariants()}>
+          </Link>
+          <Link href="/rh/folha/eventos/novo" className={buttonVariants({ size: "sm" })}>
           <Plus className="mr-2 h-4 w-4" />
           Novo Evento
         </Link>
-      </div>
+        </div>}
+      />
 
-      <Card>
-        <CardHeader>
+      <Card size="sm" className="rounded-md shadow-none">
+        <CardHeader className="border-b pb-2">
           <CardTitle>Configuração de Rubricas/Eventos</CardTitle>
           <CardDescription>
             Gerencie proventos, descontos e bases de cálculo para a folha de pagamento.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-md border overflow-x-auto max-h-[600px] overflow-y-auto">
+        <CardContent className="pt-3">
+          <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm text-left">
               <thead className="bg-muted text-muted-foreground border-b sticky top-0 z-10 shadow-sm">
                 <tr>
@@ -89,6 +89,6 @@ export default async function EventosPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   )
 }

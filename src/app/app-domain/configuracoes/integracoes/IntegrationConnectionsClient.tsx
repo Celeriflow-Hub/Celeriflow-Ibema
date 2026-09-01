@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { integrationEnvironments, isEnvironmentAllowedForIntegration, isIntegrationEnvironment, type IntegrationEnvironment } from "@/lib/integrations/registry";
 import { testIntegrationConnection, saveIntegrationConnection } from "./actions";
 import IntegrationRunModal from "./IntegrationRunModal";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type CatalogItem = {
   code: string;
@@ -107,28 +109,12 @@ export default function IntegrationConnectionsClient({ catalog, connections }: {
   const selectedDefinition = catalog.find((connection) => connection.code === selectedCode);
 
   return (
-    <div className="flex-1 space-y-6 p-8 bg-slate-950 text-slate-100 min-h-screen">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div className="rounded-xl bg-indigo-600/30 p-3 text-indigo-400 border border-indigo-500/30">
-            <Cable className="h-6 w-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-white">Console Técnico de Integrações</h1>
-            <p className="text-sm text-slate-400">
-              Catálogo central de ambientes, parâmetros e evidências técnicas auditáveis para a comissão de avaliação da POC.
-            </p>
-          </div>
-        </div>
+    <PageFrame className="space-y-3 bg-slate-950 px-1 py-1 text-slate-100 md:px-2">
+      <PageHeader title="Console Técnico de Integrações" icon={<Cable className="size-4 shrink-0 text-indigo-400" />} action={<span className="hidden items-center gap-2 rounded-md border border-indigo-800/40 bg-indigo-950/40 px-2 py-1 font-mono text-xs text-indigo-300 sm:flex"><Layers className="h-3.5 w-3.5" />Modo POC ativo</span>} className="border-slate-800 bg-slate-900 text-white [&>h1]:text-white" />
+      <p className="text-sm text-slate-400">Catálogo central de ambientes, parâmetros e evidências técnicas auditáveis para a comissão de avaliação da POC.</p>
 
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-950/40 border border-indigo-800/40 text-indigo-300 text-xs font-mono">
-          <Layers className="w-4 h-4 text-indigo-400" />
-          Modo POC: Integrações Simuladas Ativas
-        </div>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-        <aside className="rounded-2xl border border-slate-800 bg-slate-900/80 p-3 backdrop-blur-md">
+      <div className="grid gap-3 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="rounded-lg border border-slate-800 bg-slate-900/80 p-3 backdrop-blur-md">
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-3 py-2">Conectores Disponíveis</h3>
           {catalog.map((connection) => {
             const configured = connections.find((item) => item.code === connection.code);
@@ -159,7 +145,7 @@ export default function IntegrationConnectionsClient({ catalog, connections }: {
         </aside>
 
         {selectedDefinition && (
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 backdrop-blur-md space-y-6">
+          <section className="space-y-4 rounded-lg border border-slate-800 bg-slate-900/80 p-4 backdrop-blur-md">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-4">
               <div>
                 <h2 className="text-xl font-bold text-white">{selectedDefinition.name}</h2>
@@ -312,6 +298,6 @@ export default function IntegrationConnectionsClient({ catalog, connections }: {
             }
           }}
       />
-    </div>
+    </PageFrame>
   );
 }

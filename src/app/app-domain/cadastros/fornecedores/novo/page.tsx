@@ -3,6 +3,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import type { Prisma } from "@prisma/client";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function NovoFornecedorPage() {
   const { prisma } = await getTenantContextForModule("CADASTROS");
@@ -50,23 +52,13 @@ export default async function NovoFornecedorPage() {
   }
 
   return (
-    <div className="max-w-4xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-6">
-        <Link href="/cadastros/fornecedores" className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800 transition-colors mb-2">
-          <ArrowLeft className="w-4 h-4" />
-          Voltar para listagem
-        </Link>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-          <Truck className="w-6 h-6 text-fuchsia-600" />
-          Novo Fornecedor
-        </h1>
-        <p className="text-slate-500 mt-1">Vincule uma Pessoa Física ou Jurídica como Fornecedor.</p>
-      </div>
+    <PageFrame className="max-w-4xl space-y-2">
+      <PageHeader title="Novo Fornecedor" icon={<Truck className="size-4 shrink-0 text-fuchsia-600" />} action={<Link href="/cadastros/fornecedores" className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><ArrowLeft className="size-3.5" />Voltar</Link>} />
 
-      <form action={createSupplier} className="space-y-6">
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-          <div className="flex items-center gap-2 text-fuchsia-700 font-semibold mb-4 border-b border-slate-100 pb-2">
-            <User className="w-5 h-5" />
+      <form action={createSupplier} className="space-y-2">
+        <div className="rounded border border-slate-300 bg-white p-3 shadow-sm">
+          <div className="mb-2 flex items-center gap-2 border-b border-slate-200 pb-1.5 text-xs font-bold uppercase tracking-[0.08em] text-fuchsia-700">
+            <User className="size-4" />
             Vínculo do Fornecedor
           </div>
           
@@ -101,9 +93,9 @@ export default async function NovoFornecedorPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-          <div className="flex items-center gap-2 text-fuchsia-700 font-semibold mb-4 border-b border-slate-100 pb-2">
-            <List className="w-5 h-5" />
+        <div className="rounded border border-slate-300 bg-white p-3 shadow-sm">
+          <div className="mb-2 flex items-center gap-2 border-b border-slate-200 pb-1.5 text-xs font-bold uppercase tracking-[0.08em] text-fuchsia-700">
+            <List className="size-4" />
             Dados do Fornecedor
           </div>
           
@@ -142,16 +134,16 @@ export default async function NovoFornecedorPage() {
           </div>
         </div>
 
-        <div className="flex justify-end gap-3">
-          <Link href="/cadastros/fornecedores" className="px-5 py-2.5 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+        <div className="flex h-10 justify-end gap-2 rounded border border-slate-200 bg-slate-50 px-3">
+          <Link href="/cadastros/fornecedores" className="inline-flex h-7 items-center self-center rounded border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
             Cancelar
           </Link>
-          <button type="submit" className="px-5 py-2.5 text-sm font-medium text-white bg-fuchsia-600 hover:bg-fuchsia-700 rounded-lg flex items-center gap-2 transition-colors shadow-sm">
-            <Save className="w-4 h-4" />
+          <button type="submit" className="inline-flex h-7 items-center gap-1.5 self-center rounded bg-fuchsia-700 px-3 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-fuchsia-800">
+            <Save className="size-3.5" />
             Salvar Fornecedor
           </button>
         </div>
       </form>
-    </div>
+    </PageFrame>
   );
 }

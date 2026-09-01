@@ -43,11 +43,11 @@ export function NewAttendanceSheet({
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger render={<button className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors" />}>
-        <ClipboardList className="h-5 w-5" />
+      <SheetTrigger render={<button className="inline-flex h-7 items-center gap-1 rounded-md bg-emerald-600 px-2.5 text-xs font-semibold text-white hover:bg-emerald-700" />}>
+        <ClipboardList className="size-3.5" />
         Novo Atendimento
       </SheetTrigger>
-      <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
+      <SheetContent side="right" className="w-full max-w-[540px] overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Novo Atendimento</SheetTitle>
           <SheetDescription>

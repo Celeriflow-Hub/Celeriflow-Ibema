@@ -1,6 +1,8 @@
 import { Landmark, Palette, Users } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { GestaoCulturalClient, type CulturalRecord } from "../components/GestaoCulturalClient";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 function assetReference(asset: { patrimonyNumber: string; name: string } | null) {
   return asset ? `${asset.patrimonyNumber} - ${asset.name}` : "Sem vínculo no Patrimônio";
@@ -92,32 +94,23 @@ export default async function GestaoCulturalPage() {
   const humanResourcesLinks = spaces.filter((space) => space.responsibleEmployeeId).length;
 
   return (
-    <div className="max-w-7xl">
-      <header className="mb-8">
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-pink-100 p-2.5 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300">
-            <Palette className="h-6 w-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Gestão Cultural</h1>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Consulta integrada de agentes, espaços culturais e patrimônio.</p>
-          </div>
-        </div>
-      </header>
+    <PageFrame className="max-w-7xl space-y-3 px-1 py-1 md:px-2">
+      <PageHeader title="Gestão Cultural" icon={<Palette className="size-4 shrink-0 text-pink-600" />} className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white" />
+      <p className="text-sm text-slate-500 dark:text-slate-400">Consulta integrada de agentes, espaços culturais e patrimônio.</p>
 
-      <section aria-label="Integrações dos cadastros" className="mb-6 grid gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-sky-100 bg-sky-50/70 p-4 dark:border-sky-900/50 dark:bg-sky-950/20">
+      <section aria-label="Integrações dos cadastros" className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-sky-100 bg-sky-50/70 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
           <p className="text-xs font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">Cadastro Geral</p>
           <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{generalRegistryLinks}</p>
           <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">Agentes vinculados a pessoa física ou jurídica</p>
         </div>
-        <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-4 dark:border-amber-900/50 dark:bg-amber-950/20">
+        <div className="rounded-lg border border-amber-100 bg-amber-50/70 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
           <Landmark className="mb-2 h-4 w-4 text-amber-700 dark:text-amber-300" />
           <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Patrimônio</p>
           <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{patrimonyLinks}</p>
           <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">Espaços ou bens com ativo ou imóvel vinculado</p>
         </div>
-        <div className="rounded-xl border border-violet-100 bg-violet-50/70 p-4 dark:border-violet-900/50 dark:bg-violet-950/20">
+        <div className="rounded-lg border border-violet-100 bg-violet-50/70 p-3 dark:border-violet-900/50 dark:bg-violet-950/20">
           <Users className="mb-2 h-4 w-4 text-violet-700 dark:text-violet-300" />
           <p className="text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">RH</p>
           <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{humanResourcesLinks}</p>
@@ -126,6 +119,6 @@ export default async function GestaoCulturalPage() {
       </section>
 
       <GestaoCulturalClient records={records} />
-    </div>
+    </PageFrame>
   );
 }

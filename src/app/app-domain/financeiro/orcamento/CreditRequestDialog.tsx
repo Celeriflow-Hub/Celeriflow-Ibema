@@ -97,7 +97,7 @@ export function CreditRequestDialog({
       <DialogTrigger className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90">
         <PlusCircle className="h-4 w-4" /> Solicitar Crédito Adicional
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl font-bold">
             <ShieldAlert className="h-5 w-5 text-amber-500" />
@@ -105,7 +105,7 @@ export function CreditRequestDialog({
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Número do Crédito</Label>
               <Input
@@ -141,7 +141,7 @@ export function CreditRequestDialog({
               onChange={(e) => setLawNumber(e.target.value)}
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2"><Label>Data do Ato Legal</Label><Input required type="date" value={legalActDate} onChange={(e) => setLegalActDate(e.target.value)} /></div>
             <div className="space-y-2"><Label>Fonte de Recursos</Label><Select value={fundingSourceId} onValueChange={(value) => setFundingSourceId(value ?? "")}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{resourceSources.map((source) => <SelectItem key={source.id} value={source.id}>{source.code} - {source.name}</SelectItem>)}</SelectContent></Select></div>
           </div>
@@ -166,8 +166,8 @@ export function CreditRequestDialog({
             </div>
 
             {items.map((item, idx) => (
-              <div key={idx} className="grid grid-cols-12 gap-2 items-center border p-3 rounded-md bg-muted/30">
-                <div className="col-span-5">
+              <div key={idx} className="grid items-center gap-2 rounded-md border bg-muted/30 p-3 sm:grid-cols-12">
+                <div className="sm:col-span-5">
                   <Select
                     value={item.appropriationId}
                     onValueChange={(value) => updateItem(idx, "appropriationId", value ?? "")}
@@ -184,7 +184,7 @@ export function CreditRequestDialog({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="col-span-3">
+                <div className="sm:col-span-3">
                   <Select
                     value={item.type}
                     onValueChange={(value) => updateItem(idx, "type", value as CreditItem["type"])}
@@ -198,13 +198,13 @@ export function CreditRequestDialog({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="col-span-3">
+                <div className="sm:col-span-3">
                   <MoneyInput
                     value={item.value}
                     onChange={(val) => updateItem(idx, "value", val)}
                   />
                 </div>
-                <div className="col-span-1 text-right">
+                <div className="text-right sm:col-span-1">
                   {items.length > 1 && (
                     <Button
                       type="button"

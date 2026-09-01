@@ -32,13 +32,13 @@ export function QuickFilters({ filters }: { filters: FilterDef[] }) {
   );
 
   return (
-    <div className="flex gap-2 items-center flex-wrap">
+    <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
       {filters.map((filter) => (
         <select
           key={filter.name}
           value={searchParams.get(filter.name) || ""}
           onChange={(e) => handleFilterChange(filter.name, e.target.value)}
-          className="px-3 py-2 border rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-700"
+          className="h-9 min-w-36 rounded-md border bg-white px-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
         >
           <option value="">{filter.label} (Todos)</option>
           {filter.options.map((opt) => (

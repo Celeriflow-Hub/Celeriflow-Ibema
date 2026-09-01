@@ -52,7 +52,7 @@ export default function AssinaturasClient({ initialDocuments }: { initialDocumen
 
   return (
     <>
-      <table className="w-full text-left text-sm whitespace-nowrap">
+      <table className="min-w-[720px] w-full text-left text-sm whitespace-nowrap">
         <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
           <tr>
             <th className="px-6 py-3">Documento</th>

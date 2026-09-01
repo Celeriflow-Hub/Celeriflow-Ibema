@@ -171,16 +171,16 @@ export default function PacientesClient({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       {/* Barra de Ações e Busca */}
-      <div className="flex flex-col sm:flex-row justify-between gap-4">
+      <div className="flex flex-col gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-700 dark:bg-slate-800">
         <div className="relative flex-1 max-w-md">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <Search className="h-5 w-5 text-gray-400" />
           </div>
           <input
             type="text"
-            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
+          className="block h-9 w-full rounded-md border border-gray-300 bg-white pl-10 pr-3 text-sm leading-5 text-gray-900 placeholder-gray-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:bg-gray-900 dark:text-white"
             placeholder="Pesquisar por nome, CPF ou CNS..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -188,7 +188,7 @@ export default function PacientesClient({
         </div>
         <button
           onClick={openCreateModal}
-          className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none shadow-sm"
+          className="inline-flex h-9 items-center justify-center rounded-md border border-transparent bg-emerald-600 px-3 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 focus:outline-none"
         >
           <Plus className="h-4 w-4 mr-2" />
           Novo Paciente
@@ -196,7 +196,7 @@ export default function PacientesClient({
       </div>
 
       {/* Tabela */}
-      <div className="bg-white rounded shadow overflow-x-auto">
+      <div className="overflow-x-auto rounded-md border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
         <table className="w-full text-left text-sm whitespace-nowrap">
           <thead className="bg-gray-50 border-b">
             <tr>
@@ -256,8 +256,8 @@ export default function PacientesClient({
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black bg-opacity-50 p-4">
+          <div className="my-4 w-full max-w-2xl overflow-hidden rounded-md bg-white shadow-xl">
             <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
               <h3 className="text-lg font-medium text-gray-900">
                 {editingId ? "Editar Paciente" : "Novo Paciente"}
@@ -325,7 +325,7 @@ export default function PacientesClient({
                             onChange={e => setFormData({...formData, fullName: e.target.value})}
                           />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-3 sm:grid-cols-2">
                           <div>
                             <label className="block text-sm font-medium text-gray-700">CPF</label>
                             <input
@@ -350,7 +350,7 @@ export default function PacientesClient({
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">CNS (Cartão SUS)</label>
                     <input
@@ -381,7 +381,7 @@ export default function PacientesClient({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Unidade de Saúde Referência</label>
                     <select
@@ -419,7 +419,7 @@ export default function PacientesClient({
 
               </div>
 
-              <div className="mt-6 flex justify-end gap-3">
+              <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}

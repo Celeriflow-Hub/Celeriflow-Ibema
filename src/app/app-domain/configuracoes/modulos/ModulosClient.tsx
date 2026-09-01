@@ -8,6 +8,8 @@ import {
   Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, AlertCircle, RefreshCw
 } from "lucide-react";
 import { toggleModulo } from "../actions";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export type ModuloItem = {
   id: string;
@@ -75,32 +77,15 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
   };
 
   return (
-    <div className="flex-1 p-6 md:p-8 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-zinc-900 text-white dark:bg-zinc-800 rounded-2xl shadow-sm">
-            <Blocks className="h-7 w-7" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Módulos Contratados da Prefeitura</h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                {totalAtivos} de {initialModulos.length} Ativos
-              </span>
-            </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-              Ative ou bloqueie o acesso aos módulos nos cards da página inicial conforme o plano contratado.
-            </p>
-          </div>
-        </div>
-      </div>
+    <PageFrame className="space-y-3 px-1 py-1 md:px-2">
+      <PageHeader title="Módulos contratados" icon={<Blocks className="size-4 shrink-0 text-slate-700 dark:text-slate-300" />} className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white" />
+      <p className="text-sm text-slate-500 dark:text-slate-400">{totalAtivos} de {initialModulos.length} ativos. Ative ou bloqueie o acesso conforme o plano contratado.</p>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400">
-            <Blocks className="w-6 h-6" />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <div className="rounded-md bg-indigo-50 p-2 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400">
+            <Blocks className="h-5 w-5" />
           </div>
           <div>
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Total de Módulos</p>
@@ -108,9 +93,9 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400">
-            <Unlock className="w-6 h-6" />
+        <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <div className="rounded-md bg-emerald-50 p-2 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400">
+            <Unlock className="h-5 w-5" />
           </div>
           <div>
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Liberados / Contratados</p>
@@ -118,9 +103,9 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950 dark:text-rose-400">
-            <Lock className="w-6 h-6" />
+        <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <div className="rounded-md bg-rose-50 p-2 text-rose-600 dark:bg-rose-950 dark:text-rose-400">
+            <Lock className="h-5 w-5" />
           </div>
           <div>
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Bloqueados / Não Contratados</p>
@@ -130,7 +115,7 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
       </div>
 
       {/* Info Banner */}
-      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 p-4 rounded-2xl flex items-start gap-3 text-amber-900 dark:text-amber-200 text-xs sm:text-sm">
+      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200 sm:text-sm">
         <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
         <div>
           <span className="font-bold">Como funciona a liberação de módulos:</span> Ao desativar um módulo nesta tela, o card correspondente na página inicial do sistema ficará <strong>escurecido com um ícone de cadeado 🔒</strong>, impedindo a entrada de usuários nas subpáginas. As rotas internas de integração continuam preservadas no banco de dados.
@@ -138,8 +123,8 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
       </div>
 
       {/* Filters and Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50 dark:bg-slate-900/50">
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative w-full sm:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
@@ -147,7 +132,7 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
               placeholder="Buscar módulo..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-500/20"
+              className="w-full rounded-md border border-slate-300 bg-white py-1.5 pl-9 pr-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-zinc-500/20 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
             />
           </div>
 
@@ -186,7 +171,7 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
         </div>
 
         {/* Modules Grid / Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+        <div className="grid grid-cols-1 gap-3 p-3 md:grid-cols-2 xl:grid-cols-3">
           {filtered.length === 0 ? (
             <div className="col-span-full py-12 text-center text-slate-500">
               Nenhum módulo encontrado para os filtros selecionados.
@@ -206,7 +191,7 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
               return (
                 <div
                   key={modulo.id}
-                  className={`relative p-5 rounded-2xl border transition-all flex flex-col justify-between ${
+                  className={`relative flex flex-col justify-between rounded-lg border p-4 transition-all ${
                     modulo.ativo
                       ? "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm hover:border-slate-300"
                       : "bg-slate-50/70 dark:bg-slate-950/50 border-slate-200 dark:border-slate-900 opacity-80"
@@ -288,6 +273,6 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
           )}
         </div>
       </div>
-    </div>
+    </PageFrame>
   );
 }

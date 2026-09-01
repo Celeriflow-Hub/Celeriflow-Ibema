@@ -31,8 +31,8 @@ export default async function CamaraDashboard() {
         className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white"
       />
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="flex items-center gap-3">
             <div className="rounded-md bg-purple-100 p-2.5 text-[#9333EA] dark:bg-purple-900/30">
               <Users className="h-5 w-5" />
@@ -44,7 +44,7 @@ export default async function CamaraDashboard() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="flex items-center gap-3">
             <div className="rounded-md bg-indigo-100 p-2.5 text-indigo-600 dark:bg-indigo-900/30">
               <Calendar className="h-5 w-5" />
@@ -56,7 +56,7 @@ export default async function CamaraDashboard() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="flex items-center gap-3">
             <div className="rounded-md bg-fuchsia-100 p-2.5 text-fuchsia-600 dark:bg-fuchsia-900/30">
               <FileText className="h-5 w-5" />
@@ -68,7 +68,7 @@ export default async function CamaraDashboard() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="flex items-center gap-3">
             <div className="rounded-md bg-emerald-100 p-2.5 text-emerald-600 dark:bg-emerald-900/30">
               <Scale className="h-5 w-5" />
@@ -82,7 +82,7 @@ export default async function CamaraDashboard() {
       </div>
 
       <h3 className="pt-1 text-sm font-semibold text-gray-900 dark:text-white">Módulos do Sistema Legislativo</h3>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         
         <Link href="/camara/legislaturas" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
           <Landmark className="h-6 w-6 text-[#9333EA] mb-2" />

@@ -39,13 +39,18 @@ export default function SegurancaLayout({ children }: { children: React.ReactNod
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
 
   return (
-    <div className="relative -my-2 mx-auto flex min-h-0 w-[calc(100%+1rem)] max-w-[calc(1600px+1rem)] flex-1 flex-col bg-slate-50/30 sm:-my-3 sm:w-[calc(100%+1.5rem)] sm:max-w-[calc(1600px+1.5rem)] md:flex-row">
+    <div data-module-shell className="relative -my-2 mx-auto flex min-h-0 w-[calc(100%+1rem)] max-w-[calc(1600px+1rem)] flex-1 flex-col bg-slate-50/30 sm:-my-3 sm:w-[calc(100%+1.5rem)] sm:max-w-[calc(1600px+1.5rem)] md:flex-row">
       <div className="flex items-center justify-between border-b border-slate-200 bg-white p-4 md:hidden">
         <div>
           <h2 className="text-base font-bold leading-tight text-slate-800">Seguranca e Mobilidade</h2>
           <p className="text-xs text-slate-500">Gestao municipal</p>
         </div>
-        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100">
+        <button
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          aria-label="Alternar menu de Segurança e Mobilidade"
+          aria-expanded={isSidebarOpen}
+          className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+        >
           {isSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </div>

@@ -59,7 +59,7 @@ export default async function ContasBancariasPage() {
   return (
     <>
       <ContasBancariasClient accounts={displayAccounts} resourceSources={resourceSources} budgetUnits={budgetUnits} accountingPlans={accountingPlans} />
-      <div className="px-8 pb-8">
+      <div className="px-1 pb-2 sm:px-2">
         <TreasuryTransferSection
           accounts={displayAccounts.map(({ id, bankName, agency, accountNumber, isActive }) => ({ id, bankName, agency, accountNumber, isActive }))}
           transfers={transfers.map((transfer) => ({

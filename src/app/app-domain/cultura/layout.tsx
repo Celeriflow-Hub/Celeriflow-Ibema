@@ -34,16 +34,18 @@ export default function CulturaLayout({ children }: { children: React.ReactNode 
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
 
   return (
-    <div className="relative -my-2 mx-auto flex min-h-0 w-[calc(100%+1rem)] max-w-[calc(1600px+1rem)] flex-1 flex-col bg-slate-50/30 sm:-my-3 sm:w-[calc(100%+1.5rem)] sm:max-w-[calc(1600px+1.5rem)] md:flex-row">
+    <div data-module-shell className="relative -my-2 mx-auto flex min-h-0 w-[calc(100%+1rem)] max-w-[calc(1600px+1rem)] flex-1 flex-col bg-slate-50/30 sm:-my-3 sm:w-[calc(100%+1.5rem)] sm:max-w-[calc(1600px+1.5rem)] md:flex-row">
       
       {/* Mobile Header with Hamburger */}
       <div className="md:hidden flex items-center justify-between bg-white border-b border-slate-200 p-4">
         <div>
           <h2 className="text-base font-bold text-slate-800 leading-tight">Cultura e Lazer</h2>
         </div>
-        <button 
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+         <button
+           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+           aria-label="Alternar menu de Cultura e Lazer"
+           aria-expanded={isSidebarOpen}
+           className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
         >
           {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>

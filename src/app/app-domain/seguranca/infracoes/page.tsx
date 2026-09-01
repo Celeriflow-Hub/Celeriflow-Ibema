@@ -25,7 +25,7 @@ export default async function InfracoesPage() {
   const { prisma } = await getTenantContextForModule("SEGURANCA");
   const infracoes = await prisma.segurancaInfracao.findMany({ orderBy: { createdAt: "desc" } });
   return (
-    <div className="p-6">
+    <div className="space-y-2">
       <InfracoesInteractiveClient />
       <SegMobCrudClient items={infracoes.map(mapInfracao)} config={config} />
     </div>

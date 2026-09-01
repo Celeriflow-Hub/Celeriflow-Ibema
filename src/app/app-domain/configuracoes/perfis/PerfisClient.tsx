@@ -8,6 +8,8 @@ import {
   Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, Lock, CheckSquare, Square
 } from "lucide-react";
 import { upsertPerfil, togglePerfilStatus } from "./actions";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type Perfil = {
   id: string;
@@ -255,37 +257,18 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
   }
 
   return (
-    <div className="flex-1 p-8 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-indigo-600/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400 rounded-xl border border-indigo-500/20">
-            <ShieldCheck className="h-7 w-7" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Gestão de Perfis & Permissões</h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300">
-                {perfis.length} Perfis Cadastrados
-              </span>
-            </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-              Defina os níveis de acesso e matriz de permissões granulares por módulo para os usuários do sistema.
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={openNew}
-          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium shadow-md transition-all whitespace-nowrap"
-        >
-          <Plus className="h-4 w-4" />
-          Criar Novo Perfil
-        </button>
-      </div>
+    <PageFrame className="space-y-3 px-1 py-1 md:px-2">
+      <PageHeader
+        title="Gestão de Perfis e Permissões"
+        icon={<ShieldCheck className="size-4 shrink-0 text-indigo-600 dark:text-indigo-300" />}
+        action={<button onClick={openNew} className="flex h-8 items-center justify-center gap-2 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition-colors hover:bg-indigo-700"><Plus className="h-4 w-4" />Criar perfil</button>}
+        className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white"
+      />
+      <p className="text-sm text-slate-500 dark:text-slate-400">{perfis.length} perfis cadastrados. Defina a matriz granular de permissões por módulo.</p>
 
       {/* Search and Table Card */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="border-b border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
           <div className="relative w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
@@ -293,13 +276,13 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
               placeholder="Buscar perfil..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              className="w-full rounded-md border border-slate-300 bg-white py-1.5 pl-9 pr-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
               <tr>
                 <th className="px-6 py-4 font-semibold">Nome do Perfil</th>
@@ -372,7 +355,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
       {/* Permissions Config Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col border border-slate-200 dark:border-slate-800">
+          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-5xl flex-col overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
             {/* Modal Header */}
             <div className="flex justify-between items-center px-6 py-4 border-b border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-3">
@@ -452,7 +435,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
             </div>
 
             {/* Form Content */}
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-5 p-4">
               {activeTab === "dados" && (
                 <div className="space-y-4 max-w-xl mx-auto py-4">
                   <div>
@@ -607,6 +590,6 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
           </div>
         </div>
       )}
-    </div>
+    </PageFrame>
   );
 }

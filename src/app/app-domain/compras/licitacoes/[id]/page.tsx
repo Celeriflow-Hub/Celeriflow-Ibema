@@ -2,11 +2,13 @@ import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Edit } from "lucide-react";
+import { ArrowLeft, Edit, Gavel } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function LicitacaoDetalhesPage({ params }: { params: Promise<{ id: string }> }) {
   const { prisma } = await getTenantContextForModule("COMPRAS");
@@ -23,28 +25,15 @@ export default async function LicitacaoDetalhesPage({ params }: { params: Promis
   }
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center space-x-4 mb-4">
-        <Link href="/compras/licitacoes">
-          <Button variant="outline" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <h2 className="text-3xl font-bold tracking-tight">Detalhes da Licitação</h2>
-        <div className="flex-1" />
-        <Link href={`/compras/licitacoes/${licitacao.id}/editar`}>
-          <Button variant="outline">
-            <Edit className="mr-2 h-4 w-4" /> Editar
-          </Button>
-        </Link>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Detalhes da Licitação" icon={<Gavel className="size-4 shrink-0 text-amber-600" />} action={<><Link href="/compras/licitacoes" aria-label="Voltar"><Button variant="outline" size="icon"><ArrowLeft className="size-4" /></Button></Link><Link href={`/compras/licitacoes/${licitacao.id}/editar`}><Button variant="outline" size="sm"><Edit className="size-3.5" /><span className="hidden sm:inline">Editar</span></Button></Link></>} />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Informações Gerais</CardTitle>
+      <Card className="rounded-md">
+        <CardHeader className="border-b p-3">
+          <CardTitle className="text-sm">Informações Gerais</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <CardContent className="space-y-3 p-3 text-sm">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Número</p>
               <p className="text-lg">{licitacao.number}</p>
@@ -54,7 +43,7 @@ export default async function LicitacaoDetalhesPage({ params }: { params: Promis
               <Badge variant="secondary">{licitacao.status}</Badge>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4 border-t pt-4">
+          <div className="grid gap-3 border-t pt-3 sm:grid-cols-2">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Modalidade</p>
               <p>{licitacao.modality}</p>
@@ -64,7 +53,7 @@ export default async function LicitacaoDetalhesPage({ params }: { params: Promis
               <p>{licitacao.process?.number}</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4 border-t pt-4">
+          <div className="grid gap-3 border-t pt-3 sm:grid-cols-2">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Data de Publicação</p>
               <p>{licitacao.publicationDate ? format(new Date(licitacao.publicationDate), "dd/MM/yyyy", { locale: ptBR }) : "Não informada"}</p>
@@ -76,6 +65,6 @@ export default async function LicitacaoDetalhesPage({ params }: { params: Promis
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   );
 }

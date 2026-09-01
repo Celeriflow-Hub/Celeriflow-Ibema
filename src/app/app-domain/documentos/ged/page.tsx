@@ -2,6 +2,8 @@ import { Folder as FolderIcon, Clock, ArrowLeft, LayoutGrid } from "lucide-react
 import Link from "next/link";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import GEDClient from "./GEDClient";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -75,13 +77,9 @@ export default async function GEDPage({
   }
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-          <FolderIcon className="w-6 h-6 text-indigo-600" />
-          Gerenciamento Eletrônico de Documentos
-        </h1>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Gerenciamento Eletrônico de Documentos" icon={<FolderIcon className="size-4 shrink-0 text-indigo-600" />} />
+      <div>
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1 mt-1 text-sm text-slate-400 flex-wrap">
           <Link href="/documentos/ged" className="hover:text-indigo-600 transition-colors">GED</Link>
@@ -109,10 +107,10 @@ export default async function GEDPage({
       </div>
 
       {/* Layout: sidebar + main */}
-      <div className="flex gap-5">
+      <div className="flex gap-3">
         {/* Sidebar - only on large screens */}
         <aside className="w-52 shrink-0 hidden lg:flex flex-col gap-1">
-          <div className="bg-white border border-slate-200 rounded-xl p-2.5 sticky top-4">
+          <div className="sticky top-4 rounded-md border border-slate-200 bg-white p-2.5">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-2">Acesso Rápido</p>
             <Link
               href="/documentos/ged"
@@ -182,6 +180,6 @@ export default async function GEDPage({
           />
         </div>
       </div>
-    </div>
+    </PageFrame>
   );
 }

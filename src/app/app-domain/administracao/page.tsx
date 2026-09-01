@@ -2,6 +2,8 @@ import { Building2, Network, Users, ClipboardList, MapPin, Briefcase } from "luc
 import Link from "next/link";
 import Image from "next/image";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -26,53 +28,50 @@ export default async function AdministracaoPage() {
   ];
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Painel Administrativo</h1>
-        <p className="text-slate-500 mt-2">Visão geral da estrutura organizacional da prefeitura.</p>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Painel Administrativo" icon={<Building2 className="size-4 shrink-0 text-blue-600" />} />
 
       {!institution ? (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+        <div className="flex flex-col items-start justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 sm:flex-row sm:items-center">
           <div>
-            <h3 className="text-amber-800 font-semibold text-lg">Dados da Prefeitura Incompletos</h3>
-            <p className="text-amber-700 mt-1 text-sm">Você precisa configurar os dados principais da instituição para liberar algumas funcionalidades.</p>
+            <h2 className="text-sm font-bold text-amber-800">Dados da Prefeitura Incompletos</h2>
+            <p className="mt-0.5 text-xs text-amber-700">Configure os dados principais da instituição para liberar algumas funcionalidades.</p>
           </div>
-          <Link href="/administracao/instituicao" className="shrink-0 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm">
+          <Link href="/administracao/instituicao" className="inline-flex h-7 shrink-0 items-center rounded bg-amber-600 px-3 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-amber-700">
             Configurar Agora
           </Link>
         </div>
       ) : (
-        <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-6 flex items-center gap-4">
+        <div className="flex items-center gap-3 rounded-md border border-slate-200 bg-white p-3 shadow-sm">
           {institution.logoUrl ? (
-            <Image src={institution.logoUrl} alt="Logo" width={64} height={64} unoptimized className="w-16 h-16 rounded-lg object-contain" />
+            <Image src={institution.logoUrl} alt="Logo" width={48} height={48} unoptimized className="size-12 rounded object-contain" />
           ) : (
-            <div className="w-16 h-16 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
-              <Building2 className="w-8 h-8 text-slate-400" />
+            <div className="flex size-12 shrink-0 items-center justify-center rounded border border-slate-200 bg-slate-100">
+              <Building2 className="size-6 text-slate-400" />
             </div>
           )}
           <div>
-            <h2 className="text-xl font-bold text-slate-800">{institution.name}</h2>
-            <p className="text-slate-500 text-sm">{institution.cnpj ? `CNPJ: ${institution.cnpj}` : 'CNPJ não configurado'}</p>
+            <h2 className="text-sm font-bold text-slate-800">{institution.name}</h2>
+            <p className="text-xs text-slate-500">{institution.cnpj ? `CNPJ: ${institution.cnpj}` : 'CNPJ não configurado'}</p>
           </div>
         </div>
       )}
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {stats.map((stat) => (
           <Link key={stat.title} href={stat.href} className="block group">
-            <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-200 flex items-center justify-between">
+            <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white p-3 shadow-sm transition-colors hover:border-slate-300 hover:shadow-md">
               <div>
-                <p className="text-sm font-medium text-slate-500">{stat.title}</p>
-                <p className="text-3xl font-bold text-slate-800 mt-1">{stat.value}</p>
+                <p className="text-xs font-medium text-slate-500">{stat.title}</p>
+                <p className="mt-0.5 text-2xl font-bold text-slate-800">{stat.value}</p>
               </div>
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${stat.bg} group-hover:scale-110 transition-transform duration-200`}>
-                <stat.icon className={`w-6 h-6 ${stat.color}`} />
+              <div className={`flex size-9 items-center justify-center rounded-md ${stat.bg} transition-transform duration-200 group-hover:scale-105`}>
+                <stat.icon className={`size-5 ${stat.color}`} />
               </div>
             </div>
           </Link>
         ))}
       </div>
-    </div>
+    </PageFrame>
   );
 }

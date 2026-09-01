@@ -4,6 +4,7 @@ import { getProtocolContext, protocolScope } from "@/lib/protocols/access";
 import { canViewModule } from "@/lib/platform/tenant-context";
 import { notFound } from "next/navigation";
 import ProcessControls from "./ProcessControls";
+import { PageFrame } from "@/components/app-ui/PageFrame";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +67,7 @@ export default async function ProcessoDetalhesPage({ params }: { params: { id: s
   const genericStage = processo.genericWorkflowInstance?.definition.stages.find((stage) => stage.position === processo.genericWorkflowInstance?.currentPosition) || null;
 
   return (
-    <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <PageFrame className="max-w-6xl space-y-3">
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <Link href="/protocolos/processos" className="text-emerald-600 hover:text-emerald-700 text-sm font-semibold flex items-center gap-2 mb-4 w-fit transition-colors">
@@ -271,6 +272,6 @@ export default async function ProcessoDetalhesPage({ params }: { params: { id: s
 
         </div>
       </div>
-    </div>
+    </PageFrame>
   );
 }

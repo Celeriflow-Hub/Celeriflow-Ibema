@@ -3,6 +3,8 @@
 import { useDeferredValue, useState } from "react";
 import Link from "next/link";
 import { CalendarDays, ExternalLink, FileText, MapPin, Search, UserRound } from "lucide-react";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type Evento = {
   id: string;
@@ -121,15 +123,12 @@ export function CulturaEventosClient({ eventos }: { eventos: Evento[] }) {
   ));
 
   return (
-    <main className="flex-1 p-4 md:p-8">
-      <header className="mb-8">
-        <p className="text-sm font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">Cultura, esporte e lazer</p>
-        <h1 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">Eventos oficiais</h1>
-        <p className="mt-2 max-w-3xl text-slate-600 dark:text-slate-400">Agenda de eventos e suas vinculações a espaços, responsáveis, projetos, reservas e documentos.</p>
-      </header>
+    <PageFrame className="space-y-3 px-1 py-1 md:px-2">
+      <PageHeader title="Eventos oficiais" icon={<CalendarDays className="size-4 shrink-0 text-amber-600 dark:text-amber-300" />} className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white" />
+      <p className="text-sm text-slate-500 dark:text-slate-400">Agenda de eventos e suas vinculações a espaços, responsáveis, projetos, reservas e documentos.</p>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 p-4 dark:border-slate-700 dark:bg-slate-800/50 md:flex-row md:items-center md:p-6">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-800/50 md:flex-row md:items-center">
           <div className="relative min-w-0 flex-1">
             <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Buscar evento, local, responsável ou vínculo..." className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition-colors focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 dark:border-slate-600 dark:bg-slate-700 dark:text-white" />
@@ -219,6 +218,6 @@ export function CulturaEventosClient({ eventos }: { eventos: Evento[] }) {
           {filteredEventos.length === 0 && <div className="px-6 py-14 text-center"><CalendarDays className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 font-medium text-slate-700 dark:text-slate-300">Nenhum evento encontrado</p><p className="mt-1 text-sm text-slate-500">Ajuste a busca ou os filtros para consultar os eventos cadastrados.</p></div>}
         </div>
       </section>
-    </main>
+    </PageFrame>
   );
 }

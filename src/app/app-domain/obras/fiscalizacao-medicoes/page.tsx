@@ -1,5 +1,6 @@
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import MedicoesClient from "../components/MedicoesClient";
+import { PageFrame } from "@/components/app-ui/PageFrame";
 
 export default async function FiscalizacaoMedicoesPage() {
   const { prisma } = await getTenantContextForModule("OBRAS");
@@ -28,12 +29,14 @@ export default async function FiscalizacaoMedicoesPage() {
   ]);
 
   return (
-    <MedicoesClient
+    <PageFrame className="px-1 py-1 md:px-2">
+      <MedicoesClient
       medicoes={medicoes.map((medicao) => ({
         ...medicao,
         data: medicao.data.toISOString().slice(0, 10),
       }))}
       obras={obras}
-    />
+      />
+    </PageFrame>
   );
 }

@@ -42,12 +42,12 @@ export function EditLicenseSheet({ license, open, onClose }: EditLicenseSheetPro
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
-      <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
+      <SheetContent side="right" className="w-[calc(100vw-1rem)] overflow-y-auto sm:w-[34rem]">
         <SheetHeader>
           <SheetTitle>Editar Licenca</SheetTitle>
           <SheetDescription>Atualize os dados da licenca ambiental.</SheetDescription>
         </SheetHeader>
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-4 space-y-3 pb-2">
           {error && <div className="p-3 bg-red-100 text-red-700 rounded-md text-sm">{error}</div>}
           <div className="space-y-2">
             <label className="text-sm font-medium">Numero da Licenca</label>
@@ -78,7 +78,7 @@ export function EditLicenseSheet({ license, open, onClose }: EditLicenseSheetPro
             <label className="text-sm font-medium">Validade</label>
             <input type="date" name="validUntil" defaultValue={validUntilValue} className="w-full p-2 border rounded-md" />
           </div>
-          <div className="pt-4 flex justify-end gap-2">
+          <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">Cancelar</button>
             <button type="submit" disabled={loading} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50">
               {loading ? "Salvando..." : "Salvar Alteracoes"}

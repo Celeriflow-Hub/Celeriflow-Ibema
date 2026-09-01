@@ -1,6 +1,8 @@
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import Link from "next/link";
 import { Home, Search, Plus, Upload, Download } from "lucide-react";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 import ImoveisClient from "./ImoveisClient";
 
 export const dynamic = "force-dynamic";
@@ -22,45 +24,37 @@ export default async function ImoveisPage() {
   });
 
   return (
-    <div className="max-w-6xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Home className="w-6 h-6 text-sky-600" />
-            Imóveis
-          </h1>
-          <p className="text-slate-500 mt-1">Gerencie os imóveis cadastrados no município.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-colors">
-            <Upload className="w-4 h-4" />
-            Importar
+    <PageFrame className="space-y-2">
+      <PageHeader title="Imóveis" icon={<Home className="size-4 shrink-0 text-sky-600" />} action={<div className="flex items-center gap-1">
+          <button type="button" className="inline-flex h-7 items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" aria-label="Importar imóveis">
+            <Upload className="size-3.5" />
+            <span className="hidden sm:inline">Importar</span>
           </button>
-          <button className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-colors">
-            <Download className="w-4 h-4" />
-            Exportar
+          <button type="button" className="inline-flex h-7 items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" aria-label="Exportar imóveis">
+            <Download className="size-3.5" />
+            <span className="hidden sm:inline">Exportar</span>
           </button>
-          <Link href="/cadastros/imoveis/novo" className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-colors">
-            <Plus className="w-4 h-4" />
-            Adicionar Novo Imóvel
+          <Link href="/cadastros/imoveis/novo" className="inline-flex h-7 items-center gap-1 rounded bg-sky-700 px-3 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-sky-800">
+            <Plus className="size-3.5" />
+            <span className="hidden sm:inline">Adicionar imóvel</span>
+            <span className="sm:hidden">Adicionar</span>
           </Link>
-        </div>
-      </div>
+        </div>} />
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-200 flex items-center bg-slate-50/50">
+      <div className="overflow-hidden rounded border border-slate-300 bg-white shadow-sm">
+        <div className="flex min-h-9 items-center border-b border-slate-200 bg-slate-50 px-3 py-1.5">
           <div className="relative w-full max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
               placeholder="Buscar por Inscrição ou Endereço..." 
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-600/20 focus:border-sky-600"
+              className="h-7 w-full rounded border border-slate-300 bg-white py-1 pl-8 pr-2 text-xs outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-600/15"
             />
           </div>
         </div>
 
         <ImoveisClient realEstates={realEstates} />
       </div>
-    </div>
+    </PageFrame>
   );
 }

@@ -27,8 +27,8 @@ export default async function EducacaoDashboardPage() {
         className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white"
       />
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-        <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-4">
+        <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="rounded-md bg-indigo-100 p-2.5 dark:bg-indigo-900/50">
             <School className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
           </div>
@@ -38,7 +38,7 @@ export default async function EducacaoDashboardPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="rounded-md bg-blue-100 p-2.5 dark:bg-blue-900/50">
             <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
           </div>
@@ -48,7 +48,7 @@ export default async function EducacaoDashboardPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="rounded-md bg-emerald-100 p-2.5 dark:bg-emerald-900/50">
             <BookOpen className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
           </div>
@@ -58,7 +58,7 @@ export default async function EducacaoDashboardPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="rounded-md bg-amber-100 p-2.5 dark:bg-amber-900/50">
             <ClipboardCheck className="h-5 w-5 text-amber-600 dark:text-amber-400" />
           </div>
@@ -70,7 +70,7 @@ export default async function EducacaoDashboardPage() {
       </div>
 
       <h2 className="pt-1 text-sm font-semibold text-gray-900 dark:text-white">Acesso Rápido</h2>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
         <Link href="/educacao/escolas" className="group">
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
             <School className="mb-3 h-6 w-6 text-indigo-500 transition-transform group-hover:scale-110" />

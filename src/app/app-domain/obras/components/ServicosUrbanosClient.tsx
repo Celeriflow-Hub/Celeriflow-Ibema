@@ -126,8 +126,8 @@ export function ServicosUrbanosClient({ servicos }: { servicos: ObrasServico[] }
     : serviceStatuses;
 
   return (
-    <div className="flex-1 p-4 md:p-8">
-      <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+    <div className="space-y-2">
+      <div className="flex flex-col items-start justify-between gap-2 md:flex-row md:items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Serviços Urbanos</h1>
           <p className="text-slate-500 dark:text-slate-400">Gestão de zeladoria da cidade, vias, praças e cemitérios municipais.</p>
@@ -138,8 +138,8 @@ export function ServicosUrbanosClient({ servicos }: { servicos: ObrasServico[] }
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <div className="flex flex-col items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-800/50 md:p-6 lg:flex-row">
+      <section className="overflow-hidden rounded-md border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800" aria-label="Lista de serviços urbanos">
+        <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/50 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative w-full lg:max-w-md">
             <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
             <input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Buscar por protocolo, serviço ou local..." className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-10 pr-4 text-slate-900 outline-none transition-all focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 dark:border-slate-600 dark:bg-slate-700 dark:text-white" />
@@ -198,22 +198,22 @@ export function ServicosUrbanosClient({ servicos }: { servicos: ObrasServico[] }
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
       <Sheet open={sheetMode !== null} onOpenChange={(open) => !open && closeSheet()}>
-        <SheetContent side="right" className="w-[400px] overflow-y-auto sm:w-[540px]">
+        <SheetContent side="right" className="w-[calc(100vw-1rem)] overflow-y-auto sm:w-[34rem]">
           <SheetHeader>
             <SheetTitle>{isEditing ? "Editar Serviço" : "Novo Serviço"}</SheetTitle>
             <SheetDescription>{isEditing ? "Atualize os dados do serviço urbano." : "Registre uma nova solicitação de serviço urbano."}</SheetDescription>
           </SheetHeader>
-          <form key={editingServico?.id ?? "new"} onSubmit={handleSubmit} className="space-y-4 p-4 pt-2">
+          <form key={editingServico?.id ?? "new"} onSubmit={handleSubmit} className="space-y-3 p-1 pb-2">
             <div className="space-y-2"><label htmlFor="protocolo" className="text-sm font-medium">Protocolo</label><input id="protocolo" name="protocolo" required defaultValue={editingServico?.protocolo} className={inputClassName} placeholder="Ex.: SU-2026-001" /></div>
             <div className="space-y-2"><label htmlFor="tipo" className="text-sm font-medium">Tipo</label><input id="tipo" name="tipo" required defaultValue={editingServico?.tipo} className={inputClassName} placeholder="Ex.: Limpeza, Pavimentação ou Poda" /></div>
             <div className="space-y-2"><label htmlFor="descricao" className="text-sm font-medium">Descrição</label><textarea id="descricao" name="descricao" required rows={4} defaultValue={editingServico?.descricao} className={inputClassName} placeholder="Descreva o serviço solicitado" /></div>
             <div className="space-y-2"><label htmlFor="local" className="text-sm font-medium">Local</label><input id="local" name="local" required defaultValue={editingServico?.local} className={inputClassName} placeholder="Rua, bairro ou ponto de referência" /></div>
             {isEditing && <div className="space-y-2"><label htmlFor="status" className="text-sm font-medium">Status</label><select id="status" name="status" required defaultValue={editingServico.status} className={inputClassName}>{formStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></div>}
             {formError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{formError}</p>}
-            <div className="flex justify-end gap-2 pt-4">
+            <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end">
               <button type="button" onClick={closeSheet} disabled={submitting} className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600">Cancelar</button>
               <button type="submit" disabled={submitting} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">{submitting ? "Salvando..." : isEditing ? "Salvar alterações" : "Cadastrar serviço"}</button>
             </div>

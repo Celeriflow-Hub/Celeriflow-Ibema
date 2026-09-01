@@ -1,6 +1,8 @@
 import { ClipboardList, MapPin, Trophy, Users } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import AtividadesEsporteLazerClient from "../components/AtividadesEsporteLazerClient";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -88,16 +90,12 @@ export default async function EsporteLazerPage() {
   }));
 
   return (
-    <div className="flex-1 p-4 md:p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Esporte e Lazer</h1>
-        <p className="mt-1 text-slate-500 dark:text-slate-400">
-          Acompanhamento das atividades esportivas e de lazer cadastradas no município.
-        </p>
-      </div>
+    <PageFrame className="space-y-3 px-1 py-1 md:px-2">
+      <PageHeader title="Esporte e Lazer" icon={<Trophy className="size-4 shrink-0 text-rose-600 dark:text-rose-300" />} className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white" />
+      <p className="text-sm text-slate-500 dark:text-slate-400">Acompanhamento das atividades esportivas e de lazer cadastradas no município.</p>
 
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-4">
             <div className="rounded-xl bg-rose-100 p-3 text-rose-600 dark:bg-rose-900/30">
               <ClipboardList className="h-6 w-6" />
@@ -109,7 +107,7 @@ export default async function EsporteLazerPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-4">
             <div className="rounded-xl bg-emerald-100 p-3 text-emerald-600 dark:bg-emerald-900/30">
               <Trophy className="h-6 w-6" />
@@ -121,7 +119,7 @@ export default async function EsporteLazerPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-4">
             <div className="rounded-xl bg-amber-100 p-3 text-amber-600 dark:bg-amber-900/30">
               <Users className="h-6 w-6" />
@@ -133,7 +131,7 @@ export default async function EsporteLazerPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-4">
             <div className="rounded-xl bg-sky-100 p-3 text-sky-600 dark:bg-sky-900/30">
               <MapPin className="h-6 w-6" />
@@ -147,6 +145,6 @@ export default async function EsporteLazerPage() {
       </div>
 
       <AtividadesEsporteLazerClient activities={serializedActivities} />
-    </div>
+    </PageFrame>
   );
 }

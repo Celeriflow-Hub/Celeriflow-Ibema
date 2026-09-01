@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
-import { Plus } from "lucide-react"
+import { Clock, Plus } from "lucide-react"
 import Link from "next/link"
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { PontoRowActions } from "./PontoRowActions"
@@ -9,6 +9,8 @@ import { format } from "date-fns"
 import { PontoFilters } from "./PontoFilters"
 import { UploadCSVButton } from "./UploadCSVButton"
 import type { Prisma } from "@prisma/client";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function PontoPage({ searchParams }: { searchParams: Promise<{ q?: string, month?: string }> }) {
   const { prisma } = await getTenantContextForModule("RH");
@@ -41,29 +43,30 @@ export default async function PontoPage({ searchParams }: { searchParams: Promis
   })
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Registro de Ponto</h2>
-        <div className="flex items-center space-x-2">
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title="Registro de Ponto"
+        icon={<Clock className="size-4 shrink-0 text-violet-600" />}
+        action={<div className="flex items-center gap-1.5">
           <UploadCSVButton />
-          <Link href="/rh/ponto/novo" className={buttonVariants()}>
+          <Link href="/rh/ponto/novo" className={buttonVariants({ size: "sm" })}>
             <Plus className="mr-2 h-4 w-4" />
             Apontamento Manual
           </Link>
-        </div>
-      </div>
+        </div>}
+      />
 
       <PontoFilters />
 
-      <Card>
-        <CardHeader>
+      <Card size="sm" className="rounded-md shadow-none">
+        <CardHeader className="border-b pb-2">
           <CardTitle>Espelho de Ponto</CardTitle>
           <CardDescription>
             Controle de frequência, assiduidade e banco de horas dos servidores.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-md border overflow-x-auto max-h-[600px] overflow-y-auto">
+        <CardContent className="pt-3">
+          <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm text-left">
               <thead className="bg-muted text-muted-foreground border-b sticky top-0 z-10 shadow-sm">
                 <tr>
@@ -115,6 +118,6 @@ export default async function PontoPage({ searchParams }: { searchParams: Promis
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   )
 }

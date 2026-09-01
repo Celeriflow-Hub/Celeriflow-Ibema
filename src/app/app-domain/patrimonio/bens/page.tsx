@@ -10,6 +10,8 @@ import {
 import Link from "next/link"
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import type { Prisma } from "@prisma/client";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function BensPatrimoniaisPage(
   props: { searchParams?: Promise<{ q?: string, status?: string }> }
@@ -43,30 +45,19 @@ export default async function BensPatrimoniaisPage(
   })
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Bens Patrimoniais</h2>
-        <div className="flex items-center space-x-2">
-          <Link href="/patrimonio/bens/novo" className={buttonVariants()}>
-            <Plus className="mr-2 h-4 w-4" />
-            Tombar Novo Bem
-          </Link>
-          <Link href="/patrimonio/ciclo-vida" className={buttonVariants({ variant: "outline" })}>
-            Ciclo de Vida
-          </Link>
-        </div>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Bens Patrimoniais" action={<><Link href="/patrimonio/ciclo-vida" className={buttonVariants({ variant: "outline", size: "sm" })}><span className="hidden sm:inline">Ciclo de Vida</span></Link><Link href="/patrimonio/bens/novo" className={buttonVariants({ size: "sm" })}><Plus className="size-3.5" /><span className="hidden sm:inline">Tombar Novo Bem</span></Link></>} />
 
-      <Card>
-        <CardHeader className="pb-4">
-          <CardTitle>Lista de Bens Permanentes</CardTitle>
-          <CardDescription>
+      <Card className="rounded-md">
+        <CardHeader className="border-b p-3">
+          <CardTitle className="text-sm">Lista de Bens Permanentes</CardTitle>
+          <CardDescription className="text-xs">
             Controle de móveis, equipamentos, veículos e vinculação com imóveis e secretarias.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form className="flex flex-wrap items-center gap-2 mb-4 bg-slate-50 p-3 rounded-lg border">
-            <div className="flex-1 min-w-[300px]">
+        <CardContent className="p-3">
+          <form className="mb-3 flex flex-wrap items-center gap-2 rounded-md border bg-slate-50 p-2">
+            <div className="min-w-0 flex-1 sm:min-w-72">
               <Input 
                 name="q"
                 defaultValue={q}
@@ -74,7 +65,7 @@ export default async function BensPatrimoniaisPage(
                 className="bg-white"
               />
             </div>
-            <div className="w-[200px]">
+            <div className="w-full sm:w-48">
               <select 
                 name="status"
                 defaultValue={status}
@@ -94,8 +85,8 @@ export default async function BensPatrimoniaisPage(
             </button>
           </form>
 
-          <div className="rounded-md border overflow-x-auto">
-            <table className="w-full text-sm text-left">
+          <div className="overflow-x-auto rounded-md border">
+            <table className="min-w-[980px] w-full text-sm text-left">
               <thead className="bg-muted text-muted-foreground border-b">
                 <tr>
                   <th className="font-medium p-4 whitespace-nowrap">Tombamento</th>
@@ -150,6 +141,6 @@ export default async function BensPatrimoniaisPage(
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   )
 }

@@ -1,5 +1,8 @@
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { ObrasProjetosClient } from "../components/ObrasProjetosClient";
+import { Building2 } from "lucide-react";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function ObrasProjetosPage() {
   const { prisma } = await getTenantContextForModule("OBRAS");
@@ -19,14 +22,9 @@ export default async function ObrasProjetosPage() {
   });
 
   return (
-    <div className="flex-1 p-4 md:p-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Obras e Projetos</h1>
-          <p className="text-slate-500 dark:text-slate-400">Gestão de obras públicas, projetos de engenharia e convênios federais/estaduais.</p>
-        </div>
-      </div>
+    <PageFrame className="space-y-2 px-1 py-1 md:px-2">
+      <PageHeader title="Obras e Projetos" icon={<Building2 className="size-4 shrink-0 text-amber-600" />} className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white" />
       <ObrasProjetosClient obras={obras} />
-    </div>
+    </PageFrame>
   );
 }

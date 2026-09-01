@@ -1,6 +1,8 @@
 import React from "react";
 import { Home, Calendar, MapPin, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function SocialVisitasPage() {
   const { prisma } = await getTenantContextForModule("SOCIAL");
@@ -14,64 +16,54 @@ export default async function SocialVisitasPage() {
   });
 
   return (
-    <div className="flex-1 p-8">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-            <Home className="h-8 w-8 text-teal-600" />
-            Visitas Domiciliares
-          </h1>
-          <p className="text-gray-500 mt-2">
-            Gestão, agendamento e registro das visitas técnicas da equipe.
-          </p>
-        </div>
-        <button className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-          <Calendar className="h-5 w-5" />
-          Agendar Visita
-        </button>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title="Visitas domiciliares"
+        icon={<Home className="size-4 shrink-0 text-teal-600" />}
+        action={<button className="inline-flex h-7 items-center gap-1 rounded-md bg-teal-600 px-2.5 text-xs font-semibold text-white hover:bg-teal-700"><Calendar className="size-3.5" />Agendar visita</button>}
+      />
+      <p className="px-1 text-sm text-slate-500">Gestão, agendamento e registro das visitas técnicas da equipe.</p>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <table className="w-full table-fixed text-left">
             <thead>
-              <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700">
-                <th className="p-4 font-medium text-gray-500 dark:text-gray-400">Data Agendada</th>
-                <th className="p-4 font-medium text-gray-500 dark:text-gray-400">Família e Endereço</th>
-                <th className="p-4 font-medium text-gray-500 dark:text-gray-400">Técnico</th>
-                <th className="p-4 font-medium text-gray-500 dark:text-gray-400">Objetivo / Motivo</th>
-                <th className="p-4 font-medium text-gray-500 dark:text-gray-400">Status</th>
+              <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <th className="p-3 font-semibold">Data</th>
+                <th className="p-3 font-semibold">Família e endereço</th>
+                <th className="hidden p-3 font-semibold md:table-cell">Técnico</th>
+                <th className="hidden p-3 font-semibold lg:table-cell">Objetivo</th>
+                <th className="p-3 font-semibold">Status</th>
               </tr>
             </thead>
             <tbody>
               {visits.map((visit) => (
-                <tr key={visit.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  <td className="p-4">
-                    <div className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-gray-400" />
+                <tr key={visit.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                  <td className="p-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+                      <Calendar className="size-3.5 text-slate-400" />
                       {visit.scheduledDate.toLocaleDateString("pt-BR")}
                     </div>
                   </td>
-                  <td className="p-4">
-                    <div className="font-medium text-gray-900 dark:text-white">
+                  <td className="p-3">
+                    <div className="break-words font-medium text-slate-900">
                       {visit.family.representative.fullName}
                     </div>
-                    <div className="text-sm text-gray-500 mt-1 flex items-center gap-1">
+                    <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
                       <MapPin className="h-3 w-3" />
                       {visit.family.address?.streetName || "Endereço não cadastrado"}
                     </div>
                   </td>
-                  <td className="p-4">
-                    <div className="text-sm text-gray-900 dark:text-white">
+                  <td className="hidden p-3 md:table-cell">
+                    <div className="text-sm text-slate-900">
                       {visit.professional.person?.fullName || visit.professional.name || "Técnico"}
                     </div>
                   </td>
-                  <td className="p-4">
-                    <div className="text-sm text-gray-900 dark:text-white line-clamp-2 max-w-xs">
+                  <td className="hidden p-3 lg:table-cell">
+                    <div className="text-sm text-slate-900">
                       {visit.objective}
                     </div>
                   </td>
-                  <td className="p-4">
+                  <td className="p-3">
                     <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit ${
                       visit.status === "Agendada" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" :
                       visit.status === "Realizada" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
@@ -88,15 +80,14 @@ export default async function SocialVisitasPage() {
 
               {visits.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-gray-500">
+                    <td colSpan={5} className="p-6 text-center text-slate-500">
                     Nenhuma visita domiciliar agendada.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-        </div>
       </div>
-    </div>
+    </PageFrame>
   );
 }

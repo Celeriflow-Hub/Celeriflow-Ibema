@@ -7,6 +7,8 @@ import Link from "next/link"
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { format } from "date-fns"
 import { ContratoRowActions } from "./ContratoRowActions"
+import { PageFrame } from "@/components/app-ui/PageFrame"
+import { PageHeader } from "@/components/app-ui/PageHeader"
 
 export default async function ContratosPage() {
   const { prisma } = await getTenantContextForModule("COMPRAS");
@@ -29,27 +31,18 @@ export default async function ContratosPage() {
   }).catch(() => [])
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Gestão de Contratos</h2>
-          <p className="text-muted-foreground">
-            Acompanhamento de contratos vigentes, aditivos e saldos.
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Link href="/compras/contratos/novo" className={buttonVariants()}>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Contrato
-          </Link>
-        </div>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title="Gestão de Contratos"
+        icon={<Scale className="size-4 shrink-0 text-indigo-600" />}
+        action={<Link href="/compras/contratos/novo" className={buttonVariants({ size: "sm" })}><Plus className="size-3.5" /><span className="hidden sm:inline">Novo Contrato</span></Link>}
+      />
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+      <Card className="rounded-md">
+        <CardHeader className="flex flex-col gap-2 space-y-0 border-b p-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle>Contratos Administrativos</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-sm">Contratos Administrativos</CardTitle>
+            <CardDescription className="text-xs">
               Lista de todos os contratos registrados no sistema.
             </CardDescription>
           </div>
@@ -64,7 +57,7 @@ export default async function ContratosPage() {
             </Link>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-3">
           {contratos.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground">
               <Scale className="h-10 w-10 mb-4 opacity-20" />
@@ -72,8 +65,8 @@ export default async function ContratosPage() {
               <p className="text-sm">Clique em &quot;Novo Contrato&quot; para registrar um contrato.</p>
             </div>
           ) : (
-            <div className="rounded-md border">
-              <Table>
+            <div className="overflow-x-auto rounded-md border">
+              <Table className="min-w-[900px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Número</TableHead>
@@ -131,6 +124,6 @@ export default async function ContratosPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   )
 }

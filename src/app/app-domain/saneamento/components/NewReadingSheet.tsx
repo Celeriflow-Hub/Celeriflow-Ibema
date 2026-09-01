@@ -43,11 +43,11 @@ export function NewReadingSheet({ units }: { units: { id: string; code: string; 
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger render={<button className="flex items-center gap-2 bg-[#0284C7] hover:bg-[#0369A1] text-white px-4 py-2 rounded-lg font-medium transition-colors" />}>
+      <SheetTrigger render={<button className="flex h-8 items-center gap-2 rounded-md bg-[#0284C7] px-3 text-sm font-medium text-white transition-colors hover:bg-[#0369A1]" />}>
         <FileText className="h-5 w-5" />
         Nova Leitura
       </SheetTrigger>
-      <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
+      <SheetContent side="right" className="w-[calc(100vw-1rem)] overflow-y-auto sm:w-[34rem]">
         <SheetHeader>
           <SheetTitle>Registrar Leitura</SheetTitle>
           <SheetDescription>
@@ -55,7 +55,7 @@ export function NewReadingSheet({ units }: { units: { id: string; code: string; 
           </SheetDescription>
         </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-4 space-y-3 pb-2">
           <div className="space-y-2">
             <label className="text-sm font-medium">Unidade Consumidora</label>
             <select name="unitId" required className="w-full p-2 border rounded-md">
@@ -76,7 +76,7 @@ export function NewReadingSheet({ units }: { units: { id: string; code: string; 
               placeholder="Ex: 08/2026"
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium">Leitura Anterior</label>
               <input
@@ -110,7 +110,7 @@ export function NewReadingSheet({ units }: { units: { id: string; code: string; 
             />
           </div>
 
-          <div className="pt-4 flex justify-end gap-2">
+          <div className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={() => setOpen(false)}

@@ -3,6 +3,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Save } from "lucide-react";
 import { createRole } from "../actions";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default function NovoCargoPage() {
   const [loading, setLoading] = useState(false);
@@ -20,24 +22,19 @@ export default function NovoCargoPage() {
   }
 
   return (
-    <div className="max-w-3xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-6">
-        <Link href="/administracao/cargos" className="text-purple-600 hover:text-purple-700 text-sm font-semibold flex items-center gap-2 w-fit mb-4">
-          <ArrowLeft className="w-4 h-4" /> Voltar
-        </Link>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Novo Cargo/Função</h1>
-      </div>
+    <PageFrame className="max-w-3xl space-y-2">
+      <PageHeader title="Novo Cargo/Função" action={<Link href="/administracao/cargos" className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><ArrowLeft className="size-3.5" />Voltar</Link>} />
 
-      <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="p-6 space-y-4">
-          {error && <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm border border-red-200">{error}</div>}
+      <form onSubmit={handleSubmit} className="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+        <div className="space-y-3 p-3">
+          {error && <div className="rounded border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs text-red-700">{error}</div>}
           
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-700">Nome do Cargo *</label>
             <input type="text" name="name" required placeholder="Ex: Diretor de Escola" className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none text-sm" />
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-700">Nível (Opcional)</label>
               <select name="level" className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none text-sm bg-white">
@@ -65,12 +62,12 @@ export default function NovoCargoPage() {
             <input type="text" name="description" placeholder="Breve descrição das atribuições" className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none text-sm" />
           </div>
         </div>
-        <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end">
-          <button type="submit" disabled={loading} className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg shadow-sm flex items-center gap-2 disabled:opacity-50">
-            <Save className="w-4 h-4" /> {loading ? "Salvando..." : "Salvar Cargo"}
+        <div className="flex h-10 justify-end border-t border-slate-200 bg-slate-50 px-3">
+          <button type="submit" disabled={loading} className="inline-flex h-7 items-center gap-1.5 self-center rounded bg-purple-700 px-3 text-xs font-semibold text-white shadow-sm hover:bg-purple-800 disabled:opacity-50">
+            <Save className="size-3.5" /> {loading ? "Salvando..." : "Salvar Cargo"}
           </button>
         </div>
       </form>
-    </div>
+    </PageFrame>
   );
 }

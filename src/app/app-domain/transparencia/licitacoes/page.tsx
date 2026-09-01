@@ -2,6 +2,8 @@ import { Gavel, Search, Download } from "lucide-react";
 import Link from "next/link";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import UploadLicitacoesForm from "./UploadLicitacoesForm";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -23,38 +25,31 @@ export default async function LicitacoesPage() {
   const now = new Date();
 
   return (
-    <div className="max-w-6xl animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <Link href="/transparencia" className="text-sm font-semibold text-blue-600 hover:underline mb-2 inline-block">
-            &larr; Voltar para Transparência
-          </Link>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Gavel className="w-6 h-6 text-blue-600" />
-            Licitações Abertas
-          </h1>
-          <p className="text-slate-500 mt-1">Acompanhe os processos de compra e concorrência pública.</p>
-        </div>
-        <div className="flex gap-2">
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title="Licitações abertas"
+        icon={<Gavel className="size-4 shrink-0 text-blue-600" />}
+        action={<Link href="/compras" className="rounded-md bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-amber-700">Nova licitação</Link>}
+      />
+      <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-slate-500">Acompanhe os processos de compra e concorrência pública.</p>
+        <div className="flex">
           <UploadLicitacoesForm />
-          <Link href="/compras" className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors">
-            Nova Licitação (Módulo Compras)
-          </Link>
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row items-center gap-4 bg-slate-50/50">
-          <div className="relative w-full max-w-md">
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/50 p-3 sm:flex-row sm:items-center">
+          <div className="relative w-full sm:max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
               placeholder="Buscar por número ou objeto..." 
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+              className="h-8 w-full rounded-md border border-slate-200 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
             />
           </div>
-          <div className="flex gap-2 w-full sm:w-auto">
-            <select className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 text-slate-600">
+          <div className="w-full sm:w-auto">
+            <select className="h-8 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 sm:w-auto">
               <option value="">Todas as Modalidades</option>
               <option value="Pregão">Pregão</option>
               <option value="Concorrência">Concorrência Pública</option>
@@ -66,16 +61,16 @@ export default async function LicitacoesPage() {
         {biddings.length === 0 ? (
           <div className="p-12 text-center text-slate-500">Nenhuma licitação encontrada.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm whitespace-nowrap">
+          <div>
+            <table className="w-full table-fixed text-left text-sm">
               <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                 <tr>
-                  <th className="px-6 py-3">Número / Processo</th>
-                  <th className="px-6 py-3">Modalidade</th>
-                  <th className="px-6 py-3">Objeto</th>
-                  <th className="px-6 py-3">Data da Sessão</th>
-                  <th className="px-6 py-3">Status Inteligente</th>
-                  <th className="px-6 py-3 text-right">Edital</th>
+                  <th className="px-3 py-2.5">Número / Processo</th>
+                  <th className="hidden px-3 py-2.5 md:table-cell">Modalidade</th>
+                  <th className="px-3 py-2.5">Objeto</th>
+                  <th className="hidden px-3 py-2.5 lg:table-cell">Data da Sessão</th>
+                  <th className="px-3 py-2.5">Status</th>
+                  <th className="hidden px-3 py-2.5 text-right sm:table-cell">Edital</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -99,28 +94,28 @@ export default async function LicitacoesPage() {
 
                   return (
                   <tr key={b.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-bold text-slate-800">
+                    <td className="px-3 py-3 font-semibold text-slate-800">
                       {b.number}
                       <span className="block text-xs font-normal text-slate-500">{b.process.number}</span>
                     </td>
-                    <td className="px-6 py-4 text-slate-600">{b.modality}</td>
-                    <td className="px-6 py-4">
-                      <div className="max-w-xs truncate text-slate-800" title={b.process.object}>
+                    <td className="hidden px-3 py-3 text-slate-600 md:table-cell">{b.modality}</td>
+                    <td className="px-3 py-3">
+                      <div className="break-words text-slate-800" title={b.process.object}>
                         {b.process.object}
                       </div>
                       <span className="text-xs font-semibold text-slate-500">
                         Valor Estimado: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(b.process.estimatedValue || 0)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-slate-600">
+                    <td className="hidden px-3 py-3 text-slate-600 lg:table-cell">
                       {b.sessionDate ? new Date(b.sessionDate).toLocaleDateString('pt-BR') : '-'}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-3">
                       <span className={`px-2 py-1 rounded-md text-xs font-semibold ${statusColor}`}>
                         {intelligentStatus}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="hidden px-3 py-3 text-right sm:table-cell">
                       <button className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-xs font-bold transition-colors">
                         <Download className="w-4 h-4" /> Baixar
                       </button>
@@ -132,6 +127,6 @@ export default async function LicitacoesPage() {
           </div>
         )}
       </div>
-    </div>
+    </PageFrame>
   );
 }

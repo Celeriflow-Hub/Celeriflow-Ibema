@@ -178,8 +178,8 @@ export default function MedicoesClient({ medicoes, obras }: { medicoes: Medicao[
   }
 
   return (
-    <div className="flex-1 p-4 md:p-8">
-      <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+    <div className="space-y-2">
+      <div className="flex flex-col items-start justify-between gap-2 md:flex-row md:items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Medições de Obras</h1>
           <p className="text-slate-500 dark:text-slate-400">Acompanhamento financeiro das medições registradas nas obras.</p>
@@ -196,8 +196,8 @@ export default function MedicoesClient({ medicoes, obras }: { medicoes: Medicao[
         </p>
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <div className="flex flex-col items-stretch justify-between gap-4 border-b border-slate-100 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-800/50 md:flex-row md:items-center md:p-6">
+      <section className="overflow-hidden rounded-md border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800" aria-label="Lista de medições">
+        <div className="flex flex-col items-stretch justify-between gap-2 border-b border-slate-100 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/50 md:flex-row md:items-center">
           <div className="relative w-full md:max-w-sm">
             <Search className="absolute top-1/2 left-3 size-5 -translate-y-1/2 text-slate-400" />
             <Input
@@ -281,17 +281,17 @@ export default function MedicoesClient({ medicoes, obras }: { medicoes: Medicao[
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
       <Sheet open={sheetOpen} onOpenChange={handleSheetChange}>
-        <SheetContent className="w-full overflow-y-auto sm:max-w-md">
+        <SheetContent className="w-[calc(100vw-1rem)] overflow-y-auto sm:max-w-[34rem]">
           <SheetHeader>
             <SheetTitle>{editingMedicao ? "Editar medição" : "Nova medição"}</SheetTitle>
             <SheetDescription>
               {editingMedicao ? "Atualize os dados da medição selecionada." : "Registre uma medição para uma obra ativa."}
             </SheetDescription>
           </SheetHeader>
-          <form onSubmit={handleSubmit} className="flex flex-1 flex-col gap-5 px-4 pb-4">
+          <form onSubmit={handleSubmit} className="flex flex-1 flex-col gap-3 px-1 pb-2">
             {formError && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">{formError}</p>}
             {!editingMedicao && (
               <div className="space-y-2">

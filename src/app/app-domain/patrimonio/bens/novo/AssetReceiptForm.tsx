@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type ReceiptItem = { id: string; label: string; remaining: number };
 type Option = { id: string; name: string };
@@ -27,9 +29,10 @@ export function AssetReceiptForm({ receiptItems, categories, departments, employ
   }
 
   return (
-    <div className="max-w-3xl space-y-6 p-8 pt-6">
-      <div><h1 className="text-3xl font-bold tracking-tight">Tombar Bem Recebido</h1><p className="mt-1 text-sm text-muted-foreground">Cada tombamento deve ser vinculado a um item de recebimento aprovado.</p></div>
-      <form onSubmit={submit} className="grid gap-4 rounded-lg border bg-white p-6 md:grid-cols-2">
+    <PageFrame className="max-w-5xl space-y-2">
+      <PageHeader title="Tombar Bem Recebido" action={<Link href="/patrimonio/bens" aria-label="Voltar"><Button variant="outline" size="sm">Cancelar</Button></Link>} />
+      <p className="text-xs text-muted-foreground">Cada tombamento deve ser vinculado a um item de recebimento aprovado.</p>
+      <form onSubmit={submit} className="grid gap-3 rounded-md border bg-white p-3 md:grid-cols-2">
         <div className="space-y-2 md:col-span-2"><Label>Item recebido</Label><Select value={data.purchaseReceiptItemId} onValueChange={(purchaseReceiptItemId) => setData({ ...data, purchaseReceiptItemId: purchaseReceiptItemId ?? "" })}><SelectTrigger><SelectValue placeholder="Selecione o item recebido" /></SelectTrigger><SelectContent>{receiptItems.map((item) => <SelectItem key={item.id} value={item.id}>{item.label} ({item.remaining} disponível)</SelectItem>)}</SelectContent></Select></div>
         <div className="space-y-2"><Label>Número de tombamento</Label><Input required value={data.patrimonyNumber} onChange={(event) => setData({ ...data, patrimonyNumber: event.target.value })} /></div>
         <div className="space-y-2"><Label>Nome do bem</Label><Input required value={data.name} onChange={(event) => setData({ ...data, name: event.target.value })} /></div>
@@ -39,8 +42,8 @@ export function AssetReceiptForm({ receiptItems, categories, departments, employ
         <div className="space-y-2"><Label>Modelo</Label><Input value={data.model} onChange={(event) => setData({ ...data, model: event.target.value })} /></div>
         <div className="space-y-2"><Label>Número de série</Label><Input value={data.serialNumber} onChange={(event) => setData({ ...data, serialNumber: event.target.value })} /></div>
         <div className="space-y-2"><Label>Servidor responsável</Label><Select value={data.responsibleId} onValueChange={(responsibleId) => setData({ ...data, responsibleId: responsibleId ?? "" })}><SelectTrigger><SelectValue placeholder="Não atribuir agora" /></SelectTrigger><SelectContent>{employees.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div>
-        <div className="flex justify-end gap-2 md:col-span-2"><Link href="/patrimonio/bens"><Button type="button" variant="outline">Cancelar</Button></Link><Button type="submit" disabled={pending || !data.purchaseReceiptItemId || !data.categoryId}>{pending ? "Tombando..." : "Registrar tombamento"}</Button></div>
+        <div className="flex justify-end gap-2 border-t pt-3 md:col-span-2"><Link href="/patrimonio/bens"><Button type="button" variant="outline">Cancelar</Button></Link><Button type="submit" disabled={pending || !data.purchaseReceiptItemId || !data.categoryId}>{pending ? "Tombando..." : "Registrar tombamento"}</Button></div>
       </form>
-    </div>
+    </PageFrame>
   );
 }

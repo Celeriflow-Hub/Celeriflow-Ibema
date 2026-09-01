@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Users, Search, Plus, List, Filter } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type Comissao = {
   id: string;
@@ -30,27 +32,16 @@ export default function ComissoesClient({ comissoes }: { comissoes: Comissao[] }
   );
 
   return (
-    <div className="p-6 md:p-8 flex-1">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-gray-500">Câmara Municipal</span>
-            <span className="text-gray-400">/</span>
-            <span className="text-gray-900 font-medium">Comissões</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Users className="h-6 w-6 text-[#9333EA]" />
-            Comissões Parlamentares
-          </h1>
-        </div>
-        <button className="flex items-center gap-2 bg-[#9333EA] hover:bg-[#7E22CE] text-white px-4 py-2 rounded-lg font-medium transition-colors">
-          <Plus className="h-5 w-5" />
-          Nova Comissão
-        </button>
-      </div>
+    <PageFrame className="space-y-3 px-1 py-1 md:px-2">
+      <PageHeader
+        title="Comissões Parlamentares"
+        icon={<Users className="size-4 shrink-0 text-[#9333EA]" />}
+        action={<button className="flex h-8 items-center gap-2 rounded-md bg-[#9333EA] px-3 text-sm font-medium text-white transition-colors hover:bg-[#7E22CE]"><Plus className="h-4 w-4" />Nova Comissão</button>}
+        className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white"
+      />
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 p-3 dark:border-gray-700 dark:bg-gray-800/50">
           <div className="relative w-full md:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input 
@@ -58,7 +49,7 @@ export default function ComissoesClient({ comissoes }: { comissoes: Comissao[] }
               placeholder="Buscar comissão..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
+              className="w-full rounded-md border border-slate-300 bg-white py-1.5 pl-9 pr-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-[#9333EA]/20 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
             />
           </div>
           <button className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md">
@@ -72,7 +63,7 @@ export default function ComissoesClient({ comissoes }: { comissoes: Comissao[] }
             <p>Nenhuma comissão encontrada.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
+          <div className="grid grid-cols-1 gap-3 p-3 md:grid-cols-2 xl:grid-cols-3">
             {filtered.map((com) => (
               <Card key={com.id} className="overflow-hidden hover:shadow-md transition-shadow border-gray-200 dark:border-gray-700">
                 <div className="p-5 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
@@ -127,6 +118,6 @@ export default function ComissoesClient({ comissoes }: { comissoes: Comissao[] }
           </div>
         )}
       </div>
-    </div>
+    </PageFrame>
   );
 }

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Archive, Search } from "lucide-react";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type Processo = {
   id: string;
@@ -30,19 +32,12 @@ export default function ArquivadosClient({ initialProcessos }: { initialProcesso
   });
 
   return (
-    <div className="max-w-6xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Archive className="w-6 h-6 text-emerald-600" />
-            Processos Arquivados
-          </h1>
-          <p className="text-slate-500 mt-1">Consulte os processos finalizados e arquivados pelo seu setor.</p>
-        </div>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Processos Arquivados" icon={<Archive className="size-4 shrink-0 text-emerald-600" />} />
+      <p className="text-xs text-slate-500">Consulte os processos finalizados e arquivados pelo seu setor.</p>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row items-center gap-4 bg-slate-50/50">
+      <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col items-center gap-2 border-b border-slate-200 bg-slate-50/50 p-3 sm:flex-row">
           <div className="relative w-full max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
@@ -65,7 +60,7 @@ export default function ArquivadosClient({ initialProcessos }: { initialProcesso
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm whitespace-nowrap">
+            <table className="min-w-[760px] w-full text-left text-sm whitespace-nowrap">
               <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="px-6 py-3">Nº Protocolo</th>
@@ -113,6 +108,6 @@ export default function ArquivadosClient({ initialProcessos }: { initialProcesso
           </div>
         )}
       </div>
-    </div>
+    </PageFrame>
   );
 }

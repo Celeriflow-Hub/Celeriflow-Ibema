@@ -4,6 +4,9 @@ import { DependenteRowActions } from "./DependenteRowActions"
 import { format } from "date-fns"
 import { DependenteFilters } from "./DependenteFilters"
 import type { Prisma } from "@prisma/client";
+import { UserPlus } from "lucide-react";
+import { PageFrame } from "@/components/app-ui/PageFrame";
+import { PageHeader } from "@/components/app-ui/PageHeader";
 
 export default async function DependentesPage(
   props: {
@@ -34,13 +37,11 @@ export default async function DependentesPage(
   })
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Dependentes</h2>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader title="Dependentes" icon={<UserPlus className="size-4 shrink-0 text-violet-600" />} />
 
-      <Card>
-        <CardHeader className="pb-4">
+      <Card size="sm" className="rounded-md shadow-none">
+        <CardHeader className="border-b pb-2">
           <CardTitle>Lista de Dependentes</CardTitle>
           <CardDescription>
             Visualização geral de dependentes cadastrados. Exibindo {dependents.length} registros (limite de 100).
@@ -48,10 +49,10 @@ export default async function DependentesPage(
             <strong>Nota:</strong> Novos dependentes devem ser cadastrados diretamente na ficha do Servidor (Editar Servidor).
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-3">
           <DependenteFilters />
 
-          <div className="rounded-md border overflow-x-auto max-h-[600px] overflow-y-auto">
+          <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm text-left">
               <thead className="bg-muted text-muted-foreground border-b sticky top-0 z-10 shadow-sm">
                 <tr>
@@ -87,6 +88,6 @@ export default async function DependentesPage(
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   )
 }

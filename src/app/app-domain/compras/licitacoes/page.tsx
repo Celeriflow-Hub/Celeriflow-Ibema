@@ -9,6 +9,8 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { LicitacaoRowActions } from "./LicitacaoRowActions"
 import { DispensaRowActions } from "../dispensas/DispensaRowActions"
+import { PageFrame } from "@/components/app-ui/PageFrame"
+import { PageHeader } from "@/components/app-ui/PageHeader"
 
 export default async function LicitacoesPage() {
   const { prisma } = await getTenantContextForModule("COMPRAS");
@@ -28,31 +30,18 @@ export default async function LicitacoesPage() {
   }).catch(() => [])
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Licitações e Dispensas</h2>
-          <p className="text-muted-foreground">
-            Acompanhamento de pregões, concorrências e contratações diretas.
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Link href="/compras/dispensas/novo" className={buttonVariants({ variant: "outline" })}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nova Dispensa
-          </Link>
-          <Link href="/compras/licitacoes/novo" className={buttonVariants()}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nova Licitação
-          </Link>
-        </div>
-      </div>
+    <PageFrame className="space-y-2">
+      <PageHeader
+        title="Licitações e Dispensas"
+        icon={<Gavel className="size-4 shrink-0 text-amber-600" />}
+        action={<><Link href="/compras/dispensas/novo" className={buttonVariants({ variant: "outline", size: "sm" })}><Plus className="size-3.5" /><span className="hidden sm:inline">Nova Dispensa</span></Link><Link href="/compras/licitacoes/novo" className={buttonVariants({ size: "sm" })}><Plus className="size-3.5" /><span className="hidden sm:inline">Nova Licitação</span></Link></>}
+      />
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+      <Card className="rounded-md">
+        <CardHeader className="flex flex-col gap-2 space-y-0 border-b p-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle>Certames Abertos</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-sm">Certames Abertos</CardTitle>
+            <CardDescription className="text-xs">
               Licitações e dispensas em andamento.
             </CardDescription>
           </div>
@@ -67,7 +56,7 @@ export default async function LicitacoesPage() {
             </Link>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-3">
           {biddings.length === 0 && directContractings.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground">
               <Gavel className="h-10 w-10 mb-4 opacity-20" />
@@ -75,8 +64,8 @@ export default async function LicitacoesPage() {
               <p className="text-sm">Clique em &quot;Nova Licitação&quot; para cadastrar um certame.</p>
             </div>
           ) : (
-            <div className="rounded-md border">
-              <Table>
+            <div className="overflow-x-auto rounded-md border">
+              <Table className="min-w-[720px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Número/Processo</TableHead>
@@ -136,6 +125,6 @@ export default async function LicitacoesPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageFrame>
   )
 }

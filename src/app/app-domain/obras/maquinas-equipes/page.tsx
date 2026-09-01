@@ -1,5 +1,6 @@
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { MaquinasEquipesClient } from "../components/MaquinasEquipesClient";
+import { PageFrame } from "@/components/app-ui/PageFrame";
 
 export default async function MaquinasEquipesPage() {
   const { prisma } = await getTenantContextForModule("OBRAS");
@@ -77,5 +78,5 @@ export default async function MaquinasEquipesPage() {
     }),
   ]);
 
-  return <MaquinasEquipesClient teams={teams} assets={assets} />;
+  return <PageFrame className="px-1 py-1 md:px-2"><MaquinasEquipesClient teams={teams} assets={assets} /></PageFrame>;
 }

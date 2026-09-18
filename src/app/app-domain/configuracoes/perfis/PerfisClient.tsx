@@ -5,14 +5,15 @@ import {
   ShieldCheck, Plus, Search, X, Pencil, CheckCircle2, SlidersHorizontal, 
   Building2, Users, FileText, HeadphonesIcon, ShoppingCart, FileSpreadsheet, DollarSign, 
   Package, Receipt, Stethoscope, GraduationCap, HeartHandshake, HardHat, 
-  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, Lock, CheckSquare, Square
+  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, Lock, CheckSquare, Square, Trash2
 } from "lucide-react";
-import { upsertPerfil, togglePerfilStatus } from "./actions";
+import { deletePerfil, upsertPerfil, togglePerfilStatus } from "./actions";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
 
 type Perfil = {
   id: string;
+  codigo: string;
   nome: string;
   descricao: string | null;
   permissoes: string | null;
@@ -76,6 +77,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"dados" | "matriz">("matriz");
 
   const [formData, setFormData] = useState<{
@@ -253,7 +255,17 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
   }
 
   async function handleToggle(id: string, ativo: boolean) {
-    await togglePerfilStatus(id, !ativo);
+    const result = await togglePerfilStatus(id, !ativo);
+    if (result.error) alert(result.error);
+  }
+
+  async function handleDelete(perfil: Perfil) {
+    if (!window.confirm(`Excluir o perfil "${perfil.nome}"? Esta ação não pode ser desfeita.`)) return;
+
+    setDeletingId(perfil.id);
+    const result = await deletePerfil(perfil.id);
+    if (result.error) alert(result.error);
+    setDeletingId(null);
   }
 
   return (
@@ -335,13 +347,25 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
                         </button>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => openEdit(perfil)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950 dark:text-indigo-300 dark:hover:bg-indigo-900 text-xs font-bold transition-colors"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                          Configurar Permissões
-                        </button>
+                        <div className="inline-flex items-center gap-2">
+                          <button
+                            onClick={() => openEdit(perfil)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950 dark:text-indigo-300 dark:hover:bg-indigo-900 text-xs font-bold transition-colors"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Configurar Permissões
+                          </button>
+                          {perfil.codigo !== "SYSTEM_ADMINISTRATOR" && (
+                            <button
+                              onClick={() => handleDelete(perfil)}
+                              disabled={deletingId === perfil.id}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-rose-950 dark:text-rose-300 dark:hover:bg-rose-900 text-xs font-bold transition-colors"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              {deletingId === perfil.id ? "Excluindo..." : "Excluir"}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

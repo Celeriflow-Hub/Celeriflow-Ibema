@@ -13,7 +13,7 @@ type NotificationInput = {
 
 type NotificationRecipient = {
   id: string;
-  perfil: { codigo: string | null; permissoes: string; ativo: boolean; nome: string };
+  perfil: { codigo: string; permissoes: string; ativo: boolean; nome: string };
   permissoesModulo: { modulo: { codigo: string }; canView: boolean; canEdit: boolean }[];
 };
 

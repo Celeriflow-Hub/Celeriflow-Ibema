@@ -2,6 +2,7 @@ import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
 import { pocVirtualBank } from "../src/lib/poc/poc-config";
 import { constitutionalRevenueRules } from "../src/lib/poc/constitutional-revenue-rules";
+import { pocFixture } from "../src/lib/poc/fixture-catalog";
 
 type Check = { check: string; status: "OK" | "FALHA"; detail: string };
 
@@ -21,8 +22,8 @@ async function main() {
       prisma.integrationConnection.findUnique({ where: { code: "BANCO_API" }, select: { status: true, environment: true, provider: true } }),
     ]);
 
-    if (unit?.name === "Prefeitura Municipal de São João do Ivaí") pass("Unidade gestora", "UG 0101 identificada como Prefeitura Municipal de São João do Ivaí.");
-    else fail("Unidade gestora", "A UG 0101 não está identificada como Prefeitura Municipal de São João do Ivaí.");
+    if (unit?.name === pocFixture.cityHallName) pass("Unidade gestora", `UG 0101 identificada como ${pocFixture.cityHallName}.`);
+    else fail("Unidade gestora", `A UG 0101 não está identificada como ${pocFixture.cityHallName}.`);
 
     if (years.length === 2 && years.every((year) => year.status === "Aberto")) pass("Exercícios", "Exercícios 2025 e 2026 estão abertos.");
     else fail("Exercícios", "Os exercícios 2025 e 2026 devem estar abertos para os cenários do roteiro.");

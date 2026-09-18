@@ -96,7 +96,7 @@ export default async function PortalTransparenciaPage({ searchParams }: { search
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-300">Dados abertos</p>
             <h1 className="mt-1 text-2xl font-bold">Portal da Transparência</h1>
-            <p className="mt-1 text-sm text-slate-300">Execução orçamentária e financeira da Prefeitura Municipal de Lagoa Seca/PB</p>
+            <p className="mt-1 text-sm text-slate-300">Execução orçamentária e financeira de {institution?.name ?? "instituição municipal em demonstração"}</p>
           </div>
           <a className="rounded-md border border-slate-600 px-4 py-2 text-sm font-semibold hover:border-white hover:bg-slate-800" href="#consulta">Ir para consulta</a>
         </div>

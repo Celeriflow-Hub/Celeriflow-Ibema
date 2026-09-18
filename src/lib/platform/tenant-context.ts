@@ -23,7 +23,7 @@ export type AppContext = {
     email: string;
     name: string;
     role: string;
-    profileCode: string | null;
+    profileCode: string;
     permissions?: string | null;
     modulePermissions: { code: string; canView: boolean; canEdit: boolean }[];
     allowedBudgetUnitIds: string[];
@@ -227,7 +227,7 @@ async function resolveUser(principal: SessionPrincipal | null): Promise<AppConte
   const systemAdminEmail = process.env.SYSTEM_ADMIN_EMAIL?.trim().toLowerCase();
   if (!usuario && systemAdminEmail && principal.email === systemAdminEmail) {
     const profile = await prisma.configuracaoPerfil.upsert({
-      where: { id: "system-administrator" },
+      where: { codigo: SYSTEM_ADMIN_PROFILE_CODE },
       create: {
         id: "system-administrator",
         codigo: SYSTEM_ADMIN_PROFILE_CODE,

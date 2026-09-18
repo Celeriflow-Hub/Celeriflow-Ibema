@@ -47,11 +47,11 @@ async function main() {
     { id: "perfil-transparencia-lagoaseca", codigo: "TRANSPARENCIA", nome: "Transparência", permissoes: { acesso: "operacional", modulosPermitidos: ["TRANSPARENCIA"] } },
   ];
   await Promise.all(profileDefinitions.map((profile) => prisma.configuracaoPerfil.upsert({
-    where: { id: profile.id },
+    where: { codigo: profile.codigo },
     create: { ...profile, permissoes: JSON.stringify(profile.permissoes), ativo: true },
     update: { codigo: profile.codigo, nome: profile.nome, permissoes: JSON.stringify(profile.permissoes), ativo: true },
   })));
-  const perfilContador = await prisma.configuracaoPerfil.findUniqueOrThrow({ where: { id: "perfil-contador-lagoaseca" } });
+  const perfilContador = await prisma.configuracaoPerfil.findUniqueOrThrow({ where: { codigo: "CONTADOR" } });
 
   await prisma.usuario.upsert({
     where: { email: "contador.prefeitura@lagoaseca.pb.gov.br" },

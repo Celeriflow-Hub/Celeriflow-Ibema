@@ -28,17 +28,23 @@ export async function upsertUsuario(data: {
       ? await prisma.usuario.findUnique({ where: { id: data.id }, include: { perfil: { select: { codigo: true } } } })
       : null;
     if (data.id && !existing) return { error: "Usuário não encontrado." };
+    const duplicateEmailUser = await prisma.usuario.findUnique({ where: { email }, select: { id: true } });
+    if (duplicateEmailUser && duplicateEmailUser.id !== existing?.id) return { error: "Já existe um usuário com este e-mail." };
 
     if (existing) {
       const activeSystemAdministratorCount = await prisma.usuario.count({ where: { ativo: true, perfil: { codigo: SYSTEM_ADMIN_PROFILE_CODE } } });
-      assertAdministratorLifecycleChange({
-        actorUsuarioId: context.user.id,
-        targetUsuarioId: existing.id,
-        targetIsSystemAdministrator: isSystemAdministratorProfileCode(existing.perfil.codigo),
-        targetWillBeSystemAdministrator: isSystemAdministratorProfileCode(perfil.codigo),
-        targetWillBeActive: data.ativo,
-        activeSystemAdministratorCount,
-      });
+      try {
+        assertAdministratorLifecycleChange({
+          actorUsuarioId: context.user.id,
+          targetUsuarioId: existing.id,
+          targetIsSystemAdministrator: isSystemAdministratorProfileCode(existing.perfil.codigo),
+          targetWillBeSystemAdministrator: isSystemAdministratorProfileCode(perfil.codigo),
+          targetWillBeActive: data.ativo,
+          activeSystemAdministratorCount,
+        });
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : "Não foi possível alterar o acesso administrativo." };
+      }
     }
 
     const provisioner = createFirebaseUserProvisioner(adminAuth);
@@ -70,7 +76,7 @@ export async function upsertUsuario(data: {
     return { error: null };
   } catch (error) {
     console.error(error);
-    return { error: error instanceof Error ? error.message : "Erro ao salvar o usuário." };
+    return { error: error instanceof AccessError ? error.message : "Não foi possível salvar o usuário. Tente novamente." };
   }
 }
 
@@ -81,14 +87,18 @@ export async function toggleUsuarioStatus(id: string, ativo: boolean) {
     const target = await prisma.usuario.findUnique({ where: { id }, include: { perfil: { select: { codigo: true } } } });
     if (!target) return { error: "Usuário não encontrado." };
     const activeSystemAdministratorCount = await prisma.usuario.count({ where: { ativo: true, perfil: { codigo: SYSTEM_ADMIN_PROFILE_CODE } } });
-    assertAdministratorLifecycleChange({
-      actorUsuarioId: context.user.id,
-      targetUsuarioId: target.id,
-      targetIsSystemAdministrator: isSystemAdministratorProfileCode(target.perfil.codigo),
-      targetWillBeSystemAdministrator: isSystemAdministratorProfileCode(target.perfil.codigo),
-      targetWillBeActive: ativo,
-      activeSystemAdministratorCount,
-    });
+    try {
+      assertAdministratorLifecycleChange({
+        actorUsuarioId: context.user.id,
+        targetUsuarioId: target.id,
+        targetIsSystemAdministrator: isSystemAdministratorProfileCode(target.perfil.codigo),
+        targetWillBeSystemAdministrator: isSystemAdministratorProfileCode(target.perfil.codigo),
+        targetWillBeActive: ativo,
+        activeSystemAdministratorCount,
+      });
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Não foi possível alterar o acesso administrativo." };
+    }
     const provisioner = createFirebaseUserProvisioner(adminAuth);
     const { firebaseUid } = await provisioner.provision({ email: target.email, displayName: target.nome, disabled: !ativo, firebaseUid: target.firebaseUid });
     await prisma.$transaction(async (tx) => {
@@ -99,6 +109,43 @@ export async function toggleUsuarioStatus(id: string, ativo: boolean) {
     return { error: null };
   } catch (error) {
     console.error(error);
-    return { error: error instanceof AccessError ? error.message : error instanceof Error ? error.message : "Erro ao alterar o status do usuário." };
+    return { error: error instanceof AccessError ? error.message : "Não foi possível alterar o status do usuário. Tente novamente." };
+  }
+}
+
+export async function deleteUsuario(id: string) {
+  try {
+    const context = await getTenantContextForSystemAdministration();
+    const { prisma } = context;
+    const target = await prisma.usuario.findUnique({ where: { id }, include: { perfil: { select: { codigo: true } } } });
+    if (!target) return { error: "Usuário não encontrado." };
+    if (target.id === context.user.id) return { error: "Você não pode excluir seu próprio usuário." };
+
+    const activeSystemAdministratorCount = await prisma.usuario.count({ where: { ativo: true, perfil: { codigo: SYSTEM_ADMIN_PROFILE_CODE } } });
+    try {
+      assertAdministratorLifecycleChange({
+        actorUsuarioId: context.user.id,
+        targetUsuarioId: target.id,
+        targetIsSystemAdministrator: isSystemAdministratorProfileCode(target.perfil.codigo),
+        targetWillBeSystemAdministrator: false,
+        targetWillBeActive: false,
+        activeSystemAdministratorCount,
+      });
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Não foi possível alterar o acesso administrativo." };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.usuario.delete({ where: { id } });
+      await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "USUARIO", targetId: id });
+    });
+    revalidatePath("/configuracoes/usuarios");
+    return { error: null };
+  } catch (error) {
+    console.error(error);
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2003") {
+      return { error: "Não é possível excluir este usuário porque ele possui histórico ou registros vinculados. Inative-o para revogar o acesso." };
+    }
+    return { error: error instanceof AccessError ? error.message : "Não foi possível excluir o usuário. Tente novamente." };
   }
 }

@@ -1,11 +1,12 @@
 import "dotenv/config";
 
 import { prisma } from "../src/lib/prisma";
+import { pocFixtureUsers } from "../src/lib/poc/fixture-catalog";
 
 const evaluatorProfiles = [
-  { id: "perfil-poc-avaliador-ti", name: "POC Avaliador Técnico de TI", email: "adminteste@email.com" },
-  { id: "perfil-poc-avaliador-financeiro", name: "POC Avaliador Administrativo-Financeiro", email: "gestao1@email.com" },
-  { id: "perfil-poc-avaliador-contabil", name: "POC Avaliador Contábil", email: "contadorteste@email.com" },
+  { id: "perfil-poc-avaliador-ti", name: "Avaliador Técnico de Tecnologia", email: pocFixtureUsers.evaluatorTechnology.email },
+  { id: "perfil-poc-avaliador-financeiro", name: "Avaliador Administrativo-Financeiro", email: pocFixtureUsers.evaluatorFinance.email },
+  { id: "perfil-poc-avaliador-contabil", name: "Avaliador Contábil", email: pocFixtureUsers.evaluatorAccounting.email },
 ];
 
 async function main() {
@@ -21,6 +22,7 @@ async function main() {
   })).map((module) => module.codigo);
 
   for (const evaluator of evaluatorProfiles) {
+    const profileCode = evaluator.id.replace("perfil-", "").toUpperCase();
     const user = await prisma.usuario.findUnique({ where: { email: evaluator.email }, select: { id: true, employeeId: true } });
     if (!user) throw new Error(`Usuário avaliador ${evaluator.email} não foi encontrado.`);
     let employeeId = user.employeeId;
@@ -39,9 +41,10 @@ async function main() {
     }
 
     const profile = await prisma.configuracaoPerfil.upsert({
-      where: { id: evaluator.id },
+      where: { codigo: profileCode },
       create: {
         id: evaluator.id,
+        codigo: profileCode,
         nome: evaluator.name,
         descricao: "Acesso individual da comissão avaliadora da POC de São João do Ivaí.",
         permissoes: JSON.stringify({
@@ -54,13 +57,14 @@ async function main() {
               create: true,
               update: true,
               delete: true,
-              issueReports: evaluator.email === "gestao1@email.com",
+              issueReports: evaluator.email === pocFixtureUsers.evaluatorFinance.email,
             },
           },
         }),
         ativo: true,
       },
       update: {
+        codigo: profileCode,
         nome: evaluator.name,
         descricao: "Acesso individual da comissão avaliadora da POC de São João do Ivaí.",
         permissoes: JSON.stringify({
@@ -73,7 +77,7 @@ async function main() {
               create: true,
               update: true,
               delete: true,
-              issueReports: evaluator.email === "gestao1@email.com",
+              issueReports: evaluator.email === pocFixtureUsers.evaluatorFinance.email,
             },
           },
         }),

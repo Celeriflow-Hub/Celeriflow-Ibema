@@ -63,7 +63,9 @@ test("administrative audit events persist stable identifiers and migration remai
   });
   assert.deepEqual(events, [{ actorUsuarioId: "actor-1", eventType: "ADMINISTRATIVE_MUTATION", targetType: "EMPLOYEE", targetId: "employee-1" }]);
   const migration = await readFile(path.join(process.cwd(), "prisma/migrations/20260817160000_add_c3_administration_integrity/migration.sql"), "utf8");
+  const schema = await readFile(path.join(process.cwd(), "prisma/schema.prisma"), "utf8");
   assert.match(migration, /ADD COLUMN "isActive" BOOLEAN NOT NULL DEFAULT true/);
   assert.match(migration, /ADD COLUMN "firebaseUid" TEXT/);
+  assert.match(schema, /model ConfiguracaoPerfil \{\s+id\s+String\s+@id @default\(cuid\(\)\)\s+codigo\s+String\s+@unique/);
   assert.doesNotMatch(migration, /DROP TABLE|DELETE FROM/i);
 });

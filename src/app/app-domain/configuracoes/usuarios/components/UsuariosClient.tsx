@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { UserCog, Plus, Search, Shield, X } from "lucide-react";
-import { upsertUsuario, toggleUsuarioStatus } from "../actions";
+import { UserCog, Plus, Search, Shield, Trash2, X } from "lucide-react";
+import { deleteUsuario, upsertUsuario, toggleUsuarioStatus } from "../actions";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
 
-type Perfil = { id: string; nome: string; codigo: string | null };
+type Perfil = { id: string; nome: string; codigo: string };
 type Modulo = { id: string; nome: string; codigo: string };
 type UsuarioModulo = { moduloId: string; canView: boolean; canEdit: boolean };
 type Usuario = {
@@ -40,6 +40,7 @@ export default function UsuariosClient({
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   
   const [formData, setFormData] = useState<{
     id?: string;
@@ -129,6 +130,15 @@ export default function UsuariosClient({
     if (result.error) alert(result.error);
   }
 
+  async function handleDelete(usuario: Usuario) {
+    if (!window.confirm(`Excluir o usuário "${usuario.nome}"? Esta ação não pode ser desfeita.`)) return;
+
+    setDeletingId(usuario.id);
+    const result = await deleteUsuario(usuario.id);
+    if (result.error) alert(result.error);
+    setDeletingId(null);
+  }
+
   return (
     <PageFrame className="space-y-3 px-1 py-1 md:px-2">
       <PageHeader
@@ -187,12 +197,22 @@ export default function UsuariosClient({
                     </button>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button 
-                      onClick={() => openEditModal(u)}
-                      className="text-gray-600 hover:text-gray-900 font-medium text-sm"
-                    >
-                      Editar
-                    </button>
+                    <div className="inline-flex items-center gap-3">
+                      <button
+                        onClick={() => openEditModal(u)}
+                        className="text-gray-600 hover:text-gray-900 font-medium text-sm dark:text-gray-300 dark:hover:text-white"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => handleDelete(u)}
+                        disabled={deletingId === u.id}
+                        className="inline-flex items-center gap-1 text-rose-700 hover:text-rose-900 disabled:cursor-not-allowed disabled:opacity-70 font-medium text-sm dark:text-rose-300 dark:hover:text-rose-200"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        {deletingId === u.id ? "Excluindo..." : "Excluir"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

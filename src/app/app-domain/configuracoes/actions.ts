@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
@@ -143,6 +144,7 @@ export async function createPerfil(data: {
   const prisma = await getTenantPrisma();
   await prisma.configuracaoPerfil.create({
     data: {
+      codigo: `CUSTOM_${randomUUID().replaceAll("-", "")}`,
       nome: data.nome,
       descricao: data.descricao || null,
       permissoes: data.permissoes,

@@ -6060,7 +6060,7 @@ model IntegrationRun {
 
 model ConfiguracaoPerfil {
   id         String  @id @default(cuid())
-  codigo     String? @unique
+  codigo     String  @unique
   nome       String // Administrador Municipal, Gestor, Operador
   descricao  String?
   permissoes String // JSON string with permissions

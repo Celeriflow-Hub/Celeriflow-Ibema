@@ -9,6 +9,7 @@ import {
   requestAccountingMonthClose,
   type FinanceActor,
 } from "../src/lib/financeiro";
+import { pocFixture } from "../src/lib/poc/fixture-catalog";
 
 const demoProfileId = "perfil-poc-financeiro-demonstracao";
 const year2025 = 2025;
@@ -175,13 +176,13 @@ async function seedClosed2025History(financialYearId: string, requester: Finance
 
 async function main() {
   await prisma.configuracaoPerfil.upsert({
-    where: { id: demoProfileId },
-    create: { id: demoProfileId, nome: "Financeiro Demonstração POC", permissoes: JSON.stringify({ ALL: true }), ativo: true },
-    update: { nome: "Financeiro Demonstração POC", permissoes: JSON.stringify({ ALL: true }), ativo: true },
+    where: { codigo: "POC_FINANCEIRO_DEMONSTRACAO" },
+    create: { id: demoProfileId, codigo: "POC_FINANCEIRO_DEMONSTRACAO", nome: "Equipe Financeira da POC", permissoes: JSON.stringify({ ALL: true }), ativo: true },
+    update: { codigo: "POC_FINANCEIRO_DEMONSTRACAO", nome: "Equipe Financeira da POC", permissoes: JSON.stringify({ ALL: true }), ativo: true },
   });
   const [requester, authorizer, accounts] = await Promise.all([
-    ensureDemoActor({ cpf: "900.000.000-01", email: "contabilidade.poc@celeriflow.local", name: "Contabilidade POC" }),
-    ensureDemoActor({ cpf: "900.000.000-02", email: "controle.poc@celeriflow.local", name: "Controle Interno POC" }),
+    ensureDemoActor({ cpf: "900.000.000-01", email: `contabilidade.poc@${pocFixture.emailDomain}`, name: "Equipe de Contabilidade" }),
+    ensureDemoActor({ cpf: "900.000.000-02", email: `controle.interno.poc@${pocFixture.emailDomain}`, name: "Equipe de Controle Interno" }),
     ensureAccountingDemoAccounts(),
   ]);
   const financialYear2025 = await prisma.financialYear.upsert({

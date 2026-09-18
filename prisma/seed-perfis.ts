@@ -32,25 +32,16 @@ async function main() {
   ];
 
   for (const perfil of perfis) {
-    const existing = await prisma.configuracaoPerfil.findFirst({
-      where: { nome: perfil.nome }
+    await prisma.configuracaoPerfil.upsert({
+      where: { codigo: perfil.codigo },
+      create: perfil,
+      update: {
+        nome: perfil.nome,
+        descricao: perfil.descricao,
+        permissoes: perfil.permissoes,
+        ativo: perfil.ativo,
+      },
     });
-
-    if (existing) {
-      await prisma.configuracaoPerfil.update({
-        where: { id: existing.id },
-        data: {
-          descricao: perfil.descricao,
-          codigo: perfil.codigo,
-          permissoes: perfil.permissoes,
-          ativo: perfil.ativo,
-        }
-      });
-    } else {
-      await prisma.configuracaoPerfil.create({
-        data: perfil
-      });
-    }
     console.log(`✅ Perfil "${perfil.nome}" criado/atualizado.`);
   }
 

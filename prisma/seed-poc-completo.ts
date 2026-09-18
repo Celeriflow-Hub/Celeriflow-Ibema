@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { generateInternalReportDataset, reportDatasetCsv } from "../src/lib/financeiro/report-delivery";
 import { publicFinancialReportDocumentType } from "../src/lib/transparencia/portal-public";
+import { pocFixture, pocFixtureUsers, syntheticAddress, syntheticCnpj, syntheticCpf, syntheticPhone } from "../src/lib/poc/fixture-catalog";
 
 function ensureSampleFiles() {
   const docsDir = path.join(process.cwd(), "public", "docs");
@@ -47,6 +48,22 @@ function ensureSampleFiles() {
     fs.writeFileSync(filePath, buffer);
   }
   console.log("📁 Arquivos de exemplo criados em /public/docs e /public/uploads");
+}
+
+async function upsertPocUser(input: { email: string; legacyEmail?: string; name: string; perfilId: string }) {
+  const existing = await prisma.usuario.findUnique({ where: { email: input.email } })
+    ?? (input.legacyEmail ? await prisma.usuario.findUnique({ where: { email: input.legacyEmail } }) : null);
+
+  if (existing) {
+    return prisma.usuario.update({
+      where: { id: existing.id },
+      data: { email: input.email, nome: input.name, perfilId: input.perfilId, ativo: true },
+    });
+  }
+
+  return prisma.usuario.create({
+    data: { email: input.email, nome: input.name, perfilId: input.perfilId, ativo: true },
+  });
 }
 
 async function main() {
@@ -103,53 +120,55 @@ async function main() {
   // ---------------------------------------------------------------------------
   const ugPrefeitura = await prisma.budgetUnit.upsert({
     where: { code: "0101" },
-    create: { code: "0101", name: "Prefeitura Municipal de São João do Ivaí", secretariatId: secFinancas.id },
-    update: { name: "Prefeitura Municipal de São João do Ivaí" },
+    create: { code: "0101", name: pocFixture.cityHallName, secretariatId: secFinancas.id },
+    update: { name: pocFixture.cityHallName },
   });
 
   const ugCamara = await prisma.budgetUnit.upsert({
     where: { code: "0201" },
-    create: { code: "0201", name: "Câmara Municipal de São João do Ivaí", secretariatId: secFinancas.id },
-    update: { name: "Câmara Municipal de São João do Ivaí" },
+    create: { code: "0201", name: pocFixture.chamberName, secretariatId: secFinancas.id },
+    update: { name: pocFixture.chamberName },
   });
 
   // ---------------------------------------------------------------------------
   // 3. Perfis e Usuários (AcessoFlow)
   // ---------------------------------------------------------------------------
   const perfilAdmin = await prisma.configuracaoPerfil.upsert({
-    where: { id: "perfil-admin-poc" },
+    where: { codigo: "SYSTEM_ADMINISTRATOR" },
     create: { id: "perfil-admin-poc", codigo: "SYSTEM_ADMINISTRATOR", nome: "Administrador Geral", ativo: true, permissoes: '{"acesso":"operacional","modules":{}}' },
     update: { codigo: "SYSTEM_ADMINISTRATOR", nome: "Administrador Geral", ativo: true, permissoes: '{"acesso":"operacional","modules":{}}' },
   });
 
   const perfilGestor = await prisma.configuracaoPerfil.upsert({
-    where: { id: "perfil-gestor-poc" },
-    create: { id: "perfil-gestor-poc", nome: "Gestor Municipal", ativo: true, permissoes: '{"GESTAO": true, "FINANCEIRO": true}' },
-    update: { nome: "Gestor Municipal" },
+    where: { codigo: "POC_GESTOR_MUNICIPAL" },
+    create: { id: "perfil-gestor-poc", codigo: "POC_GESTOR_MUNICIPAL", nome: "Gestor Municipal", ativo: true, permissoes: '{"GESTAO": true, "FINANCEIRO": true}' },
+    update: { codigo: "POC_GESTOR_MUNICIPAL", nome: "Gestor Municipal" },
   });
 
   const perfilServidor = await prisma.configuracaoPerfil.upsert({
-    where: { id: "perfil-servidor-poc" },
-    create: { id: "perfil-servidor-poc", nome: "Servidor Operador", ativo: true, permissoes: '{"OPERACAO": true}' },
-    update: { nome: "Servidor Operador" },
+    where: { codigo: "POC_SERVIDOR_OPERADOR" },
+    create: { id: "perfil-servidor-poc", codigo: "POC_SERVIDOR_OPERADOR", nome: "Servidor Operador", ativo: true, permissoes: '{"OPERACAO": true}' },
+    update: { codigo: "POC_SERVIDOR_OPERADOR", nome: "Servidor Operador" },
   });
 
   const perfilContador = await prisma.configuracaoPerfil.upsert({
-    where: { id: "perfil-contador-poc" },
-    create: { id: "perfil-contador-poc", nome: "Contador Responsável", ativo: true, permissoes: '{"FINANCEIRO": true}' },
-    update: { nome: "Contador Responsável" },
+    where: { codigo: "POC_CONTADOR" },
+    create: { id: "perfil-contador-poc", codigo: "POC_CONTADOR", nome: "Contador Responsável", ativo: true, permissoes: '{"FINANCEIRO": true}' },
+    update: { codigo: "POC_CONTADOR", nome: "Contador Responsável" },
   });
 
   const perfilCidadao = await prisma.configuracaoPerfil.upsert({
-    where: { id: "perfil-cidadao-poc" },
+    where: { codigo: "POC_CIDADAO" },
     create: {
       id: "perfil-cidadao-poc",
+      codigo: "POC_CIDADAO",
       nome: "Cidadão",
       descricao: "Acesso à Ouvidoria e ao Portal da Transparência.",
       ativo: true,
       permissoes: JSON.stringify({ acesso: "cidadao", modulosPermitidos: ["OUVIDORIA", "TRANSPARENCIA"] }),
     },
     update: {
+      codigo: "POC_CIDADAO",
       nome: "Cidadão",
       descricao: "Acesso à Ouvidoria e ao Portal da Transparência.",
       ativo: true,
@@ -157,16 +176,7 @@ async function main() {
     },
   });
 
-  const usuarioAdmin = await prisma.usuario.upsert({
-    where: { email: "adminteste@email.com" },
-    create: {
-      email: "adminteste@email.com",
-      nome: "Admin Teste",
-      perfilId: perfilAdmin.id,
-      ativo: true,
-    },
-    update: { nome: "Admin Teste", perfilId: perfilAdmin.id, ativo: true },
-  });
+  const usuarioAdmin = await upsertPocUser({ ...pocFixtureUsers.admin, perfilId: perfilAdmin.id });
 
   await prisma.usuarioUnidadeGestora.upsert({
     where: { usuarioId_budgetUnitId: { usuarioId: usuarioAdmin.id, budgetUnitId: ugPrefeitura.id } },
@@ -179,74 +189,60 @@ async function main() {
     update: {},
   });
 
-  const usuarioGestor = await prisma.usuario.upsert({
-    where: { email: "gestao1@email.com" },
-    create: { email: "gestao1@email.com", nome: "Gestão 1", perfilId: perfilGestor.id, ativo: true },
-    update: { nome: "Gestão 1", perfilId: perfilGestor.id, ativo: true },
-  });
+  const usuarioGestor = await upsertPocUser({ ...pocFixtureUsers.manager, perfilId: perfilGestor.id });
   await prisma.usuarioUnidadeGestora.upsert({
     where: { usuarioId_budgetUnitId: { usuarioId: usuarioGestor.id, budgetUnitId: ugPrefeitura.id } },
     create: { usuarioId: usuarioGestor.id, budgetUnitId: ugPrefeitura.id },
     update: {},
   });
 
-  const usuarioServidor = await prisma.usuario.upsert({
-    where: { email: "servidor1@email.com" },
-    create: { email: "servidor1@email.com", nome: "Servidor 1", perfilId: perfilServidor.id, ativo: true },
-    update: { nome: "Servidor 1", perfilId: perfilServidor.id, ativo: true },
-  });
+  const usuarioServidor = await upsertPocUser({ ...pocFixtureUsers.operator, perfilId: perfilServidor.id });
   await prisma.usuarioUnidadeGestora.upsert({
     where: { usuarioId_budgetUnitId: { usuarioId: usuarioServidor.id, budgetUnitId: ugPrefeitura.id } },
     create: { usuarioId: usuarioServidor.id, budgetUnitId: ugPrefeitura.id },
     update: {},
   });
 
-  const usuarioContador = await prisma.usuario.upsert({
-    where: { email: "contadorteste@email.com" },
-    create: { email: "contadorteste@email.com", nome: "Contador Teste", perfilId: perfilContador.id, ativo: true },
-    update: { nome: "Contador Teste", perfilId: perfilContador.id, ativo: true },
-  });
+  const usuarioContador = await upsertPocUser({ ...pocFixtureUsers.accountant, perfilId: perfilContador.id });
   await prisma.usuarioUnidadeGestora.upsert({
     where: { usuarioId_budgetUnitId: { usuarioId: usuarioContador.id, budgetUnitId: ugPrefeitura.id } },
     create: { usuarioId: usuarioContador.id, budgetUnitId: ugPrefeitura.id },
     update: {},
   });
 
-  const usuarioCidadao1 = await prisma.usuario.upsert({
-    where: { email: "pessoateste1@email.com" },
-    create: { email: "pessoateste1@email.com", nome: "Pessoa Teste1", perfilId: perfilCidadao.id, ativo: true },
-    update: { nome: "Pessoa Teste1", perfilId: perfilCidadao.id, ativo: true },
-  });
+  const usuarioCidadao1 = await upsertPocUser({ ...pocFixtureUsers.citizenOne, perfilId: perfilCidadao.id });
 
-  const usuarioCidadao2 = await prisma.usuario.upsert({
-    where: { email: "pessoateste2@email.com" },
-    create: { email: "pessoateste2@email.com", nome: "Pessoa Teste2", perfilId: perfilCidadao.id, ativo: true },
-    update: { nome: "Pessoa Teste2", perfilId: perfilCidadao.id, ativo: true },
-  });
+  const usuarioCidadao2 = await upsertPocUser({ ...pocFixtureUsers.citizenTwo, perfilId: perfilCidadao.id });
 
   await prisma.usuarioUnidadeGestora.deleteMany({
     where: { usuarioId: { in: [usuarioCidadao1.id, usuarioCidadao2.id] } },
   });
 
+  await Promise.all([
+    pocFixtureUsers.evaluatorTechnology,
+    pocFixtureUsers.evaluatorFinance,
+    pocFixtureUsers.evaluatorAccounting,
+  ].map((user) => upsertPocUser({ ...user, perfilId: perfilGestor.id })));
+
   // ---------------------------------------------------------------------------
   // 4. Pessoas, Empresas, Fornecedores
   // ---------------------------------------------------------------------------
   const pessoaFisica1 = await prisma.person.upsert({
-    where: { cpf: "111.111.111-11" },
-    create: { id: "person-teste-01", fullName: "Pessoa Teste1", cpf: "111.111.111-11", email: "pessoateste1@email.com" },
-    update: { fullName: "Pessoa Teste1" },
+    where: { id: "person-teste-01" },
+    create: { id: "person-teste-01", fullName: pocFixtureUsers.citizenOne.name, cpf: syntheticCpf(901), email: pocFixtureUsers.citizenOne.email, phonePrimary: syntheticPhone(901) },
+    update: { fullName: pocFixtureUsers.citizenOne.name, cpf: syntheticCpf(901), email: pocFixtureUsers.citizenOne.email, phonePrimary: syntheticPhone(901) },
   });
 
   const pessoaFisica2 = await prisma.person.upsert({
-    where: { cpf: "222.222.222-22" },
-    create: { id: "person-teste-02", fullName: "Pessoa Teste2", cpf: "222.222.222-22", email: "pessoateste2@email.com" },
-    update: { fullName: "Pessoa Teste2" },
+    where: { id: "person-teste-02" },
+    create: { id: "person-teste-02", fullName: pocFixtureUsers.citizenTwo.name, cpf: syntheticCpf(902), email: pocFixtureUsers.citizenTwo.email },
+    update: { fullName: pocFixtureUsers.citizenTwo.name, cpf: syntheticCpf(902), email: pocFixtureUsers.citizenTwo.email },
   });
 
   const empresaTeste = await prisma.company.upsert({
-    where: { cnpj: "00.000.000/0001-91" },
-    create: { id: "company-teste-01", cnpj: "00.000.000/0001-91", corporateName: "Empresa Teste Ltda", tradeName: "Empresa Teste", emailPrimary: "empresateste@email.com" },
-    update: { corporateName: "Empresa Teste Ltda" },
+    where: { id: "company-teste-01" },
+    create: { id: "company-teste-01", cnpj: syntheticCnpj(901), corporateName: "Veredas Suprimentos Ltda.", tradeName: "Veredas Suprimentos", emailPrimary: `contato@veredassuprimentos.${pocFixture.emailDomain}` },
+    update: { cnpj: syntheticCnpj(901), corporateName: "Veredas Suprimentos Ltda.", tradeName: "Veredas Suprimentos", emailPrimary: `contato@veredassuprimentos.${pocFixture.emailDomain}` },
   });
 
   const fornecedor = await prisma.supplier.upsert({
@@ -257,15 +253,17 @@ async function main() {
 
   await prisma.creditor.upsert({
     where: { supplierId: fornecedor.id },
-    create: { supplierId: fornecedor.id, name: "Empresa Teste Ltda", document: "00.000.000/0001-91", companyId: empresaTeste.id },
-    update: { name: "Empresa Teste Ltda" },
+    create: { supplierId: fornecedor.id, name: "Veredas Suprimentos Ltda.", document: syntheticCnpj(901), companyId: empresaTeste.id },
+    update: { name: "Veredas Suprimentos Ltda.", document: syntheticCnpj(901), companyId: empresaTeste.id },
   });
 
-  const servidor = await prisma.employee.upsert({
-    where: { cpf: "333.333.333-33" },
-    create: { name: "Servidor 1", cpf: "333.333.333-33", secretariatId: secFinancas.id, departmentId: deptCompras.id, isActive: true },
-    update: { name: "Servidor 1" },
+  const servidorExistente = await prisma.employee.findFirst({
+    where: { OR: [{ cpf: "333.333.333-33" }, { cpf: syntheticCpf(903) }, { registration: "AV-ADM-0001" }] },
+    select: { id: true },
   });
+  const servidor = servidorExistente
+    ? await prisma.employee.update({ where: { id: servidorExistente.id }, data: { name: "Eduardo Faria", cpf: syntheticCpf(903), registration: "AV-ADM-0001", email: `eduardo.faria@${pocFixture.emailDomain}`, secretariatId: secFinancas.id, departmentId: deptCompras.id, isActive: true } })
+    : await prisma.employee.create({ data: { id: "employee-poc-01", name: "Eduardo Faria", cpf: syntheticCpf(903), registration: "AV-ADM-0001", email: `eduardo.faria@${pocFixture.emailDomain}`, secretariatId: secFinancas.id, departmentId: deptCompras.id, isActive: true } });
 
   // ---------------------------------------------------------------------------
   // 5. Orçamento e Finanças
@@ -318,9 +316,9 @@ async function main() {
     where: { id: "cl-lagoaseca-bb-pref-1000" },
     create: {
       id: "cl-lagoaseca-bb-pref-1000",
-      bankName: "Banco do Brasil S.A.",
-      agency: "1234-5",
-      accountNumber: "10000-1",
+      bankName: pocFixture.bankName,
+      agency: "0412-0",
+      accountNumber: "01010-6",
       accountType: "Movimento",
       currentBalanceDecimal: new Prisma.Decimal("800000.00"),
       currentBalance: 800000,
@@ -328,7 +326,7 @@ async function main() {
       budgetUnitId: ugPrefeitura.id,
       isActive: true,
     },
-    update: { currentBalanceDecimal: new Prisma.Decimal("800000.00"), currentBalance: 800000, isActive: true },
+    update: { bankName: pocFixture.bankName, agency: "0412-0", accountNumber: "01010-6", currentBalanceDecimal: new Prisma.Decimal("800000.00"), currentBalance: 800000, isActive: true },
   });
 
   // ---------------------------------------------------------------------------
@@ -396,41 +394,41 @@ async function main() {
     where: { number: "CONV-2026/001" },
     create: {
       number: "CONV-2026/001",
-      grantor: "Ministério da Saúde / FNS",
-      description: "Apoio ao Programa Saúde da Família em Lagoa Seca/PB",
+      grantor: "Fundo Estadual de Desenvolvimento Municipal",
+      description: "Apoio à ampliação da atenção primária em Aurora das Veredas/MG",
       totalValueDecimal: new Prisma.Decimal(500000),
       startDate: new Date("2026-01-01T00:00:00.000Z"),
       endDate: new Date("2026-12-31T23:59:59.999Z"),
       status: "Ativo",
     },
-    update: { status: "Ativo" },
+    update: { grantor: "Fundo Estadual de Desenvolvimento Municipal", description: "Apoio à ampliação da atenção primária em Aurora das Veredas/MG", totalValueDecimal: new Prisma.Decimal(500000), status: "Ativo" },
   });
 
   await prisma.publicityCampaign.upsert({
-    where: { name: "Campanha Lagoa Seca Transparente 2026" },
+    where: { name: "Campanha Aurora Transparente 2026" },
     create: {
-      name: "Campanha Lagoa Seca Transparente 2026",
-      agency: "Agência Pública de Comunicação S/A",
+      name: "Campanha Aurora Transparente 2026",
+      agency: "Veredas Comunicação Institucional Ltda.",
       contractNumber: "CONT-2026/001",
       approvedBudgetDecimal: new Prisma.Decimal(120000),
       startDate: new Date("2026-01-01T00:00:00.000Z"),
       endDate: new Date("2026-12-31T23:59:59.999Z"),
       status: "Ativa",
     },
-    update: { status: "Ativa" },
+    update: { agency: "Veredas Comunicação Institucional Ltda.", contractNumber: "CONT-2026/001", approvedBudgetDecimal: new Prisma.Decimal(120000), status: "Ativa" },
   });
 
   await prisma.fundedDebt.upsert({
     where: { lawNumber: "Lei-482/2020" },
     create: {
-      creditorName: "Caixa Econômica Federal - FINISA",
+      creditorName: "Agência de Desenvolvimento Municipal de Minas Gerais",
       lawNumber: "Lei-482/2020",
-      contractNumber: "FINISA-004/2020",
+      contractNumber: "ADM-004/2020",
       principalValueDecimal: new Prisma.Decimal(1500000),
       amortizationSchedule: "Mensal 120 parcelas com carência de 24 meses",
       status: "Ativa",
     },
-    update: { status: "Ativa" },
+    update: { creditorName: "Agência de Desenvolvimento Municipal de Minas Gerais", contractNumber: "ADM-004/2020", principalValueDecimal: new Prisma.Decimal(1500000), amortizationSchedule: "Mensal em 120 parcelas, com carência de 24 meses", status: "Ativa" },
   });
 
   // ---------------------------------------------------------------------------
@@ -438,8 +436,8 @@ async function main() {
   // ---------------------------------------------------------------------------
   const almoxarifadoCentral = await prisma.warehouse.upsert({
     where: { id: "almox-central" },
-    create: { id: "almox-central", name: "Almoxarifado Central Municipal", address: "Rua Um, 10, Centro, Lagoa Seca - PB" },
-    update: { name: "Almoxarifado Central Municipal" },
+    create: { id: "almox-central", name: "Almoxarifado Central de Aurora das Veredas", address: syntheticAddress(701) },
+    update: { name: "Almoxarifado Central de Aurora das Veredas", address: syntheticAddress(701) },
   });
 
   const categoriaMaterial = await prisma.materialCategory.upsert({
@@ -465,8 +463,8 @@ async function main() {
   // ---------------------------------------------------------------------------
   const escolaMunicipal = await prisma.school.upsert({
     where: { inepCode: "25000001" },
-    create: { inepCode: "25000001", name: "Escola Municipal Teste", capacity: 300, isActive: true },
-    update: { name: "Escola Municipal Teste" },
+    create: { inepCode: "25000001", name: "Escola Municipal Caminhos do Saber", capacity: 300, isActive: true },
+    update: { name: "Escola Municipal Caminhos do Saber", capacity: 300, isActive: true },
   });
 
   const aluno = await prisma.student.upsert({
@@ -492,8 +490,8 @@ async function main() {
   // ---------------------------------------------------------------------------
   const ubsCentro = await prisma.healthUnit.upsert({
     where: { cnes: "CNES-001" },
-    create: { cnes: "CNES-001", name: "UBS Teste 1 - Centro", type: "Unidade Básica de Saúde" },
-    update: { name: "UBS Teste 1 - Centro" },
+    create: { cnes: "CNES-001", name: "UBS Doutora Lúcia Ribeiro - Centro", type: "Unidade Básica de Saúde" },
+    update: { name: "UBS Doutora Lúcia Ribeiro - Centro", type: "Unidade Básica de Saúde" },
   });
 
   const paciente = await prisma.patient.upsert({
@@ -504,8 +502,8 @@ async function main() {
 
   const profissionalSaude = await prisma.healthProfessional.upsert({
     where: { employeeId: servidor.id },
-    create: { employeeId: servidor.id, councilName: "CRM", councilNumber: "CRM-PB 12345", specialty: "Médico de Família", isActive: true },
-    update: { specialty: "Médico de Família" },
+    create: { employeeId: servidor.id, councilName: "CRM", councilNumber: "CRM-MG 12345", specialty: "Médico de Família", isActive: true },
+    update: { councilName: "CRM", councilNumber: "CRM-MG 12345", specialty: "Médico de Família", isActive: true },
   });
 
   await prisma.healthAppointment.upsert({
@@ -527,8 +525,8 @@ async function main() {
   // ---------------------------------------------------------------------------
   const crasCentro = await prisma.socialUnit.upsert({
     where: { id: "cras-centro-01" },
-    create: { id: "cras-centro-01", name: "CRAS Teste - Centro", type: "CRAS", isActive: true },
-    update: { name: "CRAS Teste - Centro" },
+    create: { id: "cras-centro-01", name: "CRAS Jardim das Acácias", type: "CRAS", isActive: true },
+    update: { name: "CRAS Jardim das Acácias", isActive: true },
   });
 
   const familiaSocial = await prisma.socialFamily.upsert({
@@ -556,8 +554,8 @@ async function main() {
   // ---------------------------------------------------------------------------
   const empreendimento = await prisma.envEnterprise.upsert({
     where: { id: "emp-env-01" },
-    create: { id: "emp-env-01", name: "Empreendimento Comercial Teste", activityType: "Comércio", status: "Ativo" },
-    update: {},
+    create: { id: "emp-env-01", name: "Cooperativa Agroecológica das Veredas", activityType: "Beneficiamento de produtos agrícolas", status: "Ativo" },
+    update: { name: "Cooperativa Agroecológica das Veredas", activityType: "Beneficiamento de produtos agrícolas", status: "Ativo" },
   });
 
   await prisma.envLicense.upsert({
@@ -581,13 +579,13 @@ async function main() {
     create: {
       id: "obra-01",
       numero: "OBRA-2026/001",
-      nome: "Reforma da Praça Central",
-      local: "Rua Um, 10, Centro, Lagoa Seca - PB",
+      nome: "Revitalização da Praça das Araucárias",
+      local: syntheticAddress(801),
       tipo: "Reforma",
       valorEstimado: 150000,
       status: "Em Execução",
     },
-    update: { status: "Em Execução" },
+    update: { nome: "Revitalização da Praça das Araucárias", local: syntheticAddress(801), status: "Em Execução" },
   });
 
   // ---------------------------------------------------------------------------
@@ -595,8 +593,8 @@ async function main() {
   // ---------------------------------------------------------------------------
   const agenteCultural = await prisma.culturaAgente.upsert({
     where: { id: "agente-cult-01" },
-    create: { id: "agente-cult-01", nome: "Agente Cultural Teste", personId: pessoaFisica1.id, tipo: "Artista Individual", segmento: "Música" },
-    update: {},
+    create: { id: "agente-cult-01", nome: "Coletivo Sons das Veredas", personId: pessoaFisica1.id, tipo: "Coletivo Cultural", segmento: "Música e patrimônio imaterial" },
+    update: { nome: "Coletivo Sons das Veredas", tipo: "Coletivo Cultural", segmento: "Música e patrimônio imaterial" },
   });
 
   await prisma.culturaProjeto.upsert({
@@ -618,8 +616,8 @@ async function main() {
   // ---------------------------------------------------------------------------
   const guardaMunicipal = await prisma.segurancaGuarda.upsert({
     where: { matricula: "GCM-001" },
-    create: { matricula: "GCM-001", nome: "Guarda Municipal 1", tipo: "Guarda Municipal", status: "Ativo", isActive: true },
-    update: { status: "Ativo" },
+    create: { matricula: "GCM-001", nome: "Inspetora Renata Silva", tipo: "Guarda Municipal", status: "Ativo", isActive: true },
+    update: { nome: "Inspetora Renata Silva", status: "Ativo", isActive: true },
   });
 
   await prisma.segurancaOcorrencia.upsert({
@@ -641,13 +639,13 @@ async function main() {
     where: { code: "UC-00100" },
     create: {
       code: "UC-00100",
-      address: "Rua Um, 10, Centro, Lagoa Seca - PB",
+      address: syntheticAddress(901),
       category: "Residencial",
       status: "Ativa",
-      ownerName: "Pessoa Teste1",
-      ownerDocument: "111.111.111-11",
+      ownerName: pocFixtureUsers.citizenOne.name,
+      ownerDocument: syntheticCpf(901),
     },
-    update: { status: "Ativa" },
+    update: { address: syntheticAddress(901), ownerName: pocFixtureUsers.citizenOne.name, ownerDocument: syntheticCpf(901), status: "Ativa" },
   });
 
   await prisma.sanWaterMeter.upsert({
@@ -690,11 +688,11 @@ async function main() {
       id: "ver-01",
       legislaturaId: legislatura.id,
       personId: pessoaFisica1.id,
-      nomeCompleto: "Pessoa Teste1",
-      nomeParlamentar: "Vereador Teste 1",
-      partido: "PARTIDO TESTE",
+      nomeCompleto: "Joana Martins",
+      nomeParlamentar: "Joana das Veredas",
+      partido: "Partido Municipal Cidadão",
     },
-    update: { nomeParlamentar: "Vereador Teste 1" },
+    update: { legislaturaId: legislatura.id, personId: pessoaFisica1.id, nomeCompleto: "Joana Martins", nomeParlamentar: "Joana das Veredas", partido: "Partido Municipal Cidadão" },
   });
 
   await prisma.camProposicao.upsert({
@@ -714,26 +712,26 @@ async function main() {
   // ---------------------------------------------------------------------------
   await prisma.document.upsert({
     where: { id: "doc-sample-pdf" },
-    create: { id: "doc-sample-pdf", title: "Documento de Teste PDF - GED", documentType: "Relatorio Tecnico", fileUrl: "/docs/sample.pdf", status: "Válido" },
-    update: {},
+    create: { id: "doc-sample-pdf", title: "Dado fictício POC - Relatório técnico de vistoria", documentType: "Relatorio Tecnico", fileUrl: "/docs/sample.pdf", status: "Válido" },
+    update: { title: "Dado fictício POC - Relatório técnico de vistoria", status: "Válido" },
   });
 
   await prisma.document.upsert({
     where: { id: "doc-sample-docx" },
-    create: { id: "doc-sample-docx", title: "Documento de Teste Word - GED", documentType: "Termo de Referencia", fileUrl: "/docs/sample.docx", status: "Válido" },
-    update: {},
+    create: { id: "doc-sample-docx", title: "Dado fictício POC - Termo de referência", documentType: "Termo de Referencia", fileUrl: "/docs/sample.docx", status: "Válido" },
+    update: { title: "Dado fictício POC - Termo de referência", status: "Válido" },
   });
 
   await prisma.document.upsert({
     where: { id: "doc-sample-png" },
-    create: { id: "doc-sample-png", title: "Imagem de Teste PNG - GED", documentType: "Comprovante", fileUrl: "/docs/sample.png", status: "Válido" },
-    update: {},
+    create: { id: "doc-sample-png", title: "Dado fictício POC - Registro fotográfico", documentType: "Comprovante", fileUrl: "/docs/sample.png", status: "Válido" },
+    update: { title: "Dado fictício POC - Registro fotográfico", status: "Válido" },
   });
 
   await prisma.document.upsert({
     where: { id: "doc-sample-jpg" },
-    create: { id: "doc-sample-jpg", title: "Imagem de Teste JPG - GED", documentType: "Vistoria", fileUrl: "/docs/sample.jpg", status: "Válido" },
-    update: {},
+    create: { id: "doc-sample-jpg", title: "Dado fictício POC - Vistoria de obra", documentType: "Vistoria", fileUrl: "/docs/sample.jpg", status: "Válido" },
+    update: { title: "Dado fictício POC - Vistoria de obra", status: "Válido" },
   });
 
   // ---------------------------------------------------------------------------

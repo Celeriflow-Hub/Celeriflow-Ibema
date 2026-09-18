@@ -7,9 +7,9 @@ import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 
 const defaultEmails = [
-  "adminteste@email.com",
-  "gestao1@email.com",
-  "contadorteste@email.com",
+  "marina.azevedo@aurora-das-veredas.poc.test",
+  "ricardo.mendonca@aurora-das-veredas.poc.test",
+  "helena.duarte@aurora-das-veredas.poc.test",
 ];
 
 function requiredEnvironment(name) {

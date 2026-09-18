@@ -36,7 +36,7 @@ async function main() {
 
   try {
     const profile = await prisma.configuracaoPerfil.upsert({
-      where: { id: "system-administrator" },
+      where: { codigo: SYSTEM_ADMIN_PROFILE_CODE },
       create: {
         id: "system-administrator",
         codigo: SYSTEM_ADMIN_PROFILE_CODE,

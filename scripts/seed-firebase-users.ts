@@ -15,6 +15,7 @@ import "dotenv/config";
 import { initializeApp, getApps, cert, App } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { prisma } from "../src/lib/prisma";
+import { pocFixtureUsers } from "../src/lib/poc/fixture-catalog";
 
 // ---------------------------------------------------------------------------
 // Inicializa Firebase Admin
@@ -44,52 +45,58 @@ if (!DEFAULT_PASSWORD) throw new Error("SEED_USER_PASSWORD deve ser configurada 
 
 const TEST_USERS = [
   {
-    email: "adminteste@email.com",
-    displayName: "Admin Teste",
+    email: pocFixtureUsers.admin.email,
+    displayName: pocFixtureUsers.admin.name,
     password: DEFAULT_PASSWORD,
     role: "Administrador Geral",
   },
   {
-    email: "gestao1@email.com",
-    displayName: "Gestão 1",
+    email: pocFixtureUsers.manager.email,
+    displayName: pocFixtureUsers.manager.name,
     password: DEFAULT_PASSWORD,
     role: "Gestor Municipal",
   },
   {
-    email: "servidor1@email.com",
-    displayName: "Servidor 1",
+    email: pocFixtureUsers.operator.email,
+    displayName: pocFixtureUsers.operator.name,
     password: DEFAULT_PASSWORD,
     role: "Servidor Operador",
   },
   {
-    email: "contadorteste@email.com",
-    displayName: "Contador Teste",
+    email: pocFixtureUsers.accountant.email,
+    displayName: pocFixtureUsers.accountant.name,
     password: DEFAULT_PASSWORD,
     role: "Contador Responsável",
   },
   {
-    email: "pessoateste1@email.com",
-    displayName: "Pessoa Teste1",
+    email: pocFixtureUsers.citizenOne.email,
+    displayName: pocFixtureUsers.citizenOne.name,
     password: DEFAULT_PASSWORD,
     role: "Cidadão",
   },
   {
-    email: "pessoateste2@email.com",
-    displayName: "Pessoa Teste2",
+    email: pocFixtureUsers.citizenTwo.email,
+    displayName: pocFixtureUsers.citizenTwo.name,
     password: DEFAULT_PASSWORD,
     role: "Cidadão",
   },
   {
-    email: "contador.prefeitura@lagoaseca.pb.gov.br",
-    displayName: "Contador Prefeitura Lagoa Seca",
+    email: pocFixtureUsers.evaluatorTechnology.email,
+    displayName: pocFixtureUsers.evaluatorTechnology.name,
     password: DEFAULT_PASSWORD,
-    role: "Contador Prefeitura",
+    role: "Avaliador de tecnologia",
   },
   {
-    email: "contador.camara@lagoaseca.pb.gov.br",
-    displayName: "Contador Câmara Lagoa Seca",
+    email: pocFixtureUsers.evaluatorFinance.email,
+    displayName: pocFixtureUsers.evaluatorFinance.name,
     password: DEFAULT_PASSWORD,
-    role: "Contador Câmara",
+    role: "Avaliador financeiro",
+  },
+  {
+    email: pocFixtureUsers.evaluatorAccounting.email,
+    displayName: pocFixtureUsers.evaluatorAccounting.name,
+    password: DEFAULT_PASSWORD,
+    role: "Avaliador contábil",
   },
 ];
 

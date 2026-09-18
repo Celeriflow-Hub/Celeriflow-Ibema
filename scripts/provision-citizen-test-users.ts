@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { prisma } from "../src/lib/prisma";
+import { pocFixtureUsers } from "../src/lib/poc/fixture-catalog";
 
 const configuredPassword = process.env.CITIZEN_TEST_PASSWORD;
 if (!configuredPassword) {
@@ -17,8 +18,8 @@ function hashPassword(value: string) {
 }
 
 const citizens = [
-  { email: "pessoateste1@email.com", name: "Pessoa Teste1" },
-  { email: "pessoateste2@email.com", name: "Pessoa Teste2" },
+  pocFixtureUsers.citizenOne,
+  pocFixtureUsers.citizenTwo,
 ];
 
 async function syncFirebaseUser(citizen: (typeof citizens)[number]) {
@@ -43,15 +44,17 @@ async function syncFirebaseUser(citizen: (typeof citizens)[number]) {
 
 async function main() {
   const perfil = await prisma.configuracaoPerfil.upsert({
-    where: { id: "perfil-cidadao-poc" },
+    where: { codigo: "POC_CIDADAO" },
     create: {
       id: "perfil-cidadao-poc",
+      codigo: "POC_CIDADAO",
       nome: "Cidadão",
       descricao: "Acesso à Ouvidoria e ao Portal da Transparência.",
       ativo: true,
       permissoes: JSON.stringify({ acesso: "cidadao", modulosPermitidos: ["OUVIDORIA", "TRANSPARENCIA"] }),
     },
     update: {
+      codigo: "POC_CIDADAO",
       nome: "Cidadão",
       descricao: "Acesso à Ouvidoria e ao Portal da Transparência.",
       ativo: true,

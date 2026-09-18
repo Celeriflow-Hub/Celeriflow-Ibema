@@ -5,7 +5,7 @@ import {
   ShieldCheck, Plus, Search, X, Pencil, CheckCircle2, SlidersHorizontal, 
   Building2, Users, FileText, HeadphonesIcon, ShoppingCart, FileSpreadsheet, DollarSign, 
   Package, Receipt, Stethoscope, GraduationCap, HeartHandshake, HardHat, 
-  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, Lock, CheckSquare, Square, Trash2
+  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, Lock, CheckSquare, Square, Trash2, Truck
 } from "lucide-react";
 import { deletePerfil, upsertPerfil, togglePerfilStatus } from "./actions";
 import { PageFrame } from "@/components/app-ui/PageFrame";
@@ -38,6 +38,7 @@ const MODULES_LIST = [
   { code: "EDUCACAO", label: "Educação Pública & Escolas", icon: GraduationCap, color: "text-yellow-500" },
   { code: "SOCIAL", label: "Assistência Social & CRAS", icon: HeartHandshake, color: "text-pink-500" },
   { code: "OBRAS", label: "Obras Públicas & Vistorias", icon: HardHat, color: "text-lime-500" },
+  { code: "FROTAS", label: "Frotas", icon: Truck, color: "text-teal-600" },
   { code: "MEIO_AMBIENTE", label: "Meio Ambiente & Licenciamento", icon: Trees, color: "text-emerald-600" },
   { code: "SEGURANCA", label: "Segurança Pública & Guarda Municipal", icon: Shield, color: "text-slate-500" },
   { code: "SANEAMENTO", label: "Saneamento, Água & Esgoto", icon: Droplets, color: "text-blue-600" },

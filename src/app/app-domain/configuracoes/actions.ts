@@ -115,6 +115,7 @@ export async function ensureDefaultModulos() {
     { codigo: "MEIO_AMBIENTE", nome: "Meio Ambiente & Licenciamento" },
     { codigo: "SANEAMENTO", nome: "Saneamento, Água & Esgoto" },
     { codigo: "OBRAS", nome: "Obras Públicas & Vistorias" },
+    { codigo: "FROTAS", nome: "Frotas" },
     { codigo: "CULTURA", nome: "Cultura, Esporte & Turismo" },
     { codigo: "CAMARA", nome: "Câmara Municipal & Legislação" },
     { codigo: "SEGURANCA", nome: "Segurança Pública & Guarda Municipal" },

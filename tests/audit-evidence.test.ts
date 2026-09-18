@@ -7,6 +7,11 @@ import { auditEventPageSize, buildAuditEventPageQuery, buildAuditEventWhere, cre
 import { prisma } from "../src/lib/prisma.ts";
 import { canEditModule, canPerformModuleOperation, canShowDashboardCard, canUseInactiveModule, canViewModule, isModuleBlockedForUser, isSystemAdministrator } from "../src/lib/platform/tenant-context.ts";
 
+const permissionUser: Parameters<typeof canViewModule>[0] = {
+  id: "permission-fixture", firebaseUid: "permission-fixture", email: "permission@example.invalid", name: "Operador", role: "Operador", profileCode: "OPERACIONAL",
+  permissions: "{}", modulePermissions: [], allowedBudgetUnitIds: [], employeeId: null, departmentId: null, secretariatId: null,
+};
+
 test("persists payload-free audit evidence with only actor, event, and target identifiers", async () => {
   let data: unknown;
   const prisma = {
@@ -159,14 +164,16 @@ test("limits audit-log consultation to the stable system administrator profile c
 
 test("uses the same profile permissions for dashboard visibility and route access", () => {
   const profileAuthorized = {
+    ...permissionUser,
     role: "Gestor",
-    profileCode: null,
+    profileCode: "GESTOR",
     permissions: JSON.stringify({ modulosPermitidos: ["FINANCEIRO", "COMPRAS"] }),
     modulePermissions: [],
   } as Parameters<typeof canViewModule>[0];
   const explicitlyBlocked = {
+    ...permissionUser,
     role: "Gestor",
-    profileCode: null,
+    profileCode: "GESTOR",
     permissions: JSON.stringify({ modulosBloqueados: ["COMPRAS"] }),
     modulePermissions: [{ code: "COMPRAS", canView: true, canEdit: true }],
   } as Parameters<typeof canViewModule>[0];
@@ -199,6 +206,7 @@ test("applies dashboard visibility, blocking, and operational module permissions
 
 test("shows every dashboard module to the protected system administrator", () => {
   const administrator = {
+    ...permissionUser,
     profileCode: "SYSTEM_ADMINISTRATOR",
     permissions: JSON.stringify({ acesso: "operacional", modules: {} }),
     modulePermissions: [],
@@ -210,8 +218,9 @@ test("shows every dashboard module to the protected system administrator", () =>
 
 test("requires the exact module operation for profiles using the granular matrix", () => {
   const profile = {
+    ...permissionUser,
     role: "Operador",
-    profileCode: null,
+    profileCode: "OPERACIONAL",
     permissions: JSON.stringify({
       modules: {
         CADASTROS: { showDashboardCard: true, blocked: false, create: true, update: false, delete: false, issueReports: true },
@@ -228,8 +237,9 @@ test("requires the exact module operation for profiles using the granular matrix
 
 test("does not allow financial cancellations from the create permission", () => {
   const profile = {
+    ...permissionUser,
     role: "Operador Financeiro",
-    profileCode: null,
+    profileCode: "OPERACIONAL",
     permissions: JSON.stringify({
       modules: {
         FINANCEIRO: { showDashboardCard: true, blocked: false, create: true, update: false, delete: false, issueReports: false },

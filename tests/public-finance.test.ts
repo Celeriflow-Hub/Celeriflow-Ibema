@@ -74,6 +74,7 @@ test("projeta despesa pública sem identificadores internos ou dados pessoais", 
   assert.equal(row.paidValue, 100);
   assert.equal(row.paidPaymentCount, 1);
   assert.equal(row.receiptNumber, "REC-2026-001");
+  assert.ok(row.receiptDate);
   assert.equal(row.receiptDate.toISOString(), "2026-01-31T00:00:00.000Z");
   assert.equal("id" in row, false);
   assert.equal("history" in row, false);
@@ -113,10 +114,10 @@ test("projeta receita arrecadada com classificação, fonte e unidade disponíve
 });
 
 test("executa conectores externos em modo mock sem chamada de rede", () => {
-  const result = runMockIntegration("SICONFI", "GERAR_REMESSA");
+  const result = runMockIntegration("SICONFI", "HEALTH_CHECK");
 
   assert.equal(result.status, "SUCESSO");
-  assert.equal(result.payload.simulated, true);
+  assert.equal(result.evidence.dispatch, "MOCK");
   assert.match(result.externalId, /^MOCK-SICONFI-/);
 });
 

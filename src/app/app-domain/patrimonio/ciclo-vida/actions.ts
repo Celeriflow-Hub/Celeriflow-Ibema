@@ -56,8 +56,10 @@ export async function registerAssetDisposal(input: {
     revalidatePath("/patrimonio/ciclo-vida");
     revalidatePath("/patrimonio/bens");
     revalidatePath("/patrimonio");
+    revalidatePath("/frotas");
+    revalidatePath("/patrimonio/bens", "layout");
     return { message: writeOff.integration.pending
-      ? "Baixa registrada. O resultado contábil ficou pendente de parametrização; nenhuma receita ou lançamento foi criado."
+      ? "Baixa registrada e frota vinculada inativada. O resultado contábil ficou pendente de parametrização; nenhuma receita ou lançamento foi criado."
       : "Baixa patrimonial registrada com a evidência de valor contábil." };
   } catch (error) {
     return { error: messageFor(error) };

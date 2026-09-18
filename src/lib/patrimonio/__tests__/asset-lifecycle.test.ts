@@ -40,7 +40,7 @@ test("records a configuration pending item instead of faking disposal accounting
   let status = "Ativo";
   const transaction = {
     asset: {
-      findUnique: async () => ({ id: "asset-1", status, currentValue: 75 }),
+      findUnique: async () => ({ id: "asset-1", status, currentValue: 75, maintenances: [] }),
       update: async ({ data }: { data: { status: string } }) => { status = data.status; },
     },
     assetWriteOff: {

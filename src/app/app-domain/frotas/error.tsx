@@ -1,0 +1,2 @@
+"use client";
+export default function FleetPageError({ reset }: { reset: () => void }) { return <div role="alert" className="space-y-3 rounded border border-slate-300 bg-white p-5 text-sm"><p>Não foi possível consultar Frotas. Verifique sua sessão, as permissões e a disponibilidade do sistema.</p><button onClick={reset} className="min-h-11 rounded bg-teal-700 px-4 text-white">Tentar novamente</button></div>; }

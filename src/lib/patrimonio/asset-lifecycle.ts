@@ -293,10 +293,11 @@ export async function recordAssetDisposal(db: PrismaClient, input: AssetDisposal
   return db.$transaction(async (tx) => {
     const asset = await tx.asset.findUnique({
       where: { id: input.assetId },
-      select: { id: true, status: true, currentValue: true, name: true },
+      select: { id: true, status: true, currentValue: true, name: true, maintenances: { where: { status: { in: ["Solicitada", "Em manutenção"] } }, select: { id: true }, take: 1 } },
     });
     if (!asset) throw new AssetLifecycleError("Bem patrimonial não encontrado.");
     if (asset.status === "Baixado") throw new AssetLifecycleError("Este bem já foi baixado.");
+    if (asset.maintenances.length) throw new AssetLifecycleError("Conclua as manutenções abertas antes da baixa patrimonial.");
 
     const existing = await tx.assetWriteOff.findFirst({ where: { assetId: asset.id }, select: { id: true } });
     if (existing) throw new AssetLifecycleError("Este bem já possui uma baixa registrada.");

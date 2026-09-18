@@ -51,6 +51,9 @@ export async function upsertPerfil(data: {
     if (data.id) {
       const existing = await prisma.configuracaoPerfil.findUnique({ where: { id: data.id } });
       if (!existing) return { error: "Perfil não encontrado." };
+      if (existing.codigo === SYSTEM_ADMIN_PROFILE_CODE) {
+        return { error: "O perfil técnico do administrador do sistema é gerenciado automaticamente." };
+      }
       
       await prisma.$transaction(async (tx) => {
         const profile = await tx.configuracaoPerfil.update({ where: { id: data.id }, data: { nome, descricao: data.descricao, permissoes: jsonPermissoes, ativo: data.ativo } });
@@ -76,10 +79,8 @@ export async function togglePerfilStatus(id: string, ativo: boolean) {
     const { prisma } = context;
     const perfil = await prisma.configuracaoPerfil.findUnique({ where: { id } });
     if (!perfil) return { error: "Perfil não encontrado." };
-    
-    if (!ativo && perfil.codigo === SYSTEM_ADMIN_PROFILE_CODE) {
-      const activeAdministrators = await prisma.usuario.count({ where: { ativo: true, perfilId: id } });
-      if (activeAdministrators > 0) return { error: "Não é possível desativar o perfil do administrador do sistema enquanto houver administradores ativos." };
+    if (perfil.codigo === SYSTEM_ADMIN_PROFILE_CODE) {
+      return { error: "O perfil técnico do administrador do sistema é gerenciado automaticamente." };
     }
     await prisma.$transaction(async (tx) => {
       await tx.configuracaoPerfil.update({ where: { id }, data: { ativo } });

@@ -1,4 +1,5 @@
 import { getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
+import { SYSTEM_ADMIN_PROFILE_CODE } from "@/lib/administration/c3-policy";
 import PerfisClient from "./PerfisClient";
 
 export const dynamic = "force-dynamic";
@@ -8,6 +9,7 @@ export default async function PerfisPage() {
 
   // Fetch profiles ordered by name
   const allPerfis = await prisma.configuracaoPerfil.findMany({
+    where: { codigo: { not: SYSTEM_ADMIN_PROFILE_CODE } },
     orderBy: { createdAt: "asc" },
     include: {
       usuarios: {

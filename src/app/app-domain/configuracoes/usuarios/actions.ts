@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { assertAdministratorLifecycleChange, isSystemAdministratorProfileCode, SYSTEM_ADMIN_PROFILE_CODE } from "@/lib/administration/c3-policy";
+import { assertAdministratorLifecycleChange, isSystemAdministratorEmail, isSystemAdministratorProfileCode, SYSTEM_ADMIN_PROFILE_CODE } from "@/lib/administration/c3-policy";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 import { AccessError, getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
 import { adminAuth } from "@/lib/firebase/server";
@@ -24,10 +24,16 @@ export async function upsertUsuario(data: {
 
     const email = data.email.trim().toLowerCase();
     if (!data.nome.trim() || !email) return { error: "Nome e e-mail são obrigatórios." };
+    if (isSystemAdministratorEmail(email) || isSystemAdministratorProfileCode(perfil.codigo)) {
+      return { error: "A conta técnica do administrador do sistema é gerenciada automaticamente." };
+    }
     const existing = data.id
       ? await prisma.usuario.findUnique({ where: { id: data.id }, include: { perfil: { select: { codigo: true } } } })
       : null;
     if (data.id && !existing) return { error: "Usuário não encontrado." };
+    if (existing && (isSystemAdministratorEmail(existing.email) || isSystemAdministratorProfileCode(existing.perfil.codigo))) {
+      return { error: "A conta técnica do administrador do sistema não pode ser alterada nesta tela." };
+    }
     const duplicateEmailUser = await prisma.usuario.findUnique({ where: { email }, select: { id: true } });
     if (duplicateEmailUser && duplicateEmailUser.id !== existing?.id) return { error: "Já existe um usuário com este e-mail." };
 
@@ -86,6 +92,9 @@ export async function toggleUsuarioStatus(id: string, ativo: boolean) {
     const { prisma } = context;
     const target = await prisma.usuario.findUnique({ where: { id }, include: { perfil: { select: { codigo: true } } } });
     if (!target) return { error: "Usuário não encontrado." };
+    if (isSystemAdministratorEmail(target.email) || isSystemAdministratorProfileCode(target.perfil.codigo)) {
+      return { error: "A conta técnica do administrador do sistema não pode ser desativada." };
+    }
     const activeSystemAdministratorCount = await prisma.usuario.count({ where: { ativo: true, perfil: { codigo: SYSTEM_ADMIN_PROFILE_CODE } } });
     try {
       assertAdministratorLifecycleChange({
@@ -119,6 +128,9 @@ export async function deleteUsuario(id: string) {
     const { prisma } = context;
     const target = await prisma.usuario.findUnique({ where: { id }, include: { perfil: { select: { codigo: true } } } });
     if (!target) return { error: "Usuário não encontrado." };
+    if (isSystemAdministratorEmail(target.email) || isSystemAdministratorProfileCode(target.perfil.codigo)) {
+      return { error: "A conta técnica do administrador do sistema não pode ser excluída." };
+    }
     if (target.id === context.user.id) return { error: "Você não pode excluir seu próprio usuário." };
 
     const activeSystemAdministratorCount = await prisma.usuario.count({ where: { ativo: true, perfil: { codigo: SYSTEM_ADMIN_PROFILE_CODE } } });

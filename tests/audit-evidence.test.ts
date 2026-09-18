@@ -197,6 +197,17 @@ test("applies dashboard visibility, blocking, and operational module permissions
   assert.equal(canEditModule(profile, "COMPRAS"), false);
 });
 
+test("shows every dashboard module to the protected system administrator", () => {
+  const administrator = {
+    profileCode: "SYSTEM_ADMINISTRATOR",
+    permissions: JSON.stringify({ acesso: "operacional", modules: {} }),
+    modulePermissions: [],
+  } as Parameters<typeof canShowDashboardCard>[0];
+
+  assert.equal(canShowDashboardCard(administrator, "PATRIMONIO"), true);
+  assert.equal(canShowDashboardCard(administrator, "CONFIGURACOES"), true);
+});
+
 test("requires the exact module operation for profiles using the granular matrix", () => {
   const profile = {
     role: "Operador",

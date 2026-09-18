@@ -1,6 +1,15 @@
 import { requireValidCep, requireValidCnpj } from "@/lib/identifiers/brazilian-identifiers";
 
 export const SYSTEM_ADMIN_PROFILE_CODE = "SYSTEM_ADMINISTRATOR";
+export const DEFAULT_SYSTEM_ADMIN_EMAIL = "admin@email.com";
+
+export function getSystemAdministratorEmail() {
+  return process.env.SYSTEM_ADMIN_EMAIL?.trim().toLowerCase() || DEFAULT_SYSTEM_ADMIN_EMAIL;
+}
+
+export function isSystemAdministratorEmail(email: string | null | undefined) {
+  return email?.trim().toLowerCase() === getSystemAdministratorEmail();
+}
 
 export type EmployeeHierarchyInput = {
   requestedSecretariatId: string | null;

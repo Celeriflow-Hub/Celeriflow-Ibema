@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getIdTokenPrincipal, getSessionPrincipal, SESSION_COOKIE_NAME, type SessionPrincipal } from "@/lib/platform/session";
 import type { PrismaClient } from "@prisma/client";
-import { SYSTEM_ADMIN_PROFILE_CODE } from "@/lib/administration/c3-policy";
+import { isSystemAdministratorEmail, SYSTEM_ADMIN_PROFILE_CODE } from "@/lib/administration/c3-policy";
 
 export { canIssueFinancialReports } from "@/lib/financeiro/report-access";
 
@@ -96,11 +96,13 @@ export function isModuleBlockedForUser(user: AppContext["user"], moduleCode: str
 }
 
 export function canShowDashboardCard(user: AppContext["user"], moduleCode: string) {
+  if (isSystemAdministrator(user)) return true;
+
   const codeUpper = moduleCode.toUpperCase();
   const rolePermissions = parseRolePermissions(user.permissions);
   const permission = getModuleProfilePermission(rolePermissions, codeUpper);
   if (permission) return permission.showDashboardCard;
-  return isSystemAdministrator(user) || canViewModule(user, codeUpper);
+  return canViewModule(user, codeUpper);
 }
 
 export function canViewModule(user: AppContext["user"], moduleCode: string) {
@@ -224,8 +226,9 @@ async function resolveUser(principal: SessionPrincipal | null): Promise<AppConte
     });
   }
 
-  const systemAdminEmail = process.env.SYSTEM_ADMIN_EMAIL?.trim().toLowerCase();
-  if (!usuario && systemAdminEmail && principal.email === systemAdminEmail) {
+  // The configured technical administrator is always repaired to the protected
+  // profile after Firebase has verified the identity, even if a stale row exists.
+  if (isSystemAdministratorEmail(principal.email)) {
     const profile = await prisma.configuracaoPerfil.upsert({
       where: { codigo: SYSTEM_ADMIN_PROFILE_CODE },
       create: {

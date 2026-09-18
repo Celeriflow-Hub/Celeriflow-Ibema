@@ -1,10 +1,15 @@
 import { getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
+import { getSystemAdministratorEmail, SYSTEM_ADMIN_PROFILE_CODE } from "@/lib/administration/c3-policy";
 import UsuariosClient from "./components/UsuariosClient";
 
 export default async function UsuariosPage() {
   const { prisma } = await getTenantContextForSystemAdministration();
   const [usuarios, perfis, modulos, servidores] = await Promise.all([
     prisma.usuario.findMany({
+      where: {
+        email: { not: getSystemAdministratorEmail() },
+        perfil: { codigo: { not: SYSTEM_ADMIN_PROFILE_CODE } },
+      },
       include: {
         perfil: true,
         permissoesModulo: true,

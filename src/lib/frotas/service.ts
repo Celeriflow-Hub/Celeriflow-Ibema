@@ -78,7 +78,7 @@ async function apply(tx: Tx, scope: FleetScope, input: FleetMutation): Promise<{
         const parent = await requireUnit(tx, scope, d.parentId);
         if (parent.id === d.id || parent.category === "AGREGADO" || parent.departmentId !== d.departmentId) throw new FleetError("Selecione uma unidade principal do mesmo setor, diferente do agregado.");
       }
-      if (d.assetId) {
+      if (d.assetId && d.assetId !== existing?.assetId) {
         if (!scope.canReadAssets) throw new FleetError("Seu perfil não permite consultar Patrimônio para criar esse vínculo.");
         const asset = await tx.asset.findFirst({ where: { id: d.assetId, departmentId: d.departmentId, status: { not: "Baixado" } }, select: { id: true } });
         if (!asset) throw new FleetError("O bem patrimonial deve estar ativo e pertencer ao mesmo setor.");

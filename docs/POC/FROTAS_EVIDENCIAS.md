@@ -47,6 +47,8 @@ Outro cenário cria 14 consumos: dois fora do período e 12 dentro dele. Consult
 
 Validações exercitadas incluem acesso próprio sem depender de Obras, perfil de consulta sem escrita, isolamento entre setores, usuário operacional sem setor, vínculo de unidade incompatível, repetição da confirmação, ocorrência repetida do plano e reversão de toda a transação quando a apropriação da despesa é forçada a falhar. Duas chamadas simultâneas da mesma programação retornam uma OS no banco isolado. Como o socket do PGlite utiliza uma conexão, esse ensaio não substitui teste de disputa entre múltiplas conexões reais do PostgreSQL/Neon.
 
+A edição local de uma ficha conserva seu vínculo patrimonial sem exigir novamente acesso a Patrimônio. Criar ou trocar esse vínculo exige a permissão e validação do bem. O cenário também verifica que reenvio de uma confirmação após mudança do setor do usuário não retorna um registro fora de seu escopo atual.
+
 ## Dependências e implantação
 
 | Dependência | Estado / limite |

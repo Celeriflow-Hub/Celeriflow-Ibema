@@ -46,6 +46,18 @@ test("Frotas · persistência e cenários da POC em banco isolado", { timeout: 1
       assert.equal((await db.fleetUnit.findUniqueOrThrow({ where: { id: ids[4] } })).parentId, ids[2]);
       assert.equal((await db.fleetUnit.findUniqueOrThrow({ where: { id: ids[2] } })).plate, null);
       await assert.rejects(mutateFleet(context, { requestId: randomUUID(), kind: "unit", data: { code: "INVALID", name: "Inválido", category: "AGREGADO", status: "ATIVO", departmentId: department.id, parentId: ids[4] } }), /unidade principal/i);
+      const assetCategory = await db.assetCategory.create({ data: { name: "Veículos DEMO", code: "FLEET-ASSET-FIXTURE" } });
+      const asset = await db.asset.create({ data: { patrimonyNumber: "PAT-DEMO-01", name: "Veículo patrimonial DEMO", acquisitionDate: dateOnly("2026-01-01"), acquisitionValue: 1000, currentValue: 1000, categoryId: assetCategory.id, departmentId: department.id } });
+      const administrator: AppContext = { ...context, user: { ...context.user, profileCode: "SYSTEM_ADMINISTRATOR" } };
+      const first = await db.fleetUnit.findUniqueOrThrow({ where: { id: ids[0] } });
+      await mutateFleet(administrator, { requestId: randomUUID(), kind: "unit", data: { id: first.id, version: first.updatedAt.toISOString(), code: first.code, name: first.name, category: first.category, status: first.status, departmentId: department.id, assetId: asset.id } });
+      const linked = await db.fleetUnit.findUniqueOrThrow({ where: { id: first.id } });
+      const command = { requestId: randomUUID(), kind: "unit", data: { id: linked.id, version: linked.updatedAt.toISOString(), code: linked.code, name: linked.name, category: linked.category, status: linked.status, departmentId: department.id, assetId: asset.id, notes: "Ficha local atualizada sem alterar vínculo patrimonial DEMO" } };
+      await mutateFleet(context, command);
+      assert.equal((await db.fleetUnit.findUniqueOrThrow({ where: { id: first.id } })).assetId, asset.id);
+      await assert.rejects(mutateFleet({ ...context, user: { ...context.user, departmentId: otherDepartment.id } }, command), /setor/i);
+      const second = await db.fleetUnit.findUniqueOrThrow({ where: { id: ids[1] } });
+      await assert.rejects(mutateFleet(context, { requestId: randomUUID(), kind: "unit", data: { id: second.id, version: second.updatedAt.toISOString(), code: second.code, name: second.name, category: second.category, status: second.status, departmentId: department.id, assetId: asset.id } }), /consultar Patrimônio/i);
     });
     await t.test("FRO-004/010 · rotas, utilizações e leituras coerentes", async () => {
       const route = await mutation({ kind: "route", data: { code: "R-DEMO-01", name: "Rota DEMO", origin: "Centro DEMO", destination: "Escola DEMO", itinerary: "Percurso original DEMO", departmentId: department.id, active: "true" } } as Omit<FleetMutationInput, "requestId">);

@@ -60,9 +60,15 @@ export async function savePurchaseRequest(payload: PurchaseRequestInput) {
     if (!items.length) return { success: false, error: "Adicione ao menos um item à solicitação." };
     const catalogItemIds = items.filter((item) => item.catalogItemId && item.catalogItemId !== "custom").map((item) => item.catalogItemId);
     const catalogItems = catalogItemIds.length
-      ? await prisma.catalogItem.findMany({ where: { id: { in: catalogItemIds }, isActive: true }, select: { id: true } })
+      ? await prisma.catalogItem.findMany({
+        where: { id: { in: catalogItemIds }, isActive: true },
+        select: { id: true, materials: { select: { id: true } } },
+      })
       : [];
     if (catalogItems.length !== new Set(catalogItemIds).size) return { success: false, error: "Selecione itens ativos do catálogo ou descreva o item livre." };
+    if (catalogItems.some((item) => item.materials.length > 1)) {
+      return { success: false, error: "Um item do catálogo está vinculado a mais de um material. Corrija o cadastro antes de criar a solicitação." };
+    }
     if (items.some((item) => !Number.isFinite(item.quantity) || item.quantity <= 0 || (item.catalogItemId === "custom" && !item.customName.trim()))) {
       return { success: false, error: "Revise os itens e suas quantidades." };
     }
@@ -104,11 +110,14 @@ export async function savePurchaseRequest(payload: PurchaseRequestInput) {
       requestId = newRequest.id;
     }
 
+    const materialIdByCatalogItemId = new Map(catalogItems.map((item) => [item.id, item.materials[0]?.id ?? null]));
+
     // Criar os itens
     if (items && items.length > 0) {
       const itemsToCreate = items.map((item) => ({
         purchaseRequestId: requestId,
         catalogItemId: item.catalogItemId === "custom" || !item.catalogItemId ? null : item.catalogItemId,
+        materialId: item.catalogItemId === "custom" || !item.catalogItemId ? null : materialIdByCatalogItemId.get(item.catalogItemId) ?? null,
         customName: item.catalogItemId === "custom" || !item.catalogItemId ? item.customName : null,
         quantity: item.quantity,
         estimatedUnitValue: item.estimatedUnitValue || null

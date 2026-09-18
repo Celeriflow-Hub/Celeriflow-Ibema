@@ -3501,6 +3501,7 @@ model PurchaseReceiptItem {
   warehouseId           String
   warehouse             Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   quantity              Float
+  quantityIncorporated  Float               @default(0)
   unitCost              Float
   batchNumber           String              @default("")
   expirationDate        DateTime?
@@ -3700,6 +3701,9 @@ model Asset {
 
   purchaseReceiptItemId String?
   purchaseReceiptItem   PurchaseReceiptItem? @relation(fields: [purchaseReceiptItemId], references: [id], onDelete: Restrict)
+
+  stockMovementId String?           @unique
+  stockMovement   MaterialMovement? @relation("AssetAcquisitionMovement", fields: [stockMovementId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3994,6 +3998,7 @@ model MaterialMovement {
   settlement   Settlement? @relation("SettlementMaterialMovements", fields: [settlementId], references: [id], onDelete: Restrict)
 
   purchaseReceiptItem   PurchaseReceiptItem? @relation("PurchaseReceiptItemMovement")
+  assetAcquisition      Asset?               @relation("AssetAcquisitionMovement")
 
   materialRequestItemId String?
   materialRequestItem   MaterialRequestItem? @relation("MaterialRequestItemMovements", fields: [materialRequestItemId], references: [id], onDelete: Restrict)
@@ -4074,6 +4079,7 @@ model InventorySessionItem {
 model MaterialRequest {
   id            String   @id @default(cuid())
   number        String   @unique
+  idempotencyKey String? @unique
   status        String   @default("Pendente") // Pendente, Aprovada, Atendida, Recusada
   date          DateTime @default(now())
   justification String?

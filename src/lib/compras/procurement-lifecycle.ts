@@ -1,5 +1,6 @@
 import { type Prisma, type PrismaClient } from "@prisma/client";
 import { applyStockMovement } from "@/lib/patrimonio/stock-service";
+import { nextYearlyCode } from "@/lib/sequence";
 
 type Db = PrismaClient;
 type Tx = Prisma.TransactionClient;
@@ -9,6 +10,18 @@ export class ProcurementLifecycleError extends Error {}
 export type ProcurementActor = {
   usuarioId: string;
   employeeId: string | null;
+};
+
+export type CreateMaterialRequestInput = {
+  number?: string;
+  justification?: string;
+  idempotencyKey: string;
+  items: Array<{ materialId: string; quantityRequested: number }>;
+};
+
+export type IssueMaterialRequestInFullInput = {
+  requestId: string;
+  stockByItem: Array<{ requestItemId: string; stockId: string }>;
 };
 
 function required(value: string | null | undefined, label: string) {
@@ -31,6 +44,64 @@ async function writeLifecycleEvent(
   input: { eventType: string; entityType: string; entityId: string; sourceType?: string; sourceId?: string; actorUsuarioId: string; idempotencyKey: string },
 ) {
   await tx.procurementLifecycleEvent.create({ data: input });
+}
+
+export async function createMaterialRequest(db: Db, actor: ProcurementActor, input: CreateMaterialRequestInput) {
+  const requesterId = required(actor.employeeId, "Servidor solicitante");
+  const idempotencyKey = required(input.idempotencyKey, "Chave de idempotência");
+  if (!input.items.length) throw new ProcurementLifecycleError("A requisição deve possuir ao menos um item.");
+  if (new Set(input.items.map((item) => item.materialId)).size !== input.items.length) {
+    throw new ProcurementLifecycleError("Não repita o mesmo material na requisição.");
+  }
+  input.items.forEach((item) => {
+    required(item.materialId, "Material");
+    quantity(item.quantityRequested, "Quantidade solicitada");
+  });
+
+  return db.$transaction(async (tx) => {
+    const existing = await tx.materialRequest.findUnique({ where: { idempotencyKey } });
+    if (existing) return existing;
+
+    const [requester, materials] = await Promise.all([
+      tx.employee.findFirst({
+        where: { id: requesterId, isActive: true, department: { is: { isActive: true } } },
+        select: { id: true, departmentId: true },
+      }),
+      tx.material.findMany({ where: { id: { in: input.items.map((item) => item.materialId) } }, select: { id: true } }),
+    ]);
+    if (!requester?.departmentId) throw new ProcurementLifecycleError("O solicitante deve estar vinculado a um setor ativo.");
+    if (materials.length !== input.items.length) throw new ProcurementLifecycleError("Selecione apenas materiais existentes.");
+
+    const suppliedNumber = input.number?.trim();
+    const number = suppliedNumber || await nextYearlyCode({
+      prisma: tx,
+      key: "patrimonio-requisicao-material",
+      prefix: "MATREQ",
+      existingCodes: (await tx.materialRequest.findMany({ select: { number: true } })).map(({ number }) => ({ code: number })),
+    });
+    const request = await tx.materialRequest.create({
+      data: {
+        number,
+        idempotencyKey,
+        justification: input.justification?.trim() || null,
+        departmentId: requester.departmentId,
+        requesterId: requester.id,
+        items: {
+          create: input.items.map((item) => ({ materialId: item.materialId.trim(), quantityRequested: item.quantityRequested })),
+        },
+      },
+    });
+    await writeLifecycleEvent(tx, {
+      eventType: "MATERIAL_REQUEST_CREATED",
+      entityType: "MATERIAL_REQUEST",
+      entityId: request.id,
+      sourceType: "MATERIAL_REQUEST",
+      sourceId: request.id,
+      actorUsuarioId: actor.usuarioId,
+      idempotencyKey: `C5:MATERIAL_REQUEST:${request.id}:CREATED`,
+    });
+    return request;
+  });
 }
 
 export async function approvePurchaseRequest(db: Db, actor: ProcurementActor, purchaseRequestId: string) {
@@ -188,7 +259,7 @@ export async function approvePurchaseReceipt(db: Db, actor: ProcurementActor, ra
 
     const processItemIds = input.items.map((item) => item.purchaseProcessItemId);
     const [processItems, priorReceiptItems] = await Promise.all([
-      tx.purchaseProcessItem.findMany({ where: { id: { in: processItemIds }, purchaseProcessId: contract.processId }, select: { id: true, quantity: true } }),
+      tx.purchaseProcessItem.findMany({ where: { id: { in: processItemIds }, purchaseProcessId: contract.processId }, select: { id: true, quantity: true, materialId: true } }),
       tx.purchaseReceiptItem.findMany({
         where: { purchaseProcessItemId: { in: processItemIds }, purchaseReceipt: { status: "APPROVED" } },
         select: { purchaseProcessItemId: true, quantity: true },
@@ -199,6 +270,9 @@ export async function approvePurchaseReceipt(db: Db, actor: ProcurementActor, ra
     for (const item of priorReceiptItems) priorByItem.set(item.purchaseProcessItemId, (priorByItem.get(item.purchaseProcessItemId) ?? 0) + item.quantity);
     for (const item of input.items) {
       const source = processItems.find((processItem) => processItem.id === item.purchaseProcessItemId)!;
+      if (source.materialId !== item.materialId) {
+        throw new ProcurementLifecycleError("O material recebido deve corresponder ao item de material do processo de compra.");
+      }
       if ((priorByItem.get(source.id) ?? 0) + item.quantity > source.quantity) {
         throw new ProcurementLifecycleError("A quantidade recebida excede o saldo do item do processo.");
       }
@@ -339,5 +413,91 @@ export async function issueMaterialRequestItem(db: Db, actor: ProcurementActor, 
       idempotencyKey: `C5:MATERIAL_REQUEST_ITEM:${requestItem.id}:ISSUED:${requestItem.quantityDelivered + issuedQuantity}`,
     });
     return request;
+  });
+}
+
+export async function issueMaterialRequestInFull(db: Db, actor: ProcurementActor, input: IssueMaterialRequestInFullInput) {
+  const requestId = required(input.requestId, "Requisição de material");
+  const issuerId = required(actor.employeeId, "Servidor responsável pela saída");
+  const eventKey = `C5:MATERIAL_REQUEST:${requestId}:ISSUED_FULL`;
+
+  return db.$transaction(async (tx) => {
+    const [existingEvent, request] = await Promise.all([
+      tx.procurementLifecycleEvent.findUnique({ where: { idempotencyKey: eventKey }, select: { id: true } }),
+      tx.materialRequest.findUnique({ where: { id: requestId }, include: { items: true } }),
+    ]);
+    if (!request) throw new ProcurementLifecycleError("Requisição de material não encontrada.");
+    if (existingEvent) return request;
+    if (!["Aprovada", "Atendida Parcialmente"].includes(request.status)) {
+      throw new ProcurementLifecycleError("A entrega integral exige uma requisição de material aprovada.");
+    }
+
+    const remainingItems = request.items.filter((item) => item.quantityApproved > item.quantityDelivered);
+    if (new Set(input.stockByItem.map((item) => item.requestItemId)).size !== input.stockByItem.length) {
+      throw new ProcurementLifecycleError("Informe uma única posição de estoque para cada item pendente.");
+    }
+    const assignmentByItem = new Map(input.stockByItem.map((item) => [item.requestItemId, item.stockId.trim()]));
+    if (remainingItems.some((item) => !assignmentByItem.get(item.id)) || assignmentByItem.size !== remainingItems.length) {
+      throw new ProcurementLifecycleError("Informe a posição de estoque para todos os itens pendentes da requisição.");
+    }
+
+    const stockIds = [...assignmentByItem.values()];
+    const stocks = stockIds.length
+      ? await tx.materialStock.findMany({
+        where: { id: { in: stockIds } },
+        select: { id: true, warehouseId: true, materialId: true, batchNumber: true, unitCost: true },
+      })
+      : [];
+    const stockById = new Map(stocks.map((stock) => [stock.id, stock]));
+    for (const item of remainingItems) {
+      const stock = stockById.get(assignmentByItem.get(item.id)!);
+      if (!stock || stock.materialId !== item.materialId) {
+        throw new ProcurementLifecycleError("A posição de estoque deve corresponder ao material requisitado.");
+      }
+    }
+
+    // Claim the request before changing balances. A competing full delivery will
+    // see the final status after this transaction commits and fail without a duplicate exit.
+    const claimed = await tx.materialRequest.updateMany({
+      where: { id: request.id, status: { in: ["Aprovada", "Atendida Parcialmente"] } },
+      data: { status: "Em atendimento" },
+    });
+    if (claimed.count !== 1) {
+      throw new ProcurementLifecycleError("A requisição foi alterada por outra operação. Revise e tente novamente.");
+    }
+
+    for (const item of remainingItems) {
+      const stock = stockById.get(assignmentByItem.get(item.id)!)!;
+      const quantityToIssue = item.quantityApproved - item.quantityDelivered;
+      await applyStockMovement(tx, {
+        kind: "EXIT",
+        sourceType: "MATERIAL_REQUEST_ISSUE",
+        materialRequestItemId: item.id,
+        warehouseId: stock.warehouseId,
+        materialId: stock.materialId,
+        batchNumber: stock.batchNumber,
+        quantity: quantityToIssue,
+        unitCost: stock.unitCost,
+        departmentId: request.departmentId,
+        reason: `Entrega integral da requisição ${request.number}`,
+        actor,
+      });
+      await tx.materialRequestItem.update({ where: { id: item.id }, data: { quantityDelivered: { increment: quantityToIssue } } });
+    }
+
+    const issued = await tx.materialRequest.update({
+      where: { id: request.id },
+      data: { status: "Atendida", issuedByEmployeeId: issuerId, issuedAt: new Date() },
+    });
+    await writeLifecycleEvent(tx, {
+      eventType: "MATERIAL_REQUEST_ISSUED_FULL",
+      entityType: "MATERIAL_REQUEST",
+      entityId: issued.id,
+      sourceType: "MATERIAL_REQUEST",
+      sourceId: issued.id,
+      actorUsuarioId: actor.usuarioId,
+      idempotencyKey: eventKey,
+    });
+    return issued;
   });
 }

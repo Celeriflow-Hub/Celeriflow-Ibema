@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
+import { applyStockMovement } from "./stock-service";
 
 export class AssetAcquisitionError extends Error {}
 
@@ -61,19 +62,40 @@ export async function acquireAssetFromPurchaseReceipt(db: PrismaClient, actor: A
     if (!receiptItem || receiptItem.purchaseReceipt.status !== "APPROVED") {
       throw new AssetAcquisitionError("O tombamento exige um item de recebimento de compra aprovado.");
     }
+    if (receiptItem.quantityIncorporated >= receiptItem.quantity) {
+      throw new AssetAcquisitionError("Todos os itens deste recebimento já foram tombados.");
+    }
 
-    const [category, existingAssets, department, responsible] = await Promise.all([
+    const [category, department, responsible] = await Promise.all([
       tx.assetCategory.findFirst({ where: { id: input.categoryId, isActive: true }, select: { id: true } }),
-      tx.asset.count({ where: { purchaseReceiptItemId: receiptItem.id } }),
       input.departmentId ? tx.department.findUnique({ where: { id: input.departmentId }, select: { id: true } }) : null,
       input.responsibleId ? tx.employee.findFirst({ where: { id: input.responsibleId, isActive: true }, select: { id: true } }) : null,
     ]);
     if (!category) throw new AssetAcquisitionError("Categoria patrimonial não encontrada ou inativa.");
     if (input.departmentId && !department) throw new AssetAcquisitionError("Setor responsável não encontrado.");
     if (input.responsibleId && !responsible) throw new AssetAcquisitionError("Servidor responsável não encontrado ou inativo.");
-    if (existingAssets >= receiptItem.quantity) {
-      throw new AssetAcquisitionError("Todos os itens deste recebimento já foram tombados.");
+
+    // The compare-and-swap increment makes concurrent tombamentos compete for
+    // the same remaining unit instead of over-incorporating the receipt.
+    const reserved = await tx.purchaseReceiptItem.updateMany({
+      where: { id: receiptItem.id, quantityIncorporated: receiptItem.quantityIncorporated },
+      data: { quantityIncorporated: { increment: 1 } },
+    });
+    if (reserved.count !== 1) {
+      throw new AssetAcquisitionError("A disponibilidade do recebimento foi alterada por outra operação. Revise e tente novamente.");
     }
+
+    const { movement } = await applyStockMovement(tx, {
+      kind: "EXIT",
+      sourceType: "ASSET_ACQUISITION",
+      warehouseId: receiptItem.warehouseId,
+      materialId: receiptItem.materialId,
+      batchNumber: receiptItem.batchNumber,
+      quantity: 1,
+      unitCost: receiptItem.unitCost,
+      reason: `Tombamento ${input.patrimonyNumber} do recebimento ${receiptItem.purchaseReceipt.number}`,
+      actor,
+    });
 
     const asset = await tx.asset.create({
       data: {
@@ -92,6 +114,7 @@ export async function acquireAssetFromPurchaseReceipt(db: PrismaClient, actor: A
         supplierId: receiptItem.purchaseReceipt.contract.supplierId,
         invoiceNumber: receiptItem.purchaseReceipt.number,
         purchaseReceiptItemId: receiptItem.id,
+        stockMovementId: movement.id,
       },
     });
     await writeAuditEvent(tx, {

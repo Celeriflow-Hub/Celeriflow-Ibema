@@ -27,7 +27,7 @@ export type StockMovementInput = {
   /** Reserved for the approved inventory-close workflow. */
   inventorySessionId?: string | null;
   /** Stock entries are reserved for a receipt already approved by procurement. */
-  sourceType?: "APPROVED_PURCHASE_RECEIPT" | "MATERIAL_REQUEST_ISSUE";
+  sourceType?: "APPROVED_PURCHASE_RECEIPT" | "MATERIAL_REQUEST_ISSUE" | "ASSET_ACQUISITION";
   materialRequestItemId?: string | null;
   actor: StockActor;
 };
@@ -59,6 +59,9 @@ export function normalizeStockMovement(input: StockMovementInput): ValidStockMov
   }
   if (input.sourceType === "MATERIAL_REQUEST_ISSUE" && input.kind !== "EXIT") {
     throw new StockServiceError("A requisição de material pode originar somente uma saída de estoque.");
+  }
+  if (input.sourceType === "ASSET_ACQUISITION" && input.kind !== "EXIT") {
+    throw new StockServiceError("O tombamento patrimonial pode originar somente uma saída de estoque.");
   }
   if (input.unitCost !== undefined && input.unitCost !== null && (!Number.isFinite(input.unitCost) || input.unitCost < 0)) {
     throw new StockServiceError("O custo unitário deve ser maior ou igual a zero.");

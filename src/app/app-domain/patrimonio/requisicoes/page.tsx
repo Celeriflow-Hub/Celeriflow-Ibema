@@ -102,7 +102,7 @@ export default async function RequisicoesPage(
                 ) : (
                   requests.map((req) => (
                     <tr key={req.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="p-4 font-bold text-slate-700 whitespace-nowrap">{req.number}</td>
+                      <td className="p-4 font-bold text-slate-700 whitespace-nowrap"><Link href={`/patrimonio/requisicoes/${req.id}`} className="hover:underline">{req.number}</Link></td>
                       <td className="p-4 text-muted-foreground whitespace-nowrap">
                         {format(new Date(req.date), "dd/MM/yyyy", { locale: ptBR })}
                       </td>

@@ -6578,3 +6578,202 @@ model TaxAuditCrossCheck {
   dataCruzamento      DateTime @default(now())
   createdAt           DateTime @default(now())
 }
+
+// Frotas: domínio operacional independente de Obras e Patrimônio.
+// Referências externas são validadas pelos serviços, sem alterar tabelas de origem.
+model FleetUnit {
+  id             String @id @default(cuid())
+  code           String @unique
+  name           String
+  category       String
+  status         String @default("ATIVO")
+  plate          String? @unique
+  renavam        String?
+  brand          String?
+  model          String?
+  year           Int?
+  notes          String?
+  departmentId   String
+  assetId        String? @unique
+  responsibleId  String?
+  parentId       String?
+  parent         FleetUnit? @relation("FleetAggregate", fields: [parentId], references: [id], onDelete: Restrict)
+  aggregates     FleetUnit[] @relation("FleetAggregate")
+  usages         FleetUsage[]
+  plans          FleetPlan[]
+  orders         FleetWorkOrder[]
+  consumptions   FleetConsumption[]
+  expenses       FleetExpense[]
+  documents      FleetDocument[]
+  occurrences    FleetOccurrence[]
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@index([departmentId, category, status, code])
+}
+
+model FleetRoute {
+  id            String @id @default(cuid())
+  code          String @unique
+  name          String
+  origin        String
+  destination   String
+  itinerary     String
+  departmentId  String
+  active        Boolean @default(true)
+  usages        FleetUsage[]
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  @@index([departmentId, active, code])
+}
+
+model FleetUsage {
+  id             String @id @default(cuid())
+  unitId         String
+  unit           FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  routeId        String?
+  route          FleetRoute? @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  routeSnapshot  String?
+  employeeId     String?
+  employeeName   String?
+  startedAt      DateTime
+  endedAt        DateTime
+  purpose        String
+  initialReading Decimal? @db.Decimal(14, 3)
+  finalReading   Decimal? @db.Decimal(14, 3)
+  createdById    String
+  createdAt     DateTime @default(now())
+  @@index([unitId, startedAt, id])
+}
+
+model FleetPlan {
+  id             String @id @default(cuid())
+  unitId         String
+  unit           FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  title          String
+  type           String
+  services       String
+  firstDueAt     DateTime @db.Date
+  nextDueAt      DateTime @db.Date
+  intervalDays   Int
+  estimatedCost  Decimal? @db.Decimal(18, 2)
+  active         Boolean @default(true)
+  orders         FleetWorkOrder[]
+  createdById    String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  @@index([unitId, nextDueAt, id])
+}
+
+model FleetWorkOrder {
+  id             String @id @default(cuid())
+  unitId         String
+  unit           FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  planId         String
+  plan           FleetPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  scheduledAt    DateTime @db.Date
+  title          String
+  type           String
+  services       String
+  intervalDays   Int
+  estimatedCost  Decimal? @db.Decimal(18, 2)
+  status         String @default("EMITIDA")
+  startedAt      DateTime?
+  completedAt    DateTime? @db.Date
+  performed      String?
+  result         String?
+  actualCost     Decimal? @db.Decimal(18, 2)
+  createdById    String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  @@unique([planId, scheduledAt])
+  @@index([unitId, status, scheduledAt, id])
+}
+
+model FleetConsumption {
+  id                 String @id @default(cuid())
+  unitId             String
+  unit               FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  type               String
+  origin             String
+  occurredAt         DateTime @db.Date
+  material           String
+  quantity           Decimal @db.Decimal(14, 3)
+  measurementUnit    String
+  cost               Decimal? @db.Decimal(18, 2)
+  supplierId         String?
+  supplierName       String?
+  reference          String?
+  workOrderId        String?
+  createdById        String
+  createdAt          DateTime @default(now())
+  @@index([unitId, type, occurredAt, id])
+}
+
+model FleetExpense {
+  id                 String @id @default(cuid())
+  unitId             String
+  unit               FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  nature             String
+  occurredAt         DateTime @db.Date
+  amount             Decimal? @db.Decimal(18, 2)
+  description        String
+  sourceType         String
+  sourceId           String
+  sourceKey          String @unique
+  reference          String?
+  createdById        String
+  createdAt          DateTime @default(now())
+  @@index([unitId, nature, occurredAt, id])
+}
+
+model FleetDocument {
+  id                 String @id @default(cuid())
+  unitId             String
+  unit               FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  kind               String
+  type               String
+  reference          String
+  title              String
+  insurerId          String?
+  insurerName        String?
+  startsAt           DateTime? @db.Date
+  scheduledAt        DateTime? @db.Date
+  dueAt              DateTime @db.Date
+  fulfilledAt        DateTime? @db.Date
+  fulfillmentNote    String?
+  status             String @default("PENDENTE")
+  value              Decimal? @db.Decimal(18, 2)
+  notes              String?
+  createdById        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  @@unique([unitId, kind, type, reference])
+  @@index([unitId, dueAt, status, id])
+}
+
+model FleetOccurrence {
+  id                 String @id @default(cuid())
+  unitId             String
+  unit               FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  type               String
+  occurredAt         DateTime @db.Date
+  description        String
+  involvedValue      Decimal? @db.Decimal(18, 2)
+  reference          String?
+  createdById        String
+  createdAt          DateTime @default(now())
+  @@index([unitId, occurredAt, id])
+}
+
+model FleetMutation {
+  requestId          String @id
+  actorId            String
+  payloadHash        String
+  targetType         String
+  targetId           String
+  createdAt          DateTime @default(now())
+  @@index([actorId, createdAt])
+}
+

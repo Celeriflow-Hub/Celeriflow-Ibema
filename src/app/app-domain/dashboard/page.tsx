@@ -22,7 +22,8 @@ import {
   Shield,
   Lock,
   Truck,
-  ArrowUpRight
+  ArrowUpRight,
+  BadgeCheck
 } from "lucide-react";
 import { canShowDashboardCard, canUseInactiveModule, canViewModule, getOptionalTenantContext, isModuleBlockedForUser } from "@/lib/platform/tenant-context";
 import { PageFrame } from "@/components/app-ui/PageFrame";
@@ -39,6 +40,7 @@ type MenuItem = {
   color: string;
   bg: string;
   solid: string;
+  operational?: boolean;
 };
 
 const menuItems: MenuItem[] = [
@@ -52,6 +54,7 @@ const menuItems: MenuItem[] = [
   { code: "FINANCEIRO", name: "Financeiro e Contábil", description: "Orçamento e caixa", href: "/financeiro", icon: CircleDollarSign, color: "text-[#16A34A]", bg: "bg-[#DCFCE7]", solid: "bg-[#16A34A]" },
   { code: "COMPRAS", name: "Compras e Contratos", description: "Gestão de compras", href: "/compras", icon: ShoppingCart, color: "text-[#9333EA]", bg: "bg-[#F3E8FF]", solid: "bg-[#9333EA]" },
   { code: "RH", name: "RH e Folha", description: "Servidores e folha", href: "/rh", icon: Users, color: "text-[#EC4899]", bg: "bg-[#FCE7F3]", solid: "bg-[#EC4899]" },
+  { code: "PORTAL_SERVIDOR", name: "Portal do Servidor", description: "Autosserviço, documentos e solicitações funcionais", href: "/portal-servidor", icon: BadgeCheck, color: "text-[#0F3D61]", bg: "bg-[#E8F0F7]", solid: "bg-[#0F3D61]", operational: true },
   { code: "PATRIMONIO", name: "Almoxarifado e Patrimônio", description: "Estoque, bens e inventários", href: "/patrimonio", icon: Package, color: "text-[#D97706]", bg: "bg-[#FEF3C7]", solid: "bg-[#D97706]" },
   { code: "EDUCACAO", name: "Educação", description: "Escolas e alunos", href: "/educacao", icon: GraduationCap, color: "text-[#6366F1]", bg: "bg-[#E0E7FF]", solid: "bg-[#6366F1]" },
   { code: "SAUDE", name: "Saúde", description: "SUS, postos e pacientes", href: "/saude", icon: HeartPulse, color: "text-[#EF4444]", bg: "bg-[#FEE2E2]", solid: "bg-[#EF4444]" },
@@ -95,7 +98,7 @@ export default async function PainelPage() {
               <div
                 key={item.name}
                 title={isProfileBlocked ? "Acesso bloqueado ou sem permissão de visualização neste perfil." : "Módulo não contratado nesta instância municipal. Ative em Configurações e Integrações > Módulos."}
-                className="relative flex h-full min-h-[126px] cursor-not-allowed flex-col justify-center overflow-hidden rounded-md border border-dashed border-slate-300 bg-slate-100/90 px-2 py-3 text-center opacity-60 grayscale select-none dark:border-slate-800 dark:bg-slate-900/60"
+                className={`relative flex h-full min-h-[126px] cursor-not-allowed flex-col overflow-hidden rounded-md border border-dashed border-slate-300 bg-slate-100/90 px-2 py-3 opacity-60 grayscale select-none dark:border-slate-800 dark:bg-slate-900/60 ${item.operational ? "justify-between text-left" : "justify-center text-center"}`}
               >
                 {/* Top Gray Bar */}
                 <div className="absolute top-0 left-0 h-[3px] w-full bg-slate-400/50" />
@@ -105,7 +108,7 @@ export default async function PainelPage() {
                   <Lock className="w-3.5 h-3.5" />
                 </div>
 
-                <div className="flex flex-col items-center gap-2">
+                <div className={`flex flex-col gap-2 ${item.operational ? "items-start" : "items-center"}`}>
                   <div className="flex size-10 items-center justify-center rounded-md bg-slate-200 ring-1 ring-inset ring-black/5 dark:bg-slate-800">
                     <item.icon className="size-[19px] text-slate-500" strokeWidth={2} />
                   </div>
@@ -124,12 +127,12 @@ export default async function PainelPage() {
 
           return (
             <Link key={item.name} href={item.href} className="group block outline-none">
-              <div className="relative flex h-full min-h-[126px] cursor-pointer flex-col justify-center overflow-hidden rounded-md border border-slate-300 bg-white px-2 py-3 text-center shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-emerald-600 active:bg-slate-100 dark:bg-slate-950">
+              <div className={`relative flex h-full min-h-[126px] cursor-pointer flex-col overflow-hidden rounded-md border border-slate-300 bg-white px-2 py-3 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-emerald-600 active:bg-slate-100 dark:bg-slate-950 ${item.operational ? "justify-between text-left" : "justify-center text-center"}`}>
                 
                 {/* Colored Top Bar */}
                 <div className={`absolute top-0 left-0 h-[3px] w-full ${item.solid} opacity-85`} />
                 
-                <div className="flex flex-col items-center gap-2">
+                <div className={`flex flex-col gap-2 ${item.operational ? "items-start" : "items-center"}`}>
                   <div className={`flex size-10 items-center justify-center rounded-md ${item.bg} ring-1 ring-inset ring-black/5 transition-transform duration-200 group-hover:scale-105`}>
                     <item.icon className={`size-[19px] ${item.color}`} strokeWidth={2.5} />
                   </div>
@@ -137,11 +140,11 @@ export default async function PainelPage() {
                     <h3 className="text-[12px] font-bold leading-tight text-slate-800 transition-colors group-hover:text-primary sm:text-[13px]">
                       {item.name}
                     </h3>
-                    <p className="mt-1 line-clamp-2 px-1 text-[10px] font-medium leading-tight text-slate-500">
+                    <p className={`mt-1 line-clamp-2 text-[10px] font-medium leading-tight text-slate-500 ${item.operational ? "pr-2 text-left" : "px-1"}`}>
                       {item.description}
                     </p>
                   </div>
-                  <span className="flex items-center justify-center gap-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 group-hover:text-emerald-700">
+                  <span className={`flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 group-hover:text-emerald-700 ${item.operational ? "justify-start" : "justify-center"}`}>
                     Acessar <ArrowUpRight className="size-3" />
                   </span>
                 </div>

@@ -37,6 +37,20 @@ export async function upsertUsuario(data: {
     const duplicateEmailUser = await prisma.usuario.findUnique({ where: { email }, select: { id: true } });
     if (duplicateEmailUser && duplicateEmailUser.id !== existing?.id) return { error: "Já existe um usuário com este e-mail." };
 
+    const employeeId = data.employeeId || null;
+    if (employeeId) {
+      const employee = await prisma.employee.findFirst({
+        where: { id: employeeId, isActive: true },
+        select: { id: true },
+      });
+      if (!employee) return { error: "Selecione um servidor ativo para vincular ao usuário." };
+
+      const linkedUser = await prisma.usuario.findUnique({ where: { employeeId }, select: { id: true } });
+      if (linkedUser && linkedUser.id !== existing?.id) {
+        return { error: "Este servidor já está vinculado a outro usuário." };
+      }
+    }
+
     if (existing) {
       const activeSystemAdministratorCount = await prisma.usuario.count({ where: { ativo: true, perfil: { codigo: SYSTEM_ADMIN_PROFILE_CODE } } });
       try {
@@ -66,19 +80,20 @@ export async function upsertUsuario(data: {
         ? await tx.usuario.update({
           where: { id: existing.id },
           data: {
-            nome: data.nome.trim(), email, firebaseUid, perfilId: data.perfilId, employeeId: data.employeeId || null, ativo: data.ativo,
+            nome: data.nome.trim(), email, firebaseUid, perfilId: data.perfilId, employeeId, ativo: data.ativo,
             permissoesModulo: { deleteMany: {}, create: data.permissoes.map((permission) => ({ moduloId: permission.moduloId, canView: permission.canView, canEdit: permission.canEdit })) },
           },
         })
         : await tx.usuario.create({
           data: {
-            nome: data.nome.trim(), email, firebaseUid, perfilId: data.perfilId, employeeId: data.employeeId || null, ativo: data.ativo,
+            nome: data.nome.trim(), email, firebaseUid, perfilId: data.perfilId, employeeId, ativo: data.ativo,
             permissoesModulo: { create: data.permissoes.map((permission) => ({ moduloId: permission.moduloId, canView: permission.canView, canEdit: permission.canEdit })) },
           },
         });
       await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "USUARIO", targetId: user.id });
     });
     revalidatePath("/configuracoes/usuarios");
+    revalidatePath("/portal-servidor");
     return { error: null };
   } catch (error) {
     console.error(error);

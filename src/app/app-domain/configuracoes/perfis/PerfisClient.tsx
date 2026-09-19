@@ -5,7 +5,7 @@ import {
   ShieldCheck, Plus, Search, X, Pencil, CheckCircle2, SlidersHorizontal, 
   Building2, Users, FileText, HeadphonesIcon, ShoppingCart, FileSpreadsheet, DollarSign, 
   Package, Receipt, Stethoscope, GraduationCap, HeartHandshake, HardHat, 
-  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, Lock, CheckSquare, Square, Trash2, Truck
+  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, Lock, CheckSquare, Square, Trash2, Truck, BadgeCheck
 } from "lucide-react";
 import { deletePerfil, upsertPerfil, togglePerfilStatus } from "./actions";
 import { PageFrame } from "@/components/app-ui/PageFrame";
@@ -25,6 +25,7 @@ type Perfil = {
 const MODULES_LIST = [
   { code: "ADMINISTRACAO", label: "Administração Geral & Entidades", icon: Building2, color: "text-blue-500" },
   { code: "RH", label: "Recursos Humanos & Servidores", icon: Users, color: "text-indigo-500" },
+  { code: "PORTAL_SERVIDOR", label: "Portal do Servidor", icon: BadgeCheck, color: "text-sky-700" },
   { code: "CADASTROS", label: "Pessoas & Cadastros Gerais", icon: FileText, color: "text-purple-500" },
   { code: "DOCUMENTOS", label: "Documentos, GED & Emissões", icon: FileText, color: "text-amber-500" },
   { code: "ATENDIMENTO", label: "Atendimento, Ouvidoria & Chamados", icon: HeadphonesIcon, color: "text-orange-500" },

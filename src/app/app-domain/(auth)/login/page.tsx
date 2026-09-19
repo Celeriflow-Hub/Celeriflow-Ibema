@@ -7,16 +7,23 @@ import { Label } from "@/components/ui/label";
 import { Mail, Lock, Loader2, ArrowRight, ArrowLeft, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { APP_VERSION } from "@/lib/version";
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const returnTo = (() => {
+    const candidate = searchParams.get("returnTo");
+    return candidate && candidate.startsWith("/") && !candidate.startsWith("//") && !candidate.startsWith("/app-domain")
+      ? candidate
+      : "/dashboard";
+  })();
   
   // Estado para controlar a visualização (Login vs Esqueci a Senha)
   const [view, setView] = useState<"login" | "reset" | "reset-success">("login");
@@ -42,7 +49,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/dashboard");
+      router.push(returnTo);
     } catch (error) {
       console.error(error);
       const errorMessage = error instanceof Error ? error.message : "E-mail ou senha incorretos. Tente novamente.";
@@ -59,11 +66,11 @@ export default function LoginPage() {
     
     try {
       await sendPasswordResetEmail(auth, email);
-      setView("reset-success");
-    } catch (error) {
-      console.error(error);
-      setErrorMsg("Ocorreu um erro. Verifique se o e-mail está correto.");
+    } catch {
+      // Keep a neutral response so the reset flow does not reveal whether the
+      // submitted address belongs to a registered user.
     } finally {
+      setView("reset-success");
       setIsLoading(false);
     }
   };
@@ -234,7 +241,7 @@ export default function LoginPage() {
               <div className="text-center space-y-1.5">
                 <h3 className="font-semibold text-base">E-mail Enviado!</h3>
                 <p className="text-xs text-muted-foreground">
-                  Verifique a caixa de entrada de <strong className="text-foreground">{email}</strong>.
+                  Se houver uma conta ativa para este endereço, você receberá as instruções de recuperação.
                 </p>
               </div>
               <Button

@@ -5,7 +5,7 @@ import {
   Blocks, Search, CheckCircle2, Lock, Unlock, 
   Building2, Users, FileText, ShoppingCart, DollarSign, 
   Package, Receipt, Stethoscope, GraduationCap, HeartHandshake, HardHat, 
-  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, AlertCircle, RefreshCw, Truck
+  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, AlertCircle, RefreshCw, Truck, BadgeCheck
 } from "lucide-react";
 import { toggleModulo } from "../actions";
 import { PageFrame } from "@/components/app-ui/PageFrame";
@@ -31,6 +31,7 @@ const MODULE_ICONS: Record<string, { icon: React.ElementType; color: string; bg:
   FINANCEIRO: { icon: DollarSign, color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-950/50" },
   COMPRAS: { icon: ShoppingCart, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-950/50" },
   RH: { icon: Users, color: "text-pink-600 dark:text-pink-400", bg: "bg-pink-50 dark:bg-pink-950/50" },
+  PORTAL_SERVIDOR: { icon: BadgeCheck, color: "text-sky-700 dark:text-sky-300", bg: "bg-sky-50 dark:bg-sky-950/50" },
   PATRIMONIO: { icon: Package, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/50" },
   EDUCACAO: { icon: GraduationCap, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-950/50" },
   SAUDE: { icon: Stethoscope, color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-950/50" },

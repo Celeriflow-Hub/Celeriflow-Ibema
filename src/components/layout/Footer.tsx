@@ -77,7 +77,7 @@ export function Footer() {
             <h3 className="font-bold text-slate-200 mb-4 text-xs uppercase tracking-wider font-mono">Acesso & Suporte</h3>
             <ul className="space-y-2.5 text-xs">
               <li>
-                <Link href="/app-domain" className="hover:text-blue-400 transition-colors font-semibold text-blue-400">
+                <Link href="/portal-servidor" className="hover:text-blue-400 transition-colors font-semibold text-blue-400">
                   Portal do Servidor →
                 </Link>
               </li>

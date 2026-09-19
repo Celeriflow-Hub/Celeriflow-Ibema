@@ -108,6 +108,7 @@ export async function ensureDefaultModulos() {
     { codigo: "FINANCEIRO", nome: "Financeiro, Orçamento & Tesouraria" },
     { codigo: "COMPRAS", nome: "Compras, Licitações & Cotações" },
     { codigo: "RH", nome: "Recursos Humanos & Servidores" },
+    { codigo: "PORTAL_SERVIDOR", nome: "Portal do Servidor" },
     { codigo: "PATRIMONIO", nome: "Almoxarifado e Patrimônio" },
     { codigo: "EDUCACAO", nome: "Educação Pública & Escolas" },
     { codigo: "SAUDE", nome: "Saúde Pública & UBSs" },

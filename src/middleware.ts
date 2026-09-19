@@ -54,7 +54,11 @@ export default function middleware(req: NextRequest) {
     // Redireciona para /login se não há sessão e não está já na página de login
     const hasSession = req.cookies.has(SESSION_COOKIE_NAME);
     if (!hasSession && internalPath !== "/login" && !internalPath.startsWith("/login")) {
-      return NextResponse.redirect(new URL("/login", req.url));
+      const loginUrl = new URL("/login", req.url);
+      // The destination is always built from the original internal path, never
+      // accepted as an absolute URL, so the login flow cannot become an open redirect.
+      loginUrl.searchParams.set("returnTo", internalPath + url.search);
+      return NextResponse.redirect(loginUrl);
     }
 
     // Reescrita invisível: domínio -> /app-domain/...

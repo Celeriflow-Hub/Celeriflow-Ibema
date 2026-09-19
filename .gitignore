@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+/tools/siafic-demo-receiver/node_modules/
 /.pnp
 .pnp.*
 .yarn/*

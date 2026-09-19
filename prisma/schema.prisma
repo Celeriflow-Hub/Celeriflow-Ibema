@@ -2259,6 +2259,7 @@ model BudgetUnit {
   appropriations BudgetAppropriation[]
   usuarios       UsuarioUnidadeGestora[]
   bankAccounts   BankAccount[]
+  sourceContracts Contract[] @relation("ContractSourceBudgetUnit")
 }
 
 model ResourceSource {
@@ -3410,6 +3411,11 @@ model Contract {
 
   secretariatId String
   secretariat   Secretariat @relation("SecretariatContracts", fields: [secretariatId], references: [id])
+
+  // The source budget unit is separate from the secretariat because one
+  // secretariat can own more than one budget unit.
+  sourceBudgetUnitId String?
+  sourceBudgetUnit   BudgetUnit? @relation("ContractSourceBudgetUnit", fields: [sourceBudgetUnitId], references: [id], onDelete: Restrict)
 
   managerId String?
   manager   Employee? @relation("ContractManager", fields: [managerId], references: [id])
@@ -6048,7 +6054,10 @@ model IntegrationConnection {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  runs IntegrationRun[]
+  runs                 IntegrationRun[]
+  siaficEntityVersions SiaficEntityVersion[]
+  siaficOutboxEvents   SiaficOutboxEvent[]
+  siaficExternalLinks  SiaficExternalLink[]
 
   @@index([category, environment, status])
 }
@@ -6066,6 +6075,114 @@ model IntegrationRun {
   createdAt    DateTime              @default(now())
 
   @@index([connectionId, createdAt])
+}
+
+// SIAFIC DEMO uses immutable payload snapshots. IntegrationConnection remains
+// the administrative destination configuration reused by the central console.
+model SiaficEntityVersion {
+  id             String                @id @default(cuid())
+  connectionId   String
+  connection     IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  datasetId      String
+  entityType     String
+  entityId       String
+  currentVersion Int                   @default(1)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@unique([connectionId, datasetId, entityType, entityId])
+  @@index([entityType, entityId])
+}
+
+model SiaficOutboxEvent {
+  id                  String                @id @default(uuid())
+  connectionId        String
+  connection          IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  actorUsuarioId      String
+  actorUsuario        Usuario                @relation("SiaficOutboxEventActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict)
+  datasetId           String
+  sourceInstanceId    String
+  entityType          String
+  entityId            String
+  entityVersion       Int
+  deliveryRevision    Int                   @default(1)
+  eventType           String
+  operation           String
+  payload             Json
+  payloadHash         String
+  idempotencyKey      String
+  destinationSnapshot Json
+  replacesEventId     String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  delivery SiaficDelivery?
+
+  @@unique([connectionId, datasetId, idempotencyKey])
+  @@unique([connectionId, datasetId, entityType, entityId, entityVersion, deliveryRevision])
+  @@index([connectionId, datasetId, entityType, entityId, entityVersion])
+  @@index([actorUsuarioId, createdAt])
+}
+
+model SiaficDelivery {
+  id             String            @id @default(cuid())
+  eventId        String            @unique
+  event          SiaficOutboxEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  status         String            @default("PENDING")
+  attemptCount   Int               @default(0)
+  nextAttemptAt  DateTime          @default(now())
+  leaseToken     String?
+  leaseExpiresAt DateTime?
+  lastError      String?
+  remoteEntityId String?
+  receiptId      String?
+  processedAt    DateTime?
+  receipt        Json?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  attempts SiaficDeliveryAttempt[]
+
+  @@index([status, nextAttemptAt])
+  @@index([leaseExpiresAt])
+}
+
+model SiaficDeliveryAttempt {
+  id            String         @id @default(cuid())
+  deliveryId    String
+  delivery      SiaficDelivery @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+  correlationId String
+  status        String
+  httpStatus    Int?
+  errorCode     String?
+  message       String?
+  durationMs    Int?
+  outcome       Json?
+  startedAt     DateTime       @default(now())
+  finishedAt    DateTime?
+
+  @@index([deliveryId, startedAt])
+  @@index([correlationId])
+}
+
+model SiaficExternalLink {
+  id                String                @id @default(cuid())
+  connectionId      String
+  connection        IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  datasetId         String
+  entityType        String
+  entityId          String
+  remoteEntityId    String
+  latestVersion     Int
+  latestPayloadHash String
+  lastEventId       String
+  receiptId         String
+  confirmedAt       DateTime
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@unique([connectionId, datasetId, entityType, entityId])
+  @@index([connectionId, datasetId, remoteEntityId])
 }
 
 model ConfiguracaoPerfil {
@@ -6144,6 +6261,7 @@ model Usuario {
   expenseRequests              Expense[]                     @relation("ExpenseRequestedBy")
   expenseApprovals             Expense[]                     @relation("ExpenseApprovedBy")
   procurementLifecycleEvents   ProcurementLifecycleEvent[]   @relation("ProcurementLifecycleEventActor")
+  siaficOutboxEvents           SiaficOutboxEvent[]           @relation("SiaficOutboxEventActor")
   auditEvents                  AuditEvent[]                  @relation("AuditEventActor")
   publishedPublicNotices       PublicNotice[]                @relation("PublicNoticePublisher")
   proposedPersonMergeRequests  PersonMergeRequest[]          @relation("PersonMergeProposer")

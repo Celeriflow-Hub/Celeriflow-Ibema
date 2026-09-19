@@ -17,8 +17,9 @@ export default async function ContratoDetalhesPage({ params }: { params: Promise
     where: { id: resolvedParams.id },
     include: {
       process: true,
-      supplier: { include: { company: true } },
+      supplier: { include: { company: true, person: true } },
       secretariat: true,
+      sourceBudgetUnit: true,
       manager: true,
       commitments: {
         where: { status: { in: ["Emitido", "Liquidado", "Pago"] } },
@@ -107,11 +108,15 @@ export default async function ContratoDetalhesPage({ params }: { params: Promise
           <div className="grid grid-cols-2 gap-4 border-t pt-4">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Fornecedor</p>
-              <p>{contrato.supplier?.company?.corporateName || "Não informado"}</p>
+              <p>{contrato.supplier?.company?.corporateName || contrato.supplier?.person?.fullName || "Não informado"}</p>
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Processo Vinculado</p>
               <p>{contrato.process?.number || "Não informado"}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Unidade Gestora de origem</p>
+              <p>{contrato.sourceBudgetUnit ? `${contrato.sourceBudgetUnit.code} - ${contrato.sourceBudgetUnit.name}` : "Pendente de definicao"}</p>
             </div>
           </div>
 

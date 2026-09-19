@@ -8,9 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { ApprovePurchaseRequestButton } from "../ApprovePurchaseRequestButton";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
+import { canManagePurchaseRequest } from "@/lib/compras/purchase-request-policy";
 
 export default async function SolicitacaoDetalhesPage({ params }: { params: Promise<{ id: string }> }) {
-  const { prisma } = await getTenantContextForModule("COMPRAS");
+  const { prisma, user } = await getTenantContextForModule("COMPRAS");
   const resolvedParams = await params;
   const solicitacao = await prisma.purchaseRequest.findUnique({
     where: { id: resolvedParams.id },
@@ -33,7 +34,7 @@ export default async function SolicitacaoDetalhesPage({ params }: { params: Prom
       <PageHeader
         title="Detalhes da Solicitação"
         icon={<ShoppingCart className="size-4 shrink-0 text-emerald-600" />}
-        action={<><Link href="/compras/solicitacoes" aria-label="Voltar"><Button variant="outline" size="icon"><ArrowLeft className="size-4" /></Button></Link><Link href={`/compras/solicitacoes/${solicitacao.id}/editar`}><Button variant="outline" size="sm"><Edit className="size-3.5" /><span className="hidden sm:inline">Editar</span></Button></Link>{solicitacao.status === "Rascunho" && <ApprovePurchaseRequestButton id={solicitacao.id} />}</>}
+        action={<><Link href="/compras/solicitacoes" aria-label="Voltar"><Button variant="outline" size="icon"><ArrowLeft className="size-4" /></Button></Link>{canManagePurchaseRequest(user, solicitacao) ? <Link href={`/compras/solicitacoes/${solicitacao.id}/editar`}><Button variant="outline" size="sm"><Edit className="size-3.5" /><span className="hidden sm:inline">Editar</span></Button></Link> : null}{solicitacao.status === "Rascunho" && <ApprovePurchaseRequestButton id={solicitacao.id} />}</>}
       />
 
       <Card className="rounded-md">

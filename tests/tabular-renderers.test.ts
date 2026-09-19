@@ -23,7 +23,9 @@ test("neutralizes spreadsheet formulas in tabular text exports", () => {
 
 test("creates a metadata cover sheet and formula-safe section sheets", async () => {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(Buffer.from(await renderTabularXlsx(dataset, presentation)));
+  // ExcelJS declares the legacy Node Buffer type while Node 24 returns a generic Buffer.
+  const spreadsheet = Buffer.from(await renderTabularXlsx(dataset, presentation)) as unknown as Parameters<typeof workbook.xlsx.load>[0];
+  await workbook.xlsx.load(spreadsheet);
   assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), ["Metadados do relatório", "Dados"]);
   assert.equal(workbook.getWorksheet("Dados")?.getCell("A2").value, "'=HYPERLINK(\"https://invalid\")");
 });

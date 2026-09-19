@@ -12,8 +12,9 @@ export function ContratoRowActions({ id }: { id: string }) {
   async function handleDelete() {
     if (confirm("Tem certeza que deseja excluir este contrato?")) {
       setIsDeleting(true);
-      await deleteContract(id);
+      const result = await deleteContract(id);
       setIsDeleting(false);
+      if (!result.success) alert(result.error || "Nao foi possivel excluir o contrato.");
     }
   }
 

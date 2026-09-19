@@ -2,6 +2,8 @@
 
 import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { requireValidCnpj, requireValidCpf } from "@/lib/identifiers/brazilian-identifiers";
+import { dispatchSiaficEvents } from "@/lib/siafic/dispatcher";
+import { setSupplierStatusWithSiaficEvent, updateSupplierWithSiaficEvent } from "@/lib/siafic/source";
 import { revalidatePath } from "next/cache";
 
 type PersonUpdateData = {
@@ -178,22 +180,25 @@ export async function activateRealEstate(id: string) {
 
 // Supplier
 export async function updateSupplier(id: string, data: SupplierUpdateData) {
-  const prisma = await getTenantPrisma("update");
-  const result = await prisma.supplier.update({ where: { id }, data });
+  const context = await getTenantContextForModuleOperation("CADASTROS", "update");
+  const result = await updateSupplierWithSiaficEvent(context.prisma, { usuarioId: context.user.id }, id, data);
+  await dispatchSiaficEvents(context.prisma, result.eventIds);
   revalidatePath("/cadastros/fornecedores");
-  return result;
+  return result.supplier;
 }
 export async function deactivateSupplier(id: string) {
-  const prisma = await getTenantPrisma("update");
-  const result = await prisma.supplier.update({ where: { id }, data: { status: 'Inativo' } });
+  const context = await getTenantContextForModuleOperation("CADASTROS", "update");
+  const result = await setSupplierStatusWithSiaficEvent(context.prisma, { usuarioId: context.user.id }, id, "Inativo");
+  await dispatchSiaficEvents(context.prisma, result.eventIds);
   revalidatePath("/cadastros/fornecedores");
-  return result;
+  return result.supplier;
 }
 export async function activateSupplier(id: string) {
-  const prisma = await getTenantPrisma("update");
-  const result = await prisma.supplier.update({ where: { id }, data: { status: 'Ativo' } });
+  const context = await getTenantContextForModuleOperation("CADASTROS", "update");
+  const result = await setSupplierStatusWithSiaficEvent(context.prisma, { usuarioId: context.user.id }, id, "Ativo");
+  await dispatchSiaficEvents(context.prisma, result.eventIds);
   revalidatePath("/cadastros/fornecedores");
-  return result;
+  return result.supplier;
 }
 
 // Address endpoints removed as they don't have a standalone page anymore

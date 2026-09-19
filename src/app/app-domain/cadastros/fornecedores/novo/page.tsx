@@ -2,7 +2,8 @@ import { Truck, Save, ArrowLeft, User, List } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
-import type { Prisma } from "@prisma/client";
+import { dispatchSiaficEvents } from "@/lib/siafic/dispatcher";
+import { createSupplierWithSiaficEvent } from "@/lib/siafic/source";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
 
@@ -18,7 +19,7 @@ export default async function NovoFornecedorPage() {
 
   async function createSupplier(formData: FormData) {
     "use server";
-    const { prisma } = await getTenantContextForModuleOperation("CADASTROS", "create");
+    const context = await getTenantContextForModuleOperation("CADASTROS", "create");
     
     const supplierType = formData.get("supplierType") as string;
     const personId = formData.get("personId") as string;
@@ -29,24 +30,19 @@ export default async function NovoFornecedorPage() {
     const bankData = formData.get("bankData") as string;
     const notes = formData.get("notes") as string;
 
-    const data: Prisma.SupplierUncheckedCreateInput = {
-      category: category || null,
-      businessBranch: businessBranch || null,
-      certificationsValidUntil: certificationsValidUntil ? new Date(certificationsValidUntil) : null,
-      bankData: bankData || null,
-      notes: notes || null,
-      status: "Ativo"
-    };
-
-    if (supplierType === "PF" && personId) {
-      data.personId = personId;
-    } else if (supplierType === "PJ" && companyId) {
-      data.companyId = companyId;
+    if (supplierType !== "PF" && supplierType !== "PJ") {
+      throw new Error("Tipo de fornecedor invalido.");
     }
-
-    await prisma.supplier.create({
-      data
+    const result = await createSupplierWithSiaficEvent(context.prisma, { usuarioId: context.user.id }, {
+      personId: supplierType === "PF" ? personId : null,
+      companyId: supplierType === "PJ" ? companyId : null,
+      category,
+      businessBranch,
+      certificationsValidUntil: certificationsValidUntil ? new Date(certificationsValidUntil) : null,
+      bankData,
+      notes,
     });
+    await dispatchSiaficEvents(context.prisma, result.eventIds);
 
     redirect("/cadastros/fornecedores");
   }

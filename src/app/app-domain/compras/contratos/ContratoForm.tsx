@@ -19,6 +19,7 @@ type ContractData = {
   processId: string;
   supplierId: string;
   secretariatId: string;
+  sourceBudgetUnitId?: string | null;
   number: string;
   object: string;
   initialValue: number;
@@ -35,20 +36,23 @@ type ProcessOption = {
 };
 
 type SecretariatOption = { id: string; name: string };
+type BudgetUnitOption = { id: string; code: string; name: string; secretariatId: string };
 
 type SupplierOption = {
   id: string;
   company: { corporateName: string; tradeName: string | null } | null;
+  person: { fullName: string } | null;
 };
 
 type ContratoFormProps = {
   data?: ContractData;
   processos?: ProcessOption[];
   secretarias?: SecretariatOption[];
+  unidadesGestoras?: BudgetUnitOption[];
   fornecedores?: SupplierOption[];
 };
 
-export function ContratoForm({ data, processos = [], secretarias = [], fornecedores = [] }: ContratoFormProps) {
+export function ContratoForm({ data, processos = [], secretarias = [], unidadesGestoras = [], fornecedores = [] }: ContratoFormProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const [selectedProcessId, setSelectedProcessId] = useState<string>(data?.processId || "");
@@ -133,7 +137,7 @@ export function ContratoForm({ data, processos = [], secretarias = [], fornecedo
                   </SelectTrigger>
                   <SelectContent>
                     {fornecedores.map(forn => (
-                      <SelectItem key={forn.id} value={forn.id}>{forn.company?.corporateName || forn.company?.tradeName}</SelectItem>
+                      <SelectItem key={forn.id} value={forn.id}>{forn.company?.corporateName || forn.company?.tradeName || forn.person?.fullName}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -147,6 +151,19 @@ export function ContratoForm({ data, processos = [], secretarias = [], fornecedo
                   <SelectContent>
                     {secretarias.map(sec => (
                       <SelectItem key={sec.id} value={sec.id}>{sec.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sourceBudgetUnitId">Unidade Gestora de origem</Label>
+                <Select name="sourceBudgetUnitId" defaultValue={data?.sourceBudgetUnitId || ""} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a Unidade Gestora" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unidadesGestoras.map((unit) => (
+                      <SelectItem key={unit.id} value={unit.id}>{unit.code} - {unit.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

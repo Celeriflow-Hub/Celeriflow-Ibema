@@ -42,21 +42,24 @@ type CatalogItemOption = {
 
 type SecretariatOption = { id: string; name: string };
 type DepartmentOption = { id: string; name: string; secretariatId: string };
+type Origin = { secretariatId: string; departmentId: string };
 
 type SolicitacaoFormProps = {
   data?: RequestData;
   catalogItems?: CatalogItemOption[];
   secretarias?: SecretariatOption[];
   departments?: DepartmentOption[];
+  initialOrigin?: Origin | null;
+  originLocked?: boolean;
 };
 
-export function SolicitacaoForm({ data, catalogItems = [], secretarias = [], departments = [] }: SolicitacaoFormProps) {
+export function SolicitacaoForm({ data, catalogItems = [], secretarias = [], departments = [], initialOrigin = null, originLocked = false }: SolicitacaoFormProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   
   const [items, setItems] = useState<RequestItem[]>(data?.items || []);
-  const [secretariatId, setSecretariatId] = useState(data?.secretariatId || "");
-  const [departmentId, setDepartmentId] = useState(data?.departmentId || "");
+  const [secretariatId, setSecretariatId] = useState(data?.secretariatId || initialOrigin?.secretariatId || "");
+  const [departmentId, setDepartmentId] = useState(data?.departmentId || initialOrigin?.departmentId || "");
   const estimatedTotal = items.length > 0
     ? items.reduce((acc, curr) => acc + (curr.quantity * (curr.estimatedUnitValue || 0)), 0)
     : data?.estimatedValue || 0;
@@ -131,7 +134,7 @@ export function SolicitacaoForm({ data, catalogItems = [], secretarias = [], dep
               </div>
               <div className="space-y-2">
                 <Label htmlFor="secretariatId">Secretaria</Label>
-                <Select value={secretariatId} onValueChange={(value) => { setSecretariatId(value ?? ""); setDepartmentId(""); }}>
+                <Select disabled={originLocked} value={secretariatId} onValueChange={(value) => { setSecretariatId(value ?? ""); setDepartmentId(""); }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione a Secretaria" />
                   </SelectTrigger>
@@ -144,7 +147,7 @@ export function SolicitacaoForm({ data, catalogItems = [], secretarias = [], dep
               </div>
               <div className="space-y-2">
                 <Label htmlFor="departmentId">Departamento</Label>
-                <Select value={departmentId} onValueChange={(value) => setDepartmentId(value ?? "")}>
+                <Select disabled={originLocked} value={departmentId} onValueChange={(value) => setDepartmentId(value ?? "")}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o Departamento" />
                   </SelectTrigger>
@@ -156,6 +159,7 @@ export function SolicitacaoForm({ data, catalogItems = [], secretarias = [], dep
                 </Select>
               </div>
             </div>
+            {originLocked ? <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">A origem da solicitacao esta vinculada ao seu setor e secretaria autorizados.</p> : null}
 
             <div className="space-y-2">
               <Label>Valor Estimado Total (R$)</Label>

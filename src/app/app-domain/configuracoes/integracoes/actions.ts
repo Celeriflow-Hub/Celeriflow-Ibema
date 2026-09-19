@@ -3,6 +3,9 @@
 import { Prisma } from "@prisma/client";
 import { assertIntegrationEnvironmentPolicy, getIntegrationDefinition } from "@/lib/integrations/registry";
 import { executeConfiguredHealthCheck } from "@/lib/integrations/runtime";
+import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
+import { assertSiaficConnectionMatchesRuntime, parseSiaficConnectionConfiguration } from "@/lib/siafic/config";
+import { testSiaficDemoConnection } from "@/lib/siafic/dispatcher";
 import { getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -11,7 +14,7 @@ type ActionResult = { error?: string; data?: { id: string; message: string } };
 
 const connectionSchema = z.object({
   code: z.string().min(1),
-  environment: z.enum(["MOCK", "SANDBOX", "HOMOLOGACAO", "PRODUCAO"]),
+  environment: z.enum(["MOCK", "DEMO", "SANDBOX", "HOMOLOGACAO", "PRODUCAO"]),
   baseUrl: z.string().trim().max(500).optional(),
   credentialReference: z.string().trim().max(250).optional(),
   configurationJson: z.string().max(20_000).optional(),
@@ -46,7 +49,7 @@ function parsePublicJson(value: string | undefined, field: string): Prisma.Input
   }
 }
 
-function validateConnectionInput(input: z.infer<typeof connectionSchema>) {
+function validateConnectionInput(input: z.infer<typeof connectionSchema>, configuration: Prisma.InputJsonValue | undefined) {
   const definition = getIntegrationDefinition(input.code);
   if (!definition) throw new Error("Conector externo inválido.");
   assertIntegrationEnvironmentPolicy(definition.code, input.environment);
@@ -59,6 +62,12 @@ function validateConnectionInput(input: z.infer<typeof connectionSchema>) {
     }
   }
 
+  if (definition.code === "SIAFIC_DEMO") {
+    if (!input.baseUrl) throw new Error("Informe a URL do receptor SIAFIC DEMO.");
+    assertSiaficConnectionMatchesRuntime(input.baseUrl);
+    parseSiaficConnectionConfiguration(configuration);
+  }
+
   if (input.credentialReference && !/^(env:|vault:|secret:\/\/)/.test(input.credentialReference)) {
     throw new Error("A referência de credencial deve apontar para env:, vault: ou secret://; não informe o segredo diretamente.");
   }
@@ -68,7 +77,9 @@ function validateConnectionInput(input: z.infer<typeof connectionSchema>) {
 export async function saveIntegrationConnection(rawInput: unknown): Promise<ActionResult> {
   try {
     const input = connectionSchema.parse(rawInput);
-    const definition = validateConnectionInput(input);
+    const configuration = parsePublicJson(input.configurationJson, "Parâmetros públicos");
+    const mockScenario = parsePublicJson(input.mockScenarioJson, "Cenário mock");
+    const definition = validateConnectionInput(input, configuration);
     const context = await getTenantContextForSystemAdministration();
     const connection = await context.prisma.integrationConnection.upsert({
       where: { code: definition.code },
@@ -81,8 +92,8 @@ export async function saveIntegrationConnection(rawInput: unknown): Promise<Acti
         status: input.enabled ? "CONFIGURANDO" : "DESATIVADA",
         baseUrl: input.baseUrl || undefined,
         credentialReference: input.credentialReference || undefined,
-        configuration: parsePublicJson(input.configurationJson, "Parâmetros públicos"),
-        mockScenario: parsePublicJson(input.mockScenarioJson, "Cenário mock"),
+        configuration,
+        mockScenario,
       },
       update: {
         name: definition.name,
@@ -92,8 +103,8 @@ export async function saveIntegrationConnection(rawInput: unknown): Promise<Acti
         status: input.enabled ? "CONFIGURANDO" : "DESATIVADA",
         baseUrl: input.baseUrl || null,
         credentialReference: input.credentialReference || null,
-        configuration: parsePublicJson(input.configurationJson, "Parâmetros públicos") ?? Prisma.JsonNull,
-        mockScenario: parsePublicJson(input.mockScenarioJson, "Cenário mock") ?? Prisma.JsonNull,
+        configuration: configuration ?? Prisma.JsonNull,
+        mockScenario: mockScenario ?? Prisma.JsonNull,
       },
     });
     revalidatePath("/configuracoes/integracoes");
@@ -111,7 +122,9 @@ export async function testIntegrationConnection(connectionId: string): Promise<A
     if (!connection) throw new Error("Conexão não encontrada.");
     if (connection.status === "DESATIVADA") throw new Error("Ative a conexão antes de executar o teste.");
 
-    const result = await executeConfiguredHealthCheck(context.prisma, connection.code, true);
+    const result = connection.code === "SIAFIC_DEMO"
+      ? await testSiaficDemoConnection(connection)
+      : await executeConfiguredHealthCheck(context.prisma, connection.code, true);
 
     await context.prisma.integrationConnection.update({
       where: { id: connection.id },
@@ -127,5 +140,39 @@ export async function testIntegrationConnection(connectionId: string): Promise<A
     return { data: { id: connection.id, message: result.message } };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Não foi possível testar a conexão." };
+  }
+}
+
+export async function retrySiaficDelivery(eventId: string): Promise<ActionResult> {
+  try {
+    const context = await getTenantContextForSystemAdministration();
+    const delivery = await context.prisma.siaficDelivery.findUnique({
+      where: { eventId: z.string().uuid().parse(eventId) },
+      include: { event: { select: { connection: { select: { code: true, environment: true } } } } },
+    });
+    if (!delivery || delivery.event.connection.code !== "SIAFIC_DEMO" || delivery.event.connection.environment !== "DEMO") {
+      throw new Error("Entrega SIAFIC DEMO nao encontrada.");
+    }
+    if (delivery.status === "PROCESSED") throw new Error("Esta entrega ja possui recibo confirmado.");
+    if (delivery.status === "SENDING" && delivery.leaseExpiresAt && delivery.leaseExpiresAt > new Date()) {
+      throw new Error("A entrega esta em processamento por outro worker.");
+    }
+    await context.prisma.$transaction(async (tx) => {
+      await tx.siaficDelivery.update({
+        where: { eventId: delivery.eventId },
+        data: { status: "PENDING", nextAttemptAt: new Date(), leaseToken: null, leaseExpiresAt: null },
+      });
+      await writeAuditEvent(tx, {
+        actorUsuarioId: context.user.id,
+        eventType: auditEventTypes.siaficDeliveryRetryRequested,
+        targetType: "SiaficOutboxEvent",
+        targetId: delivery.eventId,
+      });
+    });
+    revalidatePath("/configuracoes/integracoes");
+    revalidatePath("/configuracoes");
+    return { data: { id: delivery.eventId, message: "Entrega recolocada na fila. O worker validara o recibo antes de reenviar quando houver tentativa anterior." } };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Nao foi possivel reenfileirar a entrega SIAFIC." };
   }
 }

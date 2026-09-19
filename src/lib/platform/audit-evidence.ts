@@ -27,6 +27,10 @@ export const auditEventTypes = {
   assetAcquiredFromReceipt: "ASSET_ACQUIRED_FROM_RECEIPT",
   internalControlFindingRegistered: "INTERNAL_CONTROL_FINDING_REGISTERED",
   fleetOperationRegistered: "FLEET_OPERATION_REGISTERED",
+  siaficOutboxQueued: "SIAFIC_OUTBOX_QUEUED",
+  siaficDeliveryConfirmed: "SIAFIC_DELIVERY_CONFIRMED",
+  siaficDeliveryFailed: "SIAFIC_DELIVERY_FAILED",
+  siaficDeliveryRetryRequested: "SIAFIC_DELIVERY_RETRY_REQUESTED",
 } as const;
 
 export type AuditEventType = (typeof auditEventTypes)[keyof typeof auditEventTypes];

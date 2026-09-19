@@ -4,9 +4,10 @@ import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/
 import { revalidatePath } from "next/cache";
 import { nextYearlyCode } from "@/lib/sequence";
 import { approvePurchaseRequest as approveOfficialPurchaseRequest, ProcurementLifecycleError } from "@/lib/compras/procurement-lifecycle";
+import { assertPurchaseRequestOrigin, canManagePurchaseRequest, PurchaseRequestOriginError } from "@/lib/compras/purchase-request-policy";
 
-async function getTenantPrisma(operation: ModuleOperation) {
-  return (await getTenantContextForModuleOperation("COMPRAS", operation)).prisma;
+async function getTenantContext(operation: ModuleOperation) {
+  return getTenantContextForModuleOperation("COMPRAS", operation);
 }
 
 type PurchaseRequestItemInput = {
@@ -28,8 +29,16 @@ type PurchaseRequestInput = {
 };
 
 export async function deletePurchaseRequest(id: string) {
-  const prisma = await getTenantPrisma("delete");
   try {
+    const context = await getTenantContext("delete");
+    const { prisma } = context;
+    const existing = await prisma.purchaseRequest.findUnique({
+      where: { id },
+      select: { requesterId: true, secretariatId: true, departmentId: true, status: true },
+    });
+    if (!existing || !canManagePurchaseRequest(context.user, existing)) {
+      return { success: false, error: "Somente o solicitante pode excluir uma solicitacao em rascunho." };
+    }
     await prisma.purchaseRequest.delete({
       where: { id },
     });
@@ -43,16 +52,27 @@ export async function deletePurchaseRequest(id: string) {
 
 export async function savePurchaseRequest(payload: PurchaseRequestInput) {
   const { id, number, object, justification, estimatedValue, items, secretariatId, departmentId } = payload;
-  const context = await getTenantContextForModuleOperation("COMPRAS", id ? "update" : "create");
-  const { prisma } = context;
-
   try {
+    const context = await getTenantContextForModuleOperation("COMPRAS", id ? "update" : "create");
+    const { prisma } = context;
     if (!secretariatId?.trim() || !departmentId?.trim()) return { success: false, error: "Selecione a secretaria e o departamento solicitante." };
-    if (!context.user.employeeId) return { success: false, error: "O usuário autenticado deve estar vinculado a um servidor solicitante." };
+    if (!context.user.employeeId && !id) return { success: false, error: "O usuário autenticado deve estar vinculado a um servidor solicitante para criar a solicitação." };
+    assertPurchaseRequestOrigin(context.user, { secretariatId, departmentId });
+    const existing = id
+      ? await prisma.purchaseRequest.findUnique({
+        where: { id },
+        select: { status: true, requesterId: true, secretariatId: true, departmentId: true },
+      })
+      : null;
+    if (id && (!existing || !canManagePurchaseRequest(context.user, existing))) {
+      return { success: false, error: "Somente o solicitante pode editar uma solicitação em rascunho." };
+    }
+    const requesterId = existing?.requesterId ?? context.user.employeeId;
+    if (!requesterId) return { success: false, error: "A solicitacao precisa manter um servidor solicitante ativo." };
     const [secretariat, department, requester] = await Promise.all([
       prisma.secretariat.findUnique({ where: { id: secretariatId } }),
       prisma.department.findUnique({ where: { id: departmentId } }),
-      prisma.employee.findUnique({ where: { id: context.user.employeeId }, select: { id: true, isActive: true } }),
+      prisma.employee.findUnique({ where: { id: requesterId }, select: { id: true, isActive: true } }),
     ]);
     if (!secretariat || !department || department.secretariatId !== secretariat.id || !requester?.isActive) {
       return { success: false, error: "Secretaria, departamento ou solicitante inválido." };
@@ -81,21 +101,18 @@ export async function savePurchaseRequest(payload: PurchaseRequestInput) {
       return { success: false, error: "Informe o número da solicitação." };
     }
 
-    const data = {
-      number: finalNumber,
-      object,
-      justification,
-      estimatedValue,
-      secretariatId: secretariat.id,
-      departmentId: department.id,
-      requesterId: requester.id,
-    };
-
     let requestId: string;
 
     if (id) {
-      const existing = await prisma.purchaseRequest.findUnique({ where: { id }, select: { status: true, requesterId: true } });
-      if (!existing || existing.status !== "Rascunho" || existing.requesterId !== requester.id) return { success: false, error: "Somente o solicitante pode editar uma solicitação em rascunho." };
+      const data = {
+        number: finalNumber,
+        object,
+        justification,
+        estimatedValue,
+        secretariatId: secretariat.id,
+        departmentId: department.id,
+        requesterId: requester.id,
+      };
       // Atualizar a solicitacao
       await prisma.purchaseRequest.update({ where: { id }, data });
       requestId = id;
@@ -105,6 +122,15 @@ export async function savePurchaseRequest(payload: PurchaseRequestInput) {
         where: { purchaseRequestId: id }
       });
     } else {
+      const data = {
+        number: finalNumber,
+        object,
+        justification,
+        estimatedValue,
+        secretariatId: secretariat.id,
+        departmentId: department.id,
+        requesterId: requester.id,
+      };
       // Criar nova solicitacao
       const newRequest = await prisma.purchaseRequest.create({ data });
       requestId = newRequest.id;
@@ -131,6 +157,7 @@ export async function savePurchaseRequest(payload: PurchaseRequestInput) {
     revalidatePath("/compras/solicitacoes");
     return { success: true };
   } catch (error) {
+    if (error instanceof PurchaseRequestOriginError) return { success: false, error: error.message };
     console.error("Error saving purchase request:", error);
     return { success: false, error: "Falha ao salvar a solicitação." };
   }

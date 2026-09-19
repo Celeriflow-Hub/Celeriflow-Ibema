@@ -10,9 +10,10 @@ import { ptBR } from "date-fns/locale"
 import { SolicitacaoRowActions } from "./SolicitacaoRowActions"
 import { PageFrame } from "@/components/app-ui/PageFrame"
 import { PageHeader } from "@/components/app-ui/PageHeader"
+import { canManagePurchaseRequest } from "@/lib/compras/purchase-request-policy"
 
 export default async function SolicitacoesPage() {
-  const { prisma } = await getTenantContextForModule("COMPRAS");
+  const { prisma, user } = await getTenantContextForModule("COMPRAS");
   const solicitacoes = await prisma.purchaseRequest.findMany({
     include: {
       secretariat: true,
@@ -95,7 +96,7 @@ export default async function SolicitacoesPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <SolicitacaoRowActions id={req.id} />
+                        <SolicitacaoRowActions id={req.id} canManage={canManagePurchaseRequest(user, req)} />
                       </TableCell>
                     </TableRow>
                   ))}

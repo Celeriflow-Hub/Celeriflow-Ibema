@@ -1,4 +1,4 @@
-export type IntegrationEnvironment = "MOCK" | "SANDBOX" | "HOMOLOGACAO" | "PRODUCAO";
+export type IntegrationEnvironment = "MOCK" | "DEMO" | "SANDBOX" | "HOMOLOGACAO" | "PRODUCAO";
 export type IntegrationOperation = "HEALTH_CHECK" | "DOWNLOAD_STATEMENT";
 export type MockIntegrationResult = {
   status: "SUCESSO" | "FALHA";
@@ -7,7 +7,7 @@ export type MockIntegrationResult = {
   evidence: { dispatch: "MOCK"; scenario: string; externalId: string };
 };
 
-export const integrationEnvironments = ["MOCK", "SANDBOX", "HOMOLOGACAO", "PRODUCAO"] as const;
+export const integrationEnvironments = ["MOCK", "DEMO", "SANDBOX", "HOMOLOGACAO", "PRODUCAO"] as const;
 
 export type IntegrationDefinition = {
   code: string;
@@ -24,6 +24,7 @@ export const integrationCatalog: readonly IntegrationDefinition[] = [
   { code: "EFD_REINF", name: "EFD-Reinf", category: "GOVERNAMENTAL", provider: "Receita Federal", description: "Eventos de retenções e pagamentos." },
   { code: "DIRF_SEFIP", name: "DIRF e SEFIP", category: "GOVERNAMENTAL", provider: "Receita Federal", description: "Arquivos por competência, quando exigidos." },
   { code: "PNCP", name: "PNCP", category: "GOVERNAMENTAL", provider: "Portal Nacional de Contratações Públicas", description: "Publicação e consulta de contratações." },
+  { code: "SIAFIC_DEMO", name: "SIAFIC DEMO", category: "GOVERNAMENTAL", provider: "Receptor SIAFIC - Robonuvem DEMO", description: "Transmissão autenticada de fornecedores e instrumentos para o receptor externo de demonstração." },
   { code: "NFE_CTE", name: "NF-e e CT-e", category: "FISCAL", provider: "SEFAZ", description: "Consulta, captura e validação de documentos fiscais." },
   { code: "NFSE", name: "NFS-e", category: "FISCAL", provider: "Provedor nacional ou municipal", description: "Emissão, consulta e captura de notas de serviço." },
   { code: "BANCO_CNAB", name: "CNAB", category: "BANCARIA", provider: "Instituição financeira", description: "Remessa, retorno e liquidação bancária." },
@@ -45,7 +46,9 @@ export function isIntegrationEnvironment(value: string): value is IntegrationEnv
 }
 
 export function isEnvironmentAllowedForIntegration(code: string, environment: IntegrationEnvironment) {
-  return code === "BANCO_API" ? environment === "SANDBOX" : environment === "MOCK";
+  if (code === "BANCO_API") return environment === "SANDBOX";
+  if (code === "SIAFIC_DEMO") return environment === "DEMO";
+  return environment === "MOCK";
 }
 
 export function assertIntegrationEnvironmentPolicy(code: string, environment: IntegrationEnvironment) {
@@ -54,7 +57,10 @@ export function assertIntegrationEnvironmentPolicy(code: string, environment: In
   if (code === "BANCO_API" && environment !== "SANDBOX") {
     throw new Error("O Banco Virtual Robonuvem aceita somente o ambiente SANDBOX.");
   }
-  if (code !== "BANCO_API" && environment !== "MOCK") {
+  if (code === "SIAFIC_DEMO" && environment !== "DEMO") {
+    throw new Error("O receptor SIAFIC DEMO aceita somente o ambiente DEMO.");
+  }
+  if (code !== "BANCO_API" && code !== "SIAFIC_DEMO" && environment !== "MOCK") {
     throw new Error(`O conector ${code} é restrito ao ambiente MOCK e não realiza conexões de rede.`);
   }
 }

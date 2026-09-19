@@ -1,16 +1,25 @@
 "use server";
 
-import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
+import { assertBudgetUnitAccess, getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
+import { dispatchSiaficEvents } from "@/lib/siafic/dispatcher";
+import { saveContractWithSiaficEvent } from "@/lib/siafic/source";
 import { revalidatePath } from "next/cache";
 
-async function getTenantPrisma(operation: ModuleOperation) {
-  return (await getTenantContextForModuleOperation("COMPRAS", operation)).prisma;
+async function getTenantContext(operation: ModuleOperation) {
+  return getTenantContextForModuleOperation("COMPRAS", operation);
 }
 
 export async function deleteContract(id: string) {
-  const prisma = await getTenantPrisma("delete");
+  const context = await getTenantContext("delete");
   try {
-    await prisma.contract.delete({
+    const exported = await context.prisma.siaficOutboxEvent.findFirst({
+      where: { entityType: "INSTRUMENT", entityId: id },
+      select: { id: true },
+    });
+    if (exported) {
+      return { success: false, error: "Contrato com historico de integracao SIAFIC nao pode ser excluido. Use o encerramento do instrumento." };
+    }
+    await context.prisma.contract.delete({
       where: { id },
     });
     revalidatePath("/compras/contratos");
@@ -24,10 +33,10 @@ export async function deleteContract(id: string) {
 
 export async function saveContract(formData: FormData) {
   const id = formData.get("id") as string | null;
-  const prisma = await getTenantPrisma(id ? "update" : "create");
-  const number = formData.get("number") as string;
-  const object = formData.get("object") as string;
-  const initialValue = parseFloat(formData.get("initialValue") as string) || 0;
+  const context = await getTenantContext(id ? "update" : "create");
+  const number = String(formData.get("number") || "").trim();
+  const object = String(formData.get("object") || "").trim();
+  const initialValue = Number(formData.get("initialValue"));
   const status = formData.get("status") as string;
   const startDate = new Date(`${formData.get("startDate")}T12:00:00.000Z`);
   const endDate = new Date(`${formData.get("endDate")}T12:00:00.000Z`);
@@ -35,10 +44,12 @@ export async function saveContract(formData: FormData) {
   const processId = formData.get("processId") as string;
   const supplierId = formData.get("supplierId") as string;
   const secretariatId = formData.get("secretariatId") as string;
+  const sourceBudgetUnitId = formData.get("sourceBudgetUnitId") as string;
 
-  if (!processId || !supplierId || !secretariatId) {
-    throw new Error("Dados básicos (Processo, Fornecedor, Secretaria) não foram selecionados.");
+  if (!number || !object || !processId || !supplierId || !secretariatId || !sourceBudgetUnitId) {
+    throw new Error("Dados basicos (numero, objeto, processo, fornecedor, secretaria e unidade gestora) sao obrigatorios.");
   }
+  if (!Number.isFinite(initialValue) || initialValue < 0) return { success: false, error: "Informe um valor contratual valido." };
   if (!["Minuta", "Vigente", "Encerrado"].includes(status)) {
     return { success: false, error: "Status do contrato inválido." };
   }
@@ -46,15 +57,20 @@ export async function saveContract(formData: FormData) {
     return { success: false, error: "Informe uma vigência válida para o contrato." };
   }
 
-  const [process, supplier] = await Promise.all([
-    prisma.purchaseProcess.findUnique({ where: { id: processId }, select: { id: true, secretariatId: true, purchaseRequest: { select: { status: true } } } }),
-    prisma.supplier.findUnique({ where: { id: supplierId }, select: { id: true, status: true } }),
+  assertBudgetUnitAccess(context.user, sourceBudgetUnitId);
+  const [process, supplier, sourceBudgetUnit] = await Promise.all([
+    context.prisma.purchaseProcess.findUnique({ where: { id: processId }, select: { id: true, secretariatId: true, purchaseRequest: { select: { status: true } } } }),
+    context.prisma.supplier.findUnique({ where: { id: supplierId }, select: { id: true, status: true } }),
+    context.prisma.budgetUnit.findUnique({ where: { id: sourceBudgetUnitId }, select: { id: true, secretariatId: true } }),
   ]);
   if (!process || process.secretariatId !== secretariatId || process.purchaseRequest?.status !== "Aprovada") {
     return { success: false, error: "O contrato exige um processo originado de solicitação de compra aprovada e da mesma secretaria." };
   }
   if (!supplier || supplier.status !== "Ativo") {
     return { success: false, error: "Selecione um fornecedor ativo." };
+  }
+  if (!sourceBudgetUnit || sourceBudgetUnit.secretariatId !== secretariatId) {
+    return { success: false, error: "A Unidade Gestora deve pertencer a secretaria do contrato." };
   }
 
   const data = {
@@ -68,14 +84,12 @@ export async function saveContract(formData: FormData) {
     processId,
     supplierId,
     secretariatId,
+    sourceBudgetUnitId,
   };
 
   try {
-    if (id) {
-      await prisma.contract.update({ where: { id }, data });
-    } else {
-      await prisma.contract.create({ data });
-    }
+    const result = await saveContractWithSiaficEvent(context.prisma, { usuarioId: context.user.id }, { id: id || undefined, ...data });
+    await dispatchSiaficEvents(context.prisma, result.eventIds);
     revalidatePath("/compras/contratos");
     if (id) revalidatePath(`/compras/contratos/${id}`);
     return { success: true };

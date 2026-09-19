@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Cable, FlaskConical, Save, ShieldCheck, Eye, Layers } from "lucide-react";
+import { Cable, FlaskConical, Save, ShieldCheck, Eye, Layers, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { integrationEnvironments, isEnvironmentAllowedForIntegration, isIntegrationEnvironment, type IntegrationEnvironment } from "@/lib/integrations/registry";
-import { testIntegrationConnection, saveIntegrationConnection } from "./actions";
+import { retrySiaficDelivery, testIntegrationConnection, saveIntegrationConnection } from "./actions";
 import IntegrationRunModal from "./IntegrationRunModal";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
@@ -31,6 +31,25 @@ type ConnectionRun = {
   payload?: string | null;
 };
 
+type SiaficDelivery = {
+  status: string;
+  attemptCount: number;
+  nextAttemptAt: Date;
+  lastError: string | null;
+  receiptId: string | null;
+};
+
+type SiaficEvent = {
+  id: string;
+  entityType: string;
+  entityId: string;
+  entityVersion: number;
+  eventType: string;
+  operation: string;
+  createdAt: Date;
+  delivery: SiaficDelivery | null;
+};
+
 type Connection = {
   id: string;
   code: string;
@@ -47,6 +66,7 @@ type Connection = {
   lastTestStatus: string | null;
   lastTestMessage: string | null;
   runs: ConnectionRun[];
+  siaficOutboxEvents: SiaficEvent[];
 };
 
 type FormState = {
@@ -65,11 +85,11 @@ function formFor(connection: Connection | undefined, code: string): FormState {
     code,
     environment: configuredEnvironment && isIntegrationEnvironment(configuredEnvironment)
       ? configuredEnvironment
-      : code === "BANCO_API" ? "SANDBOX" : "MOCK",
+      : code === "BANCO_API" ? "SANDBOX" : code === "SIAFIC_DEMO" ? "DEMO" : "MOCK",
     baseUrl: connection?.baseUrl ?? "",
     credentialReference: connection?.credentialReference ?? "",
     configurationJson: connection?.configuration ?? "",
-    mockScenarioJson: connection?.mockScenario ?? '{\n  "scenario": "success"\n}',
+    mockScenarioJson: connection?.mockScenario ?? (code === "SIAFIC_DEMO" ? "" : '{\n  "scenario": "success"\n}'),
     enabled: connection?.status !== "DESATIVADA",
   };
 }
@@ -100,6 +120,15 @@ export default function IntegrationConnectionsClient({ catalog, connections }: {
     if (!selectedConnection) return alert("Salve a conexão antes de testá-la.");
     setPending(true);
     const result = await testIntegrationConnection(selectedConnection.id);
+    setPending(false);
+    if (result.error) return alert(result.error);
+    alert(result.data?.message);
+    router.refresh();
+  };
+
+  const retryDelivery = async (eventId: string) => {
+    setPending(true);
+    const result = await retrySiaficDelivery(eventId);
     setPending(false);
     if (result.error) return alert(result.error);
     alert(result.data?.message);
@@ -168,7 +197,8 @@ export default function IntegrationConnectionsClient({ catalog, connections }: {
                 >
                   {integrationEnvironments.map((environment) => (
                     <option key={environment} value={environment} disabled={!isEnvironmentAllowedForIntegration(selectedCode, environment)}>
-                      {environment === "MOCK" ? "Mock Local (Simulação POC)" : null}
+                       {environment === "MOCK" ? "Mock Local (Simulação POC)" : null}
+                       {environment === "DEMO" ? "Receptor SIAFIC - Robonuvem DEMO" : null}
                       {environment === "SANDBOX" ? "Sandbox Banco Virtual Robonuvem" : null}
                       {environment === "HOMOLOGACAO" ? "Homologação Órgão Externo (bloqueada)" : null}
                       {environment === "PRODUCAO" ? "Produção Real (bloqueada)" : null}
@@ -238,6 +268,49 @@ export default function IntegrationConnectionsClient({ catalog, connections }: {
               <ShieldCheck className="h-4 w-4 shrink-0 text-amber-400" />
               <span>Segredo, senha e chaves privadas permanecem retidos no cofre externo (`secret://`).</span>
             </div>
+
+            {selectedCode === "SIAFIC_DEMO" && selectedConnection ? (
+              <div className="space-y-3 border-t border-slate-800 pt-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Fila SIAFIC DEMO</h3>
+                    <p className="text-xs text-slate-400">Snapshots sinteticos imutaveis; o retry preserva evento, hash e chave de idempotencia.</p>
+                  </div>
+                  <span className="rounded bg-indigo-950 px-2 py-1 font-mono text-[10px] text-indigo-300">ultimos 8 eventos</span>
+                </div>
+                {selectedConnection.siaficOutboxEvents.length ? (
+                  <div className="space-y-2">
+                    {selectedConnection.siaficOutboxEvents.map((event) => {
+                      const delivery = event.delivery;
+                      const canRetry = Boolean(delivery && delivery.status !== "PROCESSED" && delivery.status !== "SENDING");
+                      return (
+                        <div key={event.id} className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="font-mono text-xs text-slate-200">{event.entityType} v{event.entityVersion} · {event.operation}</p>
+                              <p className="mt-1 truncate text-[11px] text-slate-500" title={event.entityId}>{event.entityId}</p>
+                            </div>
+                            <span className={`rounded px-2 py-1 text-[10px] font-bold ${delivery?.status === "PROCESSED" ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>
+                              {delivery?.status ?? "SEM ENTREGA"}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+                            <span>{new Date(event.createdAt).toLocaleString("pt-BR")} · tentativa {delivery?.attemptCount ?? 0}</span>
+                            {delivery?.receiptId ? <span className="font-mono text-emerald-400">recibo confirmado</span> : null}
+                            {canRetry ? (
+                              <Button variant="outline" size="sm" disabled={pending} onClick={() => retryDelivery(event.id)} className="h-7 border-slate-700 px-2 text-xs text-slate-200 hover:bg-slate-800">
+                                <RotateCcw className="mr-1 size-3" /> Reenfileirar
+                              </Button>
+                            ) : null}
+                          </div>
+                          {delivery?.lastError ? <p className="mt-2 line-clamp-2 text-[11px] text-amber-300">{delivery.lastError}</p> : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : <p className="rounded-lg border border-dashed border-slate-800 p-3 text-xs text-slate-500">Nenhum evento SIAFIC DEMO foi enfileirado nesta conexao.</p>}
+              </div>
+            ) : null}
 
             {/* Run History with Evidences */}
             {selectedConnection?.runs.length ? (

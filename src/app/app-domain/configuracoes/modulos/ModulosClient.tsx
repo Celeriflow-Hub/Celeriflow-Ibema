@@ -5,7 +5,7 @@ import {
   Blocks, Search, CheckCircle2, Lock, Unlock, 
   Building2, Users, FileText, ShoppingCart, DollarSign, 
   Package, Receipt, Stethoscope, GraduationCap, HeartHandshake, HardHat, 
-  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, AlertCircle, RefreshCw
+  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, AlertCircle, RefreshCw, Truck
 } from "lucide-react";
 import { toggleModulo } from "../actions";
 import { PageFrame } from "@/components/app-ui/PageFrame";
@@ -38,6 +38,7 @@ const MODULE_ICONS: Record<string, { icon: React.ElementType; color: string; bg:
   MEIO_AMBIENTE: { icon: Trees, color: "text-lime-600 dark:text-lime-400", bg: "bg-lime-50 dark:bg-lime-950/50" },
   SANEAMENTO: { icon: Droplets, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-950/50" },
   OBRAS: { icon: HardHat, color: "text-amber-700 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/50" },
+  FROTAS: { icon: Truck, color: "text-teal-700 dark:text-teal-400", bg: "bg-teal-50 dark:bg-teal-950/50" },
   CULTURA: { icon: Palette, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-950/50" },
   CAMARA: { icon: Landmark, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950/50" },
   SEGURANCA: { icon: Shield, color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-50 dark:bg-teal-950/50" },

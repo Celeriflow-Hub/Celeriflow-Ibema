@@ -8,7 +8,7 @@ import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence"
 
 const MODULE_CODES = new Set([
   "ADMINISTRACAO", "RH", "CADASTROS", "ATENDIMENTO", "COMPRAS", "CONTRATOS", "FINANCEIRO", "PATRIMONIO", "TRIBUTACAO", "PROCESSOS", "SAUDE",
-  "EDUCACAO", "SOCIAL", "MEIO_AMBIENTE", "CAMARA", "TRANSPARENCIA", "CONFIGURACOES",
+  "EDUCACAO", "SOCIAL", "FROTAS", "MEIO_AMBIENTE", "CAMARA", "TRANSPARENCIA", "CONFIGURACOES",
 ]);
 
 function normalizePermissions(value: string | undefined) {

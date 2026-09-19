@@ -108,7 +108,7 @@ export default async function BensPatrimoniaisPage(
                 ) : (
                   assets.map((asset) => (
                     <tr key={asset.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="p-4 font-bold whitespace-nowrap text-amber-700">{asset.patrimonyNumber}</td>
+                      <td className="p-4 font-bold whitespace-nowrap text-amber-700"><Link href={`/patrimonio/bens/${encodeURIComponent(asset.id)}`} className="underline underline-offset-2">{asset.patrimonyNumber}</Link></td>
                       <td className="p-4 font-medium min-w-[200px]">{asset.name}</td>
                       <td className="p-4 whitespace-nowrap">{asset.category?.name || "-"}</td>
                       <td className="p-4 text-xs text-muted-foreground min-w-[200px]">

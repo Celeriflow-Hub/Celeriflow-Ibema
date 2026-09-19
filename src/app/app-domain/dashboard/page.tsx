@@ -21,6 +21,7 @@ import {
   Palette,
   Shield,
   Lock,
+  Truck,
   ArrowUpRight
 } from "lucide-react";
 import { canShowDashboardCard, canViewModule, getOptionalTenantContext, isModuleActive, isModuleBlockedForUser } from "@/lib/platform/tenant-context";
@@ -58,6 +59,7 @@ const menuItems: MenuItem[] = [
   { code: "MEIO_AMBIENTE", name: "Meio Ambiente", description: "Licenças e fiscalização", href: "/meio-ambiente", icon: Leaf, color: "text-[#65A30D]", bg: "bg-[#ECFCCB]", solid: "bg-[#65A30D]" },
   { code: "SANEAMENTO", name: "Água e Saneamento", description: "Água e esgoto", href: "/saneamento", icon: Droplets, color: "text-[#0284C7]", bg: "bg-[#E0F2FE]", solid: "bg-[#0284C7]" },
   { code: "OBRAS", name: "Obras e Serviços", description: "Infraestrutura e urbana", href: "/obras", icon: HardHat, color: "text-[#B45309]", bg: "bg-[#FEF3C7]", solid: "bg-[#B45309]" },
+  { code: "FROTAS", name: "Frotas", description: "Veículos, máquinas e manutenção", href: "/frotas", icon: Truck, color: "text-[#0F766E]", bg: "bg-[#CCFBF1]", solid: "bg-[#0F766E]" },
   { code: "CULTURA", name: "Cultura e Lazer", description: "Cultura e esporte", href: "/cultura", icon: Palette, color: "text-[#E11D48]", bg: "bg-[#FFE4E6]", solid: "bg-[#E11D48]" },
   { code: "CAMARA", name: "Câmara Municipal", description: "Gestão Legislativa", href: "/camara", icon: Landmark, color: "text-[#9333EA]", bg: "bg-[#F3E8FF]", solid: "bg-[#9333EA]" },
   { code: "SEGURANCA", name: "Segurança e Mobilidade", description: "Guarda e trânsito", href: "/seguranca", icon: Shield, color: "text-[#0F766E]", bg: "bg-[#CCFBF1]", solid: "bg-[#0F766E]" },

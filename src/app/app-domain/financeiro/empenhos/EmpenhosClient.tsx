@@ -53,7 +53,20 @@ type SupplierOption = {
 };
 
 type AppropriationOption = { id: string; code: string; budgetUnit: { name: string } };
-type ReservationOption = { id: string; number: string; value: number; appropriationId: string; appropriation: { code: string }; expense: { purchaseReceipt: { number: string; contractId: string; contract: { supplierId: string } } | null } | null };
+type ReservationOption = {
+  id: string;
+  number: string;
+  value: number;
+  appropriationId: string;
+  appropriation: { code: string };
+  expense: {
+    supplierId: string | null;
+    sourceModule: string;
+    sourceType: string;
+    sourceId: string | null;
+    purchaseReceipt: { number: string; contractId: string; contract: { supplierId: string } } | null;
+  } | null;
+};
 type ProcessOption = { id: string; protocolNumber: string; description: string | null };
 type ContractOption = { id: string; number: string; object: string; supplierId: string; status: string };
 type ObrasServiceOption = { id: string; protocolo: string; tipo: string; descricao: string; local: string; budgetAppropriationId: string | null; budgetAppropriation: { code: string } | null };
@@ -346,25 +359,29 @@ export default function EmpenhosClient({
 
             {!editingId && (
               <div className="space-y-2">
-                <Label htmlFor="reservationId">Reserva Orçamentária</Label>
-                <Select value={formData.reservationId} onValueChange={v => {
-                  const reservation = reservations.find(r => r.id === v);
-                  const receipt = reservation?.expense?.purchaseReceipt;
-                  setFormData({
-                    ...formData,
-                    reservationId: v as string,
-                    appropriationId: reservation?.appropriationId ?? formData.appropriationId,
-                    value: reservation?.value ?? formData.value,
-                    supplierId: receipt?.contract.supplierId ?? formData.supplierId,
-                    contractId: receipt?.contractId ?? formData.contractId,
-                    history: receipt ? `Recebimento ${receipt.number}` : formData.history,
-                  });
-                }}>
+                 <Label htmlFor="reservationId">Reserva Orçamentária</Label>
+                 <Select value={formData.reservationId} onValueChange={v => {
+                   const reservation = reservations.find(r => r.id === v);
+                   const expense = reservation?.expense;
+                   const receipt = expense?.purchaseReceipt;
+                   const contract = expense?.sourceModule === "COMPRAS" && expense.sourceType === "CONTRACT" && expense.sourceId
+                     ? contracts.find((item) => item.id === expense.sourceId)
+                     : null;
+                   setFormData({
+                     ...formData,
+                     reservationId: v as string,
+                     appropriationId: reservation?.appropriationId ?? formData.appropriationId,
+                     value: reservation?.value ?? formData.value,
+                     supplierId: receipt?.contract.supplierId ?? expense?.supplierId ?? formData.supplierId,
+                     contractId: receipt?.contractId ?? contract?.id ?? formData.contractId,
+                     history: receipt ? `Recebimento ${receipt.number}` : contract ? `AE do contrato ${contract.number}` : formData.history,
+                   });
+                 }}>
                   <SelectTrigger><SelectValue placeholder="Selecione a reserva ativa" /></SelectTrigger>
                   <SelectContent>
-                    {reservations.map(r => (
-                      <SelectItem key={r.id} value={r.id}>{r.number} - {r.appropriation.code} - {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(r.value)}{r.expense?.purchaseReceipt ? ` · ${r.expense.purchaseReceipt.number}` : ""}</SelectItem>
-                    ))}
+                     {reservations.map(r => (
+                       <SelectItem key={r.id} value={r.id}>{r.number} - {r.appropriation.code} - {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(r.value)}{r.expense?.purchaseReceipt ? ` · ${r.expense.purchaseReceipt.number}` : r.expense?.sourceModule === "COMPRAS" && r.expense.sourceType === "CONTRACT" ? " · AE contratual" : ""}</SelectItem>
+                     ))}
                   </SelectContent>
                 </Select>
               </div>

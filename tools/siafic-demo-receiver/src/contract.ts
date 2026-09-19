@@ -9,13 +9,14 @@ const positiveInteger = z.number().int().positive();
 const decimalString = z.string().regex(/^\d+(?:\.\d{1,4})?$/);
 const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const isoInstant = z.string().datetime({ offset: true });
+const personRole = z.enum(["SUPPLIER", "AGREEMENT_COUNTERPART"]);
 
 const personPayload = z.object({
   personKind: z.enum(["PF", "PJ"]),
   identity: z.object({ type: z.literal("SYNTHETIC"), value: z.string().min(1).max(160) }),
   legalName: z.string().min(1).max(500),
   tradeName: z.string().max(500).nullable().optional(),
-  roles: z.array(z.literal("SUPPLIER")).min(1),
+  roles: z.array(personRole).min(1),
   registrationStatus: z.enum(["ACTIVE", "INACTIVE", "SUSPENDED"]),
   businessActivity: z.string().max(500).nullable().optional(),
   companyType: z.string().max(100).nullable().optional(),
@@ -25,15 +26,21 @@ const personPayload = z.object({
   targetUnitCode: z.string().min(1).max(50),
 }).strict();
 
-const instrumentPayload = z.object({
-  instrumentType: z.literal("CONTRACT"),
+const instrumentItem = z.object({
+  sourceItemId: z.string().min(1),
+  description: z.string().min(1).max(2_000),
+  unit: z.string().min(1).max(50),
+  quantity: decimalString,
+  unitPrice: decimalString.nullable(),
+  totalAmount: decimalString.nullable(),
+}).strict();
+
+const commonInstrumentPayload = {
   number: z.string().min(1).max(120),
   year: z.number().int().min(2000).max(2200),
   sourceUnitCode: z.string().min(1).max(50),
   targetUnitCode: z.string().min(1).max(50),
-  processReference: z.string().min(1).max(160),
   object: z.string().min(1).max(5_000),
-  parties: z.array(z.object({ sourcePersonId: z.string().min(1), role: z.literal("SUPPLIER") }).strict()).min(1),
   signedOn: dateOnly,
   validFrom: dateOnly,
   validUntil: dateOnly,
@@ -41,17 +48,33 @@ const instrumentPayload = z.object({
   currency: z.literal("BRL"),
   initialAmount: decimalString,
   currentAmount: decimalString,
-  items: z.array(z.object({
-    sourceItemId: z.string().min(1),
-    description: z.string().min(1).max(2_000),
-    unit: z.string().min(1).max(50),
-    quantity: decimalString,
-    unitPrice: decimalString.nullable(),
-    totalAmount: decimalString.nullable(),
-  }).strict()),
+  items: z.array(instrumentItem),
   changes: z.array(z.unknown()).default([]),
   documentReferences: z.array(z.unknown()).default([]),
+};
+
+const contractInstrumentPayload = z.object({
+  ...commonInstrumentPayload,
+  instrumentType: z.literal("CONTRACT"),
+  processReference: z.string().min(1).max(160),
+  parties: z.array(z.object({ sourcePersonId: z.string().min(1), role: z.literal("SUPPLIER") }).strict()).min(1),
 }).strict();
+
+const agreementInstrumentPayload = z.object({
+  ...commonInstrumentPayload,
+  instrumentType: z.literal("AGREEMENT"),
+  processReference: z.string().min(1).max(160).nullable().optional(),
+  parties: z.array(z.object({ sourcePersonId: z.string().min(1), role: z.string().min(1).max(120) }).strict()),
+  grantor: z.string().min(1).max(500).nullable().optional(),
+  grantorUnitCode: z.string().min(1).max(50).nullable().optional(),
+  transferAmount: decimalString.nullable().optional(),
+  counterpartAmount: decimalString.nullable().optional(),
+}).strict();
+
+const instrumentPayload = z.discriminatedUnion("instrumentType", [
+  contractInstrumentPayload,
+  agreementInstrumentPayload,
+]);
 
 const common = {
   protocol: z.literal(protocol),

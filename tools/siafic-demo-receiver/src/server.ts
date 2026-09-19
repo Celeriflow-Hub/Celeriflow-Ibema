@@ -185,8 +185,12 @@ export async function startReceiver(options: { port?: number; host?: string; con
         }
         const persons = await store.entities("PERSON", 50, 0);
         const instruments = await store.entities("INSTRUMENT", 50, 0);
+        const instrumentRows = instruments.rows.map((row) => ({
+          ...row,
+          instrumentLabel: row.entityData.entityType === "INSTRUMENT" && row.entityData.payload.instrumentType === "AGREEMENT" ? "Convenio" : "Contrato",
+        }));
         response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
-        response.end(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Receptor SIAFIC - Robonuvem DEMO</title><style>body{font:14px system-ui;margin:32px;color:#172033}table{border-collapse:collapse;width:100%;margin:16px 0}th,td{border:1px solid #cbd5e1;padding:8px;text-align:left}.notice{background:#fef3c7;padding:12px;border-radius:6px}form{display:inline}button{padding:6px 10px}</style></head><body><h1>Receptor SIAFIC - Robonuvem DEMO</h1><p class="notice">Ambiente simulado para demonstracao de interoperabilidade. Nao conectado ao SIAFIC da Prefeitura. Dados ficticios. Protocolos sem validade oficial.</p><p>Dataset: ${html(config.datasetId)}</p><form method="post" action="/dashboard/logout"><button type="submit">Encerrar sessao</button></form><h2>Fornecedores / partes (${persons.total})</h2><table><tr><th>Origem</th><th>Versao</th><th>Atualizado</th></tr>${persons.rows.map((row) => `<tr><td>${html(row.sourceEntityId)}</td><td>${row.latestVersion}</td><td>${html(row.updatedAt)}</td></tr>`).join("")}</table><h2>Instrumentos (${instruments.total})</h2><table><tr><th>Origem</th><th>Versao</th><th>Atualizado</th></tr>${instruments.rows.map((row) => `<tr><td>${html(row.sourceEntityId)}</td><td>${row.latestVersion}</td><td>${html(row.updatedAt)}</td></tr>`).join("")}</table></body></html>`);
+        response.end(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Receptor SIAFIC - Robonuvem DEMO</title><style>body{font:14px system-ui;margin:32px;color:#172033}table{border-collapse:collapse;width:100%;margin:16px 0}th,td{border:1px solid #cbd5e1;padding:8px;text-align:left}.notice{background:#fef3c7;padding:12px;border-radius:6px}form{display:inline}button{padding:6px 10px}</style></head><body><h1>Receptor SIAFIC - Robonuvem DEMO</h1><p class="notice">Ambiente simulado para demonstracao de interoperabilidade. Nao conectado ao SIAFIC da Prefeitura. Dados ficticios. Protocolos sem validade oficial.</p><p>Dataset: ${html(config.datasetId)}</p><form method="post" action="/dashboard/logout"><button type="submit">Encerrar sessao</button></form><h2>Fornecedores / partes (${persons.total})</h2><table><tr><th>Origem</th><th>Versao</th><th>Atualizado</th></tr>${persons.rows.map((row) => `<tr><td>${html(row.sourceEntityId)}</td><td>${row.latestVersion}</td><td>${html(row.updatedAt)}</td></tr>`).join("")}</table><h2>Instrumentos (${instruments.total})</h2><table><tr><th>Tipo</th><th>Origem</th><th>Versao</th><th>Atualizado</th></tr>${instrumentRows.map((row) => `<tr><td>${row.instrumentLabel}</td><td>${html(row.sourceEntityId)}</td><td>${row.latestVersion}</td><td>${html(row.updatedAt)}</td></tr>`).join("")}</table></body></html>`);
         return;
       }
       if (!isAuthorized(request, config)) {
@@ -194,7 +198,7 @@ export async function startReceiver(options: { port?: number; host?: string; con
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/demo/v1/capabilities") {
-        writeJson(response, 200, { protocol, protocolVersion, receiverId: config.receiverId, environment: "DEMO", capabilities: ["person.snapshot", "instrument.snapshot", "receipts", "reconciliation"] });
+        writeJson(response, 200, { protocol, protocolVersion, receiverId: config.receiverId, environment: "DEMO", capabilities: ["person.snapshot", "instrument.snapshot", "contract.snapshot", "agreement.snapshot", "receipts", "reconciliation"] });
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/demo/v1/events") {

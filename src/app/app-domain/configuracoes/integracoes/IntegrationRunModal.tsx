@@ -64,9 +64,11 @@ export default function IntegrationRunModal({
               <div className="flex items-center gap-2">
                 <h3 className="text-xl font-bold text-white">{connectionName}</h3>
                 <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                  run.status === "SUCCESS" || run.status === "SUCESSO"
+                  run.status === "SUCCESS" || run.status === "SUCESSO" || run.status === "CONFIRMED"
                     ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                    : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                    : run.status === "QUEUED" || run.status === "PENDING_CONFIGURATION"
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                      : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
                 }`}>
                   {run.status}
                 </span>

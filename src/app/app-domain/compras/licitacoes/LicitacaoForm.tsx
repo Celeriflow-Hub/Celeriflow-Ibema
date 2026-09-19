@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { format } from "date-fns";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
+import { BIDDING_MODALITIES, biddingStatusLabel } from "@/lib/compras/bidding-workflow";
 
 type BiddingData = {
   id: string;
@@ -41,13 +42,15 @@ export function LicitacaoForm({ data, processos = [] }: { data?: BiddingData; pr
 
   async function handleSubmit(formData: FormData) {
     setIsSaving(true);
-    const result = await saveBidding(formData);
-    setIsSaving(false);
-    
-    if (result.success) {
-      router.push("/compras/licitacoes");
-    } else {
-      alert(result.error);
+    try {
+      const result = await saveBidding(formData);
+      if (result.success) {
+        router.push("/compras/licitacoes");
+      } else {
+        alert(result.error);
+      }
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -66,54 +69,47 @@ export function LicitacaoForm({ data, processos = [] }: { data?: BiddingData; pr
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="number">Número do Edital / Certame</Label>
-                <Input id="number" name="number" defaultValue={data?.number || ""} placeholder="Ex: PE 001/2026 (Auto-gerado se vazio)" />
+                <Input id="number" name="number" defaultValue={data?.number || ""} required={Boolean(data)} placeholder="Auto-gerado por modalidade se vazio" />
+                {!data && <p className="text-xs text-muted-foreground">A sequência automática é independente para cada modalidade.</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="modality">Modalidade</Label>
-                <Select name="modality" defaultValue={data?.modality || "Pregão Eletrônico"}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a modalidade" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Pregão Eletrônico">Pregão Eletrônico</SelectItem>
-                    <SelectItem value="Pregão Presencial">Pregão Presencial</SelectItem>
-                    <SelectItem value="Concorrência">Concorrência</SelectItem>
-                    <SelectItem value="Tomada de Preços">Tomada de Preços</SelectItem>
-                    <SelectItem value="Convite">Convite</SelectItem>
-                    <SelectItem value="Leilão">Leilão</SelectItem>
-                    <SelectItem value="Concurso">Concurso</SelectItem>
-                  </SelectContent>
-                </Select>
+                {data ? (
+                  <>
+                    <Input value={data.modality} disabled />
+                    <input type="hidden" name="modality" value={data.modality} />
+                  </>
+                ) : (
+                  <Select name="modality" defaultValue="Pregão Eletrônico" required>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a modalidade" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {BIDDING_MODALITIES.map((modality) => <SelectItem key={modality} value={modality}>{modality}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+                {data && <p className="text-xs text-muted-foreground">A modalidade não é alterada depois da criação para manter a numeração atribuída.</p>}
               </div>
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select name="status" defaultValue={data?.status || "Aberto"}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Aberto">Aberto</SelectItem>
-                    <SelectItem value="Em Julgamento">Em Julgamento</SelectItem>
-                    <SelectItem value="Homologado">Homologado</SelectItem>
-                    <SelectItem value="Suspenso">Suspenso</SelectItem>
-                    <SelectItem value="Cancelado">Cancelado</SelectItem>
-                    <SelectItem value="Fracassado">Fracassado</SelectItem>
-                    <SelectItem value="Deserto">Deserto</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Situação do certame</Label>
+                <div className="flex min-h-9 items-center rounded-md border bg-muted/40 px-3 text-sm font-medium">
+                  {data ? biddingStatusLabel(data.status) : "Em Elaboração"}
+                </div>
+                <p className="text-xs text-muted-foreground">As transições são registradas na ficha da licitação, após o cadastro.</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="processId">Processo Vinculado</Label>
-                <Select name="processId" value={selectedProcessId} onValueChange={(val) => setSelectedProcessId(val || "")}>
+                <Select name="processId" value={selectedProcessId} onValueChange={(val) => setSelectedProcessId(val || "")} required>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o processo" />
                   </SelectTrigger>
                   <SelectContent>
                     {processos.map(proc => (
-                      <SelectItem key={proc.id} value={proc.id}>{proc.number} - {proc.object?.substring(0, 30)}...</SelectItem>
+                      <SelectItem key={proc.id} value={proc.id}>{proc.number} - {proc.object.substring(0, 30)}...</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -138,17 +134,18 @@ export function LicitacaoForm({ data, processos = [] }: { data?: BiddingData; pr
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="sessionDate">Data da Sessão</Label>
+                <Label htmlFor="sessionDate">Prazo da Sessão / Lances</Label>
                 <Input 
                   id="sessionDate" 
                   name="sessionDate" 
                   type="datetime-local" 
                   defaultValue={data?.sessionDate ? format(new Date(data.sessionDate), "yyyy-MM-dd'T'HH:mm") : ""} 
                 />
+                <p className="text-xs text-muted-foreground">No POC, esta data limita os lances enviados pelo portal do fornecedor.</p>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 border-t pt-3">
+            <div className="flex flex-col-reverse gap-2 border-t pt-3 sm:flex-row sm:justify-end">
               <Link href="/compras/licitacoes">
                 <Button type="button" variant="outline">Cancelar</Button>
               </Link>

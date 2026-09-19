@@ -1,13 +1,19 @@
 "use server";
 
 import { FinanceError, cancelCommitment as cancelOfficialCommitment, createCommitment as createOfficialCommitment } from "@/lib/financeiro";
+import {
+  ProcurementFinanceBridgeError,
+  cancelCommitmentForCancelledContract,
+  createCommitmentFromExpenseAuthorization,
+  procurementFinanceEventTypes,
+} from "@/lib/compras/procurement-finance-bridge";
 import { assertBudgetUnitAccess, getTenantContextForModuleOperation, type AppContext } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
 type ActionResult = { error?: string };
 
 function message(error: unknown) {
-  return error instanceof FinanceError ? error.message : "Não foi possível concluir o empenho.";
+  return error instanceof FinanceError || error instanceof ProcurementFinanceBridgeError ? error.message : "Não foi possível concluir o empenho.";
 }
 
 async function assertCommitmentAccess(context: AppContext, commitmentId: string) {
@@ -18,6 +24,42 @@ async function assertCommitmentAccess(context: AppContext, commitmentId: string)
   if (!commitment) throw new FinanceError("Empenho não encontrado.");
   assertBudgetUnitAccess(context.user, commitment.appropriation.budgetUnitId);
   return commitment;
+}
+
+async function expenseAuthorizationForReservation(context: AppContext, reservationId: string) {
+  const reservation = await context.prisma.budgetReservation.findUnique({
+    where: { id: reservationId },
+    select: {
+      id: true,
+      number: true,
+      appropriationId: true,
+      appropriation: { select: { budgetUnitId: true } },
+      expense: {
+        select: {
+          id: true,
+          supplierId: true,
+          sourceModule: true,
+          sourceType: true,
+          sourceId: true,
+          eventType: true,
+        },
+      },
+    },
+  });
+  if (!reservation) throw new FinanceError("Reserva orçamentária não encontrada.");
+  assertBudgetUnitAccess(context.user, reservation.appropriation.budgetUnitId);
+
+  const expense = reservation.expense;
+  if (
+    !expense
+    || expense.sourceModule !== "COMPRAS"
+    || expense.sourceType !== "CONTRACT"
+    || !expense.sourceId
+    || expense.eventType !== procurementFinanceEventTypes.expenseAuthorizationCreated
+  ) {
+    return { reservation, expense: null };
+  }
+  return { reservation, expense };
 }
 
 function revalidateContractExecution(contractId?: string | null) {
@@ -60,16 +102,33 @@ export async function createCommitment(data: {
 }): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
-    const appropriation = await context.prisma.budgetAppropriation.findUnique({
-      where: { id: data.appropriationId },
-      select: { budgetUnitId: true },
-    });
-    if (!appropriation) throw new FinanceError("Dotação orçamentária não encontrada.");
-    assertBudgetUnitAccess(context.user, appropriation.budgetUnitId);
-    const commitment = await createOfficialCommitment(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, data);
+    const { reservation, expense } = await expenseAuthorizationForReservation(context, data.reservationId);
+    if (reservation.appropriationId !== data.appropriationId) {
+      throw new FinanceError("A reserva selecionada não pertence à dotação informada.");
+    }
+    if (expense && data.contractId && data.contractId !== expense.sourceId) {
+      throw new ProcurementFinanceBridgeError("O contrato informado não corresponde à AE selecionada.");
+    }
+    if (expense && data.supplierId && data.supplierId !== expense.supplierId) {
+      throw new ProcurementFinanceBridgeError("O fornecedor informado não corresponde à AE selecionada.");
+    }
+
+    const actor = { usuarioId: context.user.id, employeeId: context.user.employeeId };
+    const commitment = expense
+      ? (await createCommitmentFromExpenseAuthorization(context.prisma, actor, {
+        expenseId: expense.id,
+        reservationId: reservation.id,
+        reservationNumber: reservation.number,
+        commitmentNumber: data.number,
+        date: data.date,
+        value: data.value,
+        type: data.type,
+        history: data.history,
+      })).commitment
+      : await createOfficialCommitment(context.prisma, actor, data);
     revalidatePath("/financeiro/empenhos");
     revalidatePath("/financeiro/orcamento");
-    revalidateContractExecution(data.contractId);
+    revalidateContractExecution(commitment.contractId);
     if (data.obrasServiceId) {
       revalidatePath("/obras");
       revalidatePath("/obras/ordens-servico");
@@ -102,7 +161,20 @@ export async function cancelCommitment(id: string): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "delete");
     const commitment = await assertCommitmentAccess(context, id);
-    await cancelOfficialCommitment(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, id);
+    const fromProcurement = await context.prisma.procurementLifecycleEvent.findFirst({
+      where: {
+        eventType: procurementFinanceEventTypes.commitmentCreated,
+        entityType: "COMMITMENT",
+        entityId: id,
+      },
+      select: { id: true },
+    });
+    const actor = { usuarioId: context.user.id, employeeId: context.user.employeeId };
+    if (fromProcurement) {
+      await cancelCommitmentForCancelledContract(context.prisma, actor, id);
+    } else {
+      await cancelOfficialCommitment(context.prisma, actor, id);
+    }
     revalidatePath("/financeiro/empenhos");
     revalidatePath("/financeiro/orcamento");
     revalidateContractExecution(commitment.contractId);

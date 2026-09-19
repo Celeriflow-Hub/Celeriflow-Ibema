@@ -13,12 +13,16 @@ import {
   LayoutDashboard,
   ArrowLeft,
   Menu,
-  X
+  X,
+  SearchCheck,
+  CalendarDays
 } from "lucide-react";
 
 const sidebarNavItems = [
   { title: "Painel de Compras", href: "/compras", icon: LayoutDashboard },
   { title: "Solicitações", href: "/compras/solicitacoes", icon: ShoppingCart },
+  { title: "Planejamento", href: "/compras/planejamento", icon: CalendarDays },
+  { title: "Pesquisas de Preços", href: "/compras/pesquisas-precos", icon: SearchCheck },
   { title: "Processos de Compra", href: "/compras/processos", icon: ClipboardList },
   { title: "Licitações", href: "/compras/licitacoes", icon: Gavel },
   { title: "Contratos", href: "/compras/contratos", icon: Scale },
@@ -30,6 +34,11 @@ export default function ComprasLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
+  const isSupplierPortal = pathname.includes("/compras/pesquisas-precos/portal/");
+
+  if (isSupplierPortal) {
+    return <main className="min-h-0 flex-1 bg-slate-50">{children}</main>;
+  }
 
   return (
     <div data-module-shell className="relative -my-2 mx-auto flex min-h-0 w-[calc(100%+1rem)] max-w-[calc(1600px+1rem)] flex-1 flex-col bg-slate-50/30 sm:-my-3 sm:w-[calc(100%+1.5rem)] sm:max-w-[calc(1600px+1.5rem)] md:flex-row">

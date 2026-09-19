@@ -44,7 +44,18 @@ export default async function EmpenhosPage() {
 
   const reservations = await prisma.budgetReservation.findMany({
     where: { status: "Ativa" },
-    include: { appropriation: { include: { budgetUnit: true } }, expense: { select: { purchaseReceipt: { select: { number: true, contractId: true, contract: { select: { supplierId: true } } } } } } },
+    include: {
+      appropriation: { include: { budgetUnit: true } },
+      expense: {
+        select: {
+          supplierId: true,
+          sourceModule: true,
+          sourceType: true,
+          sourceId: true,
+          purchaseReceipt: { select: { number: true, contractId: true, contract: { select: { supplierId: true } } } },
+        },
+      },
+    },
     orderBy: { date: "desc" },
   });
 

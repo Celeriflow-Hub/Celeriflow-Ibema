@@ -13,6 +13,7 @@ import { ArrowLeft, Save } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
+import { calculateInclusiveContractTermDays, parseContractDate } from "@/lib/compras/contract-lifecycle";
 
 type ContractData = {
   id: string;
@@ -23,6 +24,7 @@ type ContractData = {
   number: string;
   object: string;
   initialValue: number;
+  updatedValue: number;
   status: string;
   startDate: Date;
   endDate: Date;
@@ -33,6 +35,7 @@ type ProcessOption = {
   number: string;
   object: string;
   estimatedValue: number | null;
+  items: Array<{ quantity: number }>;
 };
 
 type SecretariatOption = { id: string; name: string };
@@ -52,14 +55,30 @@ type ContratoFormProps = {
   fornecedores?: SupplierOption[];
 };
 
+const directlyEditableStatuses = ["Minuta", "Vigente", "Encerrado"];
+
 export function ContratoForm({ data, processos = [], secretarias = [], unidadesGestoras = [], fornecedores = [] }: ContratoFormProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const [selectedProcessId, setSelectedProcessId] = useState<string>(data?.processId || "");
+  const dateValue = (value?: Date) => value ? new Date(value).toISOString().slice(0, 10) : "";
+  const [startDate, setStartDate] = useState(() => dateValue(data?.startDate));
+  const [endDate, setEndDate] = useState(() => dateValue(data?.endDate));
 
   const selectedProcess = processos.find(p => p.id === selectedProcessId);
-  const calculatedTotal = selectedProcess?.estimatedValue ?? data?.initialValue ?? 0;
-  const dateValue = (value?: Date) => value ? new Date(value).toISOString().slice(0, 10) : "";
+  const calculatedTotal = data?.initialValue ?? selectedProcess?.estimatedValue ?? 0;
+  const contractedQuantity = selectedProcess?.items.reduce((total, item) => total + item.quantity, 0) ?? 0;
+  const parsedStartDate = parseContractDate(startDate);
+  const parsedEndDate = parseContractDate(endDate);
+  const statusLocked = Boolean(data && !directlyEditableStatuses.includes(data.status));
+  let termDays: number | null = null;
+  if (parsedStartDate && parsedEndDate) {
+    try {
+      termDays = calculateInclusiveContractTermDays(parsedStartDate, parsedEndDate);
+    } catch {
+      termDays = null;
+    }
+  }
 
   async function handleSubmit(formData: FormData) {
     setIsSaving(true);
@@ -89,11 +108,12 @@ export function ContratoForm({ data, processos = [], secretarias = [], unidadesG
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="number">Número do Contrato</Label>
-                <Input id="number" name="number" defaultValue={data?.number || ""} placeholder="Ex: CONT 001/2026 (Auto-gerado se vazio)" />
+                <Input id="number" name="number" defaultValue={data?.number || ""} placeholder="Ex: CONT 001/2026" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="processId">Processo Vinculado</Label>
-                <Select name="processId" value={selectedProcessId} onValueChange={(val) => setSelectedProcessId(val || "")} required>
+                {data && <input type="hidden" name="processId" value={data.processId} />}
+                <Select name="processId" value={selectedProcessId} onValueChange={(val) => setSelectedProcessId(val || "")} required disabled={Boolean(data)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o processo" />
                   </SelectTrigger>
@@ -103,30 +123,34 @@ export function ContratoForm({ data, processos = [], secretarias = [], unidadesG
                     ))}
                   </SelectContent>
                 </Select>
+                {selectedProcess && <p className="text-xs text-muted-foreground">Quantidade vinculada ao processo: {new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 4 }).format(contractedQuantity)}</p>}
               </div>
             </div>
 
             <div className="grid gap-3 md:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="startDate">Início da vigência</Label>
-                <Input id="startDate" name="startDate" type="date" required defaultValue={dateValue(data?.startDate)} />
+                <Input id="startDate" name="startDate" type="date" required value={startDate} onChange={(event) => setStartDate(event.target.value)} disabled={Boolean(data)} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="endDate">Fim da vigência</Label>
-                <Input id="endDate" name="endDate" type="date" required defaultValue={dateValue(data?.endDate)} />
+                <Input id="endDate" name="endDate" type="date" required value={endDate} onChange={(event) => setEndDate(event.target.value)} disabled={Boolean(data)} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="status">Situação</Label>
-                <Select name="status" defaultValue={data?.status || "Minuta"} required>
+                {statusLocked && data && <input type="hidden" name="status" value={data.status} />}
+                <Select name="status" defaultValue={data?.status || "Minuta"} required disabled={statusLocked}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Minuta">Minuta</SelectItem>
                     <SelectItem value="Vigente">Vigente</SelectItem>
                     <SelectItem value="Encerrado">Encerrado</SelectItem>
+                    {statusLocked && data && <SelectItem value={data.status}>{data.status}</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
             </div>
+            <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">Vigência calculada: {termDays ? `${termDays} dia${termDays === 1 ? "" : "s"} corrido${termDays === 1 ? "" : "s"}, com contagem inclusiva.` : "Informe datas válidas de início e término."}{data && " Valor inicial e vigência são preservados nesta edição; registre alteração por aditivo."}</p>
 
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
@@ -144,7 +168,8 @@ export function ContratoForm({ data, processos = [], secretarias = [], unidadesG
               </div>
               <div className="space-y-2">
                 <Label htmlFor="secretariatId">Secretaria</Label>
-                <Select name="secretariatId" defaultValue={data?.secretariatId || ""} required>
+                {data && <input type="hidden" name="secretariatId" value={data.secretariatId} />}
+                <Select name="secretariatId" defaultValue={data?.secretariatId || ""} required disabled={Boolean(data)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione a Secretaria" />
                   </SelectTrigger>
@@ -171,11 +196,12 @@ export function ContratoForm({ data, processos = [], secretarias = [], unidadesG
             </div>
 
             <div className="space-y-2">
-              <Label>Valor Total (R$)</Label>
+              <Label>Valor Inicial (R$)</Label>
               <div className="text-2xl font-bold text-slate-700 h-10 flex items-center">
                 {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedTotal)}
               </div>
               <input type="hidden" name="initialValue" value={calculatedTotal} />
+              {data && <p className="text-xs text-muted-foreground">Valor atualizado: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(data.updatedValue)}</p>}
             </div>
 
             <div className="space-y-2">

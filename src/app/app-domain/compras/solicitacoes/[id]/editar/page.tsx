@@ -1,4 +1,4 @@
-import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { SolicitacaoForm } from "../../SolicitacaoForm";
 import { notFound } from "next/navigation";
 import { canManagePurchaseRequest, canSelectAnyPurchaseRequestOrigin, purchaseRequestOriginScope } from "@/lib/compras/purchase-request-policy";
@@ -9,7 +9,7 @@ export default async function EditarSolicitacaoPage({ params }: { params: Promis
   const resolvedParams = await params;
   const solicitacao = await prisma.purchaseRequest.findUnique({
     where: { id: resolvedParams.id },
-    include: { items: true },
+    include: { items: { include: { budgetAllocations: true } } },
   });
 
   if (!solicitacao || !canManagePurchaseRequest(context.user, solicitacao)) {
@@ -17,7 +17,8 @@ export default async function EditarSolicitacaoPage({ params }: { params: Promis
   }
   const origin = purchaseRequestOriginScope(context.user);
   const canSelectAnyOrigin = canSelectAnyPurchaseRequestOrigin(context.user);
-  const [catalogItems, secretarias, departments] = await Promise.all([
+  const budgetUnitScope = isSystemAdministrator(context.user) ? {} : { budgetUnitId: { in: context.user.allowedBudgetUnitIds } };
+  const [catalogItems, secretarias, departments, budgetAppropriations] = await Promise.all([
     prisma.catalogItem.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' }
@@ -27,17 +28,53 @@ export default async function EditarSolicitacaoPage({ params }: { params: Promis
       orderBy: { name: 'asc' }
     }),
     prisma.department.findMany({ where: { isActive: true, ...(origin ? { id: origin.departmentId } : canSelectAnyOrigin ? {} : { id: "__sem-origem-autorizada__" }) }, select: { id: true, name: true, secretariatId: true }, orderBy: { name: 'asc' } }),
+    prisma.budgetAppropriation.findMany({
+      where: budgetUnitScope,
+      select: {
+        id: true,
+        code: true,
+        budgetUnit: { select: { name: true, secretariatId: true } },
+        expenseNature: { select: { code: true, name: true } },
+        resourceSource: { select: { code: true, name: true } },
+        financialYear: { select: { year: true } },
+      },
+      orderBy: { code: "asc" },
+    }),
   ]);
 
   const mappedSolicitacao = {
     ...solicitacao,
     items: solicitacao.items.map((item) => ({
-      catalogItemId: item.catalogItemId ?? "",
+      id: item.id,
+      catalogItemId: item.catalogItemId ?? (item.customName ? "custom" : ""),
       customName: item.customName ?? "",
       quantity: item.quantity,
       estimatedUnitValue: item.estimatedUnitValue ?? 0,
+      allocations: item.budgetAllocations.map((allocation) => ({
+        budgetAppropriationId: allocation.budgetAppropriationId,
+        quantity: allocation.quantity,
+        value: allocation.valueDecimal.toNumber(),
+      })),
     }))
   };
 
-  return <SolicitacaoForm data={mappedSolicitacao} catalogItems={catalogItems} secretarias={secretarias} departments={departments} initialOrigin={origin} originLocked={!canSelectAnyOrigin} />;
+  return <SolicitacaoForm
+    data={mappedSolicitacao}
+    catalogItems={catalogItems}
+    secretarias={secretarias}
+    departments={departments}
+    budgetAppropriations={budgetAppropriations.map((appropriation) => ({
+      id: appropriation.id,
+      code: appropriation.code,
+      secretariatId: appropriation.budgetUnit.secretariatId,
+      budgetUnitName: appropriation.budgetUnit.name,
+      expenseNatureCode: appropriation.expenseNature.code,
+      expenseNatureName: appropriation.expenseNature.name,
+      resourceSourceCode: appropriation.resourceSource.code,
+      resourceSourceName: appropriation.resourceSource.name,
+      financialYear: appropriation.financialYear.year,
+    }))}
+    initialOrigin={origin}
+    originLocked={!canSelectAnyOrigin}
+  />;
 }

@@ -9,7 +9,7 @@ export default async function EditarContratoPage({ params }: { params: Promise<{
     prisma.contract.findUnique({
       where: { id: resolvedParams.id }
     }),
-    prisma.purchaseProcess.findMany({ orderBy: { number: 'desc' } }),
+    prisma.purchaseProcess.findMany({ include: { items: { select: { quantity: true } } }, orderBy: { number: 'desc' } }),
     prisma.secretariat.findMany({ orderBy: { name: 'asc' } }),
     prisma.budgetUnit.findMany({ orderBy: { code: 'asc' } }),
     prisma.supplier.findMany({ include: { company: true, person: true }, orderBy: { createdAt: 'desc' } })

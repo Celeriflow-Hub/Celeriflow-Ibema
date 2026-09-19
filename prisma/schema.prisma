@@ -104,14 +104,14 @@ model Department {
   demands       InternalDemand[]
 
   // Mod 3
-  currentProcesses    Process[]              @relation("CurrentDepartment")
-  movementsFrom       ProcessMovement[]      @relation("MovementFrom")
-  movementsTo         ProcessMovement[]      @relation("MovementTo")
-  dispatches          ProcessDispatch[]      @relation("DispatchDepartment")
-  initialProcessTypes ProcessType[]          @relation("ProcessTypeInitialDepartment")
-  initialSubjects     Subject[]              @relation("SubjectInitialDepartment")
-  processEvents       ProcessEvent[]         @relation("ProcessEventDepartment")
-  workflowStages      ProcessWorkflowStage[]
+  currentProcesses      Process[]                     @relation("CurrentDepartment")
+  movementsFrom         ProcessMovement[]             @relation("MovementFrom")
+  movementsTo           ProcessMovement[]             @relation("MovementTo")
+  dispatches            ProcessDispatch[]             @relation("DispatchDepartment")
+  initialProcessTypes   ProcessType[]                 @relation("ProcessTypeInitialDepartment")
+  initialSubjects       Subject[]                     @relation("SubjectInitialDepartment")
+  processEvents         ProcessEvent[]                @relation("ProcessEventDepartment")
+  workflowStages        ProcessWorkflowStage[]
   genericWorkflowStages GenericProcessWorkflowStage[]
 
   // Mod 4 e 5
@@ -240,13 +240,15 @@ model Employee {
   annualAccountingCloses  AnnualAccountingClose[]  @relation("AnnualCloseEmployee")
 
   // Mod 9
-  purchaseRequests        PurchaseRequest[] @relation("EmployeePurchaseRequests")
-  approvedPurchaseRequests PurchaseRequest[] @relation("PurchaseRequestApprover")
-  receivedPurchaseReceipts PurchaseReceipt[] @relation("PurchaseReceiptReceiver")
-  attestedPurchaseReceipts PurchaseReceipt[] @relation("PurchaseReceiptAttester")
-  managedContracts        Contract[]        @relation("ContractManager")
-  inspectedContracts      Contract[]        @relation("ContractInspector")
-  camaraCouncilorProfiles CamVereador[]     @relation("CamaraCouncilorEmployee")
+  purchaseRequests              PurchaseRequest[]          @relation("EmployeePurchaseRequests")
+  approvedPurchaseRequests      PurchaseRequest[]          @relation("PurchaseRequestApprover")
+  receivedPurchaseReceipts      PurchaseReceipt[]          @relation("PurchaseReceiptReceiver")
+  attestedPurchaseReceipts      PurchaseReceipt[]          @relation("PurchaseReceiptAttester")
+  managedContracts              Contract[]                 @relation("ContractManager")
+  inspectedContracts            Contract[]                 @relation("ContractInspector")
+  biddingAppointmentMemberships BiddingAppointmentMember[] @relation("BiddingAppointmentMemberEmployee")
+  instrumentParties             InstrumentParty[]          @relation("InstrumentPartyEmployee")
+  camaraCouncilorProfiles       CamVereador[]              @relation("CamaraCouncilorEmployee")
 
   // Mod 10
   personId      String?            @unique
@@ -392,8 +394,9 @@ model Person {
   socialAttendances  SocialAttendance[]
   socialConcessions  SocialBenefitConcession[]
 
-  culturaAgents       CulturaAgente[]  @relation("CulturaAgentPerson")
-  culturaReservations CulturaReserva[] @relation("CulturaReservationPerson")
+  culturaAgents       CulturaAgente[]      @relation("CulturaAgentPerson")
+  culturaReservations CulturaReserva[]     @relation("CulturaReservationPerson")
+  instrumentParties   InstrumentParty[]    @relation("InstrumentPartyPerson")
   mergeSourceRequests PersonMergeRequest[] @relation("PersonMergeSource")
   mergeTargetRequests PersonMergeRequest[] @relation("PersonMergeTarget")
   mergeSourceLedger   PersonMergeLedger[]  @relation("PersonMergeLedgerSource")
@@ -441,8 +444,9 @@ model Company {
   // Mod 4 e 5
   tickets Ticket[]
 
-  culturaAgents       CulturaAgente[]  @relation("CulturaAgentCompany")
-  culturaReservations CulturaReserva[] @relation("CulturaReservationCompany")
+  culturaAgents       CulturaAgente[]   @relation("CulturaAgentCompany")
+  culturaReservations CulturaReserva[]  @relation("CulturaReservationCompany")
+  instrumentParties   InstrumentParty[] @relation("InstrumentPartyCompany")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -505,9 +509,12 @@ model Supplier {
   creditor    Creditor?    @relation("SupplierCreditor")
 
   // Mod 9
-  priceQuotes       PriceQuote[]        @relation("SupplierPriceQuotes")
-  contracts         Contract[]          @relation("SupplierContracts")
-  directContracting DirectContracting[] @relation("SupplierDirectContracting")
+  priceQuotes              PriceQuote[]             @relation("SupplierPriceQuotes")
+  contracts                Contract[]               @relation("SupplierContracts")
+  directContracting        DirectContracting[]      @relation("SupplierDirectContracting")
+  supplierPortalIdentities SupplierPortalIdentity[]
+  biddingParticipants      BiddingParticipant[]
+  instrumentParties        InstrumentParty[]        @relation("InstrumentPartySupplier")
 
   // Mod 11
   assets            Asset[]            @relation("AssetSupplier")
@@ -659,25 +666,25 @@ model RealEstate {
 
 // Documentos e Anexos
 model DocumentClass {
-  id              String     @id @default(cuid())
-  code            String     @unique
-  label           String
-  signaturePolicy String     @default("EXTERNAL_PROVIDER_REQUIRED") // INTERNAL_ALLOWED, ICP_REQUIRED, EXTERNAL_PROVIDER_REQUIRED
-  isActive        Boolean    @default(true)
-  documents       Document[]
+  id                            String                        @id @default(cuid())
+  code                          String                        @unique
+  label                         String
+  signaturePolicy               String                        @default("EXTERNAL_PROVIDER_REQUIRED") // INTERNAL_ALLOWED, ICP_REQUIRED, EXTERNAL_PROVIDER_REQUIRED
+  isActive                      Boolean                       @default(true)
+  documents                     Document[]
   genericWorkflowRequiredStages GenericProcessWorkflowStage[]
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  createdAt                     DateTime                      @default(now())
+  updatedAt                     DateTime                      @updatedAt
 }
 
 model Document {
-  id           String    @id @default(cuid())
-  title        String
-  documentType String // RG, CPF, CNPJ, Contrato, Comprovante
-  fileUrl      String
-  validUntil   DateTime?
-  status       String    @default("VÃ¡lido") // VÃ¡lido, Vencido, Pendente
-  notes        String?
+  id              String         @id @default(cuid())
+  title           String
+  documentType    String // RG, CPF, CNPJ, Contrato, Comprovante
+  fileUrl         String
+  validUntil      DateTime?
+  status          String         @default("VÃ¡lido") // VÃ¡lido, Vencido, Pendente
+  notes           String?
   documentClassId String?
   documentClass   DocumentClass? @relation(fields: [documentClassId], references: [id], onDelete: Restrict)
   publicLabel     String         @default("Documento autenticado")
@@ -692,29 +699,33 @@ model Document {
   folderId String?
   folder   Folder? @relation("DocumentFolder", fields: [folderId], references: [id])
 
-  obrasServiceLinks            ObrasServicoDocumento[]
-  culturaEventLinks            CulturaEventoDocumento[]      @relation("CulturaEventDocument")
-  culturaProjectLinks          CulturaProjetoDocumento[]     @relation("CulturaProjectDocument")
-  culturaReservationLinks      CulturaReservaDocumento[]     @relation("CulturaReservationDocument")
-  culturaCouncilLinks          CulturaConselhoDocumento[]    @relation("CulturaCouncilDocument")
-  camaraLegislativeLinks       CamDocumentoLegislativo[]     @relation("CamaraLegislativeDocument")
-  segurancaRegistros           SegurancaMobilidadeRegistro[] @relation("SegurancaRegistroDocument")
-  settlementDocuments          Settlement[]                  @relation("SettlementDocument")
-  purchaseReceiptDocuments     PurchaseReceipt[]             @relation("PurchaseReceiptDocument")
-  withholdingReceipts          WithholdingPayable[]          @relation("WithholdingReceiptDocument")
-  taxGuideDocuments            TaxGuide[]                    @relation("TaxGuideDocument")
-  taxPaymentProofs             TaxPayment[]                  @relation("TaxPaymentProofDocument")
-  taxServiceRequests           TaxServiceRequest[]
-  taxCaseLinks                 TaxCaseLink[]
-  processDocuments             ProcessDocument[]
-  ticketLinks                  TicketDocument[]
-  ombudsmanLinks               OmbudsmanDocument[]
-  multiYearPlanLegalEvidence   MultiYearPlan[]               @relation("MultiYearPlanLegalEvidence")
-  budgetGuidelineLegalEvidence BudgetGuideline[]             @relation("BudgetGuidelineLegalEvidence")
-  annualBudgetLawLegalEvidence AnnualBudgetLaw[]             @relation("AnnualBudgetLawLegalEvidence")
-  creditRequestLegalEvidence   CreditRequest[]               @relation("CreditRequestLegalEvidence")
-  versions                     DocumentVersion[]
-  signatures                   DocumentSignature[]
+  obrasServiceLinks              ObrasServicoDocumento[]
+  culturaEventLinks              CulturaEventoDocumento[]      @relation("CulturaEventDocument")
+  culturaProjectLinks            CulturaProjetoDocumento[]     @relation("CulturaProjectDocument")
+  culturaReservationLinks        CulturaReservaDocumento[]     @relation("CulturaReservationDocument")
+  culturaCouncilLinks            CulturaConselhoDocumento[]    @relation("CulturaCouncilDocument")
+  camaraLegislativeLinks         CamDocumentoLegislativo[]     @relation("CamaraLegislativeDocument")
+  segurancaRegistros             SegurancaMobilidadeRegistro[] @relation("SegurancaRegistroDocument")
+  settlementDocuments            Settlement[]                  @relation("SettlementDocument")
+  purchaseReceiptDocuments       PurchaseReceipt[]             @relation("PurchaseReceiptDocument")
+  withholdingReceipts            WithholdingPayable[]          @relation("WithholdingReceiptDocument")
+  taxGuideDocuments              TaxGuide[]                    @relation("TaxGuideDocument")
+  taxPaymentProofs               TaxPayment[]                  @relation("TaxPaymentProofDocument")
+  taxServiceRequests             TaxServiceRequest[]
+  taxCaseLinks                   TaxCaseLink[]
+  processDocuments               ProcessDocument[]
+  ticketLinks                    TicketDocument[]
+  ombudsmanLinks                 OmbudsmanDocument[]
+  multiYearPlanLegalEvidence     MultiYearPlan[]               @relation("MultiYearPlanLegalEvidence")
+  budgetGuidelineLegalEvidence   BudgetGuideline[]             @relation("BudgetGuidelineLegalEvidence")
+  annualBudgetLawLegalEvidence   AnnualBudgetLaw[]             @relation("AnnualBudgetLawLegalEvidence")
+  creditRequestLegalEvidence     CreditRequest[]               @relation("CreditRequestLegalEvidence")
+  biddingAppointmentDocuments    BiddingAppointment[]          @relation("BiddingAppointmentDocument")
+  biddingActDocuments            BiddingAct[]                  @relation("BiddingActDocument")
+  biddingEligibilityDocuments    BiddingEligibility[]          @relation("BiddingEligibilityDocument")
+  instrumentMeasurementDocuments InstrumentMeasurement[]       @relation("InstrumentMeasurementDocument")
+  versions                       DocumentVersion[]
+  signatures                     DocumentSignature[]
 
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
@@ -723,17 +734,17 @@ model Document {
 
 // Versoes finalizadas sao snapshots imutaveis do arquivo usado em uma assinatura.
 model DocumentVersion {
-  id            String    @id @default(cuid())
-  documentId    String
-  document      Document  @relation(fields: [documentId], references: [id], onDelete: Restrict)
-  versionNumber Int
-  fileUrl       String
-  hashSha256    String
-  status        String    @default("FINAL") // FINAL, SIGNED, SUPERSEDED, CANCELLED
-  lockedAt      DateTime?
-  finalizedAt   DateTime  @default(now())
-  publicValidationCode String? @unique
-  createdAt     DateTime  @default(now())
+  id                   String    @id @default(cuid())
+  documentId           String
+  document             Document  @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  versionNumber        Int
+  fileUrl              String
+  hashSha256           String
+  status               String    @default("FINAL") // FINAL, SIGNED, SUPERSEDED, CANCELLED
+  lockedAt             DateTime?
+  finalizedAt          DateTime  @default(now())
+  publicValidationCode String?   @unique
+  createdAt            DateTime  @default(now())
 
   signatures DocumentSignature[]
 
@@ -786,21 +797,21 @@ model DocumentSignature {
 
 // Tipo de Processo
 model ProcessType {
-  id                    String      @id @default(cuid())
-  name                  String // AlvarÃ¡, LicenÃ§a, CertidÃ£o, OfÃ­cio...
-  description           String?
-  isActive              Boolean     @default(true)
-  initialDepartmentId   String?
-  initialDepartment     Department? @relation("ProcessTypeInitialDepartment", fields: [initialDepartmentId], references: [id])
-  defaultSlaDays        Int?
-  defaultPriority       String?
-  requiresInterested    Boolean     @default(false)
-  allowsInternalOpening Boolean     @default(true)
-  genericWorkflowEnabled Boolean    @default(false)
+  id                     String      @id @default(cuid())
+  name                   String // AlvarÃ¡, LicenÃ§a, CertidÃ£o, OfÃ­cio...
+  description            String?
+  isActive               Boolean     @default(true)
+  initialDepartmentId    String?
+  initialDepartment      Department? @relation("ProcessTypeInitialDepartment", fields: [initialDepartmentId], references: [id])
+  defaultSlaDays         Int?
+  defaultPriority        String?
+  requiresInterested     Boolean     @default(false)
+  allowsInternalOpening  Boolean     @default(true)
+  genericWorkflowEnabled Boolean     @default(false)
 
-  subjects       Subject[]
-  processes      Process[]
-  workflowStages ProcessWorkflowStage[]
+  subjects                   Subject[]
+  processes                  Process[]
+  workflowStages             ProcessWorkflowStage[]
   genericWorkflowDefinitions GenericProcessWorkflowDefinition[]
 
   createdAt DateTime @default(now())
@@ -864,16 +875,16 @@ model Process {
   currentWorkflowStageId       String?
   currentWorkflowStage         ProcessWorkflowStage? @relation("CurrentWorkflowStage", fields: [currentWorkflowStageId], references: [id])
 
-  movements            ProcessMovement[]
-  documents            ProcessDocument[]
-  dispatches           ProcessDispatch[]
-  events               ProcessEvent[]
-  notifications        ProtocolNotification[]
-  financialCommitments Commitment[]           @relation("FinancialCommitmentProcess")
-  taxServiceRequests   TaxServiceRequest[]
-  taxCaseLinks         TaxCaseLink[]
-  ticket               Ticket?
-  ombudsman            Ombudsman?
+  movements               ProcessMovement[]
+  documents               ProcessDocument[]
+  dispatches              ProcessDispatch[]
+  events                  ProcessEvent[]
+  notifications           ProtocolNotification[]
+  financialCommitments    Commitment[]                    @relation("FinancialCommitmentProcess")
+  taxServiceRequests      TaxServiceRequest[]
+  taxCaseLinks            TaxCaseLink[]
+  ticket                  Ticket?
+  ombudsman               Ombudsman?
   genericWorkflowInstance GenericProcessWorkflowInstance?
 
   createdAt DateTime @default(now())
@@ -931,57 +942,57 @@ model ProcessWorkflowStage {
 
 // C2-004 is opt-in only. Existing ProcessWorkflowStage records remain the legacy workflow.
 model GenericProcessWorkflowDefinition {
-  id                   String    @id @default(cuid())
+  id                   String                           @id @default(cuid())
   processTypeId        String
-  processType          ProcessType @relation(fields: [processTypeId], references: [id], onDelete: Restrict)
+  processType          ProcessType                      @relation(fields: [processTypeId], references: [id], onDelete: Restrict)
   version              Int
-  status               String    @default("DRAFT") // DRAFT, PUBLISHED
+  status               String                           @default("DRAFT") // DRAFT, PUBLISHED
   publishedAt          DateTime?
   publishedByUsuarioId String?
-  publishedByUsuario   Usuario?  @relation("GenericWorkflowDefinitionPublisher", fields: [publishedByUsuarioId], references: [id], onDelete: Restrict)
+  publishedByUsuario   Usuario?                         @relation("GenericWorkflowDefinitionPublisher", fields: [publishedByUsuarioId], references: [id], onDelete: Restrict)
   stages               GenericProcessWorkflowStage[]
   instances            GenericProcessWorkflowInstance[]
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  createdAt            DateTime                         @default(now())
+  updatedAt            DateTime                         @updatedAt
 
   @@unique([processTypeId, version])
   @@index([processTypeId, status])
 }
 
 model GenericProcessWorkflowStage {
-  id                      String    @id @default(cuid())
+  id                      String                           @id @default(cuid())
   definitionId            String
   definition              GenericProcessWorkflowDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
   position                Int
   label                   String
   departmentId            String
-  department              Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  department              Department                       @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   slaCalendarDays         Int
-  requiresSignedDocument  Boolean   @default(false)
+  requiresSignedDocument  Boolean                          @default(false)
   requiredDocumentClassId String?
-  requiredDocumentClass   DocumentClass? @relation(fields: [requiredDocumentClassId], references: [id], onDelete: Restrict)
-  createdAt               DateTime  @default(now())
+  requiredDocumentClass   DocumentClass?                   @relation(fields: [requiredDocumentClassId], references: [id], onDelete: Restrict)
+  createdAt               DateTime                         @default(now())
 
   @@unique([definitionId, position])
   @@index([definitionId, position])
 }
 
 model GenericProcessWorkflowInstance {
-  id                String    @id @default(cuid())
-  processId         String    @unique
-  process           Process   @relation(fields: [processId], references: [id], onDelete: Restrict)
+  id                String                           @id @default(cuid())
+  processId         String                           @unique
+  process           Process                          @relation(fields: [processId], references: [id], onDelete: Restrict)
   definitionId      String
   definition        GenericProcessWorkflowDefinition @relation(fields: [definitionId], references: [id], onDelete: Restrict)
   definitionVersion Int
-  status            String    @default("ACTIVE") // ACTIVE, REJECTED, CONCLUDED
+  status            String                           @default("ACTIVE") // ACTIVE, REJECTED, CONCLUDED
   currentPosition   Int
   dueAt             DateTime?
   instanceTimeZone  String
   openedByUsuarioId String
-  openedByUsuario   Usuario   @relation("GenericWorkflowInstanceOpener", fields: [openedByUsuarioId], references: [id], onDelete: Restrict)
+  openedByUsuario   Usuario                          @relation("GenericWorkflowInstanceOpener", fields: [openedByUsuarioId], references: [id], onDelete: Restrict)
   events            GenericProcessWorkflowEvent[]
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime                         @default(now())
+  updatedAt         DateTime                         @updatedAt
 
   @@index([definitionId])
   @@index([status, dueAt])
@@ -989,16 +1000,16 @@ model GenericProcessWorkflowInstance {
 
 // This is a separate append-only execution ledger; ProcessEvent remains the legacy timeline.
 model GenericProcessWorkflowEvent {
-  id             String    @id @default(cuid())
+  id             String                         @id @default(cuid())
   instanceId     String
   instance       GenericProcessWorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Restrict)
   eventType      String
   fromPosition   Int?
   toPosition     Int?
   actorUsuarioId String
-  actorUsuario   Usuario   @relation("GenericWorkflowEventActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict)
+  actorUsuario   Usuario                        @relation("GenericWorkflowEventActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict)
   note           String?
-  createdAt      DateTime  @default(now())
+  createdAt      DateTime                       @default(now())
 
   @@index([instanceId, createdAt])
 }
@@ -1699,14 +1710,14 @@ model ActiveDebt {
   cdaNumber            String?  @unique
   status               String   @default("Inscrita") // Inscrita, Em CobranÃ§a, Parcelada, Protestada, Ajuizada, Paga
 
-  taxpayerId   String
-  taxpayer     Taxpayer          @relation(fields: [taxpayerId], references: [id])
-  assessmentId String?           @unique
-  assessment   TaxAssessment?    @relation(fields: [assessmentId], references: [id])
-  installments DebtInstallment[]
-  bankTransactionId      String?
-  integrationEventId     String?
-  collectionReference    String?
+  taxpayerId          String
+  taxpayer            Taxpayer          @relation(fields: [taxpayerId], references: [id])
+  assessmentId        String?           @unique
+  assessment          TaxAssessment?    @relation(fields: [assessmentId], references: [id])
+  installments        DebtInstallment[]
+  bankTransactionId   String?
+  integrationEventId  String?
+  collectionReference String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2256,10 +2267,10 @@ model BudgetUnit {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
-  appropriations BudgetAppropriation[]
-  usuarios       UsuarioUnidadeGestora[]
-  bankAccounts   BankAccount[]
-  sourceContracts Contract[] @relation("ContractSourceBudgetUnit")
+  appropriations  BudgetAppropriation[]
+  usuarios        UsuarioUnidadeGestora[]
+  bankAccounts    BankAccount[]
+  sourceContracts Contract[]              @relation("ContractSourceBudgetUnit")
 }
 
 model ResourceSource {
@@ -2332,14 +2343,15 @@ model BudgetAppropriation {
   createdAt                     DateTime                     @default(now())
   updatedAt                     DateTime                     @updatedAt
 
-  reservations       BudgetReservation[]
-  commitments        Commitment[]
-  movements          BudgetMovement[]
-  expenses           Expense[]
-  creditRequestItems CreditRequestItem[]
-  obrasServices      ObrasServico[]      @relation("ObrasServicoBudget")
-  culturaProjects    CulturaProjeto[]    @relation("CulturaProjectBudget")
-  culturaFunds       CulturaFundo[]      @relation("CulturaFundBudget")
+  reservations                   BudgetReservation[]
+  commitments                    Commitment[]
+  movements                      BudgetMovement[]
+  expenses                       Expense[]
+  creditRequestItems             CreditRequestItem[]
+  obrasServices                  ObrasServico[]                        @relation("ObrasServicoBudget")
+  culturaProjects                CulturaProjeto[]                      @relation("CulturaProjectBudget")
+  culturaFunds                   CulturaFundo[]                        @relation("CulturaFundBudget")
+  purchaseRequestItemAllocations PurchaseRequestItemBudgetAllocation[]
 
   @@index([annualBudgetExpenseFixationId])
   @@index([programPPAId, actionPPAId])
@@ -2583,45 +2595,46 @@ model Settlement {
 }
 
 model Payment {
-  id                     String      @id @default(cuid())
-  orderNumber            String      @unique
-  date                   DateTime    @default(now())
-  value                  Float
-  valueDecimal           Decimal?    @db.Decimal(18, 2)
-  commitmentId           String
-  commitment             Commitment  @relation(fields: [commitmentId], references: [id])
-  settlementId           String?
-  settlement             Settlement? @relation(fields: [settlementId], references: [id])
-  bankAccountId          String
-  bankAccount            BankAccount @relation(fields: [bankAccountId], references: [id])
-  supplierId             String
-  supplier               Supplier    @relation("SupplierPayments", fields: [supplierId], references: [id])
-  creditorId             String?
-  creditor               Creditor?   @relation(fields: [creditorId], references: [id])
-  isExceptional          Boolean     @default(false)
-  exceptionJustification String?
-  netValueDecimal        Decimal?    @db.Decimal(18, 2)
-  paymentMethod          String      @default("TransferÃªncia")
-  status                 String      @default("Pago") // Pago, Cancelado
-  paymentOrderExternalId String?     @unique
-  integrationEventId      String?     @unique
-  bankAccountExternalId   String?
-  bankTransactionId       String?     @unique
-  bankStatus              String?     @default("PENDING_SUBMISSION")
-  bankSubmittedAt         DateTime?
-  bankProcessedAt         DateTime?
-  bankRejectionCode       String?
-  bankRejectionMessage    String?
+  id                          String      @id @default(cuid())
+  orderNumber                 String      @unique
+  date                        DateTime    @default(now())
+  value                       Float
+  valueDecimal                Decimal?    @db.Decimal(18, 2)
+  commitmentId                String
+  commitment                  Commitment  @relation(fields: [commitmentId], references: [id])
+  settlementId                String?
+  settlement                  Settlement? @relation(fields: [settlementId], references: [id])
+  bankAccountId               String
+  bankAccount                 BankAccount @relation(fields: [bankAccountId], references: [id])
+  supplierId                  String
+  supplier                    Supplier    @relation("SupplierPayments", fields: [supplierId], references: [id])
+  creditorId                  String?
+  creditor                    Creditor?   @relation(fields: [creditorId], references: [id])
+  isExceptional               Boolean     @default(false)
+  exceptionJustification      String?
+  netValueDecimal             Decimal?    @db.Decimal(18, 2)
+  paymentMethod               String      @default("TransferÃªncia")
+  status                      String      @default("Pago") // Pago, Cancelado
+  paymentOrderExternalId      String?     @unique
+  integrationEventId          String?     @unique
+  bankAccountExternalId       String?
+  bankTransactionId           String?     @unique
+  bankStatus                  String?     @default("PENDING_SUBMISSION")
+  bankSubmittedAt             DateTime?
+  bankProcessedAt             DateTime?
+  bankRejectionCode           String?
+  bankRejectionMessage        String?
   reversalOfBankTransactionId String?
   reversalBankTransactionId   String?     @unique
-  createdAt              DateTime    @default(now())
-  updatedAt              DateTime    @updatedAt
-
-  @@index([bankAccountExternalId, bankStatus])
+  createdAt                   DateTime    @default(now())
+  updatedAt                   DateTime    @updatedAt
 
   retentions                PaymentRetention[]
   financialDocument         FinancialDocument?         @relation("FinancialDocumentPayment")
   payableCarryForwardEvents PayableCarryForwardEvent[]
+  instrumentInstallments    InstrumentInstallment[]    @relation("InstrumentInstallmentPayment")
+
+  @@index([bankAccountExternalId, bankStatus])
 }
 
 // Registros internos emitidos pelo sistema; nÃ£o dependem de arquivo GED ou assinatura externa.
@@ -2742,41 +2755,41 @@ model WithholdingPayable {
 }
 
 model BankAccount {
-  id                    String          @id @default(cuid())
-  bankName              String
-  agency                String
-  accountNumber         String
-  accountType           String          @default("Movimento")
-  currentBalance        Float           @default(0)
-  currentBalanceDecimal Decimal?        @db.Decimal(18, 2)
-  resourceSourceId      String?
-  resourceSource        ResourceSource? @relation(fields: [resourceSourceId], references: [id])
-  budgetUnitId          String?
-  budgetUnit            BudgetUnit?     @relation(fields: [budgetUnitId], references: [id])
-  accountingPlanId      String?         @unique
-  accountingPlan        AccountingPlan? @relation("BankAccountAccountingPlan", fields: [accountingPlanId], references: [id])
-  isActive              Boolean         @default(true)
-  externalId            String?         @unique
-  purpose               String?
+  id                        String          @id @default(cuid())
+  bankName                  String
+  agency                    String
+  accountNumber             String
+  accountType               String          @default("Movimento")
+  currentBalance            Float           @default(0)
+  currentBalanceDecimal     Decimal?        @db.Decimal(18, 2)
+  resourceSourceId          String?
+  resourceSource            ResourceSource? @relation(fields: [resourceSourceId], references: [id])
+  budgetUnitId              String?
+  budgetUnit                BudgetUnit?     @relation(fields: [budgetUnitId], references: [id])
+  accountingPlanId          String?         @unique
+  accountingPlan            AccountingPlan? @relation("BankAccountAccountingPlan", fields: [accountingPlanId], references: [id])
+  isActive                  Boolean         @default(true)
+  externalId                String?         @unique
+  purpose                   String?
   linkedInvestmentAccountId String?
-  linkedInvestmentAccount   BankAccount? @relation("BankAccountInvestmentLink", fields: [linkedInvestmentAccountId], references: [id])
-  linkedCurrentAccounts     BankAccount[] @relation("BankAccountInvestmentLink")
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  linkedInvestmentAccount   BankAccount?    @relation("BankAccountInvestmentLink", fields: [linkedInvestmentAccountId], references: [id])
+  linkedCurrentAccounts     BankAccount[]   @relation("BankAccountInvestmentLink")
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
 
-  revenues             Revenue[]
-  payments             Payment[]
-  reconciliations      BankReconciliation[]
-  treasuryMovements    TreasuryMovement[]
-  transferOrigins      TreasuryTransfer[]    @relation("TreasuryTransferOrigin")
-  transferDestinations TreasuryTransfer[]    @relation("TreasuryTransferDestination")
-  statementImports     BankStatementImport[]
-  taxPayments          TaxPayment[]
-  taxFinancialMappings TaxFinancialMapping[]
-  constitutionalRevenueRules ClassificationRule[] @relation("ClassificationRuleBankAccount")
-  statementItems       BankStatementItem[]
-  covenants            Covenant[]
-  investmentAllocationsAsOrigin InvestmentAllocation[] @relation("InvestmentAllocationOrigin")
+  revenues                          Revenue[]
+  payments                          Payment[]
+  reconciliations                   BankReconciliation[]
+  treasuryMovements                 TreasuryMovement[]
+  transferOrigins                   TreasuryTransfer[]     @relation("TreasuryTransferOrigin")
+  transferDestinations              TreasuryTransfer[]     @relation("TreasuryTransferDestination")
+  statementImports                  BankStatementImport[]
+  taxPayments                       TaxPayment[]
+  taxFinancialMappings              TaxFinancialMapping[]
+  constitutionalRevenueRules        ClassificationRule[]   @relation("ClassificationRuleBankAccount")
+  statementItems                    BankStatementItem[]
+  covenants                         Covenant[]
+  investmentAllocationsAsOrigin     InvestmentAllocation[] @relation("InvestmentAllocationOrigin")
   investmentAllocationsAsInvestment InvestmentAllocation[] @relation("InvestmentAllocationInvestment")
 }
 
@@ -2846,21 +2859,21 @@ model RevenueResourceRedistribution {
 }
 
 model TreasuryTransfer {
-  id                       String           @id @default(cuid())
-  date                     DateTime         @default(now())
-  valueDecimal             Decimal          @db.Decimal(18, 2)
+  id                       String                @id @default(cuid())
+  date                     DateTime              @default(now())
+  valueDecimal             Decimal               @db.Decimal(18, 2)
   history                  String?
   sourceBankAccountId      String
-  sourceBankAccount        BankAccount      @relation("TreasuryTransferOrigin", fields: [sourceBankAccountId], references: [id])
+  sourceBankAccount        BankAccount           @relation("TreasuryTransferOrigin", fields: [sourceBankAccountId], references: [id])
   destinationBankAccountId String
-  destinationBankAccount   BankAccount      @relation("TreasuryTransferDestination", fields: [destinationBankAccountId], references: [id])
-  sourceMovementId         String           @unique
-  sourceMovement           TreasuryMovement @relation("TreasuryTransferOriginMovement", fields: [sourceMovementId], references: [id])
-  destinationMovementId    String           @unique
-  destinationMovement      TreasuryMovement @relation("TreasuryTransferDestinationMovement", fields: [destinationMovementId], references: [id])
-  idempotencyKey           String?          @unique
+  destinationBankAccount   BankAccount           @relation("TreasuryTransferDestination", fields: [destinationBankAccountId], references: [id])
+  sourceMovementId         String                @unique
+  sourceMovement           TreasuryMovement      @relation("TreasuryTransferOriginMovement", fields: [sourceMovementId], references: [id])
+  destinationMovementId    String                @unique
+  destinationMovement      TreasuryMovement      @relation("TreasuryTransferDestinationMovement", fields: [destinationMovementId], references: [id])
+  idempotencyKey           String?               @unique
   investmentAllocation     InvestmentAllocation?
-  createdAt                DateTime         @default(now())
+  createdAt                DateTime              @default(now())
 }
 
 model BankStatementImport {
@@ -2893,22 +2906,22 @@ model BankStatementItem {
   treasuryMovement   TreasuryMovement?    @relation(fields: [treasuryMovementId], references: [id])
 
   // Campos adicionais para Automação POC, Rendimentos e Regras
-  downloadId             String?
-  banco                  String?
-  agencia                String?
-  contaNumero            String?
-  tipoConta              String? // "CORRENTE" | "APLICACAO"
-  codigoTransacao        String?
-  sinal                  String? // "CREDITO" | "DEBITO"
-  saldoResultanteDecimal Decimal? @db.Decimal(18, 2)
-  categoriaClassificada  String? // APLICACAO, RESGATE, TRANSFERENCIA_PARA_APLICACAO, etc.
-  reciboMunicipal        String?
-  lancamentoContabilId   String?
-  bankTransactionId      String?
-  integrationEventId     String?
-  transactionType        String?
-  clientReference        String?
-  collectionReference    String?
+  downloadId                  String?
+  banco                       String?
+  agencia                     String?
+  contaNumero                 String?
+  tipoConta                   String? // "CORRENTE" | "APLICACAO"
+  codigoTransacao             String?
+  sinal                       String? // "CREDITO" | "DEBITO"
+  saldoResultanteDecimal      Decimal? @db.Decimal(18, 2)
+  categoriaClassificada       String? // APLICACAO, RESGATE, TRANSFERENCIA_PARA_APLICACAO, etc.
+  reciboMunicipal             String?
+  lancamentoContabilId        String?
+  bankTransactionId           String?
+  integrationEventId          String?
+  transactionType             String?
+  clientReference             String?
+  collectionReference         String?
   reversalOfBankTransactionId String?
 
   @@unique([banco, agencia, contaNumero, codigoTransacao])
@@ -2973,17 +2986,17 @@ model BankReconciliation {
 }
 
 model InvestmentAllocation {
-  id                      String          @id @default(cuid())
+  id                      String            @id @default(cuid())
   originBankAccountId     String
-  originBankAccount       BankAccount     @relation("InvestmentAllocationOrigin", fields: [originBankAccountId], references: [id])
+  originBankAccount       BankAccount       @relation("InvestmentAllocationOrigin", fields: [originBankAccountId], references: [id])
   investmentBankAccountId String
-  investmentBankAccount   BankAccount     @relation("InvestmentAllocationInvestment", fields: [investmentBankAccountId], references: [id])
-  treasuryTransferId      String?         @unique
+  investmentBankAccount   BankAccount       @relation("InvestmentAllocationInvestment", fields: [investmentBankAccountId], references: [id])
+  treasuryTransferId      String?           @unique
   treasuryTransfer        TreasuryTransfer? @relation(fields: [treasuryTransferId], references: [id])
-  valueDecimal            Decimal         @db.Decimal(18, 2)
-  status                  String          @default("ATIVA")
-  createdAt               DateTime        @default(now())
-  updatedAt               DateTime        @updatedAt
+  valueDecimal            Decimal           @db.Decimal(18, 2)
+  status                  String            @default("ATIVA")
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
 
   @@index([investmentBankAccountId, originBankAccountId, status])
 }
@@ -2997,7 +3010,7 @@ model AccountingPlan {
   updatedAt DateTime @updatedAt
 
   entries            AccountingEntry[]
-  bankAccount        BankAccount?          @relation("BankAccountAccountingPlan")
+  bankAccount        BankAccount?            @relation("BankAccountAccountingPlan")
   debitPostingRules  AccountingPostingRule[] @relation("PostingRuleDebitAccount")
   creditPostingRules AccountingPostingRule[] @relation("PostingRuleCreditAccount")
 }
@@ -3198,6 +3211,7 @@ model CatalogItem {
 
   purchaseRequestItems PurchaseRequestItem[]
   purchaseProcessItems PurchaseProcessItem[]
+  purchasePlannings    PurchasePlanning[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3226,7 +3240,9 @@ model PurchaseRequest {
   approvedAt           DateTime?
 
   items             PurchaseRequestItem[]
-  purchaseProcesses PurchaseProcess[] @relation("PurchaseRequestProcesses")
+  purchaseProcesses PurchaseProcess[]              @relation("PurchaseRequestProcesses")
+  processOrigins    PurchaseProcessRequestOrigin[] @relation("PurchaseProcessRequestOriginRequest")
+  purchasePlannings PurchasePlanning[]             @relation("PurchasePlanningOriginRequest")
   obrasServiceLinks ObrasServicoCompra[]
 
   createdAt DateTime @default(now())
@@ -3246,8 +3262,34 @@ model PurchaseRequestItem {
   materialId String?
   material   Material? @relation(fields: [materialId], references: [id])
 
+  budgetAllocations  PurchaseRequestItemBudgetAllocation[]
+  processItemOrigins PurchaseProcessItemOrigin[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// A future need is deliberately separate from requests and processes. It can
+// reference either one without reserving budget or creating a procurement flow.
+model PurchasePlanning {
+  id                      String           @id @default(cuid())
+  description             String?
+  catalogItemId           String?
+  catalogItem             CatalogItem?     @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  originPurchaseRequestId String?
+  originPurchaseRequest   PurchaseRequest? @relation("PurchasePlanningOriginRequest", fields: [originPurchaseRequestId], references: [id], onDelete: Restrict)
+  unit                    String
+  quantity                Float
+  expectedPeriodStart     DateTime         @db.Date
+  expectedPeriodEnd       DateTime         @db.Date
+  estimatedValueDecimal   Decimal          @db.Decimal(18, 2)
+  status                  String           @default("Rascunho")
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  @@index([status, expectedPeriodStart])
+  @@index([catalogItemId])
+  @@index([originPurchaseRequestId])
 }
 
 model PurchaseProcess {
@@ -3272,11 +3314,12 @@ model PurchaseProcess {
   directContractings DirectContracting[]
   contracts          Contract[]
   receipts           PurchaseReceipt[]
-  commitments        Commitment[] @relation("ProcurementProcessCommitments")
+  commitments        Commitment[]                @relation("ProcurementProcessCommitments")
 
   items             PurchaseProcessItem[]
+  requestOrigins    PurchaseProcessRequestOrigin[] @relation("PurchaseProcessRequestOriginProcess")
   obrasServiceLinks ObrasServicoCompra[]
-  culturaProjects   CulturaProjeto[]      @relation("CulturaProjectPurchase")
+  culturaProjects   CulturaProjeto[]               @relation("CulturaProjectPurchase")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3295,7 +3338,10 @@ model PurchaseProcessItem {
   materialId String?
   material   Material? @relation(fields: [materialId], references: [id])
 
-  receiptItems PurchaseReceiptItem[]
+  receiptItems               PurchaseReceiptItem[]
+  requestItemOrigins         PurchaseProcessItemOrigin[]
+  biddingLotItems            BiddingLotItem[]
+  instrumentMeasurementItems InstrumentMeasurementItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3372,8 +3418,13 @@ model Bidding {
   processId String
   process   PurchaseProcess @relation(fields: [processId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt                     DateTime                       @default(now())
+  updatedAt                     DateTime                       @updatedAt
+  biddingAppointmentAssignments BiddingAppointmentAssignment[]
+  biddingPhases                 BiddingPhase[]
+  biddingActs                   BiddingAct[]
+  biddingParticipants           BiddingParticipant[]
+  biddingLots                   BiddingLot[]
 }
 
 model DirectContracting {
@@ -3423,10 +3474,14 @@ model Contract {
   inspectorId String?
   inspector   Employee? @relation("ContractInspector", fields: [inspectorId], references: [id])
 
-  amendments      ContractAmendment[]
-  culturaProjects CulturaProjeto[]    @relation("CulturaProjectContract")
-  commitments     Commitment[]        @relation("FinancialCommitmentContract")
-  receipts        PurchaseReceipt[]
+  amendments           ContractAmendment[]
+  culturaProjects      CulturaProjeto[]                @relation("CulturaProjectContract")
+  commitments          Commitment[]                    @relation("FinancialCommitmentContract")
+  receipts             PurchaseReceipt[]
+  instrumentParties    InstrumentParty[]               @relation("ContractInstrumentParties")
+  responsibilityGroups InstrumentResponsibilityGroup[] @relation("ContractResponsibilityGroups")
+  measurements         InstrumentMeasurement[]         @relation("ContractInstrumentMeasurements")
+  installments         InstrumentInstallment[]         @relation("ContractInstrumentInstallments")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3468,28 +3523,28 @@ model ProcurementLifecycleEvent {
 }
 
 model PurchaseReceipt {
-  id             String   @id @default(cuid())
-  number         String   @unique
-  receivedAt     DateTime
-  status         String   @default("APPROVED") // APPROVED, CANCELLED
-  contractId     String
-  contract       Contract @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  id                String                @id @default(cuid())
+  number            String                @unique
+  receivedAt        DateTime
+  status            String                @default("APPROVED") // APPROVED, CANCELLED
+  contractId        String
+  contract          Contract              @relation(fields: [contractId], references: [id], onDelete: Restrict)
   purchaseProcessId String
-  purchaseProcess   PurchaseProcess @relation(fields: [purchaseProcessId], references: [id], onDelete: Restrict)
-  documentId     String
-  document       Document @relation("PurchaseReceiptDocument", fields: [documentId], references: [id], onDelete: Restrict)
-  receiverId     String
-  receiver       Employee @relation("PurchaseReceiptReceiver", fields: [receiverId], references: [id], onDelete: Restrict)
-  attesterId     String
-  attester       Employee @relation("PurchaseReceiptAttester", fields: [attesterId], references: [id], onDelete: Restrict)
-  idempotencyKey String   @unique
-  sourceType     String   @default("CONTRACT")
-  sourceId       String
-  items          PurchaseReceiptItem[]
-  expense        Expense? @relation("PurchaseReceiptExpense")
-  commitment     Commitment? @relation("PurchaseReceiptCommitment")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  purchaseProcess   PurchaseProcess       @relation(fields: [purchaseProcessId], references: [id], onDelete: Restrict)
+  documentId        String
+  document          Document              @relation("PurchaseReceiptDocument", fields: [documentId], references: [id], onDelete: Restrict)
+  receiverId        String
+  receiver          Employee              @relation("PurchaseReceiptReceiver", fields: [receiverId], references: [id], onDelete: Restrict)
+  attesterId        String
+  attester          Employee              @relation("PurchaseReceiptAttester", fields: [attesterId], references: [id], onDelete: Restrict)
+  idempotencyKey    String                @unique
+  sourceType        String                @default("CONTRACT")
+  sourceId          String
+  items             PurchaseReceiptItem[]
+  expense           Expense?              @relation("PurchaseReceiptExpense")
+  commitment        Commitment?           @relation("PurchaseReceiptCommitment")
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
 
   @@index([purchaseProcessId, receivedAt])
   @@index([contractId, receivedAt])
@@ -3497,28 +3552,454 @@ model PurchaseReceipt {
 }
 
 model PurchaseReceiptItem {
-  id                    String              @id @default(cuid())
-  purchaseReceiptId     String
-  purchaseReceipt       PurchaseReceipt     @relation(fields: [purchaseReceiptId], references: [id], onDelete: Restrict)
-  purchaseProcessItemId String
-  purchaseProcessItem   PurchaseProcessItem @relation(fields: [purchaseProcessItemId], references: [id], onDelete: Restrict)
-  materialId            String
-  material              Material            @relation(fields: [materialId], references: [id], onDelete: Restrict)
-  warehouseId           String
-  warehouse             Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  quantity              Float
-  quantityIncorporated  Float               @default(0)
-  unitCost              Float
-  batchNumber           String              @default("")
-  expirationDate        DateTime?
-  stockMovementId       String              @unique
-  stockMovement         MaterialMovement    @relation("PurchaseReceiptItemMovement", fields: [stockMovementId], references: [id], onDelete: Restrict)
-  assets                Asset[]
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
+  id                        String                     @id @default(cuid())
+  purchaseReceiptId         String
+  purchaseReceipt           PurchaseReceipt            @relation(fields: [purchaseReceiptId], references: [id], onDelete: Restrict)
+  purchaseProcessItemId     String
+  purchaseProcessItem       PurchaseProcessItem        @relation(fields: [purchaseProcessItemId], references: [id], onDelete: Restrict)
+  materialId                String
+  material                  Material                   @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  warehouseId               String
+  warehouse                 Warehouse                  @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  quantity                  Float
+  quantityIncorporated      Float                      @default(0)
+  unitCost                  Float
+  batchNumber               String                     @default("")
+  expirationDate            DateTime?
+  stockMovementId           String                     @unique
+  stockMovement             MaterialMovement           @relation("PurchaseReceiptItemMovement", fields: [stockMovementId], references: [id], onDelete: Restrict)
+  assets                    Asset[]
+  instrumentMeasurementItem InstrumentMeasurementItem? @relation("PurchaseReceiptItemInstrumentMeasurement")
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
 
   @@index([purchaseProcessItemId])
   @@index([materialId, warehouseId])
+}
+
+// Additive procurement traceability. Legacy request and process links remain intact.
+model PurchaseRequestItemBudgetAllocation {
+  id                    String              @id @default(cuid())
+  purchaseRequestItemId String
+  purchaseRequestItem   PurchaseRequestItem @relation(fields: [purchaseRequestItemId], references: [id], onDelete: Restrict)
+  budgetAppropriationId String
+  budgetAppropriation   BudgetAppropriation @relation(fields: [budgetAppropriationId], references: [id], onDelete: Restrict)
+  quantity              Float
+  valueDecimal          Decimal             @db.Decimal(18, 2)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@unique([purchaseRequestItemId, budgetAppropriationId])
+  @@index([budgetAppropriationId])
+}
+
+model PurchaseProcessRequestOrigin {
+  id                String          @id @default(cuid())
+  purchaseProcessId String
+  purchaseProcess   PurchaseProcess @relation("PurchaseProcessRequestOriginProcess", fields: [purchaseProcessId], references: [id], onDelete: Restrict)
+  purchaseRequestId String
+  purchaseRequest   PurchaseRequest @relation("PurchaseProcessRequestOriginRequest", fields: [purchaseRequestId], references: [id], onDelete: Restrict)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([purchaseProcessId, purchaseRequestId])
+  @@index([purchaseRequestId])
+}
+
+model PurchaseProcessItemOrigin {
+  id                    String              @id @default(cuid())
+  purchaseProcessItemId String
+  purchaseProcessItem   PurchaseProcessItem @relation(fields: [purchaseProcessItemId], references: [id], onDelete: Restrict)
+  purchaseRequestItemId String
+  purchaseRequestItem   PurchaseRequestItem @relation(fields: [purchaseRequestItemId], references: [id], onDelete: Restrict)
+  quantity              Float
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@unique([purchaseProcessItemId, purchaseRequestItemId])
+  @@index([purchaseRequestItemId])
+}
+
+model SupplierPortalIdentity {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  usuarioId  String
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  status     String   @default("Ativo")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  bids BiddingBid[] @relation("BiddingBidPortalIdentity")
+
+  @@unique([supplierId, usuarioId])
+  @@index([usuarioId, status])
+}
+
+// One appointment can describe a permanent/special commission or named officers.
+model BiddingAppointment {
+  id                    String    @id @default(cuid())
+  kind                  String
+  name                  String
+  appointmentDocumentId String?
+  appointmentDocument   Document? @relation("BiddingAppointmentDocument", fields: [appointmentDocumentId], references: [id], onDelete: Restrict)
+  appointedAt           DateTime?
+  endsAt                DateTime?
+  status                String    @default("Ativa")
+  notes                 String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  members     BiddingAppointmentMember[]
+  assignments BiddingAppointmentAssignment[]
+
+  @@index([kind, status])
+  @@index([appointmentDocumentId])
+}
+
+model BiddingAppointmentMember {
+  id            String             @id @default(cuid())
+  appointmentId String
+  appointment   BiddingAppointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  employeeId    String
+  employee      Employee           @relation("BiddingAppointmentMemberEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+  role          String
+  appointedAt   DateTime?
+  endsAt        DateTime?
+  status        String             @default("Ativo")
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@unique([appointmentId, employeeId, role])
+  @@index([employeeId, status])
+}
+
+model BiddingAppointmentAssignment {
+  id            String             @id @default(cuid())
+  biddingId     String
+  bidding       Bidding            @relation(fields: [biddingId], references: [id], onDelete: Restrict)
+  appointmentId String
+  appointment   BiddingAppointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  role          String?
+  assignedAt    DateTime           @default(now())
+  endedAt       DateTime?
+  status        String             @default("Ativa")
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@unique([biddingId, appointmentId])
+  @@index([appointmentId, status])
+}
+
+model BiddingPhase {
+  id          String    @id @default(cuid())
+  biddingId   String
+  bidding     Bidding   @relation(fields: [biddingId], references: [id], onDelete: Restrict)
+  code        String
+  name        String
+  sequence    Int
+  version     Int       @default(1)
+  isCurrent   Boolean   @default(true)
+  status      String    @default("Pendente")
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  acts BiddingAct[]
+
+  @@unique([biddingId, code, version])
+  @@unique([biddingId, sequence, version])
+  @@index([biddingId, isCurrent, sequence])
+}
+
+model BiddingAct {
+  id             String        @id @default(cuid())
+  biddingId      String
+  bidding        Bidding       @relation(fields: [biddingId], references: [id], onDelete: Restrict)
+  phaseId        String?
+  phase          BiddingPhase? @relation(fields: [phaseId], references: [id], onDelete: Restrict)
+  biddingLotId   String?
+  biddingLot     BiddingLot?   @relation(fields: [biddingLotId], references: [id], onDelete: Restrict)
+  type           String
+  description    String?
+  status         String        @default("Registrado")
+  occurredAt     DateTime      @default(now())
+  documentId     String?
+  document       Document?     @relation("BiddingActDocument", fields: [documentId], references: [id], onDelete: Restrict)
+  actorUsuarioId String
+  actorUsuario   Usuario       @relation("BiddingActActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict)
+  idempotencyKey String        @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  result BiddingResult? @relation("BiddingResultAct")
+
+  @@index([biddingId, occurredAt])
+  @@index([phaseId])
+  @@index([biddingLotId, occurredAt])
+  @@index([actorUsuarioId])
+}
+
+model BiddingParticipant {
+  id           String   @id @default(cuid())
+  biddingId    String
+  bidding      Bidding  @relation(fields: [biddingId], references: [id], onDelete: Restrict)
+  supplierId   String
+  supplier     Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  displayCode  String?
+  status       String   @default("Inscrito")
+  registeredAt DateTime @default(now())
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  bids                 BiddingBid[]
+  eligibilityDecisions BiddingEligibility[]
+  results              BiddingResult[]
+
+  @@unique([biddingId, supplierId])
+  @@unique([biddingId, displayCode])
+  @@index([supplierId, status])
+}
+
+model BiddingLot {
+  id                    String   @id @default(cuid())
+  biddingId             String
+  bidding               Bidding  @relation(fields: [biddingId], references: [id], onDelete: Restrict)
+  number                Int
+  description           String?
+  status                String   @default("Rascunho")
+  estimatedValueDecimal Decimal? @db.Decimal(18, 2)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  items                BiddingLotItem[]
+  bids                 BiddingBid[]
+  acts                 BiddingAct[]
+  eligibilityDecisions BiddingEligibility[]
+  results              BiddingResult[]
+
+  @@unique([biddingId, number])
+  @@index([biddingId, status])
+}
+
+model BiddingLotItem {
+  id                    String              @id @default(cuid())
+  biddingLotId          String
+  biddingLot            BiddingLot          @relation(fields: [biddingLotId], references: [id], onDelete: Restrict)
+  purchaseProcessItemId String
+  purchaseProcessItem   PurchaseProcessItem @relation(fields: [purchaseProcessItemId], references: [id], onDelete: Restrict)
+  quantity              Float
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@unique([biddingLotId, purchaseProcessItemId])
+  @@index([purchaseProcessItemId])
+}
+
+model BiddingBid {
+  id                       String                 @id @default(cuid())
+  biddingLotId             String
+  biddingLot               BiddingLot             @relation(fields: [biddingLotId], references: [id], onDelete: Restrict)
+  participantId            String
+  participant              BiddingParticipant     @relation(fields: [participantId], references: [id], onDelete: Restrict)
+  supplierPortalIdentityId String
+  supplierPortalIdentity   SupplierPortalIdentity @relation("BiddingBidPortalIdentity", fields: [supplierPortalIdentityId], references: [id], onDelete: Restrict)
+  kind                     String                 @default("Lance")
+  unitValueDecimal         Decimal?               @db.Decimal(18, 2)
+  totalValueDecimal        Decimal                @db.Decimal(18, 2)
+  sequence                 Int
+  submittedAt              DateTime               @default(now())
+  status                   String                 @default("Aceito")
+  idempotencyKey           String                 @unique
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+
+  results BiddingResult[]
+
+  @@unique([biddingLotId, sequence])
+  @@index([participantId, submittedAt])
+  @@index([supplierPortalIdentityId])
+}
+
+model BiddingEligibility {
+  id                 String             @id @default(cuid())
+  biddingLotId       String
+  biddingLot         BiddingLot         @relation(fields: [biddingLotId], references: [id], onDelete: Restrict)
+  participantId      String
+  participant        BiddingParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
+  status             String
+  reason             String?
+  documentId         String?
+  document           Document?          @relation("BiddingEligibilityDocument", fields: [documentId], references: [id], onDelete: Restrict)
+  decidedByUsuarioId String
+  decidedByUsuario   Usuario            @relation("BiddingEligibilityDecider", fields: [decidedByUsuarioId], references: [id], onDelete: Restrict)
+  decidedAt          DateTime           @default(now())
+  idempotencyKey     String             @unique
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([biddingLotId, participantId, decidedAt])
+  @@index([decidedByUsuarioId])
+  @@index([documentId])
+}
+
+model BiddingResult {
+  id                 String             @id @default(cuid())
+  biddingLotId       String
+  biddingLot         BiddingLot         @relation(fields: [biddingLotId], references: [id], onDelete: Restrict)
+  participantId      String
+  participant        BiddingParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
+  biddingBidId       String?
+  biddingBid         BiddingBid?        @relation(fields: [biddingBidId], references: [id], onDelete: Restrict)
+  biddingActId       String?            @unique
+  biddingAct         BiddingAct?        @relation("BiddingResultAct", fields: [biddingActId], references: [id], onDelete: Restrict)
+  status             String             @default("Arrematado")
+  reason             String?
+  unitValueDecimal   Decimal?           @db.Decimal(18, 2)
+  totalValueDecimal  Decimal            @db.Decimal(18, 2)
+  isCurrent          Boolean            @default(true)
+  decidedByUsuarioId String
+  decidedByUsuario   Usuario            @relation("BiddingResultDecider", fields: [decidedByUsuarioId], references: [id], onDelete: Restrict)
+  decidedAt          DateTime           @default(now())
+  idempotencyKey     String             @unique
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([biddingLotId, isCurrent, decidedAt])
+  @@index([participantId])
+  @@index([biddingBidId])
+  @@index([decidedByUsuarioId])
+}
+
+// These children keep the established Contract and Covenant headers as the
+// canonical instruments instead of introducing a parallel instrument master.
+model InstrumentResponsibilityGroup {
+  id          String    @id @default(cuid())
+  contractId  String?
+  contract    Contract? @relation("ContractResponsibilityGroups", fields: [contractId], references: [id], onDelete: Restrict)
+  covenantId  String?
+  covenant    Covenant? @relation("CovenantResponsibilityGroups", fields: [covenantId], references: [id], onDelete: Restrict)
+  name        String
+  description String?
+  status      String    @default("Ativo")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  members InstrumentParty[] @relation("InstrumentResponsibilityGroupMembers")
+
+  @@unique([contractId, name])
+  @@unique([covenantId, name])
+  @@index([contractId, status])
+  @@index([covenantId, status])
+}
+
+model InstrumentParty {
+  id                    String                         @id @default(cuid())
+  contractId            String?
+  contract              Contract?                      @relation("ContractInstrumentParties", fields: [contractId], references: [id], onDelete: Restrict)
+  covenantId            String?
+  covenant              Covenant?                      @relation("CovenantInstrumentParties", fields: [covenantId], references: [id], onDelete: Restrict)
+  role                  String
+  supplierId            String?
+  supplier              Supplier?                      @relation("InstrumentPartySupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  personId              String?
+  person                Person?                        @relation("InstrumentPartyPerson", fields: [personId], references: [id], onDelete: Restrict)
+  companyId             String?
+  company               Company?                       @relation("InstrumentPartyCompany", fields: [companyId], references: [id], onDelete: Restrict)
+  employeeId            String?
+  employee              Employee?                      @relation("InstrumentPartyEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+  responsibilityGroupId String?
+  responsibilityGroup   InstrumentResponsibilityGroup? @relation("InstrumentResponsibilityGroupMembers", fields: [responsibilityGroupId], references: [id], onDelete: Restrict)
+  status                String                         @default("Ativo")
+  activeFrom            DateTime?
+  activeTo              DateTime?
+  notes                 String?
+  createdAt             DateTime                       @default(now())
+  updatedAt             DateTime                       @updatedAt
+
+  @@index([contractId, role])
+  @@index([covenantId, role])
+  @@index([supplierId])
+  @@index([personId])
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([responsibilityGroupId])
+}
+
+model InstrumentMeasurement {
+  id           String    @id @default(cuid())
+  contractId   String?
+  contract     Contract? @relation("ContractInstrumentMeasurements", fields: [contractId], references: [id], onDelete: Restrict)
+  covenantId   String?
+  covenant     Covenant? @relation("CovenantInstrumentMeasurements", fields: [covenantId], references: [id], onDelete: Restrict)
+  number       Int
+  description  String?
+  periodStart  DateTime?
+  periodEnd    DateTime?
+  measuredAt   DateTime  @default(now())
+  status       String    @default("Rascunho")
+  quantity     Float?
+  unit         String?
+  valueDecimal Decimal   @db.Decimal(18, 2)
+  documentId   String?
+  document     Document? @relation("InstrumentMeasurementDocument", fields: [documentId], references: [id], onDelete: Restrict)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  items InstrumentMeasurementItem[]
+
+  @@unique([contractId, number])
+  @@unique([covenantId, number])
+  @@index([contractId, measuredAt])
+  @@index([covenantId, measuredAt])
+  @@index([documentId])
+}
+
+model InstrumentMeasurementItem {
+  id                    String                @id @default(cuid())
+  measurementId         String
+  measurement           InstrumentMeasurement @relation(fields: [measurementId], references: [id], onDelete: Restrict)
+  purchaseProcessItemId String?
+  purchaseProcessItem   PurchaseProcessItem?  @relation(fields: [purchaseProcessItemId], references: [id], onDelete: Restrict)
+  purchaseReceiptItemId String?               @unique
+  purchaseReceiptItem   PurchaseReceiptItem?  @relation("PurchaseReceiptItemInstrumentMeasurement", fields: [purchaseReceiptItemId], references: [id], onDelete: Restrict)
+  description           String
+  quantity              Float
+  unit                  String
+  unitValueDecimal      Decimal?              @db.Decimal(18, 2)
+  valueDecimal          Decimal               @db.Decimal(18, 2)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@index([purchaseProcessItemId])
+}
+
+model InstrumentInstallment {
+  id           String    @id @default(cuid())
+  contractId   String?
+  contract     Contract? @relation("ContractInstrumentInstallments", fields: [contractId], references: [id], onDelete: Restrict)
+  covenantId   String?
+  covenant     Covenant? @relation("CovenantInstrumentInstallments", fields: [covenantId], references: [id], onDelete: Restrict)
+  number       Int
+  dueDate      DateTime?
+  periodStart  DateTime?
+  periodEnd    DateTime?
+  quantity     Float?
+  unit         String?
+  valueDecimal Decimal   @db.Decimal(18, 2)
+  status       String    @default("Programada")
+  paymentId    String?
+  payment      Payment?  @relation("InstrumentInstallmentPayment", fields: [paymentId], references: [id], onDelete: Restrict)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([contractId, number])
+  @@unique([covenantId, number])
+  @@index([contractId, dueDate])
+  @@index([covenantId, dueDate])
+  @@index([paymentId])
 }
 
 // --- MÃ³dulo 10: RH e Folha ---
@@ -3724,19 +4205,19 @@ model Asset {
   culturaSpaces      CulturaEspaco[]               @relation("CulturaSpaceAsset")
   culturaHeritages   CulturaPatrimonio[]           @relation("CulturaHeritageAsset")
   segurancaRegistros SegurancaMobilidadeRegistro[] @relation("SegurancaRegistroAsset")
-  fleetOperations   FleetOperation[]
-  fleetUnit         FleetUnit?
+  fleetOperations    FleetOperation[]
+  fleetUnit          FleetUnit?
 }
 
 model InternalControlPlan {
-  id          String   @id @default(cuid())
-  title       String
-  reference   String
-  status      String   @default("ABERTO") // ABERTO, CONCLUIDO, CANCELADO
-  dueAt       DateTime?
-  ownerId     String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String    @id @default(cuid())
+  title     String
+  reference String
+  status    String    @default("ABERTO") // ABERTO, CONCLUIDO, CANCELADO
+  dueAt     DateTime?
+  ownerId   String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   findings InternalControlFinding[]
 
@@ -3744,18 +4225,18 @@ model InternalControlPlan {
 }
 
 model InternalControlFinding {
-  id                 String   @id @default(cuid())
+  id                 String              @id @default(cuid())
   planId             String
   plan               InternalControlPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
   title              String
   description        String
-  status             String   @default("PENDENTE") // PENDENTE, EM_TRATAMENTO, RESOLVIDO
+  status             String              @default("PENDENTE") // PENDENTE, EM_TRATAMENTO, RESOLVIDO
   dueAt              DateTime?
   responsibleId      String?
   evidenceDocumentId String?
   resolvedAt         DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@index([planId, status])
   @@index([responsibleId, dueAt])
@@ -3765,7 +4246,7 @@ model FleetOperation {
   id                 String   @id @default(cuid())
   assetId            String
   asset              Asset    @relation(fields: [assetId], references: [id], onDelete: Restrict)
-  type               String   // ABASTECIMENTO, MANUTENCAO, ORDEM_SERVICO
+  type               String // ABASTECIMENTO, MANUTENCAO, ORDEM_SERVICO
   occurredAt         DateTime
   odometer           Float?
   quantity           Float?
@@ -3821,14 +4302,14 @@ model AssetTransfer {
 }
 
 model AssetMaintenance {
-  id          String    @id @default(cuid())
-  description String
-  cost        Float?
-  status      String    @default("Solicitada") // Solicitada, Em manutenÃ§Ã£o, ConcluÃ­da
-  startDate   DateTime  @default(now())
-  endDate     DateTime?
+  id                  String          @id @default(cuid())
+  description         String
+  cost                Float?
+  status              String          @default("Solicitada") // Solicitada, Em manutenÃ§Ã£o, ConcluÃ­da
+  startDate           DateTime        @default(now())
+  endDate             DateTime?
   fleetPreviousStatus String?
-  fleetOrder FleetWorkOrder?
+  fleetOrder          FleetWorkOrder?
 
   assetId String
   asset   Asset  @relation(fields: [assetId], references: [id])
@@ -3978,12 +4459,12 @@ model MaterialStock {
 }
 
 model MaterialMovement {
-  id        String   @id @default(cuid())
-  type      String // Entrada, SaÃ­da, Ajuste
-  quantity  Float
-  unitValue Float?
-  date      DateTime @default(now())
-  reason    String? // Compra, Consumo, Vencimento
+  id               String            @id @default(cuid())
+  type             String // Entrada, SaÃ­da, Ajuste
+  quantity         Float
+  unitValue        Float?
+  date             DateTime          @default(now())
+  reason           String? // Compra, Consumo, Vencimento
   fleetConsumption FleetConsumption?
 
   warehouseId String
@@ -4007,8 +4488,8 @@ model MaterialMovement {
   settlementId String?
   settlement   Settlement? @relation("SettlementMaterialMovements", fields: [settlementId], references: [id], onDelete: Restrict)
 
-  purchaseReceiptItem   PurchaseReceiptItem? @relation("PurchaseReceiptItemMovement")
-  assetAcquisition      Asset?               @relation("AssetAcquisitionMovement")
+  purchaseReceiptItem PurchaseReceiptItem? @relation("PurchaseReceiptItemMovement")
+  assetAcquisition    Asset?               @relation("AssetAcquisitionMovement")
 
   materialRequestItemId String?
   materialRequestItem   MaterialRequestItem? @relation("MaterialRequestItemMovements", fields: [materialRequestItemId], references: [id], onDelete: Restrict)
@@ -4087,12 +4568,12 @@ model InventorySessionItem {
 }
 
 model MaterialRequest {
-  id            String   @id @default(cuid())
-  number        String   @unique
-  idempotencyKey String? @unique
-  status        String   @default("Pendente") // Pendente, Aprovada, Atendida, Recusada
-  date          DateTime @default(now())
-  justification String?
+  id             String   @id @default(cuid())
+  number         String   @unique
+  idempotencyKey String?  @unique
+  status         String   @default("Pendente") // Pendente, Aprovada, Atendida, Recusada
+  date           DateTime @default(now())
+  justification  String?
 
   departmentId String
   department   Department @relation("MaterialRequestDepartment", fields: [departmentId], references: [id])
@@ -6099,7 +6580,7 @@ model SiaficOutboxEvent {
   connectionId        String
   connection          IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
   actorUsuarioId      String
-  actorUsuario        Usuario                @relation("SiaficOutboxEventActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict)
+  actorUsuario        Usuario               @relation("SiaficOutboxEventActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict)
   datasetId           String
   sourceInstanceId    String
   entityType          String
@@ -6200,13 +6681,13 @@ model ConfiguracaoPerfil {
 }
 
 model Usuario {
-  id    String  @id @default(cuid())
-  nome  String
-  email String  @unique
+  id          String  @id @default(cuid())
+  nome        String
+  email       String  @unique
   // Legacy-only field. Firebase is the sole operational credential provider.
-  senha String  @default("LEGACY_CREDENTIAL_DISABLED")
+  senha       String  @default("LEGACY_CREDENTIAL_DISABLED")
   firebaseUid String? @unique
-  ativo Boolean @default(true)
+  ativo       Boolean @default(true)
 
   perfilId String
   perfil   ConfiguracaoPerfil @relation(fields: [perfilId], references: [id])
@@ -6214,60 +6695,64 @@ model Usuario {
   employeeId String?   @unique
   employee   Employee? @relation(fields: [employeeId], references: [id])
 
-  permissoesModulo             UsuarioModulo[]
-  unidadesGestoras             UsuarioUnidadeGestora[]
-  documentSignatures           DocumentSignature[]           @relation("DocumentSignatureUsuario")
-  requestedDocumentSignatures  DocumentSignature[]           @relation("DocumentSignatureRequestedBy")
+  permissoesModulo                    UsuarioModulo[]
+  unidadesGestoras                    UsuarioUnidadeGestora[]
+  documentSignatures                  DocumentSignature[]                @relation("DocumentSignatureUsuario")
+  requestedDocumentSignatures         DocumentSignature[]                @relation("DocumentSignatureRequestedBy")
   genericWorkflowDefinitionsPublished GenericProcessWorkflowDefinition[] @relation("GenericWorkflowDefinitionPublisher")
   genericWorkflowInstancesOpened      GenericProcessWorkflowInstance[]   @relation("GenericWorkflowInstanceOpener")
   genericWorkflowEvents               GenericProcessWorkflowEvent[]      @relation("GenericWorkflowEventActor")
-  protocolNotifications        ProtocolNotification[]
-  financialAuditLogs           FinancialAuditLog[]           @relation("FinancialAuditUsuario")
-  taxAuditLogs                 TaxAuditLog[]                 @relation("TaxAuditUsuario")
-  materialMovements            MaterialMovement[]            @relation("MaterialMovementActorUsuario")
-  createdInventorySessions     InventorySession[]            @relation("InventorySessionCreatedBy")
-  approvedInventorySessions    InventorySession[]            @relation("InventorySessionApprovedBy")
-  ticketAuditLogs              TicketAuditLog[]              @relation("TicketAuditUsuario")
-  ombudsmanAccesses            OmbudsmanAccess[]             @relation("OmbudsmanAccessUsuario")
-  grantedOmbudsmanAccesses     OmbudsmanAccess[]             @relation("OmbudsmanAccessGrantedBy")
-  ombudsmanAuditLogs           OmbudsmanAuditLog[]           @relation("OmbudsmanAuditUsuario")
-  accountingTransactions       AccountingTransaction[]       @relation("AccountingTransactionUsuario")
-  monthlyAccountingCloses      MonthlyAccountingClose[]      @relation("MonthlyCloseUsuario")
-  annualAccountingCloses       AnnualAccountingClose[]       @relation("AnnualCloseUsuario")
-  requestedMonthlyCloseEvents  MonthlyAccountingCloseEvent[] @relation("MonthlyCloseEventRequestedBy")
-  authorizedMonthlyCloseEvents MonthlyAccountingCloseEvent[] @relation("MonthlyCloseEventAuthorizedBy")
-  payableCarryForwardEvents    PayableCarryForwardEvent[]    @relation("PayableCarryForwardEventActor")
-  multiYearPlansDrafted        MultiYearPlan[]               @relation("MultiYearPlanDraftedBy")
-  multiYearPlansSubmitted      MultiYearPlan[]               @relation("MultiYearPlanSubmittedBy")
-  multiYearPlansApproved       MultiYearPlan[]               @relation("MultiYearPlanApprovedBy")
-  multiYearPlansSanctioned     MultiYearPlan[]               @relation("MultiYearPlanSanctionedBy")
-  multiYearPlansPublished      MultiYearPlan[]               @relation("MultiYearPlanPublishedBy")
-  budgetGuidelinesDrafted      BudgetGuideline[]             @relation("BudgetGuidelineDraftedBy")
-  budgetGuidelinesSubmitted    BudgetGuideline[]             @relation("BudgetGuidelineSubmittedBy")
-  budgetGuidelinesApproved     BudgetGuideline[]             @relation("BudgetGuidelineApprovedBy")
-  budgetGuidelinesSanctioned   BudgetGuideline[]             @relation("BudgetGuidelineSanctionedBy")
-  budgetGuidelinesPublished    BudgetGuideline[]             @relation("BudgetGuidelinePublishedBy")
-  annualBudgetLawsDrafted      AnnualBudgetLaw[]             @relation("AnnualBudgetLawDraftedBy")
-  annualBudgetLawsSubmitted    AnnualBudgetLaw[]             @relation("AnnualBudgetLawSubmittedBy")
-  annualBudgetLawsApproved     AnnualBudgetLaw[]             @relation("AnnualBudgetLawApprovedBy")
-  annualBudgetLawsSanctioned   AnnualBudgetLaw[]             @relation("AnnualBudgetLawSanctionedBy")
-  annualBudgetLawsPublished    AnnualBudgetLaw[]             @relation("AnnualBudgetLawPublishedBy")
-  creditRequestsRequested      CreditRequest[]               @relation("CreditRequestRequestedBy")
-  creditRequestsSubmitted      CreditRequest[]               @relation("CreditRequestSubmittedBy")
-  creditRequestsApproved       CreditRequest[]               @relation("CreditRequestApprovedBy")
-  creditRequestsSanctioned     CreditRequest[]               @relation("CreditRequestSanctionedBy")
-  creditRequestsPublished      CreditRequest[]               @relation("CreditRequestPublishedBy")
-  creditRequestsExecuted       CreditRequest[]               @relation("CreditRequestExecutedBy")
-  expenseRequests              Expense[]                     @relation("ExpenseRequestedBy")
-  expenseApprovals             Expense[]                     @relation("ExpenseApprovedBy")
-  procurementLifecycleEvents   ProcurementLifecycleEvent[]   @relation("ProcurementLifecycleEventActor")
-  siaficOutboxEvents           SiaficOutboxEvent[]           @relation("SiaficOutboxEventActor")
-  auditEvents                  AuditEvent[]                  @relation("AuditEventActor")
-  publishedPublicNotices       PublicNotice[]                @relation("PublicNoticePublisher")
-  proposedPersonMergeRequests  PersonMergeRequest[]          @relation("PersonMergeProposer")
-  approvedPersonMergeRequests  PersonMergeRequest[]          @relation("PersonMergeApprover")
-  reversedPersonMergeRequests  PersonMergeRequest[]          @relation("PersonMergeReverser")
-  personMergeLedger            PersonMergeLedger[]           @relation("PersonMergeLedgerActor")
+  protocolNotifications               ProtocolNotification[]
+  financialAuditLogs                  FinancialAuditLog[]                @relation("FinancialAuditUsuario")
+  taxAuditLogs                        TaxAuditLog[]                      @relation("TaxAuditUsuario")
+  materialMovements                   MaterialMovement[]                 @relation("MaterialMovementActorUsuario")
+  createdInventorySessions            InventorySession[]                 @relation("InventorySessionCreatedBy")
+  approvedInventorySessions           InventorySession[]                 @relation("InventorySessionApprovedBy")
+  ticketAuditLogs                     TicketAuditLog[]                   @relation("TicketAuditUsuario")
+  ombudsmanAccesses                   OmbudsmanAccess[]                  @relation("OmbudsmanAccessUsuario")
+  grantedOmbudsmanAccesses            OmbudsmanAccess[]                  @relation("OmbudsmanAccessGrantedBy")
+  ombudsmanAuditLogs                  OmbudsmanAuditLog[]                @relation("OmbudsmanAuditUsuario")
+  accountingTransactions              AccountingTransaction[]            @relation("AccountingTransactionUsuario")
+  monthlyAccountingCloses             MonthlyAccountingClose[]           @relation("MonthlyCloseUsuario")
+  annualAccountingCloses              AnnualAccountingClose[]            @relation("AnnualCloseUsuario")
+  requestedMonthlyCloseEvents         MonthlyAccountingCloseEvent[]      @relation("MonthlyCloseEventRequestedBy")
+  authorizedMonthlyCloseEvents        MonthlyAccountingCloseEvent[]      @relation("MonthlyCloseEventAuthorizedBy")
+  payableCarryForwardEvents           PayableCarryForwardEvent[]         @relation("PayableCarryForwardEventActor")
+  multiYearPlansDrafted               MultiYearPlan[]                    @relation("MultiYearPlanDraftedBy")
+  multiYearPlansSubmitted             MultiYearPlan[]                    @relation("MultiYearPlanSubmittedBy")
+  multiYearPlansApproved              MultiYearPlan[]                    @relation("MultiYearPlanApprovedBy")
+  multiYearPlansSanctioned            MultiYearPlan[]                    @relation("MultiYearPlanSanctionedBy")
+  multiYearPlansPublished             MultiYearPlan[]                    @relation("MultiYearPlanPublishedBy")
+  budgetGuidelinesDrafted             BudgetGuideline[]                  @relation("BudgetGuidelineDraftedBy")
+  budgetGuidelinesSubmitted           BudgetGuideline[]                  @relation("BudgetGuidelineSubmittedBy")
+  budgetGuidelinesApproved            BudgetGuideline[]                  @relation("BudgetGuidelineApprovedBy")
+  budgetGuidelinesSanctioned          BudgetGuideline[]                  @relation("BudgetGuidelineSanctionedBy")
+  budgetGuidelinesPublished           BudgetGuideline[]                  @relation("BudgetGuidelinePublishedBy")
+  annualBudgetLawsDrafted             AnnualBudgetLaw[]                  @relation("AnnualBudgetLawDraftedBy")
+  annualBudgetLawsSubmitted           AnnualBudgetLaw[]                  @relation("AnnualBudgetLawSubmittedBy")
+  annualBudgetLawsApproved            AnnualBudgetLaw[]                  @relation("AnnualBudgetLawApprovedBy")
+  annualBudgetLawsSanctioned          AnnualBudgetLaw[]                  @relation("AnnualBudgetLawSanctionedBy")
+  annualBudgetLawsPublished           AnnualBudgetLaw[]                  @relation("AnnualBudgetLawPublishedBy")
+  creditRequestsRequested             CreditRequest[]                    @relation("CreditRequestRequestedBy")
+  creditRequestsSubmitted             CreditRequest[]                    @relation("CreditRequestSubmittedBy")
+  creditRequestsApproved              CreditRequest[]                    @relation("CreditRequestApprovedBy")
+  creditRequestsSanctioned            CreditRequest[]                    @relation("CreditRequestSanctionedBy")
+  creditRequestsPublished             CreditRequest[]                    @relation("CreditRequestPublishedBy")
+  creditRequestsExecuted              CreditRequest[]                    @relation("CreditRequestExecutedBy")
+  expenseRequests                     Expense[]                          @relation("ExpenseRequestedBy")
+  expenseApprovals                    Expense[]                          @relation("ExpenseApprovedBy")
+  procurementLifecycleEvents          ProcurementLifecycleEvent[]        @relation("ProcurementLifecycleEventActor")
+  supplierPortalIdentities            SupplierPortalIdentity[]
+  biddingActs                         BiddingAct[]                       @relation("BiddingActActor")
+  biddingEligibilityDecisions         BiddingEligibility[]               @relation("BiddingEligibilityDecider")
+  biddingResults                      BiddingResult[]                    @relation("BiddingResultDecider")
+  siaficOutboxEvents                  SiaficOutboxEvent[]                @relation("SiaficOutboxEventActor")
+  auditEvents                         AuditEvent[]                       @relation("AuditEventActor")
+  publishedPublicNotices              PublicNotice[]                     @relation("PublicNoticePublisher")
+  proposedPersonMergeRequests         PersonMergeRequest[]               @relation("PersonMergeProposer")
+  approvedPersonMergeRequests         PersonMergeRequest[]               @relation("PersonMergeApprover")
+  reversedPersonMergeRequests         PersonMergeRequest[]               @relation("PersonMergeReverser")
+  personMergeLedger                   PersonMergeLedger[]                @relation("PersonMergeLedgerActor")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -6292,15 +6777,15 @@ model AuditEvent {
 
 // A deliberately redacted, independently validated public projection. Source records remain private.
 model PublicNotice {
-  id                  String   @id @default(cuid())
-  sourceModule        String
-  sourceEntityId      String
-  title               String
-  category            String
-  publishedAt         DateTime @default(now())
-  validationCode      String   @unique
+  id                   String   @id @default(cuid())
+  sourceModule         String
+  sourceEntityId       String
+  title                String
+  category             String
+  publishedAt          DateTime @default(now())
+  validationCode       String   @unique
   publishedByUsuarioId String
-  publishedByUsuario  Usuario  @relation("PublicNoticePublisher", fields: [publishedByUsuarioId], references: [id], onDelete: Restrict)
+  publishedByUsuario   Usuario  @relation("PublicNoticePublisher", fields: [publishedByUsuarioId], references: [id], onDelete: Restrict)
 
   @@unique([sourceModule, sourceEntityId])
   @@index([publishedAt])
@@ -6308,23 +6793,23 @@ model PublicNotice {
 
 // Mutable workflow state for an approved PF-only duplicate merge.
 model PersonMergeRequest {
-  id                  String   @id @default(cuid())
-  status              String   @default("PROPOSED") // PROPOSED, EXECUTED, REVERSED
+  id                  String    @id @default(cuid())
+  status              String    @default("PROPOSED") // PROPOSED, EXECUTED, REVERSED
   sourcePersonId      String
-  sourcePerson        Person   @relation("PersonMergeSource", fields: [sourcePersonId], references: [id], onDelete: Restrict)
+  sourcePerson        Person    @relation("PersonMergeSource", fields: [sourcePersonId], references: [id], onDelete: Restrict)
   targetPersonId      String
-  targetPerson        Person   @relation("PersonMergeTarget", fields: [targetPersonId], references: [id], onDelete: Restrict)
+  targetPerson        Person    @relation("PersonMergeTarget", fields: [targetPersonId], references: [id], onDelete: Restrict)
   proposedByUsuarioId String
-  proposedByUsuario   Usuario  @relation("PersonMergeProposer", fields: [proposedByUsuarioId], references: [id], onDelete: Restrict)
+  proposedByUsuario   Usuario   @relation("PersonMergeProposer", fields: [proposedByUsuarioId], references: [id], onDelete: Restrict)
   approvedByUsuarioId String?
-  approvedByUsuario   Usuario? @relation("PersonMergeApprover", fields: [approvedByUsuarioId], references: [id], onDelete: Restrict)
+  approvedByUsuario   Usuario?  @relation("PersonMergeApprover", fields: [approvedByUsuarioId], references: [id], onDelete: Restrict)
   reversedByUsuarioId String?
-  reversedByUsuario   Usuario? @relation("PersonMergeReverser", fields: [reversedByUsuarioId], references: [id], onDelete: Restrict)
+  reversedByUsuario   Usuario?  @relation("PersonMergeReverser", fields: [reversedByUsuarioId], references: [id], onDelete: Restrict)
   approvedAt          DateTime?
   executedAt          DateTime?
   reversedAt          DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   ledger PersonMergeLedger[]
 
@@ -6338,7 +6823,7 @@ model PersonMergeLedger {
   id             String             @id @default(cuid())
   requestId      String
   request        PersonMergeRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
-  eventType      String             // PROPOSED, EXECUTED, REVERSED
+  eventType      String // PROPOSED, EXECUTED, REVERSED
   sourcePersonId String
   sourcePerson   Person             @relation("PersonMergeLedgerSource", fields: [sourcePersonId], references: [id], onDelete: Restrict)
   targetPersonId String
@@ -6415,22 +6900,27 @@ model UsuarioUnidadeGestora {
 }
 
 model Covenant {
-  id                String       @id @default(cuid())
-  number            String       @unique
-  grantor           String
-  description       String
-  totalValueDecimal Decimal      @db.Decimal(18, 2)
-  startDate         DateTime
-  endDate           DateTime
-  status            String       @default("Ativo")
-  bankTransactionId String?
-  integrationEventId String?
+  id                    String                          @id @default(cuid())
+  number                String                          @unique
+  grantor               String
+  description           String
+  totalValueDecimal     Decimal                         @db.Decimal(18, 2)
+  startDate             DateTime
+  endDate               DateTime
+  status                String                          @default("Ativo")
+  bankTransactionId     String?
+  integrationEventId    String?
   bankAccountExternalId String?
-  bankAccountId     String?
-  bankAccount       BankAccount? @relation(fields: [bankAccountId], references: [id])
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
-  commitments       Commitment[] @relation("CovenantCommitments")
+  bankAccountId         String?
+  bankAccount           BankAccount?                    @relation(fields: [bankAccountId], references: [id])
+  createdAt             DateTime                        @default(now())
+  updatedAt             DateTime                        @updatedAt
+  commitments           Commitment[]                    @relation("CovenantCommitments")
+  instrumentParties     InstrumentParty[]               @relation("CovenantInstrumentParties")
+  responsibilityGroups  InstrumentResponsibilityGroup[] @relation("CovenantResponsibilityGroups")
+  measurements          InstrumentMeasurement[]         @relation("CovenantInstrumentMeasurements")
+  installments          InstrumentInstallment[]         @relation("CovenantInstrumentInstallments")
+
   @@index([bankTransactionId])
 }
 
@@ -6486,25 +6976,25 @@ model AutomatedBankDownload {
 }
 
 model ClassificationRule {
-  id               String   @id @default(cuid())
+  id               String       @id @default(cuid())
   bancoCodigo      String? // ex: "001", "104", "*"
   textoProcurado   String
   codigoTransacao  String?
   sinalEsperado    String? // "CREDITO", "DEBITO", "AMBOS"
   tipoMovimento    String // APLICACAO, RESGATE, TRANSFERENCIA_PARA_APLICACAO, TRANSFERENCIA_DA_APLICACAO, DEBITO, CREDITO, ESTORNO, RENDIMENTO, RECEITA_CONSTITUCIONAL
   bancoContaFiltro String?
-  bankAccountId     String?
-  bankAccount       BankAccount? @relation("ClassificationRuleBankAccount", fields: [bankAccountId], references: [id])
+  bankAccountId    String?
+  bankAccount      BankAccount? @relation("ClassificationRuleBankAccount", fields: [bankAccountId], references: [id])
   tipoReceita      String? // FPM, ICMS, FUNDEB, etc.
   naturezaReceita  String?
   fonteRecurso     String?
   eventoContabil   String?
-  deducaoAplicavel Boolean  @default(false)
-  prioridade       Int      @default(10)
-  exigeConfirmacao Boolean  @default(false)
-  ativo            Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  deducaoAplicavel Boolean      @default(false)
+  prioridade       Int          @default(10)
+  exigeConfirmacao Boolean      @default(false)
+  ativo            Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   @@index([ativo, prioridade])
   @@index([bankAccountId])
@@ -6710,60 +7200,62 @@ model TaxAuditCrossCheck {
 // Frotas: domínio operacional independente de Obras e Patrimônio.
 // Patrimônio e Almoxarifado compartilham referências reais e projeções transacionais.
 model FleetUnit {
-  id             String @id @default(cuid())
-  code           String @unique
-  name           String
-  category       String
-  status         String @default("ATIVO")
-  operationalStatus String @default("ATIVO")
-  patrimonyStatus String?
-  plate          String? @unique
-  renavam        String?
-  brand          String?
-  model          String?
-  year           Int?
-  notes          String?
-  departmentId   String?
-  assetId        String? @unique
-  asset          Asset? @relation(fields: [assetId], references: [id], onDelete: Restrict)
-  responsibleId  String?
-  parentId       String?
-  parent         FleetUnit? @relation("FleetAggregate", fields: [parentId], references: [id], onDelete: Restrict)
-  aggregates     FleetUnit[] @relation("FleetAggregate")
-  usages         FleetUsage[]
-  plans          FleetPlan[]
-  orders         FleetWorkOrder[]
-  consumptions   FleetConsumption[]
-  expenses       FleetExpense[]
-  documents      FleetDocument[]
-  occurrences    FleetOccurrence[]
-  assetEvents    FleetAssetEvent[]
-  createdById    String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                String             @id @default(cuid())
+  code              String             @unique
+  name              String
+  category          String
+  status            String             @default("ATIVO")
+  operationalStatus String             @default("ATIVO")
+  patrimonyStatus   String?
+  plate             String?            @unique
+  renavam           String?
+  brand             String?
+  model             String?
+  year              Int?
+  notes             String?
+  departmentId      String?
+  assetId           String?            @unique
+  asset             Asset?             @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  responsibleId     String?
+  parentId          String?
+  parent            FleetUnit?         @relation("FleetAggregate", fields: [parentId], references: [id], onDelete: Restrict)
+  aggregates        FleetUnit[]        @relation("FleetAggregate")
+  usages            FleetUsage[]
+  plans             FleetPlan[]
+  orders            FleetWorkOrder[]
+  consumptions      FleetConsumption[]
+  expenses          FleetExpense[]
+  documents         FleetDocument[]
+  occurrences       FleetOccurrence[]
+  assetEvents       FleetAssetEvent[]
+  createdById       String
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
   @@index([departmentId, category, status, code])
 }
 
 model FleetRoute {
-  id            String @id @default(cuid())
-  code          String @unique
-  name          String
-  origin        String
-  destination   String
-  itinerary     String
-  departmentId  String
-  active        Boolean @default(true)
-  usages        FleetUsage[]
-  createdById   String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String       @id @default(cuid())
+  code         String       @unique
+  name         String
+  origin       String
+  destination  String
+  itinerary    String
+  departmentId String
+  active       Boolean      @default(true)
+  usages       FleetUsage[]
+  createdById  String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
   @@index([departmentId, active, code])
 }
 
 model FleetUsage {
-  id             String @id @default(cuid())
+  id             String      @id @default(cuid())
   unitId         String
-  unit           FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  unit           FleetUnit   @relation(fields: [unitId], references: [id], onDelete: Restrict)
   routeId        String?
   route          FleetRoute? @relation(fields: [routeId], references: [id], onDelete: Restrict)
   routeSnapshot  String?
@@ -6772,160 +7264,168 @@ model FleetUsage {
   startedAt      DateTime
   endedAt        DateTime
   purpose        String
-  initialReading Decimal? @db.Decimal(14, 3)
-  finalReading   Decimal? @db.Decimal(14, 3)
+  initialReading Decimal?    @db.Decimal(14, 3)
+  finalReading   Decimal?    @db.Decimal(14, 3)
   createdById    String
-  createdAt     DateTime @default(now())
+  createdAt      DateTime    @default(now())
+
   @@index([unitId, startedAt, id])
 }
 
 model FleetPlan {
-  id             String @id @default(cuid())
-  unitId         String
-  unit           FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  title          String
-  type           String
-  services       String
-  firstDueAt     DateTime @db.Date
-  nextDueAt      DateTime @db.Date
-  intervalDays   Int
-  estimatedCost  Decimal? @db.Decimal(18, 2)
-  active         Boolean @default(true)
-  orders         FleetWorkOrder[]
-  createdById    String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id            String           @id @default(cuid())
+  unitId        String
+  unit          FleetUnit        @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  title         String
+  type          String
+  services      String
+  firstDueAt    DateTime         @db.Date
+  nextDueAt     DateTime         @db.Date
+  intervalDays  Int
+  estimatedCost Decimal?         @db.Decimal(18, 2)
+  active        Boolean          @default(true)
+  orders        FleetWorkOrder[]
+  createdById   String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
   @@index([unitId, nextDueAt, id])
 }
 
 model FleetWorkOrder {
-  id             String @id @default(cuid())
-  unitId         String
-  unit           FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  planId         String
-  plan           FleetPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
-  scheduledAt    DateTime @db.Date
-  title          String
-  type           String
-  services       String
-  intervalDays   Int
-  estimatedCost  Decimal? @db.Decimal(18, 2)
-  status         String @default("EMITIDA")
-  startedAt      DateTime?
-  completedAt    DateTime? @db.Date
-  performed      String?
-  result         String?
-  actualCost     Decimal? @db.Decimal(18, 2)
-  assetMaintenanceId String? @unique
-  assetMaintenance AssetMaintenance? @relation(fields: [assetMaintenanceId], references: [id], onDelete: Restrict)
-  createdById    String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                 String            @id @default(cuid())
+  unitId             String
+  unit               FleetUnit         @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  planId             String
+  plan               FleetPlan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+  scheduledAt        DateTime          @db.Date
+  title              String
+  type               String
+  services           String
+  intervalDays       Int
+  estimatedCost      Decimal?          @db.Decimal(18, 2)
+  status             String            @default("EMITIDA")
+  startedAt          DateTime?
+  completedAt        DateTime?         @db.Date
+  performed          String?
+  result             String?
+  actualCost         Decimal?          @db.Decimal(18, 2)
+  assetMaintenanceId String?           @unique
+  assetMaintenance   AssetMaintenance? @relation(fields: [assetMaintenanceId], references: [id], onDelete: Restrict)
+  createdById        String
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
   @@unique([planId, scheduledAt])
   @@index([unitId, status, scheduledAt, id])
 }
 
 model FleetConsumption {
-  id                 String @id @default(cuid())
-  unitId             String
-  unit               FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  type               String
-  origin             String
-  occurredAt         DateTime @db.Date
-  material           String
-  quantity           Decimal @db.Decimal(14, 3)
-  measurementUnit    String
-  cost               Decimal? @db.Decimal(18, 2)
-  supplierId         String?
-  supplierName       String?
-  reference          String?
-  workOrderId        String?
-  stockMovementId    String? @unique
-  stockMovement      MaterialMovement? @relation(fields: [stockMovementId], references: [id], onDelete: Restrict)
-  createdById        String
-  createdAt          DateTime @default(now())
+  id              String            @id @default(cuid())
+  unitId          String
+  unit            FleetUnit         @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  type            String
+  origin          String
+  occurredAt      DateTime          @db.Date
+  material        String
+  quantity        Decimal           @db.Decimal(14, 3)
+  measurementUnit String
+  cost            Decimal?          @db.Decimal(18, 2)
+  supplierId      String?
+  supplierName    String?
+  reference       String?
+  workOrderId     String?
+  stockMovementId String?           @unique
+  stockMovement   MaterialMovement? @relation(fields: [stockMovementId], references: [id], onDelete: Restrict)
+  createdById     String
+  createdAt       DateTime          @default(now())
+
   @@index([unitId, type, occurredAt, id])
 }
 
 model FleetExpense {
-  id                 String @id @default(cuid())
-  unitId             String
-  unit               FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  nature             String
-  occurredAt         DateTime @db.Date
-  amount             Decimal? @db.Decimal(18, 2)
-  description        String
-  sourceType         String
-  sourceId           String
-  sourceKey          String @unique
-  reference          String?
-  createdById        String
-  createdAt          DateTime @default(now())
+  id          String    @id @default(cuid())
+  unitId      String
+  unit        FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  nature      String
+  occurredAt  DateTime  @db.Date
+  amount      Decimal?  @db.Decimal(18, 2)
+  description String
+  sourceType  String
+  sourceId    String
+  sourceKey   String    @unique
+  reference   String?
+  createdById String
+  createdAt   DateTime  @default(now())
+
   @@index([unitId, nature, occurredAt, id])
 }
 
 model FleetDocument {
-  id                 String @id @default(cuid())
-  unitId             String
-  unit               FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  kind               String
-  type               String
-  reference          String
-  title              String
-  insurerId          String?
-  insurerName        String?
-  startsAt           DateTime? @db.Date
-  scheduledAt        DateTime? @db.Date
-  dueAt              DateTime @db.Date
-  fulfilledAt        DateTime? @db.Date
-  fulfillmentNote    String?
-  status             String @default("PENDENTE")
-  value              Decimal? @db.Decimal(18, 2)
-  notes              String?
-  createdById        String
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id              String    @id @default(cuid())
+  unitId          String
+  unit            FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  kind            String
+  type            String
+  reference       String
+  title           String
+  insurerId       String?
+  insurerName     String?
+  startsAt        DateTime? @db.Date
+  scheduledAt     DateTime? @db.Date
+  dueAt           DateTime  @db.Date
+  fulfilledAt     DateTime? @db.Date
+  fulfillmentNote String?
+  status          String    @default("PENDENTE")
+  value           Decimal?  @db.Decimal(18, 2)
+  notes           String?
+  createdById     String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
   @@unique([unitId, kind, type, reference])
   @@index([unitId, dueAt, status, id])
 }
 
 model FleetOccurrence {
-  id                 String @id @default(cuid())
-  unitId             String
-  unit               FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  type               String
-  occurredAt         DateTime @db.Date
-  description        String
-  involvedValue      Decimal? @db.Decimal(18, 2)
-  reference          String?
-  createdById        String
-  createdAt          DateTime @default(now())
+  id            String    @id @default(cuid())
+  unitId        String
+  unit          FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  type          String
+  occurredAt    DateTime  @db.Date
+  description   String
+  involvedValue Decimal?  @db.Decimal(18, 2)
+  reference     String?
+  createdById   String
+  createdAt     DateTime  @default(now())
+
   @@index([unitId, occurredAt, id])
 }
 
 model FleetMutation {
-  requestId          String @id
-  actorId            String
-  payloadHash        String
-  targetType         String
-  targetId           String
-  createdAt          DateTime @default(now())
+  requestId   String   @id
+  actorId     String
+  payloadHash String
+  targetType  String
+  targetId    String
+  createdAt   DateTime @default(now())
+
   @@index([actorId, createdAt])
 }
 
 model FleetAssetEvent {
-  id String @id @default(cuid())
-  unitId String
-  unit FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  assetId String
-  type String
-  fromDepartmentId String?
-  toDepartmentId String?
+  id                String    @id @default(cuid())
+  unitId            String
+  unit              FleetUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  assetId           String
+  type              String
+  fromDepartmentId  String?
+  toDepartmentId    String?
   fromResponsibleId String?
-  toResponsibleId String?
-  fromStatus String?
-  toStatus String?
-  createdAt DateTime @default(now())
+  toResponsibleId   String?
+  fromStatus        String?
+  toStatus          String?
+  createdAt         DateTime  @default(now())
+
   @@index([unitId, createdAt, id])
 }
-

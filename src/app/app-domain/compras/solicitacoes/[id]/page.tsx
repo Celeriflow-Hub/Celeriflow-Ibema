@@ -20,8 +20,29 @@ export default async function SolicitacaoDetalhesPage({ params }: { params: Prom
       department: true,
       requester: true,
       items: {
-        include: { catalogItem: true }
-      }
+        include: {
+          catalogItem: true,
+          budgetAllocations: {
+            include: {
+              budgetAppropriation: {
+                include: {
+                  budgetUnit: true,
+                  expenseNature: true,
+                  resourceSource: true,
+                  financialYear: true,
+                },
+              },
+            },
+          },
+          processItemOrigins: {
+            include: {
+              purchaseProcessItem: {
+                include: { purchaseProcess: { select: { id: true, number: true, status: true } } },
+              },
+            },
+          },
+        },
+      },
     }
   });
 
@@ -50,6 +71,10 @@ export default async function SolicitacaoDetalhesPage({ params }: { params: Prom
             <div>
               <p className="text-sm font-medium text-muted-foreground">Status</p>
               <Badge variant={solicitacao.status === 'Rascunho' ? 'secondary' : 'default'}>{solicitacao.status}</Badge>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Prioridade do planejamento</p>
+              <p>{solicitacao.priority}</p>
             </div>
           </div>
           <div>
@@ -83,19 +108,21 @@ export default async function SolicitacaoDetalhesPage({ params }: { params: Prom
         </CardHeader>
         <CardContent className="p-3">
           <div className="overflow-x-auto rounded-md border">
-            <table className="min-w-[560px] text-sm divide-y">
+            <table className="min-w-[980px] text-sm divide-y">
               <thead className="bg-muted">
                 <tr>
                   <th className="px-4 py-2 text-left">Item / Serviço</th>
                   <th className="px-4 py-2 text-left">Quant.</th>
                   <th className="px-4 py-2 text-left">Valor Unit.</th>
                   <th className="px-4 py-2 text-left">Subtotal</th>
+                  <th className="px-4 py-2 text-left">Alocação orçamentária</th>
+                  <th className="px-4 py-2 text-left">Processo de origem</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {solicitacao.items.map((item) => {
                   const name = item.catalogItem ? item.catalogItem.name : item.customName;
-                  const unitVal = item.estimatedUnitValue || 0;
+                  const unitVal = item.estimatedUnitValue ?? 0;
                   const subtotal = item.quantity * unitVal;
                   return (
                     <tr key={item.id}>
@@ -103,6 +130,29 @@ export default async function SolicitacaoDetalhesPage({ params }: { params: Prom
                       <td className="px-4 py-2">{item.quantity}</td>
                       <td className="px-4 py-2">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(unitVal)}</td>
                       <td className="px-4 py-2">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subtotal)}</td>
+                      <td className="px-4 py-2 align-top">
+                        {item.budgetAllocations.length ? <ul className="space-y-1 text-xs">
+                          {item.budgetAllocations.map((allocation) => {
+                            const appropriation = allocation.budgetAppropriation;
+                            return <li key={allocation.id}>
+                              <span className="font-medium">{appropriation.code}</span> · {appropriation.expenseNature.code} · {appropriation.resourceSource.code}<br />
+                              {appropriation.budgetUnit.name} · exercício {appropriation.financialYear.year}<br />
+                              {allocation.quantity} un. · {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(allocation.valueDecimal.toNumber())}
+                            </li>;
+                          })}
+                        </ul> : <span className="text-muted-foreground">Sem alocação</span>}
+                      </td>
+                      <td className="px-4 py-2 align-top">
+                        {item.processItemOrigins.length ? <ul className="space-y-1 text-xs">
+                          {item.processItemOrigins.map((origin) => (
+                            <li key={origin.id}>
+                              <Link className="font-medium text-primary underline-offset-2 hover:underline" href={`/compras/processos/${origin.purchaseProcessItem.purchaseProcess.id}`}>
+                                {origin.purchaseProcessItem.purchaseProcess.number}
+                              </Link> · {origin.quantity} un. · {origin.purchaseProcessItem.purchaseProcess.status}
+                            </li>
+                          ))}
+                        </ul> : <span className="text-muted-foreground">Ainda não agrupado</span>}
+                      </td>
                     </tr>
                   )
                 })}
@@ -110,7 +160,7 @@ export default async function SolicitacaoDetalhesPage({ params }: { params: Prom
             </table>
           </div>
           <div className="mt-4 text-right">
-            <p className="text-lg font-bold">Total: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(solicitacao.estimatedValue || 0)}</p>
+            <p className="text-lg font-bold">Total: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(solicitacao.estimatedValue ?? 0)}</p>
           </div>
         </CardContent>
       </Card>

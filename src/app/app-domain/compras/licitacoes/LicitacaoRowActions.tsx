@@ -12,8 +12,12 @@ export function LicitacaoRowActions({ id }: { id: string }) {
   async function handleInactivate() {
     if (confirm("Tem certeza que deseja inativar esta licitação?")) {
       setIsInactivating(true);
-      await inactivateBidding(id);
-      setIsInactivating(false);
+      try {
+        const result = await inactivateBidding(id);
+        if (!result.success) alert(result.error);
+      } finally {
+        setIsInactivating(false);
+      }
     }
   }
 

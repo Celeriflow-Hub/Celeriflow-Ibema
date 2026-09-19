@@ -7,7 +7,7 @@ export default async function EditarProcessoPage({ params }: { params: Promise<{
   const resolvedParams = await params;
   const processoPromise = prisma.purchaseProcess.findUnique({
     where: { id: resolvedParams.id },
-    include: { items: true }
+    include: { items: { include: { requestItemOrigins: { select: { id: true } } } } }
   });
   
   const catalogItemsPromise = prisma.catalogItem.findMany({
@@ -24,10 +24,12 @@ export default async function EditarProcessoPage({ params }: { params: Promise<{
   const mappedProcesso = {
     ...processo,
     items: processo.items.map((item) => ({
-      catalogItemId: item.catalogItemId ?? "",
+      id: item.id,
+      catalogItemId: item.catalogItemId ?? (item.customName ? "custom" : ""),
       customName: item.customName ?? "",
       quantity: item.quantity,
       estimatedUnitValue: item.estimatedUnitValue ?? 0,
+      sourceLocked: item.requestItemOrigins.length > 0,
     }))
   };
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Cable, FlaskConical, Save, ShieldCheck, Eye, Layers, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { integrationEnvironments, isEnvironmentAllowedForIntegration, isIntegrationEnvironment, type IntegrationEnvironment } from "@/lib/integrations/registry";
+import {
+  getProcurementExportConfigurationStatus,
+  getProcurementExportConfigurationTemplate,
+  parseProcurementExportConfigurationJson,
+} from "@/lib/integrations/procurement-export-contract";
 import { retrySiaficDelivery, testIntegrationConnection, saveIntegrationConnection } from "./actions";
 import IntegrationRunModal from "./IntegrationRunModal";
 import { PageFrame } from "@/components/app-ui/PageFrame";
@@ -88,7 +94,7 @@ function formFor(connection: Connection | undefined, code: string): FormState {
       : code === "BANCO_API" ? "SANDBOX" : code === "SIAFIC_DEMO" ? "DEMO" : "MOCK",
     baseUrl: connection?.baseUrl ?? "",
     credentialReference: connection?.credentialReference ?? "",
-    configurationJson: connection?.configuration ?? "",
+    configurationJson: connection?.configuration ?? getProcurementExportConfigurationTemplate(code),
     mockScenarioJson: connection?.mockScenario ?? (code === "SIAFIC_DEMO" ? "" : '{\n  "scenario": "success"\n}'),
     enabled: connection?.status !== "DESATIVADA",
   };
@@ -136,10 +142,15 @@ export default function IntegrationConnectionsClient({ catalog, connections }: {
   };
 
   const selectedDefinition = catalog.find((connection) => connection.code === selectedCode);
+  const procurementConfiguration = getProcurementExportConfigurationStatus({
+    code: selectedCode,
+    credentialReference: form.credentialReference,
+    configuration: parseProcurementExportConfigurationJson(form.configurationJson),
+  });
 
   return (
     <PageFrame className="space-y-3 bg-slate-950 px-1 py-1 text-slate-100 md:px-2">
-      <PageHeader title="Console Técnico de Integrações" icon={<Cable className="size-4 shrink-0 text-indigo-400" />} action={<span className="hidden items-center gap-2 rounded-md border border-indigo-800/40 bg-indigo-950/40 px-2 py-1 font-mono text-xs text-indigo-300 sm:flex"><Layers className="h-3.5 w-3.5" />Modo POC ativo</span>} className="border-slate-800 bg-slate-900 text-white [&>h1]:text-white" />
+      <PageHeader title="Console Técnico de Integrações" icon={<Cable className="size-4 shrink-0 text-indigo-400" />} action={<><Link href="/compras/exportacoes" className="hidden rounded-md border border-indigo-800/40 bg-indigo-950/40 px-2 py-1 text-xs font-semibold text-indigo-200 hover:bg-indigo-900/60 sm:inline">Pacotes de Compras</Link><span className="hidden items-center gap-2 rounded-md border border-indigo-800/40 bg-indigo-950/40 px-2 py-1 font-mono text-xs text-indigo-300 sm:flex"><Layers className="h-3.5 w-3.5" />Modo POC ativo</span></>} className="border-slate-800 bg-slate-900 text-white [&>h1]:text-white" />
       <p className="text-sm text-slate-400">Catálogo central de ambientes, parâmetros e evidências técnicas auditáveis para a comissão de avaliação da POC.</p>
 
       <div className="grid gap-3 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -255,11 +266,19 @@ export default function IntegrationConnectionsClient({ catalog, connections }: {
               </div>
             </div>
 
+            {procurementConfiguration.supported ? (
+              <div className={`rounded-xl border p-3.5 text-xs ${procurementConfiguration.ready ? "border-emerald-500/30 bg-emerald-950/30 text-emerald-200" : "border-amber-500/30 bg-amber-950/30 text-amber-200"}`}>
+                <p className="font-semibold">Pacotes de Compras {procurementConfiguration.ready ? "liberados para preparo POC" : "bloqueados por configuracao"}</p>
+                <p className="mt-1 leading-5">TCE e PNCP exigem referencia de credencial, leiaute identificado e operacoes declaradas. O preparo gera somente um pacote para entrega externa manual; nao transmite nem confirma remessa.</p>
+                {procurementConfiguration.issues.length ? <ul className="mt-2 list-disc space-y-1 pl-4">{procurementConfiguration.issues.map((issue) => <li key={issue}>{issue}</li>)}</ul> : <p className="mt-2">Escopo declarado: {procurementConfiguration.operations.join(", ")}.</p>}
+              </div>
+            ) : null}
+
             <div className="flex flex-wrap gap-3 pt-2">
               <Button onClick={save} disabled={pending} className="bg-indigo-600 hover:bg-indigo-500 text-white">
                 <Save className="mr-2 h-4 w-4" /> Salvar Conexão
               </Button>
-              <Button variant="outline" onClick={test} disabled={pending || !selectedConnection} className="border-slate-700 text-slate-200 hover:bg-slate-800">
+              <Button variant="outline" onClick={test} disabled={pending || !selectedConnection || (procurementConfiguration.supported && !procurementConfiguration.ready)} className="border-slate-700 text-slate-200 hover:bg-slate-800">
                 <FlaskConical className="mr-2 h-4 w-4 text-emerald-400" /> Testar Execução
               </Button>
             </div>
@@ -337,11 +356,13 @@ export default function IntegrationConnectionsClient({ catalog, connections }: {
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <span className={`text-xs font-bold px-2.5 py-1 rounded-md ${
-                          run.status === "SUCCESS" || run.status === "SUCESSO"
-                            ? "bg-emerald-500/20 text-emerald-300"
-                            : "bg-rose-500/20 text-rose-300"
-                        }`}>
+                         <span className={`text-xs font-bold px-2.5 py-1 rounded-md ${
+                           run.status === "SUCCESS" || run.status === "SUCESSO" || run.status === "CONFIRMED"
+                             ? "bg-emerald-500/20 text-emerald-300"
+                             : run.status === "QUEUED" || run.status === "PENDING_CONFIGURATION"
+                               ? "bg-amber-500/20 text-amber-300"
+                               : "bg-rose-500/20 text-rose-300"
+                         }`}>
                           {run.status}
                         </span>
                         <Eye className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 transition-colors" />
@@ -363,7 +384,7 @@ export default function IntegrationConnectionsClient({ catalog, connections }: {
         environment={form.environment}
         endpoint={form.baseUrl}
         run={activeModalRun}
-          onReprocess={async () => {
+          onReprocess={activeModalRun?.operation.startsWith("EXPORT_") ? undefined : async () => {
             if (selectedConnection) {
               const result = await testIntegrationConnection(selectedConnection.id);
               if (result.error) alert(result.error);

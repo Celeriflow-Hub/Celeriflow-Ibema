@@ -2,6 +2,7 @@
 
 import { Prisma } from "@prisma/client";
 import { assertIntegrationEnvironmentPolicy, getIntegrationDefinition } from "@/lib/integrations/registry";
+import { getProcurementExportConfigurationStatus } from "@/lib/integrations/procurement-export-contract";
 import { executeConfiguredHealthCheck } from "@/lib/integrations/runtime";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 import { assertSiaficConnectionMatchesRuntime, parseSiaficConnectionConfiguration } from "@/lib/siafic/config";
@@ -80,6 +81,11 @@ export async function saveIntegrationConnection(rawInput: unknown): Promise<Acti
     const configuration = parsePublicJson(input.configurationJson, "Parâmetros públicos");
     const mockScenario = parsePublicJson(input.mockScenarioJson, "Cenário mock");
     const definition = validateConnectionInput(input, configuration);
+    const procurementConfiguration = getProcurementExportConfigurationStatus({
+      code: definition.code,
+      credentialReference: input.credentialReference,
+      configuration,
+    });
     const context = await getTenantContextForSystemAdministration();
     const connection = await context.prisma.integrationConnection.upsert({
       where: { code: definition.code },
@@ -109,7 +115,10 @@ export async function saveIntegrationConnection(rawInput: unknown): Promise<Acti
     });
     revalidatePath("/configuracoes/integracoes");
     revalidatePath("/configuracoes");
-    return { data: { id: connection.id, message: "Conexão salva. Execute o teste antes de ativar o fluxo operacional." } };
+    const message = procurementConfiguration.supported && !procurementConfiguration.ready
+      ? `Conexão salva como CONFIGURANDO. Pacotes de Compras seguem bloqueados: ${procurementConfiguration.issues.join(" ")}`
+      : "Conexão salva. Execute o teste antes de ativar o fluxo operacional.";
+    return { data: { id: connection.id, message } };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Não foi possível salvar a conexão." };
   }
@@ -121,6 +130,14 @@ export async function testIntegrationConnection(connectionId: string): Promise<A
     const connection = await context.prisma.integrationConnection.findUnique({ where: { id: z.string().min(1).parse(connectionId) } });
     if (!connection) throw new Error("Conexão não encontrada.");
     if (connection.status === "DESATIVADA") throw new Error("Ative a conexão antes de executar o teste.");
+    const procurementConfiguration = getProcurementExportConfigurationStatus({
+      code: connection.code,
+      credentialReference: connection.credentialReference,
+      configuration: connection.configuration,
+    });
+    if (procurementConfiguration.supported && !procurementConfiguration.ready) {
+      throw new Error(`A conexão permanece bloqueada até informar credencial, leiaute e operações: ${procurementConfiguration.issues.join(" ")}`);
+    }
 
     const result = connection.code === "SIAFIC_DEMO"
       ? await testSiaficDemoConnection(connection)

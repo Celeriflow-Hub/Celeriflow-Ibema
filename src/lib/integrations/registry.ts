@@ -1,5 +1,12 @@
 export type IntegrationEnvironment = "MOCK" | "DEMO" | "SANDBOX" | "HOMOLOGACAO" | "PRODUCAO";
-export type IntegrationOperation = "HEALTH_CHECK" | "DOWNLOAD_STATEMENT";
+export type IntegrationOperation =
+  | "HEALTH_CHECK"
+  | "DOWNLOAD_STATEMENT"
+  | "EXPORT_TCE_BIDDING_ACCOUNTABILITY"
+  | "EXPORT_TCE_CONTRACT_ACCOUNTABILITY"
+  | "EXPORT_PNCP_PROCUREMENT"
+  | "EXPORT_PNCP_PROCEDURE_RESULT"
+  | "EXPORT_PNCP_CONTRACT";
 export type MockIntegrationResult = {
   status: "SUCESSO" | "FALHA";
   message: string;
@@ -68,6 +75,16 @@ export function assertIntegrationEnvironmentPolicy(code: string, environment: In
 export function assertIntegrationOperation(code: string, operation: IntegrationOperation) {
   if (operation === "DOWNLOAD_STATEMENT" && code !== "BANCO_API") {
     throw new Error("DOWNLOAD_STATEMENT é suportada somente pela integração BANCO_API.");
+  }
+  const procurementOperations: Partial<Record<IntegrationOperation, string>> = {
+    EXPORT_TCE_BIDDING_ACCOUNTABILITY: "TCE_PB_SAGRES",
+    EXPORT_TCE_CONTRACT_ACCOUNTABILITY: "TCE_PB_SAGRES",
+    EXPORT_PNCP_PROCUREMENT: "PNCP",
+    EXPORT_PNCP_PROCEDURE_RESULT: "PNCP",
+    EXPORT_PNCP_CONTRACT: "PNCP",
+  };
+  if (procurementOperations[operation] && procurementOperations[operation] !== code) {
+    throw new Error(`${operation} não é suportada pela integração ${code}.`);
   }
 }
 

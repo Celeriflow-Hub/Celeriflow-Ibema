@@ -3,8 +3,10 @@
 import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { requireValidCnpj, requireValidCpf } from "@/lib/identifiers/brazilian-identifiers";
 import { dispatchSiaficEvents } from "@/lib/siafic/dispatcher";
-import { setSupplierStatusWithSiaficEvent, updateSupplierWithSiaficEvent } from "@/lib/siafic/source";
+import { createSupplierWithSiaficEvent, queueSupplierSnapshot, setSupplierStatusWithSiaficEvent, type SupplierUpdateInput } from "@/lib/siafic/source";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { formText, optionalSupplierText, parseSupplierCnaes, parseSupplierDate, parseSupplierIdentity, validateSubmittedSupplierDocument, validateSupplierIdentityDocument } from "./fornecedores/supplier-form";
 
 type PersonUpdateData = {
   fullName?: string;
@@ -32,7 +34,13 @@ type RealEstateUpdateData = {
 };
 
 type SupplierUpdateData = {
+  category?: string | null;
   businessBranch?: string | null;
+  certificationsValidUntil?: string | null;
+  bankData?: string | null;
+  notes?: string | null;
+  primaryCnae?: string | null;
+  secondaryCnaes?: string | null;
 };
 
 type DocumentUpdateData = {
@@ -46,6 +54,17 @@ async function getTenantPrisma(operation: ModuleOperation) {
 
 function textValue(formData: FormData, name: string) {
   return String(formData.get(name) || "").trim();
+}
+
+function hasField(input: object, field: string) {
+  return Object.prototype.hasOwnProperty.call(input, field);
+}
+
+type SupplierActionResult = { error?: string };
+
+function supplierActionError(error: unknown, fallback: string): SupplierActionResult {
+  console.error(error);
+  return { error: error instanceof Error ? error.message : fallback };
 }
 
 export async function createPerson(formData: FormData): Promise<void> {
@@ -179,26 +198,117 @@ export async function activateRealEstate(id: string) {
 }
 
 // Supplier
-export async function updateSupplier(id: string, data: SupplierUpdateData) {
-  const context = await getTenantContextForModuleOperation("CADASTROS", "update");
-  const result = await updateSupplierWithSiaficEvent(context.prisma, { usuarioId: context.user.id }, id, data);
+export async function createSupplier(formData: FormData): Promise<void> {
+  const context = await getTenantContextForModuleOperation("CADASTROS", "create");
+  const selection = parseSupplierIdentity({
+    supplierType: formText(formData, "supplierType"),
+    personId: formText(formData, "personId"),
+    companyId: formText(formData, "companyId"),
+  });
+  const cnaeFieldsSubmitted = formData.has("primaryCnae") || formData.has("secondaryCnaes");
+  const cnaes = cnaeFieldsSubmitted ? parseSupplierCnaes({
+    primaryCnae: formText(formData, "primaryCnae"),
+    secondaryCnaes: formText(formData, "secondaryCnaes"),
+  }) : null;
+
+  if (selection.supplierType === "PF") {
+    const person = await context.prisma.person.findUnique({ where: { id: selection.personId! }, select: { id: true, cpf: true } });
+    if (!person) throw new Error("A pessoa física selecionada não existe.");
+    const canonicalDocument = validateSupplierIdentityDocument(selection, person);
+    validateSubmittedSupplierDocument(selection, { cpf: formText(formData, "cpf"), cnpj: formText(formData, "cnpj") }, canonicalDocument);
+    if (cnaes?.primaryCnae || cnaes?.secondaryCnaes) {
+      throw new Error("CNAE só pode ser informado para fornecedor pessoa jurídica.");
+    }
+    const existing = await context.prisma.supplier.findUnique({ where: { personId: selection.personId! }, select: { id: true } });
+    if (existing) throw new Error("A pessoa física selecionada já está cadastrada como fornecedora.");
+  } else {
+    const company = await context.prisma.company.findUnique({ where: { id: selection.companyId! }, select: { id: true, cnpj: true } });
+    if (!company) throw new Error("A pessoa jurídica selecionada não existe.");
+    const canonicalDocument = validateSupplierIdentityDocument(selection, company);
+    validateSubmittedSupplierDocument(selection, { cpf: formText(formData, "cpf"), cnpj: formText(formData, "cnpj") }, canonicalDocument);
+    const existing = await context.prisma.supplier.findUnique({ where: { companyId: selection.companyId! }, select: { id: true } });
+    if (existing) throw new Error("A pessoa jurídica selecionada já está cadastrada como fornecedora.");
+    if (cnaes) {
+      await context.prisma.company.update({
+        where: { id: selection.companyId! },
+        data: cnaes,
+      });
+    }
+  }
+
+  const result = await createSupplierWithSiaficEvent(context.prisma, { usuarioId: context.user.id }, {
+    personId: selection.personId,
+    companyId: selection.companyId,
+    category: formText(formData, "category") || null,
+    businessBranch: formText(formData, "businessBranch") || null,
+    certificationsValidUntil: parseSupplierDate(formText(formData, "certificationsValidUntil")),
+    bankData: formText(formData, "bankData") || null,
+    notes: formText(formData, "notes") || null,
+  });
   await dispatchSiaficEvents(context.prisma, result.eventIds);
   revalidatePath("/cadastros/fornecedores");
-  return result.supplier;
+  redirect("/cadastros/fornecedores");
 }
-export async function deactivateSupplier(id: string) {
-  const context = await getTenantContextForModuleOperation("CADASTROS", "update");
-  const result = await setSupplierStatusWithSiaficEvent(context.prisma, { usuarioId: context.user.id }, id, "Inativo");
-  await dispatchSiaficEvents(context.prisma, result.eventIds);
-  revalidatePath("/cadastros/fornecedores");
-  return result.supplier;
+
+export async function updateSupplier(id: string, data: SupplierUpdateData): Promise<SupplierActionResult> {
+  try {
+    const context = await getTenantContextForModuleOperation("CADASTROS", "update");
+    const update: SupplierUpdateInput = {};
+    if (hasField(data, "category")) update.category = optionalSupplierText(data.category);
+    if (hasField(data, "businessBranch")) update.businessBranch = optionalSupplierText(data.businessBranch);
+    if (hasField(data, "certificationsValidUntil")) update.certificationsValidUntil = parseSupplierDate(data.certificationsValidUntil);
+    if (hasField(data, "bankData")) update.bankData = optionalSupplierText(data.bankData);
+    if (hasField(data, "notes")) update.notes = optionalSupplierText(data.notes);
+
+    const result = await context.prisma.$transaction(async (tx) => {
+      const supplier = await tx.supplier.findUnique({ where: { id }, select: { companyId: true } });
+      if (!supplier) throw new Error("Fornecedor não encontrado.");
+
+      const cnaeFieldsSubmitted = hasField(data, "primaryCnae") || hasField(data, "secondaryCnaes");
+      if (cnaeFieldsSubmitted) {
+        if (!supplier.companyId) throw new Error("CNAE só pode ser alterado em fornecedor pessoa jurídica.");
+        await tx.company.update({
+          where: { id: supplier.companyId },
+          data: {
+            ...(hasField(data, "primaryCnae") ? { primaryCnae: optionalSupplierText(data.primaryCnae) } : {}),
+            ...(hasField(data, "secondaryCnaes") ? { secondaryCnaes: optionalSupplierText(data.secondaryCnaes) } : {}),
+          },
+        });
+      }
+
+      const updatedSupplier = await tx.supplier.update({ where: { id }, data: update });
+      // Queue the existing SIAFIC snapshot only after all canonical supplier fields are written.
+      const eventIds = await queueSupplierSnapshot(tx, { usuarioId: context.user.id }, updatedSupplier.id, "UPDATE");
+      return { eventIds };
+    });
+    await dispatchSiaficEvents(context.prisma, result.eventIds);
+    revalidatePath("/cadastros/fornecedores");
+    return {};
+  } catch (error) {
+    return supplierActionError(error, "Não foi possível atualizar o fornecedor.");
+  }
 }
-export async function activateSupplier(id: string) {
-  const context = await getTenantContextForModuleOperation("CADASTROS", "update");
-  const result = await setSupplierStatusWithSiaficEvent(context.prisma, { usuarioId: context.user.id }, id, "Ativo");
-  await dispatchSiaficEvents(context.prisma, result.eventIds);
-  revalidatePath("/cadastros/fornecedores");
-  return result.supplier;
+export async function deactivateSupplier(id: string): Promise<SupplierActionResult> {
+  try {
+    const context = await getTenantContextForModuleOperation("CADASTROS", "update");
+    const result = await setSupplierStatusWithSiaficEvent(context.prisma, { usuarioId: context.user.id }, id, "Inativo");
+    await dispatchSiaficEvents(context.prisma, result.eventIds);
+    revalidatePath("/cadastros/fornecedores");
+    return {};
+  } catch (error) {
+    return supplierActionError(error, "Não foi possível inativar o fornecedor.");
+  }
+}
+export async function activateSupplier(id: string): Promise<SupplierActionResult> {
+  try {
+    const context = await getTenantContextForModuleOperation("CADASTROS", "update");
+    const result = await setSupplierStatusWithSiaficEvent(context.prisma, { usuarioId: context.user.id }, id, "Ativo");
+    await dispatchSiaficEvents(context.prisma, result.eventIds);
+    revalidatePath("/cadastros/fornecedores");
+    return {};
+  } catch (error) {
+    return supplierActionError(error, "Não foi possível reativar o fornecedor.");
+  }
 }
 
 // Address endpoints removed as they don't have a standalone page anymore

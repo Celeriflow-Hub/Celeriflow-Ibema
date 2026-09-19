@@ -1,6 +1,8 @@
-import { type Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { applyStockMovement } from "@/lib/patrimonio/stock-service";
 import { nextYearlyCode } from "@/lib/sequence";
+import { assertPurchaseRequestItemBudgetAllocations, PurchaseRequestBudgetError } from "./purchase-request-budget";
+import { aggregatePurchaseRequestItems, PurchaseProcessOriginError, type AggregatedPurchaseProcessItem } from "./purchase-process-origins";
 
 type Db = PrismaClient;
 type Tx = Prisma.TransactionClient;
@@ -112,11 +114,22 @@ export async function approvePurchaseRequest(db: Db, actor: ProcurementActor, pu
     const existingEvent = await tx.procurementLifecycleEvent.findUnique({ where: { idempotencyKey: eventKey }, select: { id: true } });
     if (existingEvent) return tx.purchaseRequest.findUniqueOrThrow({ where: { id: requestId } });
 
-    const request = await tx.purchaseRequest.findUnique({ where: { id: requestId }, include: { items: true } });
+    const request = await tx.purchaseRequest.findUnique({
+      where: { id: requestId },
+      include: { items: { include: { budgetAllocations: true } } },
+    });
     if (!request) throw new ProcurementLifecycleError("Solicitação de compra não encontrada.");
     if (!request.items.length) throw new ProcurementLifecycleError("A solicitação deve possuir ao menos um item antes da aprovação.");
     if (!['Rascunho', 'Enviada'].includes(request.status)) throw new ProcurementLifecycleError("Somente solicitações em rascunho ou enviadas podem ser aprovadas.");
     if (request.requesterId === actorEmployeeId) throw new ProcurementLifecycleError("Segregação de funções: o solicitante não pode aprovar a própria solicitação.");
+    try {
+      for (const item of request.items) {
+        assertPurchaseRequestItemBudgetAllocations(item, item.budgetAllocations);
+      }
+    } catch (error) {
+      if (error instanceof PurchaseRequestBudgetError) throw new ProcurementLifecycleError(error.message);
+      throw error;
+    }
 
     const approved = await tx.purchaseRequest.update({
       where: { id: request.id },
@@ -135,42 +148,117 @@ export async function approvePurchaseRequest(db: Db, actor: ProcurementActor, pu
   });
 }
 
-export async function createPurchaseProcessFromApprovedRequest(
+export type CreatePurchaseProcessFromApprovedRequestsInput = {
+  purchaseRequestIds: string[];
+  number: string;
+  object?: string;
+  type: string;
+  modality?: string;
+  idempotencyKey?: string;
+};
+
+export async function createPurchaseProcessFromApprovedRequests(
   db: Db,
   actor: ProcurementActor,
-  input: { purchaseRequestId: string; number: string; type: string; modality?: string; idempotencyKey?: string },
+  input: CreatePurchaseProcessFromApprovedRequestsInput,
 ) {
-  const purchaseRequestId = required(input.purchaseRequestId, "Solicitação de compra");
+  if (!Array.isArray(input.purchaseRequestIds) || !input.purchaseRequestIds.length) {
+    throw new ProcurementLifecycleError("Selecione ao menos uma solicitação de compra aprovada.");
+  }
+  const purchaseRequestIds = input.purchaseRequestIds.map((requestId) => required(requestId, "Solicitação de compra"));
+  if (new Set(purchaseRequestIds).size !== purchaseRequestIds.length) {
+    throw new ProcurementLifecycleError("Não repita a mesma solicitação na formação do processo.");
+  }
   const number = required(input.number, "Número do processo");
   const type = required(input.type, "Tipo do processo");
-  const eventKey = idempotencyKey(input.idempotencyKey, `C5:PURCHASE_PROCESS:${purchaseRequestId}:${number}`);
+  const eventKey = idempotencyKey(input.idempotencyKey, `C5:PURCHASE_PROCESS:${[...purchaseRequestIds].sort().join(":")}:${number}`);
+
   return db.$transaction(async (tx) => {
     const existingEvent = await tx.procurementLifecycleEvent.findUnique({ where: { idempotencyKey: eventKey }, select: { entityId: true } });
     if (existingEvent) return tx.purchaseProcess.findUniqueOrThrow({ where: { id: existingEvent.entityId } });
 
-    const request = await tx.purchaseRequest.findUnique({ where: { id: purchaseRequestId }, include: { items: true } });
-    if (!request) throw new ProcurementLifecycleError("Solicitação de compra não encontrada.");
-    if (request.status !== "Aprovada") throw new ProcurementLifecycleError("O processo de compra exige uma solicitação aprovada.");
-    if (!request.items.length) throw new ProcurementLifecycleError("A solicitação aprovada não possui itens.");
+    const requests = await tx.purchaseRequest.findMany({
+      where: { id: { in: purchaseRequestIds } },
+      include: { items: { include: { budgetAllocations: true } } },
+    });
+    if (requests.length !== purchaseRequestIds.length) {
+      throw new ProcurementLifecycleError("Solicitação de compra não encontrada.");
+    }
+    const requestsById = new Map(requests.map((request) => [request.id, request]));
+    const orderedRequests = purchaseRequestIds.map((requestId) => requestsById.get(requestId)!);
+    if (orderedRequests.some((request) => request.status !== "Aprovada")) {
+      throw new ProcurementLifecycleError("O processo de compra exige solicitações aprovadas.");
+    }
+    if (orderedRequests.some((request) => !request.items.length)) {
+      throw new ProcurementLifecycleError("A solicitação aprovada não possui itens.");
+    }
+    if (orderedRequests.some((request) => request.secretariatId !== orderedRequests[0].secretariatId)) {
+      throw new ProcurementLifecycleError("As solicitações agrupadas devem pertencer à mesma secretaria.");
+    }
 
+    try {
+      for (const request of orderedRequests) {
+        for (const item of request.items) {
+          assertPurchaseRequestItemBudgetAllocations(item, item.budgetAllocations);
+        }
+      }
+    } catch (error) {
+      if (error instanceof PurchaseRequestBudgetError) throw new ProcurementLifecycleError(error.message);
+      throw error;
+    }
+
+    const requestItems = orderedRequests.flatMap((request) => request.items);
+    const existingOrigins = await tx.purchaseProcessItemOrigin.findMany({
+      where: { purchaseRequestItemId: { in: requestItems.map((item) => item.id) } },
+      select: { purchaseRequestItemId: true, quantity: true },
+    });
+    if (existingOrigins.length) {
+      throw new ProcurementLifecycleError("Uma das solicitações selecionadas já possui quantidade destinada a outro processo.");
+    }
+    const legacyLinkedProcesses = await tx.purchaseProcess.findMany({
+      where: { purchaseRequestId: { in: purchaseRequestIds } },
+      select: { id: true },
+    });
+    if (legacyLinkedProcesses.length) {
+      throw new ProcurementLifecycleError("Uma das solicitações selecionadas já está vinculada a outro processo.");
+    }
+
+    let groupedItems: AggregatedPurchaseProcessItem[];
+    try {
+      groupedItems = aggregatePurchaseRequestItems(requestItems);
+    } catch (error) {
+      if (error instanceof PurchaseProcessOriginError) throw new ProcurementLifecycleError(error.message);
+      throw error;
+    }
+
+    const requestedObject = input.object?.trim();
+    if (orderedRequests.length > 1 && !requestedObject) {
+      throw new ProcurementLifecycleError("Informe o objeto do processo para agrupar solicitações distintas.");
+    }
     const process = await tx.purchaseProcess.create({
       data: {
         number,
-        object: request.object,
+        object: requestedObject || orderedRequests[0].object,
         type,
         modality: input.modality?.trim() || undefined,
-        estimatedValue: request.estimatedValue,
+        estimatedValue: groupedItems.reduce((total, item) => total + (item.quantity * item.estimatedUnitValue), 0),
         status: "Em Planejamento",
-        secretariatId: request.secretariatId,
-        purchaseRequestId: request.id,
+        secretariatId: orderedRequests[0].secretariatId,
+        // Preserve the legacy single-request relation for existing consumers.
+        purchaseRequestId: orderedRequests[0].id,
+        requestOrigins: {
+          create: orderedRequests.map((request) => ({ purchaseRequestId: request.id })),
+        },
         items: {
-          create: request.items.map((item) => ({
-            // Catalog and material identities are copied only from their own fields.
+          create: groupedItems.map((item) => ({
             catalogItemId: item.catalogItemId,
             materialId: item.materialId,
             customName: item.customName,
             quantity: item.quantity,
             estimatedUnitValue: item.estimatedUnitValue,
+            requestItemOrigins: {
+              create: item.origins,
+            },
           })),
         },
       },
@@ -179,12 +267,26 @@ export async function createPurchaseProcessFromApprovedRequest(
       eventType: "PURCHASE_PROCESS_CREATED",
       entityType: "PURCHASE_PROCESS",
       entityId: process.id,
-      sourceType: "PURCHASE_REQUEST",
-      sourceId: request.id,
+      sourceType: orderedRequests.length > 1 ? "PURCHASE_REQUEST_GROUP" : "PURCHASE_REQUEST",
+      sourceId: orderedRequests[0].id,
       actorUsuarioId: actor.usuarioId,
       idempotencyKey: eventKey,
     });
     return process;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function createPurchaseProcessFromApprovedRequest(
+  db: Db,
+  actor: ProcurementActor,
+  input: { purchaseRequestId: string; number: string; type: string; modality?: string; idempotencyKey?: string },
+) {
+  return createPurchaseProcessFromApprovedRequests(db, actor, {
+    purchaseRequestIds: [input.purchaseRequestId],
+    number: input.number,
+    type: input.type,
+    modality: input.modality,
+    idempotencyKey: input.idempotencyKey,
   });
 }
 

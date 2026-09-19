@@ -1,5 +1,5 @@
 import { SolicitacaoForm } from "../SolicitacaoForm";
-import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { canSelectAnyPurchaseRequestOrigin, purchaseRequestOriginScope } from "@/lib/compras/purchase-request-policy";
 
 export default async function NovaSolicitacaoPage() {
@@ -7,7 +7,8 @@ export default async function NovaSolicitacaoPage() {
   const { prisma } = context;
   const origin = purchaseRequestOriginScope(context.user);
   const canSelectAnyOrigin = canSelectAnyPurchaseRequestOrigin(context.user);
-  const [catalogItems, secretarias, departments] = await Promise.all([
+  const budgetUnitScope = isSystemAdministrator(context.user) ? {} : { budgetUnitId: { in: context.user.allowedBudgetUnitIds } };
+  const [catalogItems, secretarias, departments, budgetAppropriations] = await Promise.all([
     prisma.catalogItem.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' }
@@ -17,7 +18,36 @@ export default async function NovaSolicitacaoPage() {
       orderBy: { name: 'asc' }
     }),
     prisma.department.findMany({ where: { isActive: true, ...(origin ? { id: origin.departmentId } : canSelectAnyOrigin ? {} : { id: "__sem-origem-autorizada__" }) }, select: { id: true, name: true, secretariatId: true }, orderBy: { name: 'asc' } }),
+    prisma.budgetAppropriation.findMany({
+      where: budgetUnitScope,
+      select: {
+        id: true,
+        code: true,
+        budgetUnit: { select: { name: true, secretariatId: true } },
+        expenseNature: { select: { code: true, name: true } },
+        resourceSource: { select: { code: true, name: true } },
+        financialYear: { select: { year: true } },
+      },
+      orderBy: { code: "asc" },
+    }),
   ]);
 
-  return <SolicitacaoForm catalogItems={catalogItems} secretarias={secretarias} departments={departments} initialOrigin={origin} originLocked={!canSelectAnyOrigin} />;
+  return <SolicitacaoForm
+    catalogItems={catalogItems}
+    secretarias={secretarias}
+    departments={departments}
+    budgetAppropriations={budgetAppropriations.map((appropriation) => ({
+      id: appropriation.id,
+      code: appropriation.code,
+      secretariatId: appropriation.budgetUnit.secretariatId,
+      budgetUnitName: appropriation.budgetUnit.name,
+      expenseNatureCode: appropriation.expenseNature.code,
+      expenseNatureName: appropriation.expenseNature.name,
+      resourceSourceCode: appropriation.resourceSource.code,
+      resourceSourceName: appropriation.resourceSource.name,
+      financialYear: appropriation.financialYear.year,
+    }))}
+    initialOrigin={origin}
+    originLocked={!canSelectAnyOrigin}
+  />;
 }

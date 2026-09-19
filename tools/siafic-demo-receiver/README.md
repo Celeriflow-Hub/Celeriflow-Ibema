@@ -1,6 +1,6 @@
 # Receptor SIAFIC - Robonuvem DEMO
 
-Aplicacao independente de laboratorio para receber eventos do CeleriFlow. Ela persiste apenas cadastros e instrumentos recebidos; nao executa empenho, liquidacao, pagamento ou escrituração contabil.
+Aplicacao independente de laboratorio para receber eventos do CeleriFlow. Ela persiste apenas cadastros, contratos e convenios recebidos; nao executa empenho, liquidacao, pagamento ou escrituracao contabil e nao representa suporte oficial a SIAFIC.
 
 ## Local
 

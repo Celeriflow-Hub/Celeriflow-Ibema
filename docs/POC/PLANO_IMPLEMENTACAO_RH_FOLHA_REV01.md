@@ -87,7 +87,7 @@ Durante a demonstração, o acesso ao **Portal do Servidor** fica disponível a 
 
 As regras demonstrativas do módulo passam a ser registradas em tabelas versionadas no **Neon**, vinculadas à instância municipal: conjunto de regras e vigência, regras tipadas, rubricas e incidências, regimes e faixas previdenciárias, políticas de férias, política de cálculo e regimes de vínculo. Cada alteração guarda evidência de antes/depois em log append-only, sem registrar dados pessoais, clínicos ou financeiros de servidores.
 
-A migration `20260919210000_add_rh_payroll_configuration` deve ser aplicada ao Neon por operação controlada com `prisma migrate deploy`, depois de conferir o histórico já existente no banco. O build da Vercel não executa migrations por padrão; a variável `APPLY_PRISMA_MIGRATIONS=true` é uma opção explícita para uma publicação planejada, com `DATABASE_URL` disponível e histórico conciliado.
+A migration `20260919210000_add_rh_payroll_configuration` deve ser aplicada ao Neon por operação controlada com `prisma migrate deploy`, depois de conferir o histórico já existente no banco. O build da Vercel não executa migrations: a estrutura do banco deve ser conciliada em etapa própria, com `DATABASE_URL` disponível e histórico revisado.
 
 O conjunto inicial é identificado como **DEMONSTRAÇÃO** e não substitui estatuto, plano de cargos, tabela previdenciária, convênio de consignação, eSocial ou homologação. Rubricas novas também não alimentam o motor de folha legado; essa ligação ocorrerá somente quando a competência versionada puder congelar uma cópia auditável das regras.
 

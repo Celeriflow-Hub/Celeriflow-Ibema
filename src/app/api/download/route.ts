@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AccessError, getCurrentTenantContext, getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { downloadFilename, getFile } from "@/lib/platform/blob";
-import { getAttendanceContext, ombudsmanScope, ticketScope } from "@/lib/attendance/access";
+import { getAttendanceContext, getOmbudsmanReadContext, ombudsmanScope, ticketScope } from "@/lib/attendance/access";
 import { getProtocolContext, protocolScope } from "@/lib/protocols/access";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 
@@ -30,16 +30,29 @@ export async function GET(request: NextRequest) {
     });
 
     if (document && (document.ticketLinks.length || document.ombudsmanLinks.length)) {
-      const attendance = await getAttendanceContext();
-      const [ticket, ombudsman] = await Promise.all([
-        document.ticketLinks.length
-          ? attendance.prisma.ticket.findFirst({ where: { AND: [{ id: { in: document.ticketLinks.map((link) => link.ticketId) } }, ticketScope(attendance)] }, select: { id: true } })
-          : null,
-        document.ombudsmanLinks.length
-          ? attendance.prisma.ombudsman.findFirst({ where: { AND: [{ id: { in: document.ombudsmanLinks.map((link) => link.ombudsmanId) } }, ombudsmanScope(attendance)] }, select: { id: true } })
-          : null,
-      ]);
-      if (!ticket && !ombudsman) throw new AccessError("Sem acesso ao documento vinculado.", 403);
+      let hasLinkedAccess = false;
+      if (document.ombudsmanLinks.length) {
+        const ombudsmanContext = await getOmbudsmanReadContext();
+        const ombudsman = await ombudsmanContext.prisma.ombudsman.findFirst({
+          where: {
+            AND: [
+              { id: { in: document.ombudsmanLinks.map((link) => link.ombudsmanId) } },
+              ombudsmanScope(ombudsmanContext),
+            ],
+          },
+          select: { id: true },
+        });
+        hasLinkedAccess = Boolean(ombudsman);
+      }
+      if (!hasLinkedAccess && document.ticketLinks.length) {
+        const attendance = await getAttendanceContext();
+        const ticket = await attendance.prisma.ticket.findFirst({
+          where: { AND: [{ id: { in: document.ticketLinks.map((link) => link.ticketId) } }, ticketScope(attendance)] },
+          select: { id: true },
+        });
+        hasLinkedAccess = Boolean(ticket);
+      }
+      if (!hasLinkedAccess) throw new AccessError("Sem acesso ao documento vinculado.", 403);
     } else if (document?.processDocuments.length) {
       const protocol = await getProtocolContext();
       const process = await protocol.prisma.process.findFirst({

@@ -87,6 +87,11 @@ export function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/portal-protocolos" className="hover:text-blue-400 transition-colors">
+                  Processos e Protocolos
+                </Link>
+              </li>
+              <li>
                 <Link href="#contato" className="hover:text-blue-400 transition-colors">
                   Solicitar Suporte Técnico
                 </Link>

@@ -1,5 +1,6 @@
 "use server";
 
+import type { Prisma } from "@prisma/client";
 import { getProtocolContext, getProtocolContextForOperation, protocolScope } from "@/lib/protocols/access";
 import { notifyProtocolDepartment, notifyProtocolUsers } from "@/lib/protocols/notifications";
 import { createValidatedProcess } from "@/lib/protocols/service";
@@ -12,6 +13,7 @@ import { getIdTokenPrincipal } from "@/lib/platform/session";
 import { headers } from "next/headers";
 import { publishProcessPublicNotice } from "@/lib/transparencia/public-notices";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
+import { assertMovementCanBeCancelled, assertMovementCanBeRejected, PENDING_MOVEMENT_STATUS } from "@/lib/protocols/movement-policy";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -150,6 +152,20 @@ export async function receiveProcess(processId: string): Promise<{ error: string
   }
 }
 
+export async function receiveProcessesBatch(processIds: string[]): Promise<{ results: Array<{ processId: string; error: string | null }> }> {
+  const uniqueIds = [...new Set(processIds.filter((id) => typeof id === "string" && id.length > 0))].slice(0, 10);
+  const results: Array<{ processId: string; error: string | null }> = [];
+
+  for (const processId of uniqueIds) {
+    // Each item keeps the same guarded transition as an individual receipt. A failure
+    // must not roll back other independently received processes in the batch.
+    const result = await receiveProcess(processId);
+    results.push({ processId, error: result.error });
+  }
+
+  return { results };
+}
+
 export async function forwardProcess(data: {
   processId: string;
   destinationDepartmentId: string;
@@ -285,6 +301,171 @@ export async function forwardProcess(data: {
     console.error(error);
     return { error: error instanceof Error ? error.message : "Erro ao tramitar o processo." };
   }
+}
+
+async function restoreLegacyWorkflowStage(
+  tx: Prisma.TransactionClient,
+  process: { processTypeId: string; subjectId: string; currentWorkflowStageId: string | null },
+  sourceDepartmentId: string,
+) {
+  const subjectStages = await tx.processWorkflowStage.findMany({
+    where: { processTypeId: process.processTypeId, subjectId: process.subjectId, isActive: true },
+    orderBy: { position: "asc" },
+    select: { id: true, position: true, departmentId: true },
+  });
+  const stages = subjectStages.length
+    ? subjectStages
+    : await tx.processWorkflowStage.findMany({
+        where: { processTypeId: process.processTypeId, subjectId: null, isActive: true },
+        orderBy: { position: "asc" },
+        select: { id: true, position: true, departmentId: true },
+      });
+  const currentStage = stages.find((stage) => stage.id === process.currentWorkflowStageId);
+  if (!currentStage) return null;
+  return [...stages]
+    .reverse()
+    .find((stage) => stage.position < currentStage.position && stage.departmentId === sourceDepartmentId)?.id || null;
+}
+
+async function reversePendingForwarding(
+  movementId: string,
+  reason: string,
+  operation: "cancel" | "reject",
+): Promise<{ error: string | null }> {
+  try {
+    const { prisma, employee, departmentId, user } = await getOperationalContext("update");
+    const cleanReason = reason.trim();
+    if (!cleanReason) throw new Error("Informe a justificativa da operação.");
+
+    await prisma.$transaction(async (tx) => {
+      const movement = await tx.processMovement.findUnique({
+        where: { id: movementId },
+        select: {
+          id: true,
+          processId: true,
+          fromDepartmentId: true,
+          toDepartmentId: true,
+          employeeId: true,
+          reason: true,
+          status: true,
+          receivedAt: true,
+          dueAt: true,
+          movedAt: true,
+          process: {
+            select: {
+              protocolNumber: true,
+              status: true,
+              currentDepartmentId: true,
+              processTypeId: true,
+              subjectId: true,
+              currentWorkflowStageId: true,
+              expectedCompletionAt: true,
+            },
+          },
+        },
+      });
+      if (!movement) throw new Error("Tramitação não encontrada.");
+
+      const isGenericWorkflow = await isGenericWorkflowProcess(tx, movement.processId);
+      const policyInput = {
+        processStatus: movement.process.status,
+        movementStatus: movement.status,
+        fromDepartmentId: movement.fromDepartmentId,
+        toDepartmentId: movement.toDepartmentId,
+        currentDepartmentId: movement.process.currentDepartmentId,
+        actorDepartmentId: departmentId,
+        isGenericWorkflow,
+      };
+      if (operation === "cancel") assertMovementCanBeCancelled(policyInput);
+      else assertMovementCanBeRejected(policyInput);
+
+      const movementUpdate = await tx.processMovement.updateMany({
+        where: { id: movement.id, status: PENDING_MOVEMENT_STATUS, receivedAt: null },
+        data: {
+          status: operation === "cancel" ? "CANCELLED" : "REJECTED",
+          receivedByEmployeeId: operation === "reject" ? employee.id : null,
+          reason: [
+            movement.reason,
+            operation === "cancel" ? `Encaminhamento cancelado: ${cleanReason}` : `Recebimento recusado: ${cleanReason}`,
+          ].filter(Boolean).join("\n\n"),
+        },
+      });
+      if (movementUpdate.count !== 1) {
+        throw new Error("A tramitação foi atualizada por outro usuário. Atualize a tela antes de tentar novamente.");
+      }
+
+      const sourceDepartmentId = movement.fromDepartmentId!;
+      const previousStageId = await restoreLegacyWorkflowStage(tx, movement.process, sourceDepartmentId);
+      const previousReceivedMovement = movement.dueAt
+        ? await tx.processMovement.findFirst({
+            where: {
+              processId: movement.processId,
+              toDepartmentId: sourceDepartmentId,
+              receivedAt: { not: null },
+              movedAt: { lt: movement.movedAt },
+            },
+            orderBy: { movedAt: "desc" },
+            select: { dueAt: true },
+          })
+        : null;
+      await tx.process.update({
+        where: { id: movement.processId },
+        data: {
+          status: "Recebido",
+          currentDepartmentId: sourceDepartmentId,
+          currentResponsibleEmployeeId: movement.employeeId,
+          currentWorkflowStageId: previousStageId,
+          // A destination deadline belongs to the pending movement. Do not leave
+          // it active after cancellation/refusal, where it would create a false
+          // overdue alert for the restored source sector.
+          expectedCompletionAt: movement.dueAt
+            ? previousReceivedMovement?.dueAt || null
+            : movement.process.expectedCompletionAt,
+        },
+      });
+      await tx.processEvent.create({
+        data: {
+          processId: movement.processId,
+          eventType: operation === "cancel" ? "FORWARDING_CANCELLED" : "FORWARDING_REJECTED",
+          description: operation === "cancel"
+            ? `Encaminhamento cancelado antes do recebimento. ${cleanReason}`
+            : `Recebimento recusado pelo setor de destino. ${cleanReason}`,
+          previousStatus: "Aguardando Recebimento",
+          newStatus: "Recebido",
+          departmentId,
+          employeeId: employee.id,
+        },
+      });
+      await notifyProtocolDepartment(tx, user.id, operation === "cancel" ? movement.toDepartmentId : sourceDepartmentId, {
+        processId: movement.processId,
+        type: operation === "cancel" ? "FORWARDING_CANCELLED" : "FORWARDING_REJECTED",
+        title: `${operation === "cancel" ? "Encaminhamento cancelado" : "Recebimento recusado"}: ${movement.process.protocolNumber}`,
+        message: cleanReason,
+        priority: "NORMAL",
+        dedupeDiscriminator: movement.id,
+      });
+      await writeAuditEvent(tx, {
+        actorUsuarioId: user.id,
+        eventType: auditEventTypes.processUpdated,
+        targetType: "PROCESS",
+        targetId: movement.processId,
+      });
+    });
+
+    revalidateProtocolPages();
+    return { error: null };
+  } catch (error) {
+    console.error(error);
+    return { error: error instanceof Error ? error.message : "Não foi possível atualizar a tramitação." };
+  }
+}
+
+export async function cancelProcessForwarding(movementId: string, reason: string): Promise<{ error: string | null }> {
+  return reversePendingForwarding(movementId, reason, "cancel");
+}
+
+export async function rejectProcessForwarding(movementId: string, reason: string): Promise<{ error: string | null }> {
+  return reversePendingForwarding(movementId, reason, "reject");
 }
 
 export async function addProcessDispatch(data: {
@@ -549,6 +730,7 @@ export async function publishProcessNotice(processId: string): Promise<{ error: 
     const context = await getTenantContextForSystemAdministration();
     await publishProcessPublicNotice(context.prisma, context.user.id, processId);
     revalidatePath("/portal-transparencia");
+    revalidatePath("/portal-protocolos");
     return { error: null };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Nao foi possivel publicar o aviso." };

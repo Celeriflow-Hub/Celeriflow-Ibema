@@ -1,8 +1,9 @@
-import { AlertTriangle, Archive, ClipboardList, FileBox, FileText, Timer } from "lucide-react";
+import { AlertTriangle, Archive, ClipboardList, FileBox, FileCheck2, FileText, MessageSquareWarning, Timer } from "lucide-react";
 import Link from "next/link";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
 import { getProtocolContext, protocolScope } from "@/lib/protocols/access";
+import { getOmbudsmanContextForProtocols, ombudsmanScope } from "@/lib/attendance/access";
 
 export const dynamic = "force-dynamic";
 
@@ -10,14 +11,17 @@ export default async function ProtocolosDashboardPage() {
   const context = await getProtocolContext();
   const { prisma } = context;
   const scope = protocolScope(context);
+  const ombudsmanContext = await getOmbudsmanContextForProtocols();
   const now = new Date();
-  const [totalProcesses, awaitingReceipt, inProgressProcesses, archivedProcesses, dueSoon, overdue] = await Promise.all([
+  const [totalProcesses, awaitingReceipt, inProgressProcesses, archivedProcesses, dueSoon, overdue, pendingOmbudsman, publishedProcessNotices] = await Promise.all([
     prisma.process.count({ where: scope }),
     prisma.process.count({ where: { ...scope, status: "Aguardando Recebimento" } }),
     prisma.process.count({ where: { ...scope, status: { in: ["Recebido", "Em Analise", "Reaberto"] } } }),
     prisma.process.count({ where: { ...scope, status: "Arquivado" } }),
     prisma.process.count({ where: { ...scope, expectedCompletionAt: { gte: now, lte: new Date(now.getTime() + 3 * 86_400_000) }, status: { notIn: ["Concluido", "Arquivado", "Cancelado"] } } }),
     prisma.process.count({ where: { ...scope, expectedCompletionAt: { lt: now }, status: { notIn: ["Concluido", "Arquivado", "Cancelado"] } } }),
+    ombudsmanContext.prisma.ombudsman.count({ where: { AND: [ombudsmanScope(ombudsmanContext), { status: { not: "Concluída" } }] } }),
+    prisma.publicNotice.count({ where: { sourceModule: "PROCESSOS" } }),
   ]);
 
   const stats = [
@@ -27,6 +31,8 @@ export default async function ProtocolosDashboardPage() {
     { title: "Arquivados", value: archivedProcesses.toString(), icon: Archive, href: "/protocolos/arquivados", color: "text-slate-600", bg: "bg-slate-100" },
     { title: "Próximos do prazo", value: dueSoon.toString(), icon: Timer, href: "/protocolos/acompanhamento?deadline=soon", color: "text-amber-600", bg: "bg-amber-100" },
     { title: "Atrasados", value: overdue.toString(), icon: AlertTriangle, href: "/protocolos/acompanhamento?deadline=overdue", color: "text-red-600", bg: "bg-red-100" },
+    { title: "Ouvidoria em tratamento", value: pendingOmbudsman.toString(), icon: MessageSquareWarning, href: "/protocolos/ouvidoria", color: "text-amber-700", bg: "bg-amber-100" },
+    { title: "Avisos públicos", value: publishedProcessNotices.toString(), icon: FileCheck2, href: "/portal-protocolos", color: "text-teal-700", bg: "bg-teal-100" },
   ];
 
   return (

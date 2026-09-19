@@ -8,10 +8,19 @@ import { PageFrame } from "@/components/app-ui/PageFrame";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProcessoDetalhesPage({ params }: { params: { id: string } }) {
+export default async function ProcessoDetalhesPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams?: Promise<{ returnTo?: string | string[] }>;
+}) {
   const requestTime = new Date();
   const context = await getProtocolContext();
   const { prisma, user } = context;
+  const requestedReturnTo = searchParams ? await searchParams : {};
+  const rawReturnTo = Array.isArray(requestedReturnTo.returnTo) ? requestedReturnTo.returnTo[0] : requestedReturnTo.returnTo;
+  const returnTo = rawReturnTo?.startsWith("/protocolos/processos") ? rawReturnTo : "/protocolos/processos";
   const processo = await prisma.process.findFirst({
     where: { id: params.id, ...protocolScope(context) },
     include: {
@@ -25,7 +34,7 @@ export default async function ProcessoDetalhesPage({ params }: { params: { id: s
         orderBy: { createdAt: 'desc' }
       },
       movements: {
-        include: { fromDepartment: true, toDepartment: true, employee: true },
+        include: { fromDepartment: true, toDepartment: true, employee: true, receivedByEmployee: true },
         orderBy: { movedAt: 'desc' }
       },
       documents: {
@@ -55,8 +64,15 @@ export default async function ProcessoDetalhesPage({ params }: { params: { id: s
       orderBy: { nome: "asc" },
     }),
   ]);
-  const canOperate = context.protocolAccess.canEdit && Boolean(
+  const canOperate = context.protocolAccess.canUpdate && Boolean(
     user.employeeId && user.departmentId && user.departmentId === processo.currentDepartmentId,
+  );
+  const pendingMovement = processo.movements.find((movement) => movement.status === "AWAITING_RECEIPT" && !movement.receivedAt) || null;
+  const canCancelPending = context.protocolAccess.canUpdate && Boolean(
+    user.departmentId && pendingMovement?.fromDepartmentId === user.departmentId && processo.status === "Aguardando Recebimento",
+  );
+  const canRejectPending = context.protocolAccess.canUpdate && Boolean(
+    user.departmentId && pendingMovement?.toDepartmentId === user.departmentId && processo.status === "Aguardando Recebimento",
   );
 
   const interessadoNome = processo.person?.fullName || processo.company?.corporateName || "Não Informado";
@@ -70,7 +86,7 @@ export default async function ProcessoDetalhesPage({ params }: { params: { id: s
     <PageFrame className="max-w-6xl space-y-3">
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <Link href="/protocolos/processos" className="text-emerald-600 hover:text-emerald-700 text-sm font-semibold flex items-center gap-2 mb-4 w-fit transition-colors">
+          <Link href={returnTo} className="text-emerald-600 hover:text-emerald-700 text-sm font-semibold flex items-center gap-2 mb-4 w-fit transition-colors">
             <ArrowLeft className="w-4 h-4" />
             Voltar para a Caixa do Setor
           </Link>
@@ -103,6 +119,9 @@ export default async function ProcessoDetalhesPage({ params }: { params: { id: s
             allowedBudgetUnitIds: [], employeeId: signer.employeeId, departmentId: null, secretariatId: null,
           }, "PROCESSOS")).map((signer) => ({ id: signer.id, nome: signer.nome, email: signer.email }))}
           canPublishPublicNotice={context.protocolAccess.isAdmin}
+          pendingMovement={pendingMovement ? { id: pendingMovement.id, fromDepartmentName: pendingMovement.fromDepartment?.name || null, toDepartmentName: pendingMovement.toDepartment.name } : null}
+          canCancelPending={canCancelPending}
+          canRejectPending={canRejectPending}
           genericWorkflow={processo.genericWorkflowInstance && genericStage ? {
             currentPosition: processo.genericWorkflowInstance.currentPosition,
             totalStages: processo.genericWorkflowInstance.definition.stages.length,
@@ -261,6 +280,9 @@ export default async function ProcessoDetalhesPage({ params }: { params: { id: s
                       </p>
                       <p className="text-xs text-slate-600 mt-0.5">
                         Por: {mov.employee?.name || "Sistema"}
+                      </p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">
+                        {mov.status === "AWAITING_RECEIPT" ? "Aguardando recebimento" : mov.status === "RECEIVED" ? `Recebido${mov.receivedByEmployee ? ` por ${mov.receivedByEmployee.name}` : ""}` : mov.status === "CANCELLED" ? "Encaminhamento cancelado" : mov.status === "REJECTED" ? `Recebimento recusado${mov.receivedByEmployee ? ` por ${mov.receivedByEmployee.name}` : ""}` : mov.status}
                       </p>
                        {mov.reason && <p className="text-sm text-slate-500 mt-2 italic">&quot;{mov.reason}&quot;</p>}
                     </div>

@@ -20,7 +20,7 @@ O desenho alvo distingue quatro conceitos:
 
 | Conceito | Papel no domínio alvo | Regra de separação |
 |---|---|---|
-| Protocolo de entrada | Registro inicial de uma solicitação, documento, manifestação ou comunicação recebida. | Tem número, canal, requerente, consentimentos, anexos e histórico próprios. Pode ou não gerar um Processo. |
+| Protocolo de entrada | Registro inicial de uma solicitação, documento, manifestação ou comunicação recebida. | Tem número, canal, requerente, registro de ciência do aviso, consentimentos opcionais, anexos e histórico próprios. Pode ou não gerar um Processo. |
 | Processo administrativo | Autos formais que recebem instrução, tramitação, despacho, decisão e arquivamento. | Reaproveita o núcleo Process existente; não deve absorver sem filtro a narrativa sensível de um atendimento ou de uma ouvidoria. |
 | Atendimento | Chamado operacional ao cidadão, servidor ou setor. | Continua com Ticket e seu histórico; quando a demanda exigir instrução formal, cria ou vincula um Protocolo/Processo com rastreabilidade. |
 | Ouvidoria | Manifestação que pode ser anônima ou confidencial. | Mantém identidade e conteúdo protegidos em estruturas isoladas; conversão só transfere resumo autorizado e redigido. |
@@ -81,10 +81,12 @@ ou tela nova pode reduzir essa proteção.
 
 A frase recebida sobre “sem rolagem e paginação” é ambígua e entra em conflito
 com a POC, que exige paginação real de servidor para as caixas operacionais.
-Para tornar o plano executável, a interpretação adotada é a seguinte:
+A orientação posterior do responsável definiu 20 registros por página, com
+linhas visuais mais compactas. Para tornar o plano executável, a interpretação
+adotada é a seguinte:
 
-- cada lista operacional exibirá **10 linhas por página**, salvo a última
-  página;
+- cada lista operacional interna exibirá **20 linhas por página**, salvo a
+  última página;
 - filtros, ordenação e paginação serão executados no servidor;
 - o servidor retornará o conjunto da página e o **total real** compatível com
   os filtros aplicados; o total não será inferido pela quantidade já carregada;
@@ -92,16 +94,18 @@ Para tornar o plano executável, a interpretação adotada é a seguinte:
   da página só será restringida quando houver resolução homologada e critério de
   acessibilidade para isso;
 - cabeçalho, filtros, ações e paginação serão apresentados sem região de
-  rolagem aninhada na caixa operacional; a lista terá no máximo 10 registros e
+  rolagem aninhada na caixa operacional; a lista terá no máximo 20 registros e
   o detalhe documental terá leitura própria quando for necessário;
 - campos secundários irão para detalhe, painel lateral, quebra controlada de
   texto ou cartões responsivos. Nenhuma coluna poderá forçar largura superior
   ao painel.
 
-Essa interpretação deve ser confirmada com o responsável da POC no pacote P1.
-Se a intenção for proibir também a rolagem vertical normal ou interna, o layout
-deverá ser recalibrado por resolução homologada, sem alterar a regra de 10
-linhas, paginação no servidor e total real.
+Essa decisão substitui a referência anterior de 10 linhas do plano e deve ser
+registrada como ajuste de escopo no aceite da POC. A página pública de avisos
+permanece com paginação própria e menor, pois não é caixa interna. Se a intenção
+for proibir também a rolagem vertical normal ou interna, o layout deverá ser
+recalibrado por resolução homologada, preservando paginação no servidor e total
+real.
 
 ## 4. Governança da POC e rastreabilidade PED
 
@@ -125,7 +129,7 @@ verdade no registro de rastreabilidade.
 | P2 — Caixas e tramitação | 010, 014, 018, 031, 048, 050–052, 081, 088, 098–099. Caixas por setor/função/usuário/papel, recebimento, cancelamento, recusa, lote e trânsito entre órgãos. | `ProcessMovement`, eventos, notificações, recebimento e encaminhamento existem. | Concluir regras de participantes, destino por papel/função, integração entre órgãos e estados canônicos. Este incremento cobre recebimento em lote, cancelamento e recusa concorrentes de trâmite manual. | Uma única transição vence entre receber/cancelar/recusar; lote retorna resultado por item e cada ator/data/motivo é auditável. |
 | P3 — Fluxos e formulários | 015–017, 023, 028–030, 057–065, 087, 089, 100–101. Formulários dinâmicos, condições, atividades, providências, prazos, subfluxos e atualização de instâncias. | Workflow genérico versionado, sequencial, com prazo e documentos obrigatórios. | Criar campos/respostas, regras condicionais, subfluxo, pausa/escalonamento e migração compatível de instâncias ativas. | Fluxo define próximo destino; formulário obrigatório bloqueia avanço; versão nova migra somente processos compatíveis sem apagar eventos. |
 | P4 — Documentos e peças | 012–013, 024, 026–027, 037–038, 044–045, 047, 049, 056, 078, 084–085, 097, 102–106, 120. Peças, modelos, anexação, apensação, volume, foliação e composição. | GED, versões, hash, documentos de processo e assinatura interna existem. | Unificar anexos de Atendimento/Ouvidoria no GED, criar espécies, composição, ordem, volume, foliação concorrente, modelos e termos. | Arquivo real fica ligado à peça certa; ordem cronológica/foliação é concorrente e original assinado não é alterado. |
-| P5 — Portal, sigilo e Ouvidoria | 032, 040–041, 067–074, 116. Portal externo, consulta controlada, sigilo, requerente, anonimato, ouvidoria, contestação e pedido documental. | Identidade de Ouvidoria isolada, grant, auditoria e conversão por resumo redigido existem; há aviso público redigido. | Fachada pública com submissão, token, consentimento, acesso limitado e triagem; políticas de identidade/sigilo precisam ser aprovadas. Este incremento centraliza a operação interna de Ouvidoria no card e expõe somente avisos já publicados no portal. | Cidadão vê somente dados autorizados; anônimo não requer CPF/nome/e-mail/login; token inválido não confirma existência. |
+| P5 — Portal, sigilo e Ouvidoria | 032, 040–041, 067–074, 116. Portal externo, consulta controlada, sigilo, requerente, anonimato, ouvidoria, contestação e pedido documental. | Identidade de Ouvidoria isolada, grant, auditoria e conversão por resumo redigido existem; há aviso público redigido. | Fachada pública com submissão, token, aviso de privacidade, registro de ciência, acesso limitado e triagem; políticas de identidade/sigilo precisam ser aprovadas. Este incremento centraliza a operação interna de Ouvidoria no card e expõe somente avisos já publicados no portal. | Cidadão vê somente dados autorizados; anônimo não requer CPF/nome/e-mail/login; token inválido não confirma existência. |
 | P6 — E-mail e assinaturas | 008–009, 034–036, 039, 042, 082–083, 086, 092–096, 119. Comprovante, e-mail, auditoria, assinaturas, certificado, QR e terceiro signatário. | Notificação interna e assinatura por reautenticação Firebase existem; validação de aviso existe. | Implementar serviço de e-mail/fila, prova de entrega, adaptador ICP/externo, coassinatura e solicitação externa. | Duas assinaturas verificáveis no documento final; QR consulta versão correta e mensagem chega em caixa controlada. |
 | P7 — Arquivo e cronograma | 019–022, 075–077, 079, 107. Conclusão, termo, guarda, arquivo, desarquivamento e cronograma. | Conclusão, arquivo/reabertura e alguns prazos existem. | Termos, localização física/lógica, tabela de temporalidade aprovada, cronograma e criação idempotente a partir de atividade. | Arquivamento/desarquivamento preserva o mesmo processo/histórico; guarda vencida não elimina documento automaticamente. |
 | P8 — Digitalização, OCR e exportação | 108–115, 117–118, 121–127. Scanner, lote, OCR/neural, revisão, pesquisa, impressão e exportação. | Blob/GED pode receber anexos; não há captura/OCR real. | Integrar scanner, fila de captura, OCR com revisão bruto/confirmado, modelos de extração, pesquisa e exportador idempotente. | Imagem sem camada textual é capturada/OCRizada; revisão preserva bruto/confirmado e exportação não duplica registros. |
@@ -181,9 +185,10 @@ flowchart TD
 
 1. O cidadão escolhe o serviço e recebe explicação de finalidade, tratamento
    de dados, prazo e canais de retorno.
-2. A fachada pública aplica decisão de identidade, consentimentos,
-   rate-limit distribuído, Turnstile e política de anexos antes de persistir
-   a submissão.
+2. A fachada pública aplica a decisão de identidade, o aviso de privacidade e
+   respectivo registro de ciência, rate-limit distribuído, Turnstile e política
+   de anexos antes de persistir a submissão. A base legal é definida por
+   serviço; ciência do aviso não é consentimento genérico.
 3. O portal gera identificador público e entrega token de acompanhamento uma
    única vez. No banco, guarda apenas hash do token e dados mínimos do
    requerente.
@@ -204,16 +209,57 @@ aceite antes de ativação em produção.
 
 | Decisão ou integração | Alternativas e recomendação inicial | Pré-requisito | Ponto de implementação |
 |---|---|---|---|
+| Escopo da abertura externa | Definir se a fase 1 cobre protocolo, Ouvidoria ou ambos; listar serviços e tipos de pedido. | Dono de cada serviço e prazo de resposta. | P5, por catálogo de serviço e regra de triagem. |
 | Identidade no portal | Anônimo, CPF com OTP, conta cidadã ou combinação por tipo de serviço. Recomendação: começar por token de protocolo e exigir identidade apenas quando a natureza do serviço justificar. | Política jurídica e LGPD; prova de posse/representação quando exigida. | P5, com regras por serviço e sem reutilizar sessão de servidor. |
-| Privacidade e exposição | Histórico privado por padrão; transparência somente em projeções redigidas, com campos permitidos por serviço. | Encarregado/LGPD, ouvidoria e área finalística. | P5, com classificação, mascaramento e retenção. |
+| Privacidade e exposição | Histórico privado por padrão; transparência somente em projeções redigidas, com campos permitidos por serviço. | Controlador, canal do encarregado, bases legais, Ouvidoria e área finalística. | P5, com classificação, mascaramento, registro de ciência e retenção. |
+| Campos, anexos e dados sensíveis | Definir obrigatoriedade por serviço, formatos, tamanho, representação e situações que não aceitam dado sensível. | Catálogo de serviço, jurídico/LGPD e política documental. | P5/P4, com validação servidor e classificação GED. |
+| Acompanhamento e comunicação | Token, e-mail com OTP ou outro canal; definir expiração, revogação, confirmação de entrega e responsável pelo SLA. | Remetente institucional, política de mensagens e fila. | P5/P6, sem revelar a existência de protocolo para terceiros. |
 | E-mail | Serviço SMTP ou transacional com fila, templates, opt-out e retorno de entrega. | Conta, domínio, credenciais, remetente institucional e política de comunicação. | P6; usar adaptador, tentativas idempotentes e log sem conteúdo sensível. |
 | Turnstile | Cloudflare Turnstile antes de criar protocolo, subir anexo ou consultar repetidamente. | Chaves por ambiente, validação servidor e política de contingência. | P5; não confiar só em rate-limit de memória local. |
 | Gov.br | Opcional para serviços que exigem identidade forte ou representação. | Contrato, escopo, homologação e base legal. | P5; isolar em provedor de identidade, sem tornar obrigatório para todos os serviços. |
 | ICP-Brasil | Opcional quando assinatura externa com validade jurídica for requisito formal. | Definição do tipo de assinatura, provedor/adaptador, certificado e evidência jurídica. | P6; helper existente não representa integração concluída. |
 | Scanner e OCR | Scanner para integridade de anexos; OCR em fila para extração auxiliar e revisão humana. | Motor, custo, classificação de dados, retenção e critério de erro. | P8; OCR não pode substituir validação documental nem expor arquivo a serviço não aprovado. |
-| URA/canal assistido | Operador registra atendimento assistido, preserva canal e consentimento. | Integração de telefonia, roteiro, gravação/retenção e política de representação. | P9; a URA não escreve diretamente no banco de domínio. |
+| URA/canal assistido | Operador registra atendimento assistido, preserva canal e ciência do aviso quando aplicável. | Integração de telefonia, roteiro, gravação/retenção e política de representação. | P9; a URA não escreve diretamente no banco de domínio. |
 | Base de dados externa | Leitura por adaptador, mapeamento de finalidade e mínimo de dados. | Contrato, segurança, disponibilidade, LGPD e dono do dado. | P8; proibir acesso direto do portal à base externa e registrar consultas. |
 | Notificações de prazo | Agendador de produção, fila e painel de falhas. | Responsável operacional e cron/worker configurado. | P6/P10; a rota existente de alertas internos não substitui agendamento produtivo. |
+
+### 7.1 Aviso de privacidade padrão e registro de ciência
+
+O portal publicado nesta revisão é somente de consulta e não coleta dados
+pessoais. Por isso ele informa expressamente que não pede cadastro, documento,
+e-mail, anexos ou outros dados pessoais e que seus avisos não expõem
+interessado, documentos, tramitação ou dados pessoais.
+
+Antes de ativar qualquer formulário externo, o serviço deve exibir este aviso
+padrão, adaptado apenas com os dados institucionais que forem formalmente
+definidos:
+
+> Ao registrar esta solicitação, você informa dados que serão tratados pelo
+> órgão responsável pelo serviço público para receber, protocolar, instruir,
+> acompanhar e responder à sua demanda, além de cumprir as obrigações legais e
+> administrativas aplicáveis. Serão solicitados somente os dados necessários ao
+> serviço escolhido. Os dados e anexos terão acesso restrito às pessoas e
+> setores autorizados e poderão ser compartilhados quando necessário para a
+> execução do serviço, por obrigação legal ou com órgãos competentes, sempre
+> dentro das regras aplicáveis. Eles não serão publicados no acompanhamento
+> público. Os registros serão mantidos pelos prazos legais e pela política de
+> guarda institucional. Você poderá solicitar informações sobre o tratamento e
+> exercer os direitos previstos na LGPD pelo canal oficial de proteção de dados
+> divulgado pelo órgão. Não envie dados de terceiros ou informações sensíveis
+> que não sejam necessários para a sua demanda.
+
+O controle do formulário deve registrar a ciência com o rótulo **“Li e estou
+ciente do Aviso de Privacidade e do tratamento dos dados necessários para este
+serviço.”** Ele não deve usar “autorizo” ou “consinto” como base legal
+universal. Consentimento separado só será usado para finalidade opcional
+definida pelo serviço.
+
+Antes da abertura, o Município precisa informar controlador, canal do
+encarregado, serviços atendidos, identidade exigida por serviço, dados e anexos
+permitidos, prazos de retenção, política de visibilidade, canal de comunicação,
+fornecedores envolvidos e resposta a incidentes. O texto é um padrão de
+interface e depende de validação do jurídico e do encarregado antes da
+produção.
 
 O aviso público já existente é uma projeção mínima e imutável, usada apenas
 como leitura controlada. Nesta revisão, os avisos de `PROCESSOS` usam categoria
@@ -234,7 +280,8 @@ definir no dicionário — e suas relações. Campos mínimos esperados:
   serviço, assunto, classificação, prioridade, estado e prazo;
 - requerente, representante e interessado como papéis distintos, com
   minimização de dados pessoais;
-- consentimentos e versão do aviso de privacidade aceita;
+- registro de ciência e versão do aviso de privacidade exibido; consentimento
+  separado somente quando a finalidade opcional o exigir;
 - vínculo opcional e auditável a Ticket, Ombudsman e Process;
 - eventos próprios, mensagens visíveis ao requerente e mensagens internas
   separadas;
@@ -329,10 +376,10 @@ Processo vinculado.
 | Privacidade | Anônimo, confidencial, representante, token expirado/revogado, tentativa de enumerar protocolo e tentativa de ler documento de terceiro. |
 | Estados e workflow | Transição válida, inválida, concorrente, reabertura com motivo, documento obrigatório, segregação de funções e prazo. |
 | GED | MIME/tamanho, hash, versão, download autorizado, exclusão lógica/retenção, antivírus e documento confidencial. |
-| Listas e relatórios | Filtro no servidor, 10 registros por página, página final, total real, ordenação estável, campos longos e telas desktop sem rolagem horizontal; qualquer restrição vertical depende de resolução homologada. |
+| Listas e relatórios | Filtro no servidor, 20 registros por página nas caixas internas, página final, total real, ordenação estável, linhas compactas, campos longos e telas desktop sem rolagem horizontal; qualquer restrição vertical depende de resolução homologada. |
 | Integrações | Sucesso, timeout, duplicidade, reenvio, indisponibilidade e ausência de vazamento no log. |
 | Migração | Amostra de IDs, contagem por estado, anexos, vínculos Ticket/Ombudsman/Process, registros ambíguos e execução repetida do backfill. |
-| Portal externo | Abertura, complementação, acompanhamento, comunicação, anexo, abuso, consentimento e isolamento entre dois cidadãos. |
+| Portal externo | Abertura, complementação, acompanhamento, comunicação, anexo, abuso, aviso de privacidade, registro de ciência e isolamento entre dois cidadãos. |
 
 ### 11.2 Formato da evidência por PED
 
@@ -361,7 +408,7 @@ O módulo só estará apto a seguir para produção quando:
   ambiente representativo;
 - não houver filtros ou paginação dependentes de dados carregados no cliente
   nas caixas previstas pela POC;
-- as listas homologadas exibirem 10 linhas, total real e comportamento sem
+- as listas homologadas exibirem 20 linhas nas caixas internas, total real e comportamento sem
   rolagem horizontal; qualquer restrição à rolagem vertical depende de resolução
   e acessibilidade homologadas;
 - dados externos e de Ouvidoria estiverem protegidos por política de servidor,
@@ -387,7 +434,7 @@ O módulo só estará apto a seguir para produção quando:
 
 Além deste plano, o incremento atual reforça o núcleo já existente sem migration destrutiva:
 
-- a Caixa do Setor consulta, filtra e pagina no servidor, mostra total real, limita a página a 10 registros e usa tabela compacta/cartões responsivos sem rolagem horizontal;
+- a Caixa do Setor e a lista interna de Ouvidoria consultam, filtram e paginam no servidor, mostram total real, limitam a página a 20 registros e usam tabela compacta/cartões responsivos sem rolagem horizontal;
 - o recebimento em lote devolve resultado por processo; recebimento, cancelamento pelo setor de origem e recusa pelo setor de destino usam transição condicional para impedir dupla decisão concorrente;
 - o escopo de leitura de Processos preserva a consulta do setor que participou do trâmite, enquanto mutações continuam verificando o setor atual no servidor;
 - Ouvidoria ganhou entrada, listagem, detalhe e abertura interna dentro de Processos e Protocolos, preservando identidade isolada, grants, auditoria e a conversão somente por resumo autorizado;
@@ -534,3 +581,4 @@ Esta matriz reproduz a classificação de pacote e as ressalvas da POC Rev. 01 p
 | PED-132 | P10 | A_VERIFICAR | A mapear | Não executado | Q-10 |
 | PED-133 | P10 | A_VERIFICAR | A mapear | Não executado | Conferir fonte/serviço do item |
 | PED-134 | P10 | A_VERIFICAR | A mapear | Não executado | Q-10 |
+

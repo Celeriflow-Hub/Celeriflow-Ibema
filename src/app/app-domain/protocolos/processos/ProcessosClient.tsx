@@ -160,20 +160,20 @@ export default function ProcessosClient({
               <table className="w-full table-fixed text-left text-sm">
                 <colgroup><col className="w-10" /><col className="w-[18%]" /><col className="w-[27%]" /><col className="w-[22%]" /><col className="w-[15%]" /><col className="w-[10%]" /><col className="w-[8%]" /></colgroup>
                 <thead className="border-b border-slate-200 bg-slate-100 text-[10px] font-bold uppercase tracking-[0.06em] text-slate-600">
-                  <tr><th className="px-2 py-3"><span className="sr-only">Selecionar</span></th><th className="px-3 py-3">Protocolo</th><th className="px-3 py-3">Tipo e assunto</th><th className="px-3 py-3">Interessado</th><th className="px-3 py-3">Situação</th><th className="px-3 py-3">Abertura</th><th className="px-3 py-3 text-right">Ações</th></tr>
+                  <tr><th className="px-2 py-2"><span className="sr-only">Selecionar</span></th><th className="px-3 py-2">Protocolo</th><th className="px-3 py-2">Tipo e assunto</th><th className="px-3 py-2">Interessado</th><th className="px-3 py-2">Situação</th><th className="px-3 py-2">Abertura</th><th className="px-3 py-2 text-right">Ações</th></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {processos.map((processo) => {
                     const canReceiveThis = canReceive && processo.currentDepartmentId === currentDepartmentId && processo.status === "Aguardando Recebimento";
                     return (
                       <tr key={processo.id} className="align-top hover:bg-slate-50">
-                        <td className="px-2 py-3">{canReceiveThis && <input aria-label={`Selecionar ${processo.protocolNumber}`} type="checkbox" checked={selectedIds.includes(processo.id)} onChange={(event) => setSelected(processo.id, event.target.checked)} />}</td>
-                        <td className="break-words px-3 py-3 font-semibold text-slate-800">{processo.protocolNumber}</td>
-                        <td className="break-words px-3 py-3"><p className="font-medium text-slate-800">{processo.processType.name}</p><p className="mt-0.5 text-xs text-slate-500">{processo.subject.name}</p></td>
-                        <td className="break-words px-3 py-3 text-slate-700">{interestedName(processo)}</td>
-                        <td className="px-3 py-3"><span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${statusClass(processo.status)}`}>{processo.status}</span></td>
-                        <td className="px-3 py-3 text-xs text-slate-600">{new Date(processo.createdAt).toLocaleDateString("pt-BR")}</td>
-                        <td className="px-3 py-3 text-right"><div className="flex flex-col items-end gap-1"><Link href={`/protocolos/processos/${processo.id}?returnTo=${encodeURIComponent(returnTo)}`} className="text-xs font-semibold text-emerald-700 hover:text-emerald-900">Abrir</Link>{canReceiveThis && <button disabled={isPending} onClick={() => handleReceive(processo.id)} className="text-xs font-semibold text-blue-700 hover:text-blue-900 disabled:opacity-50">Receber</button>}</div></td>
+                        <td className="px-2 py-2">{canReceiveThis && <input aria-label={`Selecionar ${processo.protocolNumber}`} type="checkbox" checked={selectedIds.includes(processo.id)} onChange={(event) => setSelected(processo.id, event.target.checked)} />}</td>
+                        <td className="break-words px-3 py-2 font-semibold text-slate-800">{processo.protocolNumber}</td>
+                        <td className="break-words px-3 py-2"><p className="font-medium text-slate-800">{processo.processType.name}</p><p className="mt-0.5 text-xs text-slate-500">{processo.subject.name}</p></td>
+                        <td className="break-words px-3 py-2 text-slate-700">{interestedName(processo)}</td>
+                        <td className="px-3 py-2"><span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${statusClass(processo.status)}`}>{processo.status}</span></td>
+                        <td className="px-3 py-2 text-xs text-slate-600">{new Date(processo.createdAt).toLocaleDateString("pt-BR")}</td>
+                        <td className="px-3 py-2 text-right"><div className="flex flex-col items-end gap-1"><Link href={`/protocolos/processos/${processo.id}?returnTo=${encodeURIComponent(returnTo)}`} className="text-xs font-semibold text-emerald-700 hover:text-emerald-900">Abrir</Link>{canReceiveThis && <button disabled={isPending} onClick={() => handleReceive(processo.id)} className="text-xs font-semibold text-blue-700 hover:text-blue-900 disabled:opacity-50">Receber</button>}</div></td>
                       </tr>
                     );
                   })}
@@ -194,3 +194,4 @@ export default function ProcessosClient({
     </PageFrame>
   );
 }
+

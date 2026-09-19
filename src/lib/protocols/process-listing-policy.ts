@@ -1,4 +1,4 @@
-export const PROCESS_LIST_PAGE_SIZE = 10;
+export const PROCESS_LIST_PAGE_SIZE = 20;
 
 export type ProcessListFilters = {
   q: string;
@@ -38,3 +38,4 @@ export function processListHref(filters: Pick<ProcessListFilters, "q" | "status"
   const query = params.toString();
   return query ? `/protocolos/processos?${query}` : "/protocolos/processos";
 }
+

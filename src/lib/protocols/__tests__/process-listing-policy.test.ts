@@ -16,10 +16,10 @@ test("process list filters are normalized before querying the server", () => {
 });
 
 test("process list page stays within the actual total", () => {
-  assert.equal(PROCESS_LIST_PAGE_SIZE, 10);
-  assert.equal(resolveProcessListPage(4, 23), 3);
+  assert.equal(PROCESS_LIST_PAGE_SIZE, 20);
+  assert.equal(resolveProcessListPage(4, 43), 3);
   assert.equal(resolveProcessListPage(0, 0), 1);
-  assert.equal(resolveProcessListPage(2, 11), 2);
+  assert.equal(resolveProcessListPage(2, 21), 2);
 });
 
 test("process list links preserve server-side filters and page", () => {
@@ -29,3 +29,4 @@ test("process list links preserve server-side filters and page", () => {
   );
   assert.equal(processListHref({ q: "", status: "" }), "/protocolos/processos");
 });
+

@@ -7,8 +7,8 @@ import { normalizeRestrictiveProfilePermissions, SYSTEM_ADMIN_PROFILE_CODE } fro
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 
 const MODULE_CODES = new Set([
-  "ADMINISTRACAO", "RH", "CADASTROS", "DOCUMENTOS", "ATENDIMENTO", "COMPRAS", "CONTRATOS", "FINANCEIRO", "PATRIMONIO", "TRIBUTACAO", "PROCESSOS", "SAUDE",
-  "EDUCACAO", "SOCIAL", "OBRAS", "MEIO_AMBIENTE", "SEGURANCA", "SANEAMENTO", "CAMARA", "CULTURA", "TRANSPARENCIA", "CONFIGURACOES",
+  "ADMINISTRACAO", "RH", "CADASTROS", "ATENDIMENTO", "COMPRAS", "CONTRATOS", "FINANCEIRO", "PATRIMONIO", "TRIBUTACAO", "PROCESSOS", "SAUDE",
+  "EDUCACAO", "SOCIAL", "MEIO_AMBIENTE", "CAMARA", "TRANSPARENCIA", "CONFIGURACOES",
 ]);
 
 function normalizePermissions(value: string | undefined) {

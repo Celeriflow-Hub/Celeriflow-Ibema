@@ -23,7 +23,7 @@ import {
   Lock,
   ArrowUpRight
 } from "lucide-react";
-import { canShowDashboardCard, canUseInactiveModule, canViewModule, getOptionalTenantContext, isModuleBlockedForUser } from "@/lib/platform/tenant-context";
+import { canShowDashboardCard, canViewModule, getOptionalTenantContext, isModuleActive, isModuleBlockedForUser } from "@/lib/platform/tenant-context";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
 
@@ -77,16 +77,17 @@ export default async function PainelPage() {
     console.warn("Notice: Failed to fetch configuracaoModulo status", err);
   }
 
-  const visibleMenuItems = menuItems.filter((item) => context && canShowDashboardCard(context.user, item.code));
+  const visibleMenuItems = menuItems.filter((item) =>
+    context && isModuleActive(moduleActivationByCode.get(item.code)) && canShowDashboardCard(context.user, item.code),
+  );
 
   return (
     <PageFrame className="flex flex-col gap-2 px-1 py-1 md:px-2">
       <PageHeader title="Módulos do sistema" />
       <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7">
         {visibleMenuItems.map((item) => {
-          const isConfig = item.code === "CONFIGURACOES";
           const isProfileBlocked = !context || isModuleBlockedForUser(context.user, item.code) || !canViewModule(context.user, item.code);
-          const isLocked = isProfileBlocked || (!isConfig && moduleActivationByCode.get(item.code) === false && !canUseInactiveModule(context.user));
+          const isLocked = isProfileBlocked;
 
           if (isLocked) {
             return (

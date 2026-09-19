@@ -4,8 +4,8 @@ import { useState } from "react";
 import { 
   ShieldCheck, Plus, Search, X, Pencil, CheckCircle2, SlidersHorizontal, 
   Building2, Users, FileText, HeadphonesIcon, ShoppingCart, FileSpreadsheet, DollarSign, 
-  Package, Receipt, Stethoscope, GraduationCap, HeartHandshake, HardHat, 
-  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, Lock, CheckSquare, Square, Trash2
+  Package, Receipt, Stethoscope, GraduationCap, HeartHandshake,
+  Trees, Landmark, Share2, Settings, Lock, CheckSquare, Square, Trash2
 } from "lucide-react";
 import { deletePerfil, upsertPerfil, togglePerfilStatus } from "./actions";
 import { PageFrame } from "@/components/app-ui/PageFrame";
@@ -26,7 +26,6 @@ const MODULES_LIST = [
   { code: "ADMINISTRACAO", label: "Administração Geral & Entidades", icon: Building2, color: "text-blue-500" },
   { code: "RH", label: "Recursos Humanos & Servidores", icon: Users, color: "text-indigo-500" },
   { code: "CADASTROS", label: "Pessoas & Cadastros Gerais", icon: FileText, color: "text-purple-500" },
-  { code: "DOCUMENTOS", label: "Documentos, GED & Emissões", icon: FileText, color: "text-amber-500" },
   { code: "ATENDIMENTO", label: "Atendimento, Ouvidoria & Chamados", icon: HeadphonesIcon, color: "text-orange-500" },
   { code: "COMPRAS", label: "Compras, Licitações & Cotações", icon: ShoppingCart, color: "text-emerald-500" },
   { code: "CONTRATOS", label: "Gestão de Contratos Públicos", icon: FileSpreadsheet, color: "text-teal-500" },
@@ -37,12 +36,8 @@ const MODULES_LIST = [
   { code: "SAUDE", label: "Saúde Pública & UBSs", icon: Stethoscope, color: "text-rose-500" },
   { code: "EDUCACAO", label: "Educação Pública & Escolas", icon: GraduationCap, color: "text-yellow-500" },
   { code: "SOCIAL", label: "Assistência Social & CRAS", icon: HeartHandshake, color: "text-pink-500" },
-  { code: "OBRAS", label: "Obras Públicas & Vistorias", icon: HardHat, color: "text-lime-500" },
   { code: "MEIO_AMBIENTE", label: "Meio Ambiente & Licenciamento", icon: Trees, color: "text-emerald-600" },
-  { code: "SEGURANCA", label: "Segurança Pública & Guarda Municipal", icon: Shield, color: "text-slate-500" },
-  { code: "SANEAMENTO", label: "Saneamento, Água & Esgoto", icon: Droplets, color: "text-blue-600" },
   { code: "CAMARA", label: "Câmara Municipal & Legislação", icon: Landmark, color: "text-violet-500" },
-  { code: "CULTURA", label: "Cultura, Esporte & Turismo", icon: Palette, color: "text-fuchsia-500" },
   { code: "TRANSPARENCIA", label: "Portal da Transparência & LAI", icon: Share2, color: "text-sky-500" },
   { code: "CONFIGURACOES", label: "Configurações do Sistema & Integrações", icon: Settings, color: "text-slate-600" },
 ];

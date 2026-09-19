@@ -5,7 +5,7 @@ import test from "node:test";
 import { auditEventTypes, writeAuditEvent, type AuditEventInput, type AuditEventType } from "../src/lib/platform/audit-evidence.ts";
 import { auditEventPageSize, buildAuditEventPageQuery, buildAuditEventWhere, createAuditEventPage, encodeAuditEventCursor, normalizeAuditEventFilters, parseAuditEventQuery } from "../src/lib/platform/audit-query.ts";
 import { prisma } from "../src/lib/prisma.ts";
-import { canEditModule, canPerformModuleOperation, canShowDashboardCard, canUseInactiveModule, canViewModule, isModuleBlockedForUser, isSystemAdministrator } from "../src/lib/platform/tenant-context.ts";
+import { canEditModule, canPerformModuleOperation, canShowDashboardCard, canViewModule, isModuleActive, isModuleBlockedForUser, isSystemAdministrator } from "../src/lib/platform/tenant-context.ts";
 
 test("persists payload-free audit evidence with only actor, event, and target identifiers", async () => {
   let data: unknown;
@@ -242,18 +242,10 @@ test("does not allow financial cancellations from the create permission", () => 
   assert.equal(canPerformModuleOperation(profile, "FINANCEIRO", "delete"), false);
 });
 
-test("allows non-POC profiles to use modules released in their permission matrix", () => {
-  const regularProfile = {
-    role: "Gestor",
-    permissions: JSON.stringify({ acesso: "operacional" }),
-  } as Parameters<typeof canUseInactiveModule>[0];
-  const pocEvaluator = {
-    role: "POC Avaliador Técnico de TI",
-    permissions: JSON.stringify({ acesso: "operacional" }),
-  } as Parameters<typeof canUseInactiveModule>[0];
-
-  assert.equal(canUseInactiveModule(regularProfile), true);
-  assert.equal(canUseInactiveModule(pocEvaluator), false);
+test("treats explicitly inactive modules as unavailable", () => {
+  assert.equal(isModuleActive(undefined), true);
+  assert.equal(isModuleActive(true), true);
+  assert.equal(isModuleActive(false), false);
 });
 
 test("migration protects audit evidence from mutation and indexes retention queries", async () => {

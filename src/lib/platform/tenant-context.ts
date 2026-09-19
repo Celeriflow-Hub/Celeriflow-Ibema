@@ -173,13 +173,8 @@ export function isSystemAdministrator(user: AppContext["user"]) {
   return user.profileCode === SYSTEM_ADMIN_PROFILE_CODE;
 }
 
-export function isPocEvaluator(user: AppContext["user"]) {
-  return user.role.startsWith("POC Avaliador");
-}
-
-export function canUseInactiveModule(user: AppContext["user"]) {
-  // São João do Ivaí evaluators remain limited to the modules enabled for the POC.
-  return !isPocEvaluator(user);
+export function isModuleActive(active: boolean | undefined) {
+  return active !== false;
 }
 
 export function assertBudgetUnitAccess(user: AppContext["user"], budgetUnitId: string) {
@@ -335,7 +330,7 @@ export async function getTenantContextForModule(moduleCode: string): Promise<App
     where: { codigo: codeUpper },
     select: { ativo: true },
   });
-  if (moduleConfig && !moduleConfig.ativo && !canUseInactiveModule(context.user)) {
+  if (!isModuleActive(moduleConfig?.ativo)) {
     throw new AccessError(`O módulo ${moduleCode} está inativo nesta instância.`, 423);
   }
   if (!canViewModule(context.user, codeUpper)) {

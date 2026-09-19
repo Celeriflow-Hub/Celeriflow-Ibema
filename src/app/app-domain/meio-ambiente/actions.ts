@@ -128,6 +128,81 @@ export async function deleteEnvLicense(id: string) {
   }
 }
 
+// ─── EnvRequest ───────────────────────────────────────────────────────────────
+
+export async function createEnvRequest(formData: FormData) {
+  const prisma = await getTenantPrisma("create");
+  const requestType = formData.get("requestType") as string;
+  const description = formData.get("description") as string;
+  const address = formData.get("address") as string;
+  const requesterName = formData.get("requesterName") as string;
+  const status = (formData.get("status") as string) || "Solicitado";
+
+  if (!requestType || !description) return { error: "Tipo e descricao sao obrigatorios." };
+
+  try {
+    const request = await prisma.envRequest.create({
+      data: { requestType, description, address, requesterName, status },
+    });
+    revalidatePath("/meio-ambiente/solicitacoes");
+    revalidatePath("/meio-ambiente");
+    return { success: true, request };
+  } catch (error) {
+    console.error(error);
+    return { error: "Erro ao criar solicitacao. Tente novamente." };
+  }
+}
+
+export async function updateEnvRequest(id: string, formData: FormData) {
+  const prisma = await getTenantPrisma("update");
+  const requestType = formData.get("requestType") as string;
+  const description = formData.get("description") as string;
+  const address = formData.get("address") as string;
+  const requesterName = formData.get("requesterName") as string;
+  const status = formData.get("status") as string;
+
+  if (!requestType || !description) return { error: "Tipo e descricao sao obrigatorios." };
+
+  try {
+    await prisma.envRequest.update({
+      where: { id },
+      data: { requestType, description, address, requesterName, ...(status && { status }) },
+    });
+    revalidatePath("/meio-ambiente/solicitacoes");
+    revalidatePath("/meio-ambiente");
+    return { success: true };
+  } catch (error) {
+    console.error(error);
+    return { error: "Erro ao atualizar solicitacao." };
+  }
+}
+
+export async function updateEnvRequestStatus(id: string, status: string) {
+  const prisma = await getTenantPrisma("update");
+  try {
+    await prisma.envRequest.update({ where: { id }, data: { status } });
+    revalidatePath("/meio-ambiente/solicitacoes");
+    revalidatePath("/meio-ambiente");
+    return { success: true };
+  } catch (error) {
+    console.error(error);
+    return { error: "Erro ao atualizar status da solicitacao." };
+  }
+}
+
+export async function deleteEnvRequest(id: string) {
+  const prisma = await getTenantPrisma("delete");
+  try {
+    await prisma.envRequest.delete({ where: { id } });
+    revalidatePath("/meio-ambiente/solicitacoes");
+    revalidatePath("/meio-ambiente");
+    return { success: true };
+  } catch (error) {
+    console.error(error);
+    return { error: "Erro ao excluir solicitacao." };
+  }
+}
+
 // ─── EnvComplaint ─────────────────────────────────────────────────────────────
 
 export async function createEnvComplaint(formData: FormData) {

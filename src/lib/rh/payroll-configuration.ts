@@ -359,4 +359,222 @@ async function ensureHrPayrollDemoRuleSetInTransaction(db: HrPayrollConfiguratio
   });
   const cltVacation = await db.hrVacationPolicy.upsert({
     where: { ruleSetId_code: { ruleSetId: ruleSet.id, code: "CLT_PADRAO" } },
-    create: { ruleSetId: ruleSet.id, code: "CLT_PADRAO", name: "Férias CLT — referência parametrizável", employmentNature: "CLT", acquisitionMonths: 12, concessionMonths: 12, entitlementDays: 30, maxSplits: 3, minFirstSplitDays: 14, minOtherSplit
+    create: {
+      ruleSetId: ruleSet.id,
+      code: "CLT_PADRAO",
+      name: "Férias CLT — referência parametrizável",
+      employmentNature: "CLT",
+      acquisitionMonths: 12,
+      concessionMonths: 12,
+      entitlementDays: 30,
+      maxSplits: 3,
+      minFirstSplitDays: 14,
+      minOtherSplitDays: 5,
+      additionalPayRate: new Prisma.Decimal("33.333333"),
+      allowsCashAbono: true,
+      maxCashAbonoDays: 10,
+      allowsAdvanceThirteenth: true,
+      requiresApproval: true,
+      legalReference: "Referência demonstrativa da CLT. Confirmar regras aplicáveis, convenções e atos municipais antes de produção.",
+      notes: "Abono e antecipação do décimo terceiro exigem validação do RH antes do uso em folha oficial.",
+    },
+    update: {},
+  });
+
+  const rppsScheme = await db.hrSocialSecurityScheme.upsert({
+    where: { ruleSetId_code: { ruleSetId: ruleSet.id, code: "RPPS_MUNICIPAL_DEMO" } },
+    create: {
+      ruleSetId: ruleSet.id,
+      code: "RPPS_MUNICIPAL_DEMO",
+      name: "RPPS municipal — demonstração",
+      regime: "RPPS",
+      employeeCalculationMethod: "PROGRESSIVA",
+      ceilingValue: new Prisma.Decimal(4_000),
+      employerContributionRate: new Prisma.Decimal(20),
+      actuarialContributionRate: null,
+      legalReference: "Faixas sintéticas de demonstração. Substituir pela legislação e avaliação atuarial vigentes do ente.",
+      notes: "Não utilizar estas alíquotas para retenção ou recolhimento oficial.",
+    },
+    update: {},
+  });
+
+  await db.hrSocialSecurityBand.createMany({
+    data: [
+      { socialSecuritySchemeId: rppsScheme.id, sequence: 1, lowerLimit: new Prisma.Decimal(0), upperLimit: new Prisma.Decimal(1_000), employeeRate: new Prisma.Decimal(5), employerRate: new Prisma.Decimal(20) },
+      { socialSecuritySchemeId: rppsScheme.id, sequence: 2, lowerLimit: new Prisma.Decimal("1000.01"), upperLimit: new Prisma.Decimal(3_000), employeeRate: new Prisma.Decimal(10), employerRate: new Prisma.Decimal(20) },
+      { socialSecuritySchemeId: rppsScheme.id, sequence: 3, lowerLimit: new Prisma.Decimal("3000.01"), upperLimit: new Prisma.Decimal(4_000), employeeRate: new Prisma.Decimal(15), employerRate: new Prisma.Decimal(20) },
+    ],
+    skipDuplicates: true,
+  });
+
+  const baseSalaryRubric = await db.hrPayrollRubric.upsert({
+    where: { ruleSetId_code: { ruleSetId: ruleSet.id, code: "VENCIMENTO_BASE_DEMO" } },
+    create: {
+      ruleSetId: ruleSet.id,
+      code: "VENCIMENTO_BASE_DEMO",
+      name: "Vencimento-base — demonstração",
+      type: "PROVENTO",
+      calculationMethod: "MANUAL",
+      priority: 10,
+      legalReference: "Rubrica demonstrativa. Validar natureza, incidências e mapeamento eSocial antes de produção.",
+      notes: "Base ilustrativa para testar a configuração versionada; não integra o motor de folha legado.",
+    },
+    update: {},
+  });
+
+  await db.hrPayrollRubricIncidence.createMany({
+    data: ["RPPS", "IRRF", "FERIAS", "DECIMO_TERCEIRO", "TETO_REMUNERATORIO"].map((incidenceType) => ({
+      rubricId: baseSalaryRubric.id,
+      incidenceType,
+    })),
+    skipDuplicates: true,
+  });
+
+  await db.hrPayrollRubric.createMany({
+    data: [
+      {
+        ruleSetId: ruleSet.id,
+        code: "ADICIONAL_FERIAS_DEMO",
+        name: "Adicional de férias — demonstração",
+        type: "PROVENTO",
+        calculationMethod: "PERCENTUAL",
+        calculationBaseCode: "VENCIMENTO_BASE_DEMO",
+        percentageRate: new Prisma.Decimal("33.333333"),
+        priority: 20,
+        legalReference: "Demonstração de um terço. Confirmar incidências e critérios do vínculo antes de produção.",
+        notes: "A política de férias mantém a fonte de verdade deste percentual.",
+      },
+      {
+        ruleSetId: ruleSet.id,
+        code: "PREVIDENCIA_SERVIDOR_DEMO",
+        name: "Contribuição do servidor — demonstração",
+        type: "DESCONTO",
+        calculationMethod: "FORMULA_CONTROLADA",
+        formulaExpression: "VENCIMENTO_BASE_DEMO * 10 / 100",
+        calculationBaseCode: "VENCIMENTO_BASE_DEMO",
+        priority: 30,
+        legalReference: "Alíquota exclusivamente didática. A tabela previdenciária vigente deve ser parametrizada e homologada.",
+        notes: "Usada apenas para conferir o catálogo e as prioridades da demonstração.",
+      },
+      {
+        ruleSetId: ruleSet.id,
+        code: "ENCARGO_PATRONAL_DEMO",
+        name: "Encargo patronal — demonstração",
+        type: "INFORMATIVA",
+        calculationMethod: "FORMULA_CONTROLADA",
+        formulaExpression: "VENCIMENTO_BASE_DEMO * 20 / 100",
+        calculationBaseCode: "VENCIMENTO_BASE_DEMO",
+        priority: 40,
+        legalReference: "Valor ilustrativo, separado do líquido do servidor e sujeito à validação atuarial e contábil.",
+        notes: "Não representa guia, obrigação de recolhimento ou lançamento contábil oficial.",
+      },
+      {
+        ruleSetId: ruleSet.id,
+        code: "CONSIGNACAO_DEMO",
+        name: "Consignação — demonstração",
+        type: "DESCONTO",
+        calculationMethod: "MANUAL",
+        priority: 50,
+        legalReference: "Demonstração. Convênio, margem e autorização do servidor devem ser validados antes de produção.",
+        notes: "A política de cálculo contém a margem máxima demonstrativa.",
+      },
+    ],
+    skipDuplicates: true,
+  });
+
+  await db.hrEmploymentRegime.upsert({
+    where: { ruleSetId_code: { ruleSetId: ruleSet.id, code: "ESTATUTARIO_DEMO" } },
+    create: {
+      ruleSetId: ruleSet.id,
+      code: "ESTATUTARIO_DEMO",
+      name: "Vínculo estatutário — demonstração",
+      employmentNature: "ESTATUTARIO",
+      defaultMonthlyHours: null,
+      socialSecuritySchemeId: rppsScheme.id,
+      vacationPolicyId: statutoryVacation.id,
+      legalReference: "Demonstração. A vinculação efetiva depende do estatuto e do enquadramento previdenciário municipal.",
+    },
+    update: {},
+  });
+
+  await db.hrEmploymentRegime.upsert({
+    where: { ruleSetId_code: { ruleSetId: ruleSet.id, code: "CLT_DEMO" } },
+    create: {
+      ruleSetId: ruleSet.id,
+      code: "CLT_DEMO",
+      name: "Vínculo CLT — demonstração",
+      employmentNature: "CLT",
+      defaultMonthlyHours: null,
+      socialSecuritySchemeId: null,
+      vacationPolicyId: cltVacation.id,
+      legalReference: "Demonstração. O enquadramento RGPS, jornada e categoria eSocial devem ser validados antes de produção.",
+    },
+    update: {},
+  });
+
+  if (createdRuleSet && actorUsuarioId) {
+    await db.hrPayrollConfigurationChange.create({
+      data: {
+        ruleSetId: ruleSet.id,
+        entityType: "HR_PAYROLL_RULE_SET",
+        entityId: ruleSet.id,
+        operation: "CRIADA",
+        afterValue: serializeHrConfigurationSnapshot(ruleSet),
+        actorUsuarioId,
+      },
+    });
+  }
+
+  return ruleSet;
+}
+
+export async function ensureHrPayrollDemoRuleSet(db: HrPayrollConfigurationDb, actorUsuarioId?: string) {
+  if (isPrismaClient(db)) {
+    return db.$transaction((tx) => ensureHrPayrollDemoRuleSetInTransaction(tx, actorUsuarioId));
+  }
+  return ensureHrPayrollDemoRuleSetInTransaction(db, actorUsuarioId);
+}
+
+export function toDecimal(value: number | null) {
+  return decimal(value);
+}
+
+export async function arePortalPayrollStatementsEnabled(db: HrPayrollConfigurationDb) {
+  const instance = await db.configuracaoInstancia.findFirst({
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  if (!instance) return true;
+
+  const now = new Date();
+  const ruleSet = await db.hrPayrollRuleSet.findFirst({
+    where: {
+      configuracaoInstanciaId: instance.id,
+      status: "ATIVA",
+      effectiveFrom: { lte: now },
+      OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: now } }],
+      rules: {
+        some: {
+          category: "PORTAL",
+          code: "PORTAL_DEMONSTRATIVOS_HABILITADOS",
+          isActive: true,
+        },
+      },
+    },
+    orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }],
+    select: {
+      rules: {
+        where: {
+          category: "PORTAL",
+          code: "PORTAL_DEMONSTRATIVOS_HABILITADOS",
+          isActive: true,
+        },
+        select: { value: true },
+      },
+    },
+  });
+
+  // Preserve existing Portal access until a current RH rule explicitly disables it.
+  const value = ruleSet?.rules[0]?.value;
+  return value !== false && value !== "false";
+}

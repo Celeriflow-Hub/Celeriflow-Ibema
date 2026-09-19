@@ -410,4 +410,95 @@ export async function saveHrSocialSecurityBand(rawInput: unknown): Promise<Actio
       }
     });
     revalidateRhConfiguration();
-    return { message: "
+    return { message: "Faixa previdenciária salva." };
+  } catch (error) {
+    return { error: messageFrom(error) };
+  }
+}
+
+export async function saveHrCalculationPolicy(rawInput: unknown): Promise<ActionResult> {
+  try {
+    const input = hrCalculationPolicyInputSchema.parse(rawInput);
+    const context = await getTenantContextForModuleOperation("RH", "update");
+    await context.prisma.$transaction(async (tx) => {
+      const ruleSet = await getManagedRuleSet(tx, input.ruleSetId);
+      assertRuleSetCanChange(ruleSet);
+      const data = {
+        currency: input.currency,
+        roundingMode: input.roundingMode,
+        roundingScale: input.roundingScale,
+        movementCutoffDay: input.movementCutoffDay,
+        paymentDay: input.paymentDay,
+        negativeNetPayPolicy: input.negativeNetPayPolicy,
+        maxConsignmentMarginRate: toDecimal(input.maxConsignmentMarginRate),
+        remunerationCeiling: toDecimal(input.remunerationCeiling),
+        freezeOnClose: input.freezeOnClose,
+        legalReference: input.legalReference,
+        notes: input.notes,
+      };
+      const previous = await tx.hrCalculationPolicy.findUnique({ where: { ruleSetId: ruleSet.id } });
+      if (previous) {
+        const next = await tx.hrCalculationPolicy.update({ where: { id: previous.id }, data });
+        await recordConfigurationChange(tx, { ruleSetId: ruleSet.id, entityType: "HR_CALCULATION_POLICY", entityId: next.id, operation: "ALTERADA", beforeValue: previous, afterValue: next, actorUsuarioId: context.user.id });
+      } else {
+        const next = await tx.hrCalculationPolicy.create({ data: { ruleSetId: ruleSet.id, ...data } });
+        await recordConfigurationChange(tx, { ruleSetId: ruleSet.id, entityType: "HR_CALCULATION_POLICY", entityId: next.id, operation: "CRIADA", afterValue: next, actorUsuarioId: context.user.id });
+      }
+    });
+    revalidateRhConfiguration();
+    return { message: "Política de cálculo salva." };
+  } catch (error) {
+    return { error: messageFrom(error) };
+  }
+}
+
+export async function saveHrEmploymentRegime(rawInput: unknown): Promise<ActionResult> {
+  try {
+    const input = hrEmploymentRegimeInputSchema.parse(rawInput);
+    const context = await getTenantContextForModuleOperation("RH", input.id ? "update" : "create");
+    await context.prisma.$transaction(async (tx) => {
+      const ruleSet = await getManagedRuleSet(tx, input.ruleSetId);
+      assertRuleSetCanChange(ruleSet);
+
+      if (input.socialSecuritySchemeId) {
+        const scheme = await tx.hrSocialSecurityScheme.findFirst({
+          where: { id: input.socialSecuritySchemeId, ruleSetId: ruleSet.id },
+          select: { id: true },
+        });
+        if (!scheme) throw new Error("O regime previdenciário informado não pertence a este conjunto de regras.");
+      }
+      if (input.vacationPolicyId) {
+        const vacationPolicy = await tx.hrVacationPolicy.findFirst({
+          where: { id: input.vacationPolicyId, ruleSetId: ruleSet.id },
+          select: { id: true },
+        });
+        if (!vacationPolicy) throw new Error("A política de férias informada não pertence a este conjunto de regras.");
+      }
+
+      const data = {
+        code: input.code,
+        name: input.name,
+        employmentNature: input.employmentNature,
+        esocialCategory: input.esocialCategory,
+        defaultMonthlyHours: input.defaultMonthlyHours,
+        socialSecuritySchemeId: input.socialSecuritySchemeId,
+        vacationPolicyId: input.vacationPolicyId,
+        legalReference: input.legalReference,
+        isActive: input.isActive,
+      };
+      if (input.id) {
+        const previous = await tx.hrEmploymentRegime.findFirst({ where: { id: input.id, ruleSetId: ruleSet.id } });
+        if (!previous) throw new Error("O vínculo não foi encontrado neste conjunto de regras.");
+        const next = await tx.hrEmploymentRegime.update({ where: { id: previous.id }, data });
+        await recordConfigurationChange(tx, { ruleSetId: ruleSet.id, entityType: "HR_EMPLOYMENT_REGIME", entityId: next.id, operation: "ALTERADA", beforeValue: previous, afterValue: next, actorUsuarioId: context.user.id });
+      } else {
+        const next = await tx.hrEmploymentRegime.create({ data: { ruleSetId: ruleSet.id, ...data } });
+        await recordConfigurationChange(tx, { ruleSetId: ruleSet.id, entityType: "HR_EMPLOYMENT_REGIME", entityId: next.id, operation: "CRIADA", afterValue: next, actorUsuarioId: context.user.id });
+      }
+    });
+    revalidateRhConfiguration();
+    return { message: "Vínculo salvo." };
+  } catch (error) {
+    return { error: messageFrom(error) };
+  }
+}

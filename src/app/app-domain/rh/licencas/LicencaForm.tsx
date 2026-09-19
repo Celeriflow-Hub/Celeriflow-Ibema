@@ -15,7 +15,7 @@ import type { Employee, Leave } from "@prisma/client";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
 
-type LeaveFormData = Leave & { description?: string | null };
+type LeaveFormData = Leave;
 
 export function LicencaForm({ data, employees = [] }: { data?: LeaveFormData, employees?: Employee[] }) {
   const router = useRouter();
@@ -120,12 +120,12 @@ export function LicencaForm({ data, employees = [] }: { data?: LeaveFormData, em
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Descrição / Observações</Label>
+              <Label htmlFor="reason">Motivo / observações internas</Label>
               <Textarea 
-                id="description" 
-                name="description" 
-                defaultValue={data?.description || ""} 
-                placeholder="Detalhes sobre a licença, número do CID, portaria, etc."
+                id="reason" 
+                name="reason" 
+                defaultValue={data?.reason || ""} 
+                placeholder="Observações funcionais e referência do ato, quando aplicável."
                 rows={4}
               />
             </div>
@@ -144,3 +144,4 @@ export function LicencaForm({ data, employees = [] }: { data?: LeaveFormData, em
     </PageFrame>
   );
 }
+

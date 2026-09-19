@@ -15,7 +15,7 @@ export async function saveLicenca(formData: FormData) {
     const type = formData.get("type") as string;
     const startDate = formData.get("startDate") as string;
     const endDate = formData.get("endDate") as string;
-    const description = formData.get("description") as string;
+    const reason = formData.get("reason") as string;
     const status = formData.get("status") as string;
 
     if (!employeeId || !type || !startDate || !endDate) {
@@ -27,7 +27,7 @@ export async function saveLicenca(formData: FormData) {
       type,
       startDate: new Date(startDate),
       endDate: new Date(endDate),
-      description: description || null,
+      reason: reason || null,
       status: status || "Ativa",
     };
 
@@ -43,6 +43,8 @@ export async function saveLicenca(formData: FormData) {
     }
 
     revalidatePath("/rh/licencas");
+    revalidatePath("/portal-servidor");
+    revalidatePath("/portal-servidor/ferias");
     return { success: true };
   } catch (error) {
     console.error("Erro ao salvar licença:", error);
@@ -57,9 +59,12 @@ export async function deleteLicenca(id: string) {
       where: { id },
     });
     revalidatePath("/rh/licencas");
+    revalidatePath("/portal-servidor");
+    revalidatePath("/portal-servidor/ferias");
     return { success: true };
   } catch (error) {
     console.error("Erro ao excluir licença:", error);
     return { success: false, error: "Falha ao excluir o registro de licença." };
   }
 }
+

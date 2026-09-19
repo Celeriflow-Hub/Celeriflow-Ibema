@@ -7,7 +7,7 @@ import { normalizeRestrictiveProfilePermissions, SYSTEM_ADMIN_PROFILE_CODE } fro
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 
 const MODULE_CODES = new Set([
-  "ADMINISTRACAO", "RH", "CADASTROS", "ATENDIMENTO", "COMPRAS", "CONTRATOS", "FINANCEIRO", "PATRIMONIO", "TRIBUTACAO", "PROCESSOS", "SAUDE",
+  "ADMINISTRACAO", "RH", "PORTAL_SERVIDOR", "CADASTROS", "ATENDIMENTO", "COMPRAS", "CONTRATOS", "FINANCEIRO", "PATRIMONIO", "TRIBUTACAO", "PROCESSOS", "SAUDE",
   "EDUCACAO", "SOCIAL", "FROTAS", "MEIO_AMBIENTE", "CAMARA", "TRANSPARENCIA", "CONFIGURACOES",
 ]);
 
@@ -129,3 +129,4 @@ function revalidatePermissionConsumers() {
   revalidatePath("/app-domain/dashboard");
   revalidatePath("/");
 }
+

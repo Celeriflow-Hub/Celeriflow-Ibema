@@ -1,8 +1,12 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { basename, resolve } from "node:path";
+import { config } from "dotenv";
 import { envelopeSchema, protocol, protocolVersion } from "./contract";
 import { ReceiverError, ReceiverStore, type ReceiverConfig } from "./store";
+
+config({ path: ".env.local" });
+config();
 
 const maxBodyDefault = 262_144;
 type FaultScenario = "NORMAL" | "FAIL_BEFORE_COMMIT_ONCE" | "FAIL_AFTER_COMMIT_ONCE";

@@ -49,6 +49,8 @@ const MODULES_LIST = [
   { code: "CONFIGURACOES", label: "Configurações do Sistema & Integrações", icon: Settings, color: "text-slate-600" },
 ];
 
+const HIDDEN_DASHBOARD_CARDS = new Set(["CADASTROS", "ATENDIMENTO"]);
+
 type ModulePermission = {
   showDashboardCard: boolean;
   blocked: boolean;
@@ -104,20 +106,27 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
 
   function parsePermissionsJSON(jsonStr: string | null, legacyModuleCodes: string[] = []): { accessLevel: "operacional"; map: Record<string, ModulePermission> } {
     const map = Object.fromEntries(MODULES_LIST.map((moduleItem) => [moduleItem.code, emptyPermission()])) as Record<string, ModulePermission>;
-    if (!jsonStr) return { accessLevel: "operacional", map };
+    const finalizeMap = () => {
+      for (const code of HIDDEN_DASHBOARD_CARDS) {
+        if (map[code]) map[code].showDashboardCard = false;
+      }
+      return { accessLevel: "operacional" as const, map };
+    };
+
+    if (!jsonStr) return finalizeMap();
     try {
       const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
       if (parsed.ALL) {
         MODULES_LIST.forEach((m) => {
           map[m.code] = { showDashboardCard: true, blocked: false, create: true, update: true, delete: true, issueReports: false };
         });
-        return { accessLevel: "operacional", map };
+        return finalizeMap();
       }
       if (parsed.acesso === "total" && !parsed.modules) {
         MODULES_LIST.forEach((moduleItem) => {
           map[moduleItem.code] = { showDashboardCard: true, blocked: false, create: true, update: true, delete: true, issueReports: false };
         });
-        return { accessLevel: "operacional", map };
+        return finalizeMap();
       }
       const modules = parsed.modules;
       if (modules && typeof modules === "object" && !Array.isArray(modules)) {
@@ -135,7 +144,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
             issueReports: !blocked && permission.issueReports === true,
           };
         }
-        return { accessLevel: "operacional", map };
+        return finalizeMap();
       }
       const blockedModules = Array.isArray(parsed.modulosBloqueados) ? parsed.modulosBloqueados : [];
       const allowedModules = Array.isArray(parsed.modulosPermitidos) ? parsed.modulosPermitidos : null;
@@ -154,17 +163,23 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
           issueReports: false,
         };
       }
-      return { accessLevel: "operacional", map };
+      return finalizeMap();
     } catch {
-      return { accessLevel: "operacional", map };
+      return finalizeMap();
     }
   }
 
   function serializePermissionsJSON(accessLevel: "operacional", map: Record<string, ModulePermission>): string {
+    const cleanedMap = { ...map };
+    for (const code of HIDDEN_DASHBOARD_CARDS) {
+      if (cleanedMap[code]) {
+        cleanedMap[code] = { ...cleanedMap[code], showDashboardCard: false };
+      }
+    }
     return JSON.stringify({
       acesso: accessLevel,
-      modules: map,
-      modulosBloqueados: MODULES_LIST.filter((moduleItem) => map[moduleItem.code]?.blocked).map((moduleItem) => moduleItem.code),
+      modules: cleanedMap,
+      modulosBloqueados: MODULES_LIST.filter((moduleItem) => cleanedMap[moduleItem.code]?.blocked).map((moduleItem) => moduleItem.code),
     });
   }
 
@@ -212,10 +227,11 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
   const toggleAllModuleActions = (moduleCode: string) => {
     setFormData((prev) => {
       const current = prev.permissionsMap[moduleCode] || emptyPermission();
-      const allSelected = !current.blocked && current.showDashboardCard && current.create && current.update && current.delete && current.issueReports;
+      const isHiddenCard = HIDDEN_DASHBOARD_CARDS.has(moduleCode);
+      const allSelected = !current.blocked && (isHiddenCard || current.showDashboardCard) && current.create && current.update && current.delete && current.issueReports;
       const updated = allSelected
         ? emptyPermission()
-        : { showDashboardCard: true, blocked: false, create: true, update: true, delete: true, issueReports: true };
+        : { showDashboardCard: isHiddenCard ? false : true, blocked: false, create: true, update: true, delete: true, issueReports: true };
       return {
         ...prev,
         permissionsMap: { ...prev.permissionsMap, [moduleCode]: updated },
@@ -226,10 +242,11 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
   const applyPreset = (preset: "FULL" | "READ_ONLY" | "CLEAR") => {
     const newMap: Record<string, ModulePermission> = {};
     MODULES_LIST.forEach((m) => {
+      const isHiddenCard = HIDDEN_DASHBOARD_CARDS.has(m.code);
       if (preset === "FULL") {
-        newMap[m.code] = { showDashboardCard: true, blocked: false, create: true, update: true, delete: true, issueReports: true };
+        newMap[m.code] = { showDashboardCard: isHiddenCard ? false : true, blocked: false, create: true, update: true, delete: true, issueReports: true };
       } else if (preset === "READ_ONLY") {
-        newMap[m.code] = { showDashboardCard: true, blocked: false, create: false, update: false, delete: false, issueReports: false };
+        newMap[m.code] = { showDashboardCard: isHiddenCard ? false : true, blocked: false, create: false, update: false, delete: false, issueReports: false };
       } else {
         newMap[m.code] = emptyPermission();
       }
@@ -541,10 +558,20 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
                           </div>
 
                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
-                             <label className="flex items-center gap-2 p-2 rounded-lg border text-xs font-medium cursor-pointer bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400">
-                               <input type="checkbox" checked={permission.showDashboardCard} onChange={() => toggleAction(moduleItem.code, "showDashboardCard")} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5" />
-                               <span>Exibir card no dashboard</span>
-                             </label>
+                             {HIDDEN_DASHBOARD_CARDS.has(moduleItem.code) ? (
+                               <label
+                                 title="Este card está desativado do painel em todos os perfis do sistema."
+                                 className="flex items-center gap-2 p-2 rounded-lg border text-xs font-medium cursor-not-allowed bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 select-none"
+                               >
+                                 <input type="checkbox" checked={false} disabled className="rounded border-slate-300 text-slate-400 focus:ring-0 w-3.5 h-3.5 cursor-not-allowed opacity-50" />
+                                 <span>Card desativado do painel</span>
+                               </label>
+                             ) : (
+                               <label className="flex items-center gap-2 p-2 rounded-lg border text-xs font-medium cursor-pointer bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400">
+                                 <input type="checkbox" checked={permission.showDashboardCard} onChange={() => toggleAction(moduleItem.code, "showDashboardCard")} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5" />
+                                 <span>Exibir card no dashboard</span>
+                               </label>
+                             )}
                              <label className={`flex items-center gap-2 p-2 rounded-lg border text-xs font-medium cursor-pointer ${permission.blocked ? "bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-900 text-rose-800 dark:text-rose-200" : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"}`}>
                                <input type="checkbox" checked={permission.blocked} onChange={() => toggleBlocked(moduleItem.code)} className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 w-3.5 h-3.5" />
                                <span>Bloquear acesso ao módulo</span>

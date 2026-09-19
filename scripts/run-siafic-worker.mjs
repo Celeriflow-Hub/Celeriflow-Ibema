@@ -1,3 +1,8 @@
+import { config } from "dotenv";
+
+config({ path: ".env.local" });
+config();
+
 const workerUrl = process.env.SIAFIC_WORKER_URL?.trim();
 const workerToken = process.env.SIAFIC_WORKER_TOKEN?.trim();
 const intervalMs = Number(process.env.SIAFIC_WORKER_INTERVAL_MS || 2_000);

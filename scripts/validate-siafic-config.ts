@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./load-local-environment";
 
 import { prisma } from "@/lib/prisma";
 import { assertSiaficConnectionMatchesRuntime, getSiaficDemoRuntimeConfig, parseSiaficConnectionConfiguration } from "@/lib/siafic/config";

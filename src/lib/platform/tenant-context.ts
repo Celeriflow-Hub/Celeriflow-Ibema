@@ -95,10 +95,13 @@ export function isModuleBlockedForUser(user: AppContext["user"], moduleCode: str
   return permission ? permission.blocked : hasModuleAccess(rolePermissions?.modulosBloqueados, codeUpper);
 }
 
+const HIDDEN_DASHBOARD_CARDS = new Set(["CADASTROS", "ATENDIMENTO"]);
+
 export function canShowDashboardCard(user: AppContext["user"], moduleCode: string) {
+  const codeUpper = moduleCode.toUpperCase();
+  if (HIDDEN_DASHBOARD_CARDS.has(codeUpper)) return false;
   if (isSystemAdministrator(user)) return true;
 
-  const codeUpper = moduleCode.toUpperCase();
   const rolePermissions = parseRolePermissions(user.permissions);
   const permission = getModuleProfilePermission(rolePermissions, codeUpper);
   if (permission) return permission.showDashboardCard;
@@ -175,6 +178,10 @@ export function isSystemAdministrator(user: AppContext["user"]) {
 
 export function isModuleActive(active: boolean | undefined) {
   return active !== false;
+}
+
+export function canUseInactiveModule(user: AppContext["user"]) {
+  return isSystemAdministrator(user);
 }
 
 export function assertBudgetUnitAccess(user: AppContext["user"], budgetUnitId: string) {

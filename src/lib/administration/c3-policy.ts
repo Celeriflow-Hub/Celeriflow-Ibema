@@ -51,8 +51,9 @@ export function normalizeRestrictiveProfilePermissions(value: string | undefined
     if (!moduleCodes.has(code) || !raw || typeof raw !== "object" || Array.isArray(raw)) continue;
     const item = raw as Record<string, unknown>;
     const blocked = item.blocked === true;
+    const isHiddenCard = code === "CADASTROS" || code === "ATENDIMENTO";
     modules[code] = {
-      showDashboardCard: item.showDashboardCard === true,
+      showDashboardCard: isHiddenCard ? false : item.showDashboardCard === true,
       blocked,
       create: !blocked && item.create === true,
       update: !blocked && item.update === true,

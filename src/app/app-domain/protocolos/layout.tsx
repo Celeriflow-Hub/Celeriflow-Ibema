@@ -14,13 +14,15 @@ import {
   Archive,
   ChartNoAxesCombined,
   Bell,
-  BarChart3
+  BarChart3,
+  MessageSquareWarning
 } from "lucide-react";
 
 const sidebarNavItems = [
   { title: "Painel de Protocolos", href: "/protocolos", icon: LayoutDashboard },
   { title: "Caixa do Setor", href: "/protocolos/processos", icon: FileBox },
   { title: "Acompanhamento", href: "/protocolos/acompanhamento", icon: ChartNoAxesCombined },
+  { title: "Ouvidoria", href: "/protocolos/ouvidoria", icon: MessageSquareWarning },
   { title: "Notificações", href: "/protocolos/notificacoes", icon: Bell },
   { title: "Relatórios", href: "/protocolos/relatorios", icon: BarChart3 },
   { title: "Buscar Processo", href: "/protocolos/busca", icon: FileSearch },

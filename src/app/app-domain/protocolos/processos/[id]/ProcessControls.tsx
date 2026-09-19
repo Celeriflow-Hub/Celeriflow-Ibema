@@ -3,10 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { FileUp, FileText, Send, X } from "lucide-react";
-import { addProcessDispatch, approveGenericProcessWorkflow, archiveProcess, concludeGenericProcessWorkflow, concludeProcess, forwardProcess, publishProcessNotice, receiveProcess, rejectGenericProcessWorkflow, reopenProcess, requestProcessSignatures, returnGenericProcessWorkflow } from "../../actions";
+import { addProcessDispatch, approveGenericProcessWorkflow, archiveProcess, cancelProcessForwarding, concludeGenericProcessWorkflow, concludeProcess, forwardProcess, publishProcessNotice, receiveProcess, rejectGenericProcessWorkflow, rejectProcessForwarding, reopenProcess, requestProcessSignatures, returnGenericProcessWorkflow } from "../../actions";
 
 type Department = { id: string; name: string };
-type Mode = "dispatch" | "forward" | "document" | "signatures" | "conclude" | "archive" | "reopen" | "genericApprove" | "genericReturn" | "genericReject" | "genericConclude" | null;
+type Mode = "dispatch" | "forward" | "document" | "signatures" | "conclude" | "archive" | "reopen" | "genericApprove" | "genericReturn" | "genericReject" | "genericConclude" | "cancelForwarding" | "rejectForwarding" | null;
 
 export default function ProcessControls({
   processId,
@@ -19,6 +19,9 @@ export default function ProcessControls({
   signableDocuments,
   signers,
   canPublishPublicNotice,
+  pendingMovement,
+  canCancelPending,
+  canRejectPending,
 }: {
   processId: string;
   status: string;
@@ -30,6 +33,9 @@ export default function ProcessControls({
   signableDocuments: { id: string; title: string }[];
   signers: { id: string; nome: string; email: string }[];
   canPublishPublicNotice: boolean;
+  pendingMovement: { id: string; fromDepartmentName: string | null; toDepartmentName: string } | null;
+  canCancelPending: boolean;
+  canRejectPending: boolean;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>(null);
@@ -103,6 +109,17 @@ export default function ProcessControls({
         : mode === "archive"
           ? await archiveProcess(processId, reason)
           : await reopenProcess(processId, reason);
+      handleResult(result);
+    });
+  }
+
+  function handlePendingMovement() {
+    if (!pendingMovement) return;
+    setError(null);
+    startTransition(async () => {
+      const result = mode === "cancelForwarding"
+        ? await cancelProcessForwarding(pendingMovement.id, reason)
+        : await rejectProcessForwarding(pendingMovement.id, reason);
       handleResult(result);
     });
   }
@@ -181,6 +198,8 @@ export default function ProcessControls({
             Receber Processo
           </button>
         )}
+        {!isGeneric && canCancelPending && pendingMovement && <button disabled={isPending} onClick={() => setMode("cancelForwarding")} className="px-4 py-2 bg-white border border-amber-300 hover:bg-amber-50 disabled:opacity-50 text-amber-800 text-sm font-semibold rounded-lg shadow-sm transition-colors">Cancelar encaminhamento</button>}
+        {!isGeneric && canRejectPending && pendingMovement && <button disabled={isPending} onClick={() => setMode("rejectForwarding")} className="px-4 py-2 bg-white border border-red-300 hover:bg-red-50 disabled:opacity-50 text-red-800 text-sm font-semibold rounded-lg shadow-sm transition-colors">Recusar recebimento</button>}
         <button disabled={disabled} onClick={() => setMode("document")} className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 text-slate-700 text-sm font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-colors">
           <FileUp className="w-4 h-4" />
           Anexar Documento
@@ -222,14 +241,14 @@ export default function ProcessControls({
         ) : null}
       </div>
 
-      {!canOperate && <p className="mt-2 text-xs text-slate-500">Ações operacionais exigem vínculo ativo com o setor atual do processo.</p>}
+      {!canOperate && !canCancelPending && !canRejectPending && <p className="mt-2 text-xs text-slate-500">Ações operacionais exigem vínculo ativo com o setor atual do processo.</p>}
 
       {mode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
           <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 p-5">
               <h2 className="text-lg font-bold text-slate-900">
-                 {mode === "forward" ? "Tramitar processo" : mode === "dispatch" ? "Adicionar despacho" : mode === "document" ? "Anexar documento" : mode === "signatures" ? "Solicitar assinaturas" : mode === "genericApprove" ? "Aprovar etapa" : mode === "genericReturn" ? "Devolver etapa" : mode === "genericReject" ? "Rejeitar processo" : mode === "genericConclude" ? "Concluir processo" : mode === "conclude" ? "Concluir processo" : mode === "archive" ? "Arquivar processo" : "Reabrir processo"}
+                 {mode === "forward" ? "Tramitar processo" : mode === "dispatch" ? "Adicionar despacho" : mode === "document" ? "Anexar documento" : mode === "signatures" ? "Solicitar assinaturas" : mode === "genericApprove" ? "Aprovar etapa" : mode === "genericReturn" ? "Devolver etapa" : mode === "genericReject" ? "Rejeitar processo" : mode === "genericConclude" ? "Concluir processo" : mode === "conclude" ? "Concluir processo" : mode === "archive" ? "Arquivar processo" : mode === "cancelForwarding" ? "Cancelar encaminhamento" : mode === "rejectForwarding" ? "Recusar recebimento" : "Reabrir processo"}
               </h2>
               <button onClick={close} disabled={isPending} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
             </div>
@@ -290,7 +309,7 @@ export default function ProcessControls({
                    <fieldset className="space-y-2"><legend className="text-sm font-medium text-slate-700">Signatarios com acesso a Processos</legend>{signers.map((signer) => <label key={signer.id} className="flex items-center gap-2 rounded-lg border border-slate-200 p-2 text-sm"><input type="checkbox" checked={selectedSignerIds.includes(signer.id)} onChange={() => toggleSigner(signer.id)} /> <span>{signer.nome}<span className="block text-xs text-slate-500">{signer.email}</span></span></label>)}</fieldset>
                  </>
                )}
-               {(mode === "conclude" || mode === "archive" || mode === "reopen" || mode === "genericReturn" || mode === "genericReject" || mode === "genericConclude") && (
+              {(mode === "conclude" || mode === "archive" || mode === "reopen" || mode === "genericReturn" || mode === "genericReject" || mode === "genericConclude" || mode === "cancelForwarding" || mode === "rejectForwarding") && (
                 <label className="block text-sm font-medium text-slate-700">Justificativa
                   <textarea value={reason} onChange={event => setReason(event.target.value)} rows={5} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
                 </label>
@@ -299,8 +318,8 @@ export default function ProcessControls({
             </div>
             <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 p-5">
               <button onClick={close} disabled={isPending} className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600">Cancelar</button>
-               <button disabled={isPending} onClick={mode === "forward" ? handleForward : mode === "dispatch" ? handleDispatch : mode === "document" ? handleDocument : mode === "signatures" ? handleSignatures : handleLifecycle} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                  {isPending ? "Salvando..." : mode === "forward" ? "Tramitar" : mode === "dispatch" ? "Adicionar" : mode === "document" ? "Anexar" : mode === "signatures" ? "Solicitar" : mode === "genericApprove" ? "Aprovar" : mode === "genericReturn" ? "Devolver" : mode === "genericReject" ? "Rejeitar" : mode === "genericConclude" || mode === "conclude" ? "Concluir" : mode === "archive" ? "Arquivar" : "Reabrir"}
+               <button disabled={isPending} onClick={mode === "forward" ? handleForward : mode === "dispatch" ? handleDispatch : mode === "document" ? handleDocument : mode === "signatures" ? handleSignatures : mode === "cancelForwarding" || mode === "rejectForwarding" ? handlePendingMovement : handleLifecycle} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                  {isPending ? "Salvando..." : mode === "forward" ? "Tramitar" : mode === "dispatch" ? "Adicionar" : mode === "document" ? "Anexar" : mode === "signatures" ? "Solicitar" : mode === "genericApprove" ? "Aprovar" : mode === "genericReturn" ? "Devolver" : mode === "genericReject" ? "Rejeitar" : mode === "genericConclude" || mode === "conclude" ? "Concluir" : mode === "archive" ? "Arquivar" : mode === "cancelForwarding" ? "Cancelar encaminhamento" : mode === "rejectForwarding" ? "Recusar recebimento" : "Reabrir"}
               </button>
             </div>
           </div>

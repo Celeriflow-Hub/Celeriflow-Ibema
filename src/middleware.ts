@@ -20,10 +20,11 @@ export const config = {
 
 export default function middleware(req: NextRequest) {
   const url = req.nextUrl;
-  const isPublicDocumentValidation = /^\/validar-documento\/[^/]+$/.test(url.pathname);
-  if (isPublicDocumentValidation) {
+  const isPublicValidation = /^\/validar-(?:documento|aviso)\/[^/]+$/.test(url.pathname);
+  const isPublicProtocolPortal = url.pathname === "/portal-protocolos";
+  if (isPublicValidation || isPublicProtocolPortal) {
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || req.headers.get("x-real-ip") || "unknown";
-    const rateLimit = checkRateLimit(`public-document:${ip}`);
+    const rateLimit = checkRateLimit(`public-read:${ip}`);
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: "Muitas tentativas. Tente novamente mais tarde." },

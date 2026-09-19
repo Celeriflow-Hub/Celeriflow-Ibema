@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
-import { createPublicNoticeValidationCode, createRedactedProcessNotice, projectPublicNotice } from "./public-notice-policy";
+import { assertProcessNoticeCanBePublished, createPublicNoticeValidationCode, createRedactedProcessNotice, projectPublicNotice } from "./public-notice-policy";
 
 export async function publishProcessPublicNotice(
   db: PrismaClient,
@@ -10,12 +10,12 @@ export async function publishProcessPublicNotice(
   return db.$transaction(async (tx) => {
     const process = await tx.process.findUnique({
       where: { id: processId },
-      select: { id: true, protocolNumber: true, processType: { select: { name: true } } },
+      select: { id: true, protocolNumber: true, status: true, ombudsman: { select: { id: true } } },
     });
     if (!process) throw new Error("Processo nao encontrado.");
+    assertProcessNoticeCanBePublished({ status: process.status, isFromOmbudsman: Boolean(process.ombudsman) });
     const notice = createRedactedProcessNotice({
       protocolNumber: process.protocolNumber,
-      processTypeName: process.processType.name,
     });
     const created = await tx.publicNotice.create({
       data: {
@@ -39,7 +39,7 @@ export async function publishProcessPublicNotice(
 
 export async function getPublicNotices(db: PrismaClient) {
   const notices = await db.publicNotice.findMany({
-    select: { title: true, category: true, publishedAt: true, validationCode: true },
+    select: { sourceModule: true, title: true, category: true, publishedAt: true, validationCode: true },
     orderBy: { publishedAt: "desc" },
     take: 100,
   });
@@ -49,7 +49,7 @@ export async function getPublicNotices(db: PrismaClient) {
 export async function findPublicNoticeValidation(db: PrismaClient, validationCode: string) {
   const notice = await db.publicNotice.findUnique({
     where: { validationCode },
-    select: { title: true, category: true, publishedAt: true, validationCode: true },
+    select: { sourceModule: true, title: true, category: true, publishedAt: true, validationCode: true },
   });
   return notice ? projectPublicNotice(notice) : null;
 }

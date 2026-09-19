@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { AccessError } from "@/lib/platform/tenant-context";
-import { getAttendanceOperationalContextForOperation, ombudsmanScope, ticketScope } from "@/lib/attendance/access";
+import { getAttendanceOperationalContextForOperation, getOmbudsmanOperationalContextForOperation, ombudsmanScope, ticketScope } from "@/lib/attendance/access";
 import { uploadFile } from "@/lib/platform/blob";
 
 export const runtime = "nodejs";
@@ -9,7 +9,6 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
-    const context = await getAttendanceOperationalContextForOperation("create");
     const formData = await request.formData();
     const file = formData.get("file");
     const entityType = String(formData.get("entityType") || "");
@@ -20,6 +19,9 @@ export async function POST(request: NextRequest) {
     if (!(file instanceof File) || !entityId || !title || !["ticket", "ombudsman"].includes(entityType)) {
       return NextResponse.json({ error: "Informe o registro, titulo e arquivo do anexo." }, { status: 400 });
     }
+    const context = entityType === "ombudsman"
+      ? await getOmbudsmanOperationalContextForOperation("update")
+      : await getAttendanceOperationalContextForOperation("update");
 
     if (entityType === "ticket") {
       const ticket = await context.prisma.ticket.findFirst({ where: { AND: [{ id: entityId }, ticketScope(context)] }, select: { id: true } });
@@ -42,8 +44,12 @@ export async function POST(request: NextRequest) {
       }
       return created;
     });
-    const path = entityType === "ticket" ? `/atendimento/chamados/${entityId}` : `/atendimento/ouvidoria/${entityId}`;
-    revalidatePath(path);
+    if (entityType === "ticket") {
+      revalidatePath(`/atendimento/chamados/${entityId}`);
+    } else {
+      revalidatePath(`/atendimento/ouvidoria/${entityId}`);
+      revalidatePath(`/protocolos/ouvidoria/${entityId}`);
+    }
     return NextResponse.json({ id: document.id }, { status: 201 });
   } catch (error) {
     if (error instanceof AccessError) return NextResponse.json({ error: error.message }, { status: error.status });

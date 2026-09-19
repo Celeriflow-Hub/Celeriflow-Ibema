@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { nextYearlyCode } from "@/lib/sequence";
-import { getAttendanceContext, getAttendanceOperationalContextForOperation, ombudsmanScope, ticketScope } from "@/lib/attendance/access";
+import { getAttendanceContext, getAttendanceOperationalContextForOperation, getOmbudsmanOperationalContextForOperation, ombudsmanScope, ticketScope } from "@/lib/attendance/access";
 import { createValidatedProcess } from "@/lib/protocols/service";
 import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { requireValidCnpj, requireValidCpf } from "@/lib/identifiers/brazilian-identifiers";
+import { assertRedactedOmbudsmanDisclosure } from "@/lib/attendance/ombudsman-disclosure-policy";
 import type { Prisma } from "@prisma/client";
 
 const TICKET_STATUSES = new Set(["Aberto", "Encaminhado", "Aguardando Recebimento", "Em Atendimento", "Aguardando Informação", "Resolvido", "Concluído", "Cancelado", "Reaberto"]);
@@ -17,7 +18,7 @@ function stringValue(formData: FormData, name: string) {
 }
 
 function revalidateAttendance() {
-  for (const path of ["/atendimento", "/atendimento/central", "/atendimento/fila", "/atendimento/configuracoes", "/atendimento/ouvidoria", "/atendimento/relatorios"]) {
+  for (const path of ["/atendimento", "/atendimento/central", "/atendimento/fila", "/atendimento/configuracoes", "/atendimento/ouvidoria", "/atendimento/relatorios", "/protocolos/ouvidoria"]) {
     revalidatePath(path);
   }
 }
@@ -25,6 +26,7 @@ function revalidateAttendance() {
 function revalidateOmbudsman(id: string) {
   revalidateAttendance();
   revalidatePath(`/atendimento/ouvidoria/${id}`);
+  revalidatePath(`/protocolos/ouvidoria/${id}`);
 }
 
 async function scopedTicket(id: string, operation: "create" | "update" = "update") {
@@ -38,7 +40,7 @@ async function scopedTicket(id: string, operation: "create" | "update" = "update
 }
 
 async function scopedOmbudsman(id: string, operation: "create" | "update" | "delete" = "update") {
-  const context = await getAttendanceOperationalContextForOperation(operation);
+  const context = await getOmbudsmanOperationalContextForOperation(operation);
   const ombudsman = await context.prisma.ombudsman.findFirst({
     where: { AND: [{ id }, ombudsmanScope(context)] },
     include: { identity: true },
@@ -147,7 +149,8 @@ export async function createTicket(formData: FormData): Promise<void> {
 }
 
 export async function createOmbudsman(formData: FormData): Promise<void> {
-  const context = await getAttendanceOperationalContextForOperation("create");
+  const context = await getOmbudsmanOperationalContextForOperation("create");
+  const openedFromProtocols = formData.get("originModule") === "PROCESSOS" && context.attendanceAccess.authorizationModule === "PROCESSOS";
   if (!context.attendanceAccess.isOmbudsman) throw new Error("Somente a Ouvidoria pode registrar manifestacoes.");
   const type = stringValue(formData, "type");
   const subject = stringValue(formData, "subject");
@@ -197,7 +200,7 @@ export async function createOmbudsman(formData: FormData): Promise<void> {
     return ombudsman;
   });
   revalidateAttendance();
-  redirect(`/atendimento/ouvidoria/${created.id}`);
+  redirect(openedFromProtocols ? `/protocolos/ouvidoria/${created.id}` : `/atendimento/ouvidoria/${created.id}`);
 }
 
 export async function assumeTicket(formData: FormData): Promise<void> {
@@ -326,7 +329,7 @@ export async function updateTicketStatus(id: string, status: string) {
 
 export async function updateOmbudsmanStatus(id: string, requestedStatus: string) {
   try {
-    const context = await getAttendanceOperationalContextForOperation("update");
+    const context = await getOmbudsmanOperationalContextForOperation("update");
     if (!context.attendanceAccess.isOmbudsman) throw new Error("Somente a Ouvidoria pode alterar manifestacoes.");
     const status = requestedStatus === "Em Análise" ? "Em Triagem" : requestedStatus;
     if (!OMBUDSMAN_STATUSES.has(status)) throw new Error("Status de manifestacao invalido.");
@@ -423,7 +426,7 @@ export async function startOmbudsmanInvestigation(formData: FormData): Promise<v
 export async function addOmbudsmanInteraction(formData: FormData): Promise<void> {
   const id = stringValue(formData, "ombudsmanId");
   const message = stringValue(formData, "message");
-  const { context } = await scopedOmbudsman(id, "create");
+  const { context } = await scopedOmbudsman(id, "update");
   if (!message) throw new Error("Informe o registro da apuracao.");
   await context.prisma.$transaction(async (tx) => {
     await tx.ombudsmanInteraction.create({ data: { ombudsmanId: id, type: "Apuração", message, employeeId: context.employee.id } });
@@ -463,11 +466,11 @@ export async function concludeOmbudsman(formData: FormData): Promise<void> {
 export async function createProcessFromOmbudsman(formData: FormData): Promise<void> {
   await getTenantContextForModuleOperation("PROCESSOS", "create");
   const id = stringValue(formData, "ombudsmanId");
-  const disclosure = stringValue(formData, "disclosure");
-  const { context, ombudsman } = await scopedOmbudsman(id, "create");
+  const disclosure = assertRedactedOmbudsmanDisclosure(stringValue(formData, "disclosure"));
+  const { context, ombudsman } = await scopedOmbudsman(id, "update");
   if (!context.attendanceAccess.isOmbudsman) throw new Error("Somente a Ouvidoria pode formalizar manifestacoes.");
   if (ombudsman.processId) throw new Error("Esta manifestacao ja possui um processo relacionado.");
-  if (!disclosure) throw new Error("Informe o resumo autorizado para o processo. Nao inclua dados de identidade ou detalhes sensiveis.");
+  if (ombudsman.isConfidential) throw new Error("A formalizacao de manifestacao confidencial exige classificação e aprovação específicas, ainda não configuradas.");
   const process = await context.prisma.$transaction(async (tx) => {
     const created = await createValidatedProcess(tx, context.employee, context.user.id, {
       processTypeId: stringValue(formData, "processTypeId"), subjectId: stringValue(formData, "subjectId"),
@@ -478,7 +481,7 @@ export async function createProcessFromOmbudsman(formData: FormData): Promise<vo
     });
     await tx.ombudsman.update({ where: { id }, data: { processId: created.id } });
     await tx.ombudsmanInteraction.create({ data: { ombudsmanId: id, type: "Processo", message: `Processo ${created.protocolNumber} gerado com resumo autorizado.`, employeeId: context.employee.id } });
-    await tx.ombudsmanAuditLog.create({ data: { ombudsmanId: id, userId: context.user.id, employeeId: context.employee.id, action: "PROCESS_CREATED", details: { processId: created.id, disclosure } } });
+    await tx.ombudsmanAuditLog.create({ data: { ombudsmanId: id, userId: context.user.id, employeeId: context.employee.id, action: "PROCESS_CREATED", details: { processId: created.id, redactedSummaryLength: disclosure.length } } });
     return created;
   });
   revalidateOmbudsman(id);
@@ -489,20 +492,16 @@ export async function grantOmbudsmanAccess(formData: FormData): Promise<void> {
   const id = stringValue(formData, "ombudsmanId");
   const userId = stringValue(formData, "userId");
   const canViewIdentity = formData.get("canViewIdentity") === "on";
-  const readContext = await getAttendanceContext();
-  const existingAccess = userId
-    ? await readContext.prisma.ombudsmanAccess.findUnique({ where: { ombudsmanId_userId: { ombudsmanId: id, userId } }, select: { ombudsmanId: true } })
-    : null;
-  const { context, ombudsman } = await scopedOmbudsman(id, existingAccess ? "update" : "create");
+  const { context, ombudsman } = await scopedOmbudsman(id, "update");
   if (!context.attendanceAccess.isAdmin || !ombudsman.isConfidential || !userId) throw new Error("Somente administradores podem conceder acesso a manifestacoes confidenciais.");
   const user = await context.prisma.usuario.findFirst({ where: { id: userId, ativo: true }, select: { id: true } });
   if (!user) throw new Error("Usuario invalido ou inativo.");
   await context.prisma.$transaction(async (tx) => {
-    if (existingAccess) {
-      await tx.ombudsmanAccess.update({ where: { ombudsmanId_userId: { ombudsmanId: id, userId } }, data: { canViewIdentity, grantedById: context.user.id } });
-    } else {
-      await tx.ombudsmanAccess.create({ data: { ombudsmanId: id, userId, grantedById: context.user.id, canViewIdentity } });
-    }
+    await tx.ombudsmanAccess.upsert({
+      where: { ombudsmanId_userId: { ombudsmanId: id, userId } },
+      create: { ombudsmanId: id, userId, grantedById: context.user.id, canViewIdentity },
+      update: { canViewIdentity, grantedById: context.user.id },
+    });
     await tx.ombudsmanAuditLog.create({ data: { ombudsmanId: id, userId: context.user.id, employeeId: context.employee.id, action: "ACCESS_GRANTED", details: { grantedUserId: userId, canViewIdentity } } });
   });
   revalidateOmbudsman(id);
@@ -511,7 +510,7 @@ export async function grantOmbudsmanAccess(formData: FormData): Promise<void> {
 export async function revokeOmbudsmanAccess(formData: FormData): Promise<void> {
   const id = stringValue(formData, "ombudsmanId");
   const userId = stringValue(formData, "userId");
-  const { context, ombudsman } = await scopedOmbudsman(id, "delete");
+  const { context, ombudsman } = await scopedOmbudsman(id, "update");
   if (!context.attendanceAccess.isAdmin || !ombudsman.isConfidential || !userId) throw new Error("Somente administradores podem revogar acesso confidencial.");
   await context.prisma.$transaction(async (tx) => {
     await tx.ombudsmanAccess.deleteMany({ where: { ombudsmanId: id, userId } });

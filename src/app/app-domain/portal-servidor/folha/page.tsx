@@ -3,6 +3,7 @@ import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
 import { buttonVariants } from "@/components/ui/button";
 import { getEmployeePortalAccess } from "@/lib/portal-servidor/access";
+import { arePortalPayrollStatementsEnabled } from "@/lib/rh/payroll-configuration";
 import type { Prisma } from "@prisma/client";
 import { FileText, Search, WalletCards } from "lucide-react";
 import Link from "next/link";
@@ -76,9 +77,25 @@ function PortalUnavailable() {
   );
 }
 
+function PayrollStatementsDisabled() {
+  return (
+    <div className="flex h-full min-h-0 flex-1 items-center justify-center p-3">
+      <section className="max-w-md border border-slate-300 bg-white p-5 text-center shadow-sm">
+        <WalletCards className="mx-auto size-6 text-slate-400" />
+        <h1 className="mt-2 text-sm font-semibold text-slate-900">Demonstrativos temporariamente indisponíveis</h1>
+        <p className="mt-1 text-xs leading-5 text-slate-600">A disponibilização de demonstrativos foi desativada pela configuração do RH. Nenhum lançamento de folha é exibido enquanto essa regra estiver inativa.</p>
+      </section>
+    </div>
+  );
+}
+
 export default async function FolhaPortalPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const access = await getEmployeePortalAccess();
   if (access.status !== "AVAILABLE") return <PortalUnavailable />;
+
+  if (!await arePortalPayrollStatementsEnabled(access.context.prisma)) {
+    return <PayrollStatementsDisabled />;
+  }
 
   const params = await searchParams;
   const competence = parseCompetence(params.competence);

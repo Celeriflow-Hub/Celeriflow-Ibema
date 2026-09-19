@@ -1,132 +1,171 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { buttonVariants } from "@/components/ui/button"
-import { Plus, Users } from "lucide-react"
-import Link from "next/link"
+import Link from "next/link";
+import { Plus, Users, Search } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
-import { ServidorRowActions } from "./ServidorRowActions"
-import { EmployeeFilters } from "./EmployeeFilters"
+import { ServidorRowActions } from "./ServidorRowActions";
 import type { Prisma } from "@prisma/client";
-import { PageFrame } from "@/components/app-ui/PageFrame";
-import { PageHeader } from "@/components/app-ui/PageHeader";
+import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
+import {
+  ErpTableContainer,
+  ErpTableThead,
+  ErpTableTh,
+  ErpTableTr,
+  ErpTableTd,
+  ErpStatusBadge,
+} from "@/components/app-ui/erp/ErpTable";
 
 export default async function ServidoresPage(
   props: {
     searchParams?: Promise<{
       q?: string;
       status?: string;
-      roleId?: string;
       departmentId?: string;
-    }>
+    }>;
   }
 ) {
   const { prisma } = await getTenantContextForModule("RH");
   const searchParams = await props.searchParams;
   const q = searchParams?.q || "";
   const status = searchParams?.status || "";
-  const roleId = searchParams?.roleId || "";
   const departmentId = searchParams?.departmentId || "";
 
   const where: Prisma.EmployeeWhereInput = {};
   if (q) {
     where.OR = [
-      { name: { contains: q, mode: 'insensitive' } },
+      { name: { contains: q, mode: "insensitive" } },
       { cpf: { contains: q } },
-      { registration: { contains: q } }
+      { registration: { contains: q } },
     ];
   }
-  if (status && status !== 'all') {
-    where.isActive = status === 'active';
+  if (status && status !== "all") {
+    where.isActive = status === "active";
   }
-  if (roleId && roleId !== 'all') {
-    where.roleId = roleId;
-  }
-  if (departmentId && departmentId !== 'all') {
+  if (departmentId && departmentId !== "all") {
     where.departmentId = departmentId;
   }
 
-  const employees = await prisma.employee.findMany({
-    where,
-    take: 100, // Limit for UI performance, but better than 10
-    orderBy: { name: 'asc' },
-    include: {
-      role: true,
-      department: true
-    }
-  })
-
-  const roles = await prisma.role.findMany({ orderBy: { name: 'asc' } });
-  const departments = await prisma.department.findMany({ orderBy: { name: 'asc' } });
+  const [employees, departments] = await Promise.all([
+    prisma.employee.findMany({
+      where,
+      take: 50,
+      orderBy: { name: "asc" },
+      include: { role: true, department: true },
+    }),
+    prisma.department.findMany({ orderBy: { name: "asc" } }),
+  ]);
 
   return (
-    <PageFrame className="space-y-2">
-      <PageHeader
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+      <ErpPageTitle
         title="Servidores"
-        icon={<Users className="size-4 shrink-0 text-violet-600" />}
-        action={<Link href="/rh/servidores/novo" className={buttonVariants({ size: "sm" })}>
-            <Plus className="mr-2 h-4 w-4" />
+        icon={<Users className="size-4 text-violet-600" />}
+        action={
+          <Link
+            href="/rh/servidores/novo"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-amber-500 px-3 text-xs font-bold text-slate-950 shadow-xs transition-colors hover:bg-amber-600"
+          >
+            <Plus className="size-3.5" />
             Novo Servidor
-          </Link>}
+          </Link>
+        }
       />
 
-      <Card size="sm" className="rounded-md shadow-none">
-        <CardHeader className="border-b pb-2">
-          <CardTitle>Lista de Servidores</CardTitle>
-          <CardDescription>
-            Gestão do quadro de pessoal e colaboradores. Exibindo {employees.length} registros (limite de 100).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-3">
-          
-          <EmployeeFilters roles={roles} departments={departments} />
-
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-muted text-muted-foreground border-b sticky top-0 z-10 shadow-sm">
-                <tr>
-                  <th className="font-medium p-2 px-4 whitespace-nowrap">Nome</th>
-                  <th className="font-medium p-2 whitespace-nowrap">CPF / Matrícula</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Cargo</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Setor</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Status</th>
-                  <th className="font-medium p-2 text-right whitespace-nowrap">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {employees.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="text-center p-8 text-muted-foreground">
-                      Nenhum servidor encontrado com os filtros aplicados.
-                    </td>
-                  </tr>
-                ) : (
-                  employees.map((emp) => (
-                    <tr key={emp.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="p-2 px-4 font-medium whitespace-nowrap">{emp.name}</td>
-                      <td className="p-2 text-muted-foreground whitespace-nowrap">
-                        {emp.cpf || "Sem CPF"} <br/>
-                        <span className="text-xs">{emp.registration || "Sem Matrícula"}</span>
-                      </td>
-                      <td className="p-2 whitespace-nowrap">{emp.role?.name || "-"}</td>
-                      <td className="p-2 whitespace-nowrap truncate max-w-[200px]" title={emp.department?.name || ""}>
-                        {emp.department?.name || "-"}
-                      </td>
-                      <td className="p-2 whitespace-nowrap">
-                        <Badge variant={emp.isActive ? "default" : "secondary"} className={emp.isActive ? "bg-emerald-500 hover:bg-emerald-600" : ""}>
-                          {emp.isActive ? "Ativo" : "Inativo"}
-                        </Badge>
-                      </td>
-                      <td className="p-2 text-right whitespace-nowrap">
-                        <ServidorRowActions employee={emp} />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-    </PageFrame>
-  )
+      <ErpListFrame
+        toolbar={
+          <form action="/rh/servidores" method="GET" className="flex flex-wrap items-center gap-2">
+            <label className="relative min-w-[200px] flex-1">
+              <span className="sr-only">Buscar servidor</span>
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                name="q"
+                defaultValue={q}
+                placeholder="Buscar por nome, CPF ou matrícula"
+                className="h-8 w-full rounded-md border border-slate-200 bg-white py-1 pl-8 pr-2.5 text-xs outline-none transition-colors placeholder:text-slate-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-800"
+              />
+            </label>
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="status" className="text-[11px] font-medium text-slate-500">Status</label>
+              <select
+                id="status"
+                name="status"
+                defaultValue={status}
+                className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-800"
+              >
+                <option value="">Todos</option>
+                <option value="active">Ativos</option>
+                <option value="inactive">Inativos</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="departmentId" className="text-[11px] font-medium text-slate-500">Setor</label>
+              <select
+                id="departmentId"
+                name="departmentId"
+                defaultValue={departmentId}
+                className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-800"
+              >
+                <option value="">Todos</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="submit"
+              className="h-8 rounded-md bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-slate-700"
+            >
+              Filtrar
+            </button>
+            <Link
+              href="/rh/servidores"
+              className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700"
+            >
+              Limpar
+            </Link>
+          </form>
+        }
+      >
+        <ErpTableContainer>
+          <ErpTableThead>
+            <tr>
+              <ErpTableTh className="w-[32%]">Nome</ErpTableTh>
+              <ErpTableTh className="w-[18%]">CPF / Matrícula</ErpTableTh>
+              <ErpTableTh className="w-[20%]">Cargo</ErpTableTh>
+              <ErpTableTh className="w-[16%]">Setor</ErpTableTh>
+              <ErpTableTh className="w-[8%]">Status</ErpTableTh>
+              <ErpTableTh className="w-[6%] text-right">Ações</ErpTableTh>
+            </tr>
+          </ErpTableThead>
+          <tbody>
+            {employees.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="p-8 text-center text-xs text-slate-400">
+                  Nenhum servidor encontrado.
+                </td>
+              </tr>
+            ) : (
+              employees.map((emp) => (
+                <ErpTableTr key={emp.id}>
+                  <ErpTableTd className="font-semibold">{emp.name}</ErpTableTd>
+                  <ErpTableTd className="font-mono text-[10.5px]">
+                    {emp.cpf || "Sem CPF"} · {emp.registration || "Sem Matrícula"}
+                  </ErpTableTd>
+                  <ErpTableTd>{emp.role?.name || "—"}</ErpTableTd>
+                  <ErpTableTd>{emp.department?.name || "—"}</ErpTableTd>
+                  <ErpTableTd>
+                    <ErpStatusBadge variant={emp.isActive ? "success" : "neutral"}>
+                      {emp.isActive ? "Ativo" : "Inativo"}
+                    </ErpStatusBadge>
+                  </ErpTableTd>
+                  <ErpTableTd className="text-right">
+                    <ServidorRowActions employee={emp} />
+                  </ErpTableTd>
+                </ErpTableTr>
+              ))
+            )}
+          </tbody>
+        </ErpTableContainer>
+      </ErpListFrame>
+    </div>
+  );
 }

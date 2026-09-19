@@ -3,6 +3,17 @@
 import { useState } from "react";
 import { Search, Plus, FileBadge, Trash2, XCircle } from "lucide-react";
 import { createCertificate, cancelCertificate } from "./actions";
+import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
+import {
+  ErpTableContainer,
+  ErpTableThead,
+  ErpTableTh,
+  ErpTableTr,
+  ErpTableTd,
+  ErpStatusBadge,
+  type ErpStatusVariant,
+} from "@/components/app-ui/erp/ErpTable";
 
 type Certificate = {
   id: string;
@@ -23,6 +34,13 @@ type Taxpayer = {
   name: string;
 };
 
+function certVariant(status: string): ErpStatusVariant {
+  if (status === "Ativa") return "success";
+  if (status === "Vencida") return "warning";
+  if (status === "Revogada" || status === "Cancelada") return "danger";
+  return "neutral";
+}
+
 export default function CertidoesClient({ 
   certificates,
   taxpayers
@@ -31,10 +49,20 @@ export default function CertidoesClient({
   taxpayers: Taxpayer[];
 }) {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const [createForm, setCreateForm] = useState({
     certificateType: "Negativa",
     taxpayerId: taxpayers[0]?.id || "",
     validUntil: ""
+  });
+
+  const filtered = certificates.filter((cert) => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    const code = cert.authCode.toLowerCase();
+    const type = cert.certificateType.toLowerCase();
+    const name = (cert.taxpayer?.company?.corporateName || cert.taxpayer?.person?.fullName || "").toLowerCase();
+    return code.includes(term) || type.includes(term) || name.includes(term);
   });
 
   const handleCancel = async (id: string) => {
@@ -68,114 +96,113 @@ export default function CertidoesClient({
   };
 
   return (
-    <>
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <FileBadge className="w-6 h-6 text-sky-600" />
-            Avaliações e Rascunhos de Certidão
-          </h1>
-          <p className="text-slate-500 mt-1">Registros internos sem validade jurídica ou emissão de certidão oficial.</p>
-        </div>
-        <button 
-          onClick={() => setIsCreateModalOpen(true)}
-          className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Registrar rascunho
-        </button>
-      </div>
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+      <ErpPageTitle
+        title="Certidões e Situação Fiscal"
+        icon={<FileBadge className="size-4 text-sky-600" />}
+        action={
+          <button 
+            onClick={() => setIsCreateModalOpen(true)}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-amber-500 px-3 text-xs font-bold text-slate-950 shadow-xs transition-colors hover:bg-amber-600"
+          >
+            <Plus className="size-3.5" />
+            Nova Certidão
+          </button>
+        }
+      />
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row items-center gap-4 bg-slate-50/50">
-          <div className="relative w-full max-w-md">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Buscar por código de autenticação ou CPF/CNPJ..." 
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-600/20 focus:border-sky-600"
-            />
+      <ErpListFrame
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="relative min-w-[180px] flex-1">
+              <span className="sr-only">Buscar certidão</span>
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por código de autenticação, tipo ou contribuinte"
+                className="h-8 w-full rounded-md border border-slate-200 bg-white py-1 pl-8 pr-2.5 text-xs outline-none placeholder:text-slate-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-800"
+              />
+            </label>
           </div>
-        </div>
-
-        {certificates.length === 0 ? (
-          <div className="p-12 text-center flex flex-col items-center justify-center">
-            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-              <FileBadge className="text-slate-400 w-8 h-8" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-700">Nenhum rascunho registrado</h3>
-            <p className="text-slate-500 mt-1">Use Operações Internas para avaliar a situação fiscal.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-[860px] w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                <tr>
-                  <th className="px-6 py-3">Código de Autenticação</th>
-                  <th className="px-6 py-3">Contribuinte</th>
-                  <th className="px-6 py-3">Tipo</th>
-                  <th className="px-6 py-3">Emissão / Validade</th>
-                  <th className="px-6 py-3">Status</th>
-                  <th className="px-6 py-3 text-right">Ação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {certificates.map((cert) => (
-                  <tr key={cert.id} className="hover:bg-slate-50 transition-colors group">
-                    <td className="px-6 py-4 font-mono font-bold text-slate-800">
-                      {cert.authCode}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600 font-medium">
-                      {cert.taxpayer?.company?.corporateName || cert.taxpayer?.person?.fullName || "Não Informado"}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600">
-                      {cert.certificateType}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600">
-                      <div><span className="text-slate-400">Emi:</span> {new Date(cert.createdAt).toLocaleDateString('pt-BR')}</div>
-                      <div><span className="text-slate-400">Val:</span> {new Date(cert.validUntil).toLocaleDateString('pt-BR')}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        cert.status === 'Ativa' ? 'bg-sky-100 text-sky-700' :
-                        cert.status === 'Vencida' ? 'bg-amber-100 text-amber-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
-                        {cert.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {cert.status === 'Ativa' && (
-                        <button onClick={() => handleCancel(cert.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="Revogar Certidão">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        }
+      >
+        <ErpTableContainer>
+          <ErpTableThead>
+            <tr>
+              <ErpTableTh className="w-[18%]">Cód. Autenticação</ErpTableTh>
+              <ErpTableTh className="w-[32%]">Contribuinte</ErpTableTh>
+              <ErpTableTh className="w-[20%]">Tipo de Certidão</ErpTableTh>
+              <ErpTableTh className="w-[12%]">Emissão</ErpTableTh>
+              <ErpTableTh className="w-[12%]">Validade</ErpTableTh>
+              <ErpTableTh className="w-[8%]">Status</ErpTableTh>
+              <ErpTableTh className="w-[6%] text-right">Ação</ErpTableTh>
+            </tr>
+          </ErpTableThead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="p-8 text-center text-xs text-slate-400">
+                  Nenhum registro de certidão encontrado.
+                </td>
+              </tr>
+            ) : (
+              filtered.map((cert) => (
+                <ErpTableTr key={cert.id}>
+                  <ErpTableTd className="font-mono text-slate-800 dark:text-slate-200 font-semibold">
+                    {cert.authCode}
+                  </ErpTableTd>
+                  <ErpTableTd>
+                    {cert.taxpayer?.company?.corporateName || cert.taxpayer?.person?.fullName || "Não Informado"}
+                  </ErpTableTd>
+                  <ErpTableTd>
+                    {cert.certificateType}
+                  </ErpTableTd>
+                  <ErpTableTd>
+                    {new Date(cert.createdAt).toLocaleDateString("pt-BR")}
+                  </ErpTableTd>
+                  <ErpTableTd>
+                    {new Date(cert.validUntil).toLocaleDateString("pt-BR")}
+                  </ErpTableTd>
+                  <ErpTableTd>
+                    <ErpStatusBadge variant={certVariant(cert.status)}>{cert.status}</ErpStatusBadge>
+                  </ErpTableTd>
+                  <ErpTableTd className="text-right">
+                    {cert.status === "Ativa" && (
+                      <button
+                        onClick={() => handleCancel(cert.id)}
+                        className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                        title="Revogar Certidão"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    )}
+                  </ErpTableTd>
+                </ErpTableTr>
+              ))
+            )}
+          </tbody>
+        </ErpTableContainer>
+      </ErpListFrame>
 
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl shadow-lg w-full max-w-md overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h2 className="text-lg font-bold text-slate-800">Registrar rascunho interno</h2>
+              <h2 className="text-base font-bold text-slate-800">Registrar Certidão</h2>
               <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <XCircle className="w-5 h-5" />
+                <XCircle className="size-5" />
               </button>
             </div>
             <form onSubmit={handleCreate} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Contribuinte</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Contribuinte</label>
                 <select 
                   required
                   value={createForm.taxpayerId}
                   onChange={(e) => setCreateForm({...createForm, taxpayerId: e.target.value})}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" 
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20" 
                 >
                   <option value="">Selecione um contribuinte...</option>
                   {taxpayers.map(tp => (
@@ -183,48 +210,48 @@ export default function CertidoesClient({
                   ))}
                 </select>
               </div>
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Certidão</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tipo de Certidão</label>
                   <select 
                     value={createForm.certificateType}
                     onChange={(e) => setCreateForm({...createForm, certificateType: e.target.value})}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" 
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20" 
                   >
                     <option value="Negativa">Negativa</option>
                     <option value="Positiva com Efeito de Negativa">Positiva com Efeito</option>
                   </select>
                 </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Validade</label>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Validade</label>
                   <input 
                     type="date"
                     required
                     value={createForm.validUntil}
                     onChange={(e) => setCreateForm({...createForm, validUntil: e.target.value})}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" 
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20" 
                   />
                 </div>
               </div>
-              <div className="mt-6 flex justify-end gap-3">
+              <div className="mt-6 flex justify-end gap-2">
                 <button 
                   type="button" 
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit"
-                  className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-600 transition-colors shadow-xs"
                 >
-                  Registrar
+                  Salvar
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

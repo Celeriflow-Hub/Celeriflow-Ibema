@@ -19,4 +19,6 @@ npm run start
 
 O painel autenticado esta em `/dashboard`; informe o mesmo token da integracao no formulario local ou use Bearer em um cliente HTTP. A sessao do painel e HTTP-only, fica somente na memoria do processo e expira em oito horas. A API usa `/api/demo/v1/*` e nunca deve receber o banco, Firebase ou segredos do CeleriFlow.
 
+As mesmas variaveis podem ficar em `.env.local` nesta pasta; o receptor a carrega antes de `.env`. O diretorio local de dados tambem e ignorado pelo Git.
+
 `SIAFIC_FAULT_INJECTION_ENABLED=true` com `SIAFIC_FAULT_SCENARIO=FAIL_BEFORE_COMMIT_ONCE` ou `FAIL_AFTER_COMMIT_ONCE` habilita falhas controladas locais para os testes da POC. Informe tambem `SIAFIC_FAULT_DATASET_ID` igual ao dataset autorizado ou um `SIAFIC_FAULT_EVENT_ID` UUID; a falha nunca e aplicada fora desse escopo.

@@ -5,8 +5,8 @@ import { config } from "dotenv";
 import { envelopeSchema, protocol, protocolVersion } from "./contract";
 import { ReceiverError, ReceiverStore, type ReceiverConfig } from "./store";
 
-config({ path: ".env.local" });
-config();
+config({ path: ".env.local", quiet: true });
+config({ quiet: true });
 
 const maxBodyDefault = 262_144;
 type FaultScenario = "NORMAL" | "FAIL_BEFORE_COMMIT_ONCE" | "FAIL_AFTER_COMMIT_ONCE";

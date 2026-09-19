@@ -1,6 +1,5 @@
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import ImoveisClient from "./ImoveisClient";
-import { PageFrame } from "@/components/app-ui/PageFrame";
 
 export const dynamic = "force-dynamic";
 
@@ -12,13 +11,13 @@ export default async function ImoveisFiscaisPage() {
         include: { person: true, company: true }
       }
     },
-    take: 20,
+    take: 50,
     orderBy: { createdAt: 'desc' }
   });
 
   return (
-    <PageFrame className="space-y-3">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <ImoveisClient imoveis={imoveis} />
-    </PageFrame>
+    </div>
   );
 }

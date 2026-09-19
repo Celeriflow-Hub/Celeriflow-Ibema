@@ -3,6 +3,17 @@
 import { useState } from "react";
 import { Search, Plus, FileText, Trash2, XCircle } from "lucide-react";
 import { createInvoice, cancelInvoice } from "./actions";
+import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
+import {
+  ErpTableContainer,
+  ErpTableThead,
+  ErpTableTh,
+  ErpTableTr,
+  ErpTableTd,
+  ErpStatusBadge,
+  type ErpStatusVariant,
+} from "@/components/app-ui/erp/ErpTable";
 
 type TaxpayerInfo = {
   id: string;
@@ -27,6 +38,12 @@ type Taxpayer = {
   name: string;
 };
 
+function invoiceVariant(status: string): ErpStatusVariant {
+  if (status === "Emitida") return "info";
+  if (status === "Cancelada") return "danger";
+  return "neutral";
+}
+
 export default function NfseClient({ 
   invoices,
   taxpayers
@@ -35,11 +52,21 @@ export default function NfseClient({
   taxpayers: Taxpayer[];
 }) {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const [createForm, setCreateForm] = useState({
     providerId: taxpayers[0]?.id || "",
     takerId: "",
     serviceValue: 0,
     competence: `${new Date().getMonth() + 1}`.padStart(2, '0') + "/" + new Date().getFullYear(),
+  });
+
+  const filtered = invoices.filter((inv) => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    const num = String(inv.invoiceNumber);
+    const prov = (inv.provider?.company?.corporateName || inv.provider?.person?.fullName || "").toLowerCase();
+    const take = (inv.taker?.company?.corporateName || inv.taker?.person?.fullName || "").toLowerCase();
+    return num.includes(term) || prov.includes(term) || take.includes(term);
   });
 
   const handleCancel = async (id: string) => {
@@ -79,120 +106,113 @@ export default function NfseClient({
   };
 
   return (
-    <>
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <FileText className="w-6 h-6 text-blue-600" />
-            Registros Internos de NFS-e
-          </h1>
-          <p className="text-slate-500 mt-1">Rascunhos internos sem validade fiscal, emissão municipal ou cálculo de ISS.</p>
-        </div>
-        <button 
-          onClick={() => setIsCreateModalOpen(true)}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Registrar rascunho
-        </button>
-      </div>
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+      <ErpPageTitle
+        title="Notas Fiscais de Serviço (NFS-e)"
+        icon={<FileText className="size-4 text-blue-600" />}
+        action={
+          <button 
+            onClick={() => setIsCreateModalOpen(true)}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-amber-500 px-3 text-xs font-bold text-slate-950 shadow-xs transition-colors hover:bg-amber-600"
+          >
+            <Plus className="size-3.5" />
+            Nova Nota
+          </button>
+        }
+      />
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row items-center gap-4 bg-slate-50/50">
-          <div className="relative w-full max-w-md">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Buscar por número da nota ou prestador..." 
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
-            />
+      <ErpListFrame
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="relative min-w-[180px] flex-1">
+              <span className="sr-only">Buscar NFS-e</span>
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por número da nota, prestador ou tomador"
+                className="h-8 w-full rounded-md border border-slate-200 bg-white py-1 pl-8 pr-2.5 text-xs outline-none placeholder:text-slate-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-800"
+              />
+            </label>
           </div>
-        </div>
-
-        {invoices.length === 0 ? (
-          <div className="p-12 text-center flex flex-col items-center justify-center">
-            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-              <FileText className="text-slate-400 w-8 h-8" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-700">Nenhum rascunho interno</h3>
-            <p className="text-slate-500 mt-1">A emissão fiscal depende de adapter municipal contratado e regras validadas.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-[980px] w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                <tr>
-                  <th className="px-6 py-3">Nº NFS-e</th>
-                  <th className="px-6 py-3">Emissão</th>
-                  <th className="px-6 py-3">Prestador</th>
-                  <th className="px-6 py-3">Tomador</th>
-                  <th className="px-6 py-3">Competência</th>
-                  <th className="px-6 py-3 text-right">Valor do Serviço</th>
-                  <th className="px-6 py-3 text-center">Status</th>
-                  <th className="px-6 py-3 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {invoices.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-slate-50 transition-colors group">
-                    <td className="px-6 py-4 font-mono font-bold text-blue-600">
-                      {inv.invoiceNumber}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600">
-                      {new Date(inv.createdAt).toLocaleDateString('pt-BR')}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600 font-medium">
-                      {inv.provider?.company?.corporateName || inv.provider?.person?.fullName || "-"}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600 font-medium">
-                      {inv.taker?.company?.corporateName || inv.taker?.person?.fullName || "-"}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600">
-                      {inv.competence}
-                    </td>
-                    <td className="px-6 py-4 text-right font-bold text-slate-800">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(inv.serviceValue)}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        inv.status === 'Emitida' ? 'bg-blue-100 text-blue-700' :
-                        inv.status === 'Cancelada' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'
-                      }`}>
-                        {inv.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {inv.status === 'Emitida' && (
-                        <button onClick={() => handleCancel(inv.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="Cancelar NFS-e">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        }
+      >
+        <ErpTableContainer>
+          <ErpTableThead>
+            <tr>
+              <ErpTableTh className="w-[12%]">Nº NFS-e</ErpTableTh>
+              <ErpTableTh className="w-[12%]">Emissão</ErpTableTh>
+              <ErpTableTh className="w-[28%]">Prestador</ErpTableTh>
+              <ErpTableTh className="w-[24%]">Tomador</ErpTableTh>
+              <ErpTableTh className="w-[12%] text-right">Valor Serviço</ErpTableTh>
+              <ErpTableTh className="w-[6%]">Status</ErpTableTh>
+              <ErpTableTh className="w-[6%] text-right">Ações</ErpTableTh>
+            </tr>
+          </ErpTableThead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="p-8 text-center text-xs text-slate-400">
+                  Nenhum registro de NFS-e encontrado.
+                </td>
+              </tr>
+            ) : (
+              filtered.map((inv) => (
+                <ErpTableTr key={inv.id}>
+                  <ErpTableTd className="font-mono font-bold text-blue-600 dark:text-blue-400">
+                    #{inv.invoiceNumber}
+                  </ErpTableTd>
+                  <ErpTableTd>
+                    {new Date(inv.createdAt).toLocaleDateString("pt-BR")}
+                  </ErpTableTd>
+                  <ErpTableTd>
+                    {inv.provider?.company?.corporateName || inv.provider?.person?.fullName || "—"}
+                  </ErpTableTd>
+                  <ErpTableTd>
+                    {inv.taker?.company?.corporateName || inv.taker?.person?.fullName || "—"}
+                  </ErpTableTd>
+                  <ErpTableTd className="text-right font-semibold tabular-nums">
+                    {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(inv.serviceValue)}
+                  </ErpTableTd>
+                  <ErpTableTd>
+                    <ErpStatusBadge variant={invoiceVariant(inv.status)}>{inv.status}</ErpStatusBadge>
+                  </ErpTableTd>
+                  <ErpTableTd className="text-right">
+                    {inv.status === "Emitida" && (
+                      <button
+                        onClick={() => handleCancel(inv.id)}
+                        className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                        title="Cancelar NFS-e"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    )}
+                  </ErpTableTd>
+                </ErpTableTr>
+              ))
+            )}
+          </tbody>
+        </ErpTableContainer>
+      </ErpListFrame>
 
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl shadow-lg w-full max-w-md overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h2 className="text-lg font-bold text-slate-800">Registrar rascunho interno</h2>
+              <h2 className="text-base font-bold text-slate-800">Registrar NFS-e</h2>
               <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <XCircle className="w-5 h-5" />
+                <XCircle className="size-5" />
               </button>
             </div>
             <form onSubmit={handleCreate} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Prestador (Contribuinte)</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Prestador (Contribuinte)</label>
                 <select 
                   required
                   value={createForm.providerId}
                   onChange={(e) => setCreateForm({...createForm, providerId: e.target.value})}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20" 
                 >
                   <option value="">Selecione o prestador...</option>
                   {taxpayers.map(tp => (
@@ -201,11 +221,11 @@ export default function NfseClient({
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Tomador (Opcional)</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Tomador (Opcional)</label>
                 <select 
                   value={createForm.takerId}
                   onChange={(e) => setCreateForm({...createForm, takerId: e.target.value})}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20" 
                 >
                   <option value="">Selecione o tomador (ou deixe em branco)...</option>
                   {taxpayers.map(tp => (
@@ -213,41 +233,41 @@ export default function NfseClient({
                   ))}
                 </select>
               </div>
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Competência</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Competência</label>
                   <input 
                     type="text"
                     required
                     placeholder="MM/AAAA"
                     value={createForm.competence}
                     onChange={(e) => setCreateForm({...createForm, competence: e.target.value})}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20" 
                   />
                 </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Valor do Serviço (R$)</label>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Valor do Serviço (R$)</label>
                   <input 
                     type="number"
                     step="0.01"
                     required
                     value={createForm.serviceValue}
                     onChange={(e) => setCreateForm({...createForm, serviceValue: Number(e.target.value)})}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20" 
                   />
                 </div>
               </div>
-              <div className="mt-6 flex justify-end gap-3">
+              <div className="mt-6 flex justify-end gap-2">
                 <button 
                   type="button" 
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-600 transition-colors shadow-xs"
                 >
                   Registrar
                 </button>
@@ -256,6 +276,6 @@ export default function NfseClient({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

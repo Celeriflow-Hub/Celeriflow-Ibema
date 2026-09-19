@@ -1,116 +1,138 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { buttonVariants } from "@/components/ui/button"
-import { CalendarDays, Plus } from "lucide-react"
-import Link from "next/link"
+import Link from "next/link";
+import { Plus, CalendarDays, Search } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
-import { FeriasRowActions } from "./FeriasRowActions"
-import { format } from "date-fns"
-import { FeriasFilters } from "./FeriasFilters"
+import { FeriasRowActions } from "./FeriasRowActions";
+import { format } from "date-fns";
 import type { Prisma } from "@prisma/client";
-import { PageFrame } from "@/components/app-ui/PageFrame";
-import { PageHeader } from "@/components/app-ui/PageHeader";
+import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
+import {
+  ErpTableContainer,
+  ErpTableThead,
+  ErpTableTh,
+  ErpTableTr,
+  ErpTableTd,
+  ErpStatusBadge,
+  type ErpStatusVariant,
+} from "@/components/app-ui/erp/ErpTable";
 
-export default async function FeriasPage({ searchParams }: { searchParams: Promise<{ q?: string, status?: string }> }) {
+function feriaVariant(status: string): ErpStatusVariant {
+  if (status === "Programada") return "success";
+  if (status === "Em gozo") return "info";
+  if (status === "Concluída") return "neutral";
+  return "neutral";
+}
+
+export default async function FeriasPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string }> }) {
   const { prisma } = await getTenantContextForModule("RH");
   const { q, status } = await searchParams;
 
   const whereClause: Prisma.VacationWhereInput = {};
-  if (q) {
-    whereClause.employee = { name: { contains: q, mode: 'insensitive' } };
-  }
-  if (status && status !== 'all') {
-    whereClause.status = status;
-  }
+  if (q) whereClause.employee = { name: { contains: q, mode: "insensitive" } };
+  if (status && status !== "all") whereClause.status = status;
 
   const vacations = await prisma.vacation.findMany({
     where: whereClause,
-    take: 20,
-    orderBy: { createdAt: 'desc' },
-    include: {
-      employee: true
-    }
-  })
+    take: 50,
+    orderBy: { createdAt: "desc" },
+    include: { employee: true },
+  });
 
   return (
-    <PageFrame className="space-y-2">
-      <PageHeader
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+      <ErpPageTitle
         title="Férias"
-        icon={<CalendarDays className="size-4 shrink-0 text-violet-600" />}
-        action={<Link href="/rh/ferias/novo" className={buttonVariants({ size: "sm" })}>
-            <Plus className="mr-2 h-4 w-4" />
+        icon={<CalendarDays className="size-4 text-violet-600" />}
+        action={
+          <Link
+            href="/rh/ferias/novo"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-amber-500 px-3 text-xs font-bold text-slate-950 shadow-xs transition-colors hover:bg-amber-600"
+          >
+            <Plus className="size-3.5" />
             Programar Férias
-          </Link>}
+          </Link>
+        }
       />
 
-      <FeriasFilters />
-
-      <Card size="sm" className="rounded-md shadow-none">
-        <CardHeader className="border-b pb-2">
-          <CardTitle>Programação e Controle de Férias</CardTitle>
-          <CardDescription>
-            Gerencie os períodos aquisitivos e de gozo dos servidores.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-3">
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-muted text-muted-foreground border-b sticky top-0 z-10 shadow-sm">
-                <tr>
-                  <th className="font-medium p-2 px-4 whitespace-nowrap">Servidor</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Período Aquisitivo</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Gozo Programado</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Dias</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Status</th>
-                  <th className="font-medium p-2 px-4 text-right whitespace-nowrap">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vacations.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="text-center p-8 text-muted-foreground">
-                      Nenhuma programação de férias encontrada.
-                    </td>
-                  </tr>
-                ) : (
-                  vacations.map((vac) => (
-                    <tr key={vac.id} className="border-b last:border-0 hover:bg-muted/50">
-                      <td className="p-2 px-4 font-medium whitespace-nowrap">{vac.employee?.name}</td>
-                      <td className="p-2 text-muted-foreground whitespace-nowrap">
-                        {format(new Date(vac.acquisitionStart), 'dd/MM/yyyy')} a <br />
-                        {format(new Date(vac.acquisitionEnd), 'dd/MM/yyyy')}
-                      </td>
-                      <td className="p-2 text-muted-foreground whitespace-nowrap">
-                        {vac.enjoymentStart ? (
-                          <>
-                            {format(new Date(vac.enjoymentStart), 'dd/MM/yyyy')} a <br />
-                            {vac.enjoymentEnd ? format(new Date(vac.enjoymentEnd), 'dd/MM/yyyy') : '-'}
-                          </>
-                        ) : (
-                          "A Definir"
-                        )}
-                      </td>
-                      <td className="p-2 whitespace-nowrap">{vac.days}</td>
-                      <td className="p-2 whitespace-nowrap">
-                        <Badge variant="outline" className={
-                          vac.status === 'Concluída' ? "bg-slate-100 text-slate-500" :
-                          vac.status === 'Em gozo' ? "bg-blue-100 text-blue-700 border-blue-200" :
-                          vac.status === 'Programada' ? "bg-emerald-100 text-emerald-700 border-emerald-200" : ""
-                        }>
-                          {vac.status}
-                        </Badge>
-                      </td>
-                      <td className="p-2 px-4 text-right whitespace-nowrap">
-                        <FeriasRowActions vacation={vac} />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-    </PageFrame>
-  )
+      <ErpListFrame
+        toolbar={
+          <form action="/rh/ferias" method="GET" className="flex flex-wrap items-center gap-2">
+            <label className="relative min-w-[180px] flex-1">
+              <span className="sr-only">Buscar servidor</span>
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                name="q"
+                defaultValue={q}
+                placeholder="Buscar por servidor"
+                className="h-8 w-full rounded-md border border-slate-200 bg-white py-1 pl-8 pr-2.5 text-xs outline-none placeholder:text-slate-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-800"
+              />
+            </label>
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="status" className="text-[11px] font-medium text-slate-500">Status</label>
+              <select
+                id="status"
+                name="status"
+                defaultValue={status}
+                className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-800"
+              >
+                <option value="">Todos</option>
+                <option value="Programada">Programada</option>
+                <option value="Em gozo">Em gozo</option>
+                <option value="Concluída">Concluída</option>
+              </select>
+            </div>
+            <button type="submit" className="h-8 rounded-md bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800">
+              Filtrar
+            </button>
+            <Link href="/rh/ferias" className="inline-flex h-8 items-center px-2.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50">
+              Limpar
+            </Link>
+          </form>
+        }
+      >
+        <ErpTableContainer>
+          <ErpTableThead>
+            <tr>
+              <ErpTableTh className="w-[28%]">Servidor</ErpTableTh>
+              <ErpTableTh className="w-[22%]">Período Aquisitivo</ErpTableTh>
+              <ErpTableTh className="w-[22%]">Gozo Programado</ErpTableTh>
+              <ErpTableTh className="w-[8%]">Dias</ErpTableTh>
+              <ErpTableTh className="w-[12%]">Status</ErpTableTh>
+              <ErpTableTh className="w-[8%] text-right">Ações</ErpTableTh>
+            </tr>
+          </ErpTableThead>
+          <tbody>
+            {vacations.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="p-8 text-center text-xs text-slate-400">
+                  Nenhuma programação de férias encontrada.
+                </td>
+              </tr>
+            ) : (
+              vacations.map((vac) => (
+                <ErpTableTr key={vac.id}>
+                  <ErpTableTd className="font-semibold">{vac.employee?.name}</ErpTableTd>
+                  <ErpTableTd className="text-[10.5px]">
+                    {format(new Date(vac.acquisitionStart), "dd/MM/yy")} – {format(new Date(vac.acquisitionEnd), "dd/MM/yy")}
+                  </ErpTableTd>
+                  <ErpTableTd className="text-[10.5px]">
+                    {vac.enjoymentStart
+                      ? `${format(new Date(vac.enjoymentStart), "dd/MM/yy")} – ${vac.enjoymentEnd ? format(new Date(vac.enjoymentEnd), "dd/MM/yy") : "—"}`
+                      : "A Definir"}
+                  </ErpTableTd>
+                  <ErpTableTd className="font-mono">{vac.days}</ErpTableTd>
+                  <ErpTableTd>
+                    <ErpStatusBadge variant={feriaVariant(vac.status)}>{vac.status}</ErpStatusBadge>
+                  </ErpTableTd>
+                  <ErpTableTd className="text-right">
+                    <FeriasRowActions vacation={vac} />
+                  </ErpTableTd>
+                </ErpTableTr>
+              ))
+            )}
+          </tbody>
+        </ErpTableContainer>
+      </ErpListFrame>
+    </div>
+  );
 }

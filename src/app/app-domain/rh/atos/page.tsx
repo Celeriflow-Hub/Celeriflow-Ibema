@@ -1,115 +1,143 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { buttonVariants } from "@/components/ui/button"
-import { FileSignature, Plus, ExternalLink } from "lucide-react"
-import Link from "next/link"
+import Link from "next/link";
+import { Plus, FileSignature, Search, ExternalLink } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
-import { AtoRowActions } from "./AtoRowActions"
-import { format } from "date-fns"
-import { AtosFilters } from "./AtosFilters"
+import { AtoRowActions } from "./AtoRowActions";
+import { format } from "date-fns";
 import type { Prisma } from "@prisma/client";
-import { PageFrame } from "@/components/app-ui/PageFrame";
-import { PageHeader } from "@/components/app-ui/PageHeader";
+import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
+import {
+  ErpTableContainer,
+  ErpTableThead,
+  ErpTableTh,
+  ErpTableTr,
+  ErpTableTd,
+  ErpStatusBadge,
+  type ErpStatusVariant,
+} from "@/components/app-ui/erp/ErpTable";
 
-export default async function AtosPage({ searchParams }: { searchParams: Promise<{ q?: string, type?: string }> }) {
+function atoVariant(type: string): ErpStatusVariant {
+  if (type === "Admissão") return "success";
+  if (type === "Demissão") return "danger";
+  if (type === "Promoção") return "info";
+  if (type === "Advertência") return "warning";
+  return "neutral";
+}
+
+export default async function AtosPage({ searchParams }: { searchParams: Promise<{ q?: string; type?: string }> }) {
   const { prisma } = await getTenantContextForModule("RH");
   const { q, type } = await searchParams;
 
   const whereClause: Prisma.PersonnelActWhereInput = {};
-  if (q) {
-    whereClause.employee = { name: { contains: q, mode: 'insensitive' } };
-  }
-  if (type && type !== 'all') {
-    whereClause.type = type;
-  }
+  if (q) whereClause.employee = { name: { contains: q, mode: "insensitive" } };
+  if (type && type !== "all") whereClause.type = type;
 
   const acts = await prisma.personnelAct.findMany({
     where: whereClause,
-    take: 20,
-    orderBy: { date: 'desc' },
-    include: {
-      employee: true
-    }
-  })
+    take: 50,
+    orderBy: { date: "desc" },
+    include: { employee: true },
+  });
 
   return (
-    <PageFrame className="space-y-2">
-      <PageHeader
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+      <ErpPageTitle
         title="Atos de Pessoal"
-        icon={<FileSignature className="size-4 shrink-0 text-violet-600" />}
-        action={<Link href="/rh/atos/novo" className={buttonVariants({ size: "sm" })}>
-            <Plus className="mr-2 h-4 w-4" />
+        icon={<FileSignature className="size-4 text-violet-600" />}
+        action={
+          <Link
+            href="/rh/atos/novo"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-amber-500 px-3 text-xs font-bold text-slate-950 shadow-xs transition-colors hover:bg-amber-600"
+          >
+            <Plus className="size-3.5" />
             Registrar Ato
-          </Link>}
+          </Link>
+        }
       />
 
-      <AtosFilters />
-
-      <Card size="sm" className="rounded-md shadow-none">
-        <CardHeader className="border-b pb-2">
-          <CardTitle>Histórico de Assentamentos Funcionais</CardTitle>
-          <CardDescription>
-            Registro de admissões, demissões, promoções, transferências e atos disciplinares.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-3">
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-muted text-muted-foreground border-b sticky top-0 z-10 shadow-sm">
-                <tr>
-                  <th className="font-medium p-2 px-4 whitespace-nowrap">Data</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Servidor</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Tipo do Ato</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Número do Ato</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Doc</th>
-                  <th className="font-medium p-2 px-4 text-right whitespace-nowrap">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {acts.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="text-center p-8 text-muted-foreground">
-                      Nenhum ato de pessoal registrado.
-                    </td>
-                  </tr>
-                ) : (
-                  acts.map((ato) => (
-                    <tr key={ato.id} className="border-b last:border-0 hover:bg-muted/50">
-                      <td className="p-2 px-4 whitespace-nowrap">{format(new Date(ato.date), 'dd/MM/yyyy')}</td>
-                      <td className="p-2 font-medium whitespace-nowrap">{ato.employee?.name}</td>
-                      <td className="p-2 whitespace-nowrap">
-                        <Badge variant="outline" className={
-                          ato.type === 'Admissão' ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
-                          ato.type === 'Demissão' ? "bg-red-100 text-red-700 border-red-200" :
-                          ato.type === 'Promoção' ? "bg-blue-100 text-blue-700 border-blue-200" :
-                          ato.type === 'Advertência' ? "bg-orange-100 text-orange-700 border-orange-200" : ""
-                        }>
-                          {ato.type}
-                        </Badge>
-                      </td>
-                      <td className="p-2 truncate max-w-[200px] whitespace-nowrap" title={ato.actNumber || ""}>
-                        {ato.actNumber || "-"}
-                      </td>
-                      <td className="p-2 whitespace-nowrap">
-                        {ato.documentUrl ? (
-                          <a href={ato.documentUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800" title="Ver Documento">
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </td>
-                      <td className="p-2 px-4 text-right whitespace-nowrap">
-                        <AtoRowActions ato={ato} />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-    </PageFrame>
-  )
+      <ErpListFrame
+        toolbar={
+          <form action="/rh/atos" method="GET" className="flex flex-wrap items-center gap-2">
+            <label className="relative min-w-[180px] flex-1">
+              <span className="sr-only">Buscar servidor</span>
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                name="q"
+                defaultValue={q}
+                placeholder="Buscar por servidor"
+                className="h-8 w-full rounded-md border border-slate-200 bg-white py-1 pl-8 pr-2.5 text-xs outline-none placeholder:text-slate-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-800"
+              />
+            </label>
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="type" className="text-[11px] font-medium text-slate-500">Tipo</label>
+              <select
+                id="type"
+                name="type"
+                defaultValue={type}
+                className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-800"
+              >
+                <option value="">Todos</option>
+                <option value="Admissão">Admissão</option>
+                <option value="Demissão">Demissão</option>
+                <option value="Promoção">Promoção</option>
+                <option value="Transferência">Transferência</option>
+                <option value="Advertência">Advertência</option>
+              </select>
+            </div>
+            <button type="submit" className="h-8 rounded-md bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800">
+              Filtrar
+            </button>
+            <Link href="/rh/atos" className="inline-flex h-8 items-center px-2.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50">
+              Limpar
+            </Link>
+          </form>
+        }
+      >
+        <ErpTableContainer>
+          <ErpTableThead>
+            <tr>
+              <ErpTableTh className="w-[12%]">Data</ErpTableTh>
+              <ErpTableTh className="w-[28%]">Servidor</ErpTableTh>
+              <ErpTableTh className="w-[16%]">Tipo</ErpTableTh>
+              <ErpTableTh className="w-[22%]">Nº do Ato</ErpTableTh>
+              <ErpTableTh className="w-[8%]">Doc</ErpTableTh>
+              <ErpTableTh className="w-[14%] text-right">Ações</ErpTableTh>
+            </tr>
+          </ErpTableThead>
+          <tbody>
+            {acts.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="p-8 text-center text-xs text-slate-400">
+                  Nenhum ato de pessoal registrado.
+                </td>
+              </tr>
+            ) : (
+              acts.map((ato) => (
+                <ErpTableTr key={ato.id}>
+                  <ErpTableTd>{format(new Date(ato.date), "dd/MM/yyyy")}</ErpTableTd>
+                  <ErpTableTd className="font-semibold">{ato.employee?.name}</ErpTableTd>
+                  <ErpTableTd>
+                    <ErpStatusBadge variant={atoVariant(ato.type)}>{ato.type}</ErpStatusBadge>
+                  </ErpTableTd>
+                  <ErpTableTd>{ato.actNumber || "—"}</ErpTableTd>
+                  <ErpTableTd>
+                    {ato.documentUrl ? (
+                      <a href={ato.documentUrl} target="_blank" rel="noopener noreferrer" className="text-sky-600 hover:text-sky-800">
+                        <ExternalLink className="size-3.5" />
+                      </a>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </ErpTableTd>
+                  <ErpTableTd className="text-right">
+                    <AtoRowActions ato={ato} />
+                  </ErpTableTd>
+                </ErpTableTr>
+              ))
+            )}
+          </tbody>
+        </ErpTableContainer>
+      </ErpListFrame>
+    </div>
+  );
 }

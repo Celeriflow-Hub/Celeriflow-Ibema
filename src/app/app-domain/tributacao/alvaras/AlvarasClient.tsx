@@ -3,6 +3,17 @@
 import { useState } from "react";
 import { Search, Plus, FileCheck, Pencil, Trash2, RefreshCw, CheckCircle, XCircle } from "lucide-react";
 import { createLicense, updateLicense, deactivateLicense, activateLicense } from "./actions";
+import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
+import {
+  ErpTableContainer,
+  ErpTableThead,
+  ErpTableTh,
+  ErpTableTr,
+  ErpTableTd,
+  ErpStatusBadge,
+  type ErpStatusVariant,
+} from "@/components/app-ui/erp/ErpTable";
 
 type License = {
   id: string;
@@ -22,28 +33,41 @@ type Taxpayer = {
   name: string;
 };
 
-export default function AlvarasClient({ 
+function licenseVariant(status: string): ErpStatusVariant {
+  if (status === "Emitido") return "info";
+  if (status === "Vencido") return "danger";
+  if (status === "Cancelado") return "neutral";
+  return "neutral";
+}
+
+export default function AlvarasClient({
   licenses,
-  taxpayers
-}: { 
+  taxpayers,
+}: {
   licenses: License[];
   taxpayers: Taxpayer[];
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{licenseType?: string, validUntil?: string}>({});
-  
+  const [editForm, setEditForm] = useState<{ licenseType?: string; validUntil?: string }>({});
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
     licenseType: "Funcionamento",
     taxpayerId: taxpayers[0]?.id || "",
-    validUntil: ""
+    validUntil: "",
+  });
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filtered = licenses.filter((lic) => {
+    if (!searchTerm) return true;
+    const name = lic.taxpayer.company?.corporateName || lic.taxpayer.person?.fullName || "";
+    return lic.licenseType.toLowerCase().includes(searchTerm.toLowerCase()) || name.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
   const handleEditClick = (lic: License) => {
     setEditingId(lic.id);
     setEditForm({
       licenseType: lic.licenseType,
-      validUntil: lic.validUntil ? new Date(lic.validUntil).toISOString().split('T')[0] : ""
+      validUntil: lic.validUntil ? new Date(lic.validUntil).toISOString().split("T")[0] : "",
     });
   };
 
@@ -61,35 +85,21 @@ export default function AlvarasClient({
   };
 
   const handleDeactivate = async (id: string) => {
-    if (confirm("Deseja cancelar este alvará?")) {
-      await deactivateLicense(id);
-    }
+    if (confirm("Deseja cancelar este alvará?")) await deactivateLicense(id);
   };
 
   const handleActivate = async (id: string) => {
-    if (confirm("Deseja reativar este alvará?")) {
-      await activateLicense(id);
-    }
+    if (confirm("Deseja reativar este alvará?")) await activateLicense(id);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createForm.taxpayerId) {
-      alert("Selecione um contribuinte válido.");
-      return;
-    }
-    if (!createForm.validUntil) {
-      alert("Informe a data de validade.");
-      return;
-    }
+    if (!createForm.taxpayerId) { alert("Selecione um contribuinte válido."); return; }
+    if (!createForm.validUntil) { alert("Informe a data de validade."); return; }
     try {
       await createLicense(createForm);
       setIsCreateModalOpen(false);
-      setCreateForm({ 
-        licenseType: "Funcionamento", 
-        taxpayerId: taxpayers[0]?.id || "",
-        validUntil: ""
-      });
+      setCreateForm({ licenseType: "Funcionamento", taxpayerId: taxpayers[0]?.id || "", validUntil: "" });
     } catch (err) {
       console.error(err);
       alert("Erro ao emitir alvará.");
@@ -97,169 +107,159 @@ export default function AlvarasClient({
   };
 
   return (
-    <>
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <FileCheck className="w-6 h-6 text-indigo-600" />
-            Alvarás e Licenças
-          </h1>
-          <p className="text-slate-500 mt-1">Gestão de alvarás de funcionamento e sanitários.</p>
-        </div>
-        <button 
-          onClick={() => setIsCreateModalOpen(true)}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Novo Alvará
-        </button>
-      </div>
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+      <ErpPageTitle
+        title="Alvarás e Licenças"
+        icon={<FileCheck className="size-4 text-indigo-600" />}
+        action={
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-amber-500 px-3 text-xs font-bold text-slate-950 shadow-xs transition-colors hover:bg-amber-600"
+          >
+            <Plus className="size-3.5" />
+            Novo Alvará
+          </button>
+        }
+      />
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row items-center gap-4 bg-slate-50/50">
-          <div className="relative w-full max-w-md">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Buscar por tipo ou contribuinte..." 
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600"
-            />
+      <ErpListFrame
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="relative min-w-[180px] flex-1">
+              <span className="sr-only">Buscar alvará</span>
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por tipo ou contribuinte"
+                className="h-8 w-full rounded-md border border-slate-200 bg-white py-1 pl-8 pr-2.5 text-xs outline-none placeholder:text-slate-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-800"
+              />
+            </label>
           </div>
-        </div>
-
-        {licenses.length === 0 ? (
-          <div className="p-12 text-center flex flex-col items-center justify-center">
-            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-              <FileCheck className="text-slate-400 w-8 h-8" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-700">Nenhum alvará emitido</h3>
-            <p className="text-slate-500 mt-1">Os alvarás e licenças aparecerão aqui.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-[860px] w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                <tr>
-                  <th className="px-6 py-3">Tipo de Alvará</th>
-                  <th className="px-6 py-3">Contribuinte</th>
-                  <th className="px-6 py-3">Emissão</th>
-                  <th className="px-6 py-3">Validade</th>
-                  <th className="px-6 py-3">Status</th>
-                  <th className="px-6 py-3 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {licenses.map((license) => (
-                  <tr key={license.id} className="hover:bg-slate-50 transition-colors group">
-                    <td className="px-6 py-4 font-bold text-slate-800">
-                      {editingId === license.id ? (
-                        <select
-                          value={editForm.licenseType || ""}
-                          onChange={(e) => setEditForm({ ...editForm, licenseType: e.target.value })}
-                          className="w-full border rounded px-2 py-1"
-                        >
-                          <option value="Funcionamento">Funcionamento</option>
-                          <option value="Sanitária">Sanitária</option>
-                          <option value="Obra">Obra</option>
-                          <option value="Ambiental">Ambiental</option>
-                        </select>
-                      ) : (
-                        license.licenseType
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600 font-medium">
-                      {license.taxpayer.company?.corporateName || license.taxpayer.person?.fullName || "Não Informado"}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600">
-                      {license.issueDate ? new Date(license.issueDate).toLocaleDateString('pt-BR') : "-"}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600">
-                      {editingId === license.id ? (
-                        <input
-                          type="date"
-                          value={editForm.validUntil || ""}
-                          onChange={(e) => setEditForm({ ...editForm, validUntil: e.target.value })}
-                          className="border rounded px-2 py-1 text-sm"
-                        />
-                      ) : (
-                        license.validUntil ? new Date(license.validUntil).toLocaleDateString('pt-BR') : "-"
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        license.status === 'Emitido' ? 'bg-indigo-100 text-indigo-700' :
-                        license.status === 'Vencido' ? 'bg-red-100 text-red-700' :
-                        'bg-slate-100 text-slate-700'
-                      }`}>
-                        {license.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {editingId === license.id ? (
-                        <div className="flex items-center justify-end gap-2">
-                          <button onClick={handleSaveEdit} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded" title="Salvar">
-                            <CheckCircle className="w-5 h-5" />
+        }
+      >
+        <ErpTableContainer>
+          <ErpTableThead>
+            <tr>
+              <ErpTableTh className="w-[20%]">Tipo de Alvará</ErpTableTh>
+              <ErpTableTh className="w-[30%]">Contribuinte</ErpTableTh>
+              <ErpTableTh className="w-[13%]">Emissão</ErpTableTh>
+              <ErpTableTh className="w-[14%]">Validade</ErpTableTh>
+              <ErpTableTh className="w-[12%]">Status</ErpTableTh>
+              <ErpTableTh className="w-[11%] text-right">Ações</ErpTableTh>
+            </tr>
+          </ErpTableThead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="p-8 text-center text-xs text-slate-400">
+                  Nenhum alvará emitido.
+                </td>
+              </tr>
+            ) : (
+              filtered.map((license) => (
+                <ErpTableTr key={license.id}>
+                  <ErpTableTd className="font-semibold">
+                    {editingId === license.id ? (
+                      <select
+                        value={editForm.licenseType || ""}
+                        onChange={(e) => setEditForm({ ...editForm, licenseType: e.target.value })}
+                        className="h-6 w-full rounded border border-slate-200 px-1 text-[11px] outline-none focus:border-amber-500"
+                      >
+                        <option value="Funcionamento">Funcionamento</option>
+                        <option value="Sanitária">Sanitária</option>
+                        <option value="Obra">Obra</option>
+                        <option value="Ambiental">Ambiental</option>
+                      </select>
+                    ) : (
+                      license.licenseType
+                    )}
+                  </ErpTableTd>
+                  <ErpTableTd>
+                    {license.taxpayer.company?.corporateName || license.taxpayer.person?.fullName || "Não informado"}
+                  </ErpTableTd>
+                  <ErpTableTd>{license.issueDate ? new Date(license.issueDate).toLocaleDateString("pt-BR") : "—"}</ErpTableTd>
+                  <ErpTableTd>
+                    {editingId === license.id ? (
+                      <input
+                        type="date"
+                        value={editForm.validUntil || ""}
+                        onChange={(e) => setEditForm({ ...editForm, validUntil: e.target.value })}
+                        className="h-6 rounded border border-slate-200 px-1 text-[11px] outline-none focus:border-amber-500"
+                      />
+                    ) : (
+                      license.validUntil ? new Date(license.validUntil).toLocaleDateString("pt-BR") : "—"
+                    )}
+                  </ErpTableTd>
+                  <ErpTableTd>
+                    <ErpStatusBadge variant={licenseVariant(license.status)}>{license.status}</ErpStatusBadge>
+                  </ErpTableTd>
+                  <ErpTableTd className="text-right">
+                    {editingId === license.id ? (
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={handleSaveEdit} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded" title="Salvar">
+                          <CheckCircle className="size-4" />
+                        </button>
+                        <button onClick={() => setEditingId(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded" title="Cancelar">
+                          <XCircle className="size-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => handleEditClick(license)} className="p-1 text-slate-400 hover:text-indigo-600 rounded" title="Editar">
+                          <Pencil className="size-3.5" />
+                        </button>
+                        {license.status === "Emitido" ? (
+                          <button onClick={() => handleDeactivate(license.id)} className="p-1 text-slate-400 hover:text-red-600 rounded" title="Cancelar">
+                            <Trash2 className="size-3.5" />
                           </button>
-                          <button onClick={() => setEditingId(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded" title="Cancelar">
-                            <XCircle className="w-5 h-5" />
+                        ) : (
+                          <button onClick={() => handleActivate(license.id)} className="p-1 text-slate-400 hover:text-emerald-600 rounded" title="Reativar">
+                            <RefreshCw className="size-3.5" />
                           </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-end gap-2">
-                          <button onClick={() => handleEditClick(license)} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded" title="Editar">
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          {license.status === 'Emitido' ? (
-                            <button onClick={() => handleDeactivate(license.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="Cancelar">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          ) : (
-                            <button onClick={() => handleActivate(license.id)} className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded" title="Reativar">
-                              <RefreshCw className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                        )}
+                      </div>
+                    )}
+                  </ErpTableTd>
+                </ErpTableTr>
+              ))
+            )}
+          </tbody>
+        </ErpTableContainer>
+      </ErpListFrame>
 
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl shadow-lg w-full max-w-md overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h2 className="text-lg font-bold text-slate-800">Emitir Alvará/Licença</h2>
+              <h2 className="text-base font-bold text-slate-800">Emitir Alvará / Licença</h2>
               <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <XCircle className="w-5 h-5" />
+                <XCircle className="size-5" />
               </button>
             </div>
             <form onSubmit={handleCreate} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Contribuinte</label>
-                <select 
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Contribuinte</label>
+                <select
                   required
                   value={createForm.taxpayerId}
-                  onChange={(e) => setCreateForm({...createForm, taxpayerId: e.target.value})}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                  onChange={(e) => setCreateForm({ ...createForm, taxpayerId: e.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20"
                 >
                   <option value="">Selecione um contribuinte...</option>
-                  {taxpayers.map(tp => (
+                  {taxpayers.map((tp) => (
                     <option key={tp.id} value={tp.id}>{tp.name}</option>
                   ))}
                 </select>
               </div>
               <div className="flex gap-4">
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
-                  <select 
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tipo</label>
+                  <select
                     value={createForm.licenseType}
-                    onChange={(e) => setCreateForm({...createForm, licenseType: e.target.value})}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                    onChange={(e) => setCreateForm({ ...createForm, licenseType: e.target.value })}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20"
                   >
                     <option value="Funcionamento">Funcionamento</option>
                     <option value="Sanitária">Sanitária</option>
@@ -268,27 +268,27 @@ export default function AlvarasClient({
                   </select>
                 </div>
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Validade</label>
-                  <input 
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Validade</label>
+                  <input
                     type="date"
                     required
                     value={createForm.validUntil}
-                    onChange={(e) => setCreateForm({...createForm, validUntil: e.target.value})}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                    onChange={(e) => setCreateForm({ ...createForm, validUntil: e.target.value })}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20"
                   />
                 </div>
               </div>
               <div className="mt-6 flex justify-end gap-3">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setIsCreateModalOpen(false)}
                   className="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors"
                 >
                   Cancelar
                 </button>
-                <button 
+                <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-lg text-sm font-bold transition-colors"
                 >
                   Emitir
                 </button>
@@ -297,6 +297,6 @@ export default function AlvarasClient({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

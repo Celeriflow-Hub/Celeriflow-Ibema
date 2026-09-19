@@ -1,7 +1,7 @@
 import { config } from "dotenv";
 
-config({ path: ".env.local" });
-config();
+config({ path: ".env.local", quiet: true });
+config({ quiet: true });
 
 const workerUrl = process.env.SIAFIC_WORKER_URL?.trim();
 const workerToken = process.env.SIAFIC_WORKER_TOKEN?.trim();

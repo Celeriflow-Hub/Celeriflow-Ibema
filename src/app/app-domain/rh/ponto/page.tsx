@@ -1,123 +1,143 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { buttonVariants } from "@/components/ui/button"
-import { Clock, Plus } from "lucide-react"
-import Link from "next/link"
+import Link from "next/link";
+import { Plus, Clock, Search } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
-import { PontoRowActions } from "./PontoRowActions"
-import { format } from "date-fns"
-import { PontoFilters } from "./PontoFilters"
-import { UploadCSVButton } from "./UploadCSVButton"
+import { PontoRowActions } from "./PontoRowActions";
+import { UploadCSVButton } from "./UploadCSVButton";
+import { format } from "date-fns";
 import type { Prisma } from "@prisma/client";
-import { PageFrame } from "@/components/app-ui/PageFrame";
-import { PageHeader } from "@/components/app-ui/PageHeader";
+import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
+import {
+  ErpTableContainer,
+  ErpTableThead,
+  ErpTableTh,
+  ErpTableTr,
+  ErpTableTd,
+  ErpStatusBadge,
+  type ErpStatusVariant,
+} from "@/components/app-ui/erp/ErpTable";
 
-export default async function PontoPage({ searchParams }: { searchParams: Promise<{ q?: string, month?: string }> }) {
+function pontoVariant(status: string): ErpStatusVariant {
+  if (status === "Presente") return "success";
+  if (status === "Falta") return "danger";
+  if (status === "Atraso") return "warning";
+  return "neutral";
+}
+
+export default async function PontoPage({ searchParams }: { searchParams: Promise<{ q?: string; month?: string }> }) {
   const { prisma } = await getTenantContextForModule("RH");
   const { q, month } = await searchParams;
 
   const whereClause: Prisma.AttendanceRecordWhereInput = {};
-  if (q) {
-    whereClause.employee = { name: { contains: q, mode: 'insensitive' } };
-  }
-  
+  if (q) whereClause.employee = { name: { contains: q, mode: "insensitive" } };
   if (month) {
-    // month is in format "yyyy-MM"
-    const [year, m] = month.split('-');
+    const [year, m] = month.split("-");
     const startDate = new Date(parseInt(year), parseInt(m) - 1, 1);
-    const endDate = new Date(parseInt(year), parseInt(m), 0); // Last day of month
-    
-    whereClause.date = {
-      gte: startDate,
-      lte: endDate,
-    };
+    const endDate = new Date(parseInt(year), parseInt(m), 0);
+    whereClause.date = { gte: startDate, lte: endDate };
   }
 
   const records = await prisma.attendanceRecord.findMany({
     where: whereClause,
     take: 50,
-    orderBy: { date: 'desc' },
-    include: {
-      employee: true
-    }
-  })
+    orderBy: { date: "desc" },
+    include: { employee: true },
+  });
 
   return (
-    <PageFrame className="space-y-2">
-      <PageHeader
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+      <ErpPageTitle
         title="Registro de Ponto"
-        icon={<Clock className="size-4 shrink-0 text-violet-600" />}
-        action={<div className="flex items-center gap-1.5">
-          <UploadCSVButton />
-          <Link href="/rh/ponto/novo" className={buttonVariants({ size: "sm" })}>
-            <Plus className="mr-2 h-4 w-4" />
-            Apontamento Manual
-          </Link>
-        </div>}
+        icon={<Clock className="size-4 text-violet-600" />}
+        action={
+          <div className="flex items-center gap-1.5">
+            <UploadCSVButton />
+            <Link
+              href="/rh/ponto/novo"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-amber-500 px-3 text-xs font-bold text-slate-950 shadow-xs transition-colors hover:bg-amber-600"
+            >
+              <Plus className="size-3.5" />
+              Apontamento Manual
+            </Link>
+          </div>
+        }
       />
 
-      <PontoFilters />
-
-      <Card size="sm" className="rounded-md shadow-none">
-        <CardHeader className="border-b pb-2">
-          <CardTitle>Espelho de Ponto</CardTitle>
-          <CardDescription>
-            Controle de frequência, assiduidade e banco de horas dos servidores.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-3">
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-muted text-muted-foreground border-b sticky top-0 z-10 shadow-sm">
-                <tr>
-                  <th className="font-medium p-2 px-4 whitespace-nowrap">Data</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Servidor</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Entrada/Saída</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Horas Dia</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Horas Extras</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Banco Horas</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Status</th>
-                  <th className="font-medium p-2 px-4 text-right whitespace-nowrap">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {records.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="text-center p-8 text-muted-foreground">
-                      Nenhum registro de ponto encontrado.
-                    </td>
-                  </tr>
-                ) : (
-                  records.map((rec) => (
-                    <tr key={rec.id} className="border-b last:border-0 hover:bg-muted/50">
-                      <td className="p-2 px-4 font-medium whitespace-nowrap">{format(new Date(rec.date), 'dd/MM/yyyy')}</td>
-                      <td className="p-2 font-medium whitespace-nowrap">{rec.employee?.name}</td>
-                      <td className="p-2 whitespace-nowrap">
-                        {rec.entryTime ? format(new Date(rec.entryTime), 'HH:mm') : '-'} / {rec.exitTime ? format(new Date(rec.exitTime), 'HH:mm') : '-'}
-                      </td>
-                      <td className="p-2 font-semibold whitespace-nowrap">{rec.hoursWorked.toFixed(2)}h</td>
-                      <td className="p-2 text-emerald-600 whitespace-nowrap">{rec.extraHours ? `${rec.extraHours.toFixed(2)}h` : '-'}</td>
-                      <td className="p-2 text-blue-600 whitespace-nowrap">{rec.bankHours ? `${rec.bankHours.toFixed(2)}h` : '-'}</td>
-                      <td className="p-2 whitespace-nowrap">
-                        <Badge variant="outline" className={
-                          rec.status === 'Presente' ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
-                          rec.status === 'Falta' ? "bg-red-100 text-red-700 border-red-200" :
-                          rec.status === 'Atraso' ? "bg-orange-100 text-orange-700 border-orange-200" : ""
-                        }>
-                          {rec.status}
-                        </Badge>
-                      </td>
-                      <td className="p-2 px-4 text-right whitespace-nowrap">
-                        <PontoRowActions record={rec} />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-    </PageFrame>
-  )
+      <ErpListFrame
+        toolbar={
+          <form action="/rh/ponto" method="GET" className="flex flex-wrap items-center gap-2">
+            <label className="relative min-w-[160px] flex-1">
+              <span className="sr-only">Buscar servidor</span>
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                name="q"
+                defaultValue={q}
+                placeholder="Buscar por servidor"
+                className="h-8 w-full rounded-md border border-slate-200 bg-white py-1 pl-8 pr-2.5 text-xs outline-none placeholder:text-slate-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-800"
+              />
+            </label>
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="month" className="text-[11px] font-medium text-slate-500">Mês</label>
+              <input
+                id="month"
+                type="month"
+                name="month"
+                defaultValue={month}
+                className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-800"
+              />
+            </div>
+            <button type="submit" className="h-8 rounded-md bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800">
+              Filtrar
+            </button>
+            <Link href="/rh/ponto" className="inline-flex h-8 items-center px-2.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50">
+              Limpar
+            </Link>
+          </form>
+        }
+      >
+        <ErpTableContainer>
+          <ErpTableThead>
+            <tr>
+              <ErpTableTh className="w-[11%]">Data</ErpTableTh>
+              <ErpTableTh className="w-[24%]">Servidor</ErpTableTh>
+              <ErpTableTh className="w-[14%]">Entrada / Saída</ErpTableTh>
+              <ErpTableTh className="w-[10%]">Horas Dia</ErpTableTh>
+              <ErpTableTh className="w-[10%]">H. Extra</ErpTableTh>
+              <ErpTableTh className="w-[10%]">Banco H.</ErpTableTh>
+              <ErpTableTh className="w-[11%]">Status</ErpTableTh>
+              <ErpTableTh className="w-[10%] text-right">Ações</ErpTableTh>
+            </tr>
+          </ErpTableThead>
+          <tbody>
+            {records.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="p-8 text-center text-xs text-slate-400">
+                  Nenhum registro de ponto encontrado.
+                </td>
+              </tr>
+            ) : (
+              records.map((rec) => (
+                <ErpTableTr key={rec.id}>
+                  <ErpTableTd>{format(new Date(rec.date), "dd/MM/yyyy")}</ErpTableTd>
+                  <ErpTableTd className="font-semibold">{rec.employee?.name}</ErpTableTd>
+                  <ErpTableTd className="font-mono text-[10.5px]">
+                    {rec.entryTime ? format(new Date(rec.entryTime), "HH:mm") : "—"} / {rec.exitTime ? format(new Date(rec.exitTime), "HH:mm") : "—"}
+                  </ErpTableTd>
+                  <ErpTableTd className="font-mono">{rec.hoursWorked.toFixed(2)}h</ErpTableTd>
+                  <ErpTableTd className="font-mono text-emerald-700">{rec.extraHours ? `${rec.extraHours.toFixed(2)}h` : "—"}</ErpTableTd>
+                  <ErpTableTd className="font-mono text-sky-700">{rec.bankHours ? `${rec.bankHours.toFixed(2)}h` : "—"}</ErpTableTd>
+                  <ErpTableTd>
+                    <ErpStatusBadge variant={pontoVariant(rec.status)}>{rec.status}</ErpStatusBadge>
+                  </ErpTableTd>
+                  <ErpTableTd className="text-right">
+                    <PontoRowActions record={rec} />
+                  </ErpTableTd>
+                </ErpTableTr>
+              ))
+            )}
+          </tbody>
+        </ErpTableContainer>
+      </ErpListFrame>
+    </div>
+  );
 }

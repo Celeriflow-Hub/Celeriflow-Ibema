@@ -1,19 +1,21 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import Link from "next/link";
+import { UserPlus, Search } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
-import { DependenteRowActions } from "./DependenteRowActions"
-import { format } from "date-fns"
-import { DependenteFilters } from "./DependenteFilters"
+import { DependenteRowActions } from "./DependenteRowActions";
+import { format } from "date-fns";
 import type { Prisma } from "@prisma/client";
-import { UserPlus } from "lucide-react";
-import { PageFrame } from "@/components/app-ui/PageFrame";
-import { PageHeader } from "@/components/app-ui/PageHeader";
+import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
+import {
+  ErpTableContainer,
+  ErpTableThead,
+  ErpTableTh,
+  ErpTableTr,
+  ErpTableTd,
+} from "@/components/app-ui/erp/ErpTable";
 
 export default async function DependentesPage(
-  props: {
-    searchParams?: Promise<{
-      q?: string;
-    }>
-  }
+  props: { searchParams?: Promise<{ q?: string }> }
 ) {
   const { prisma } = await getTenantContextForModule("RH");
   const searchParams = await props.searchParams;
@@ -22,72 +24,83 @@ export default async function DependentesPage(
   const where: Prisma.DependentWhereInput = {};
   if (q) {
     where.OR = [
-      { name: { contains: q, mode: 'insensitive' } },
-      { employee: { name: { contains: q, mode: 'insensitive' } } }
+      { name: { contains: q, mode: "insensitive" } },
+      { employee: { name: { contains: q, mode: "insensitive" } } },
     ];
   }
 
   const dependents = await prisma.dependent.findMany({
     where,
     take: 100,
-    orderBy: { createdAt: 'desc' },
-    include: {
-      employee: true
-    }
-  })
+    orderBy: { createdAt: "desc" },
+    include: { employee: true },
+  });
 
   return (
-    <PageFrame className="space-y-2">
-      <PageHeader title="Dependentes" icon={<UserPlus className="size-4 shrink-0 text-violet-600" />} />
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+      <ErpPageTitle
+        title="Dependentes"
+        icon={<UserPlus className="size-4 text-violet-600" />}
+        description="Cadastro na ficha do Servidor"
+      />
 
-      <Card size="sm" className="rounded-md shadow-none">
-        <CardHeader className="border-b pb-2">
-          <CardTitle>Lista de Dependentes</CardTitle>
-          <CardDescription>
-            Visualização geral de dependentes cadastrados. Exibindo {dependents.length} registros (limite de 100).
-            <br />
-            <strong>Nota:</strong> Novos dependentes devem ser cadastrados diretamente na ficha do Servidor (Editar Servidor).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-3">
-          <DependenteFilters />
-
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-muted text-muted-foreground border-b sticky top-0 z-10 shadow-sm">
-                <tr>
-                  <th className="font-medium p-2 px-4 whitespace-nowrap">Servidor Responsável</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Dependente</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Parentesco</th>
-                  <th className="font-medium p-2 whitespace-nowrap">Nascimento</th>
-                  <th className="font-medium p-2 text-right whitespace-nowrap">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dependents.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="text-center p-8 text-muted-foreground">
-                      Nenhum dependente encontrado.
-                    </td>
-                  </tr>
-                ) : (
-                  dependents.map((dep) => (
-                    <tr key={dep.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="p-2 px-4 font-medium whitespace-nowrap">{dep.employee?.name}</td>
-                      <td className="p-2 whitespace-nowrap">{dep.name}</td>
-                      <td className="p-2 whitespace-nowrap">{dep.relationship}</td>
-                      <td className="p-2 whitespace-nowrap">{dep.birthDate ? format(new Date(dep.birthDate), 'dd/MM/yyyy') : '-'}</td>
-                      <td className="p-2 text-right whitespace-nowrap">
-                        <DependenteRowActions dependent={dep} />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-    </PageFrame>
-  )
+      <ErpListFrame
+        toolbar={
+          <form action="/rh/dependentes" method="GET" className="flex flex-wrap items-center gap-2">
+            <label className="relative min-w-[180px] flex-1">
+              <span className="sr-only">Buscar dependente</span>
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                name="q"
+                defaultValue={q}
+                placeholder="Buscar por dependente ou servidor"
+                className="h-8 w-full rounded-md border border-slate-200 bg-white py-1 pl-8 pr-2.5 text-xs outline-none placeholder:text-slate-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-800"
+              />
+            </label>
+            <button type="submit" className="h-8 rounded-md bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800">
+              Filtrar
+            </button>
+            <Link href="/rh/dependentes" className="inline-flex h-8 items-center px-2.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50">
+              Limpar
+            </Link>
+          </form>
+        }
+      >
+        <ErpTableContainer>
+          <ErpTableThead>
+            <tr>
+              <ErpTableTh className="w-[32%]">Servidor Responsável</ErpTableTh>
+              <ErpTableTh className="w-[30%]">Dependente</ErpTableTh>
+              <ErpTableTh className="w-[18%]">Parentesco</ErpTableTh>
+              <ErpTableTh className="w-[12%]">Nascimento</ErpTableTh>
+              <ErpTableTh className="w-[8%] text-right">Ações</ErpTableTh>
+            </tr>
+          </ErpTableThead>
+          <tbody>
+            {dependents.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="p-8 text-center text-xs text-slate-400">
+                  Nenhum dependente encontrado.
+                </td>
+              </tr>
+            ) : (
+              dependents.map((dep) => (
+                <ErpTableTr key={dep.id}>
+                  <ErpTableTd className="font-semibold">{dep.employee?.name}</ErpTableTd>
+                  <ErpTableTd>{dep.name}</ErpTableTd>
+                  <ErpTableTd>{dep.relationship}</ErpTableTd>
+                  <ErpTableTd>
+                    {dep.birthDate ? format(new Date(dep.birthDate), "dd/MM/yyyy") : "—"}
+                  </ErpTableTd>
+                  <ErpTableTd className="text-right">
+                    <DependenteRowActions dependent={dep} />
+                  </ErpTableTd>
+                </ErpTableTr>
+              ))
+            )}
+          </tbody>
+        </ErpTableContainer>
+      </ErpListFrame>
+    </div>
+  );
 }

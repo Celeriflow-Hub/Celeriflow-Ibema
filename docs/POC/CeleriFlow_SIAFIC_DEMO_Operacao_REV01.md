@@ -29,13 +29,20 @@ O contrato depende da confirmacao do fornecedor. Uma falha ou resposta incerta c
 
 ## Pre-requisitos
 
-1. Aplicar as migrations no banco DEMO autorizado. Nao use banco compartilhado ou de producao.
+1. Para um banco DEMO novo e vazio, inicialize o schema atual antes de registrar o historico. A migration `20260801000000_baseline` representa um banco legado e nao possui DDL executavel. Nao use banco compartilhado ou de producao.
 
 ```powershell
-npx prisma migrate deploy
+npx prisma db push
+$migrations = Get-ChildItem -Path prisma/migrations -Directory | Sort-Object Name | ForEach-Object { $_.Name }
+foreach ($migration in $migrations) {
+  npx prisma migrate resolve --applied $migration
+  if (-not $?) { exit 1 }
+}
 ```
 
-2. Configurar estas variaveis na origem, sem inserir valores de segredos em arquivos versionados:
+`db push --force-reset` apaga todos os dados e so pode ser usado com autorizacao explicita para um banco DEMO descartavel. Depois do bootstrap, use `npx prisma migrate deploy` somente para migrations novas.
+
+2. Configurar estas variaveis na origem, sem inserir valores de segredos em arquivos versionados. Os scripts SIAFIC carregam `.env.local` antes de `.env`:
 
 ```text
 APP_ENV=DEMO
@@ -67,6 +74,7 @@ npm run start
 ```
 
 O receptor inicia vazio. Nao compartilha banco, Firebase, sessao ou segredo com a origem.
+Tambem e possivel gravar essas variaveis em `tools/siafic-demo-receiver/.env.local`, que e carregado pelo processo e ignorado pelo Git.
 
 ## Roteiro Reproduzivel
 

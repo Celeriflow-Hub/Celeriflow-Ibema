@@ -87,6 +87,8 @@ Durante a demonstração, o acesso ao **Portal do Servidor** fica disponível a 
 
 As regras demonstrativas do módulo passam a ser registradas em tabelas versionadas no **Neon**, vinculadas à instância municipal: conjunto de regras e vigência, regras tipadas, rubricas e incidências, regimes e faixas previdenciárias, políticas de férias, política de cálculo e regimes de vínculo. Cada alteração guarda evidência de antes/depois em log append-only, sem registrar dados pessoais, clínicos ou financeiros de servidores.
 
+A migration `20260919210000_add_rh_payroll_configuration` deve ser aplicada ao Neon por operação controlada com `prisma migrate deploy`, depois de conferir o histórico já existente no banco. O build da Vercel não executa migrations por padrão; a variável `APPLY_PRISMA_MIGRATIONS=true` é uma opção explícita para uma publicação planejada, com `DATABASE_URL` disponível e histórico conciliado.
+
 O conjunto inicial é identificado como **DEMONSTRAÇÃO** e não substitui estatuto, plano de cargos, tabela previdenciária, convênio de consignação, eSocial ou homologação. Rubricas novas também não alimentam o motor de folha legado; essa ligação ocorrerá somente quando a competência versionada puder congelar uma cópia auditável das regras.
 
 O Portal do Servidor continua a consultar apenas a própria ficha e demonstrativos fechados/pagos. A regra configurável `PORTAL_DEMONSTRATIVOS_HABILITADOS` controla essa visualização, sem liberar rascunhos. O futuro Portal da Transparência receberá somente projeções agregadas e publicáveis, com filtros de anonimização e aprovação; ele não acessará cadastro funcional, documentos, conta bancária, CID, afastamentos ou demonstrativos individuais.
@@ -189,4 +191,180 @@ O verde institucional do CeleriFlow continua como cor de ação primária. Âmba
 
 **Objetivo:** fazer o autoatendimento depender de dados fechados/publicados e criar solicitações rastreáveis, sem duplicar o RH.
 
-1. Publicar no Portal somente versões autorizadas de ficha, atos, férias, ponto, benefícios e demonstrativos. A mensage
+1. Publicar no Portal somente versões autorizadas de ficha, atos, férias, ponto, benefícios e demonstrativos. A mensagem de disponibilidade identifica competência, data de publicação e status.
+2. Criar `Solicitação de Autoatendimento do Servidor` com tipo, dados mínimos, anexos, status, prazo, histórico, responsável RH, decisão e referência ao registro aplicado.
+3. Os tipos iniciais recomendados são: atualização de dados pessoais, pedido/acompanhar férias, consulta de ponto com contestação, entrega de documento e solicitação de declaração. Mudança de salário, regime, conta bancária, vínculo ou dado clínico nunca é aplicada diretamente pelo Portal; vira solicitação para análise de RH.
+4. Preparar conector opcional com **Processos e Protocolos** para abrir processo interno quando o tipo exigir rito formal. O mapeamento de assunto, sigilo, prazo e unidade destinatária será configurado depois de decisão administrativa; não criar processo automaticamente sem ela.
+5. Garantir URLs assinadas e temporárias para documentos no Blob, log de download/publicação e bloqueio de acesso cruzado entre servidores.
+6. Entregar documentos, relatórios e arquivos internos com versão, filtro, competência, total e indicação clara se são demonstrativos, prévias ou documentos oficiais.
+
+**RHF predominantes:** 139–180, além do contrato de integração com o Portal do Servidor.
+
+**Critério de aceite:** um servidor autenticado vê somente seus próprios itens publicados, não visualiza CID/motivo clínico nem documento de outro servidor, abre uma solicitação e acompanha o tratamento até o registro de RH correspondente.
+
+### Fase 5 — Arquivos oficiais, integrações externas e eSocial
+
+**Objetivo:** conectar o núcleo validado às contrapartes, com homologação e evidência de cada transmissão.
+
+1. Implementar geradores para arquivos previstos no TR somente após receber leiaute, versão, entidade destinatária e conjunto de homologação.
+2. Implementar adaptadores independentes para banco, consignatária, REP, fornecedor de benefício, contabilidade, Tribunal de Contas e outras contrapartes. Cada adaptador terá configuração por tenant, credenciais seguras, lote, retry idempotente, retorno e conciliação.
+3. Implementar fila eSocial com eventos, versão de schema, certificado, ambiente de homologação/produção, recibo, rejeição, retificação e consulta de situação. XML gerado localmente é estado “preparado”; somente recibo válido da contraparte muda o estado para “aceito”.
+4. Preparar rotinas de exportação/relatório mencionadas no TR, como SEFIP/GFIP, DIRF, RAIS, CAGED, MANAD, TCE, SIOPE e atuariais, sem afirmar suporte até concluir teste de leiaute e aceite do destinatário.
+
+**RHF predominantes:** 139–201, com eSocial em 181–201.
+
+**Critério de aceite:** cada lote possui identificador, arquivo/assinatura, totais, retorno, rejeições e evidência de homologação; nenhum status de pagamento ou envio é inferido sem retorno.
+
+### Fase 6 — Migração, paralelismo e entrada em produção
+
+**Objetivo:** migrar dados e ativar cálculo de forma controlada.
+
+1. Levantar fonte atual, qualidade, titularidade e histórico a importar.
+2. Importar em área de estágio, validar CPF/PIS, vínculos, datas, duplicidades, saldos e totais antes de promover dados.
+3. Executar competência piloto em paralelo à referência aprovada pelo RH, comparar totais por rubrica, vínculo e unidade e registrar divergências.
+4. Bloquear alterações estruturais e ativar fechamento/publicação somente depois de aceite formal do RH, Contabilidade e responsável da Prefeitura.
+5. Preservar logs, snapshots, documentos e plano de reversão de configuração. Não executar reset de base ou exclusão em massa para migrar.
+
+---
+
+## 6. Matriz de rastreabilidade RHF
+
+| Bloco da POC | IDs | Entrega principal | Fase | Evidência mínima |
+|---|---:|---|---:|---|
+| Cadastro | 001–041 | Ficha funcional, vínculos históricos, dependentes, cargos, carreiras, documentos e auditoria | 1 | criação/alteração com vigência, consulta histórica e auditoria |
+| Férias | 042–048 | Períodos aquisitivos, saldo, fracionamento, planejamento e eventos | 2 | saldo antes/depois e aprovação |
+| Medicina, licenças e afastamentos | 049–068 | Processo de afastamento, dados ocupacionais segregados, cedência | 2 | RBAC de saúde, sobreposição e retorno |
+| Atos administrativos | 069–078 | Modelos, atos derivados e publicação controlada | 2 | ato versionado e referência de origem |
+| Vale-transporte | 079–086 | Elegibilidade, mapa de compra/entrega e rubricas | 2 | cálculo auditável por servidor |
+| Contagem de tempo | 087–090 | Contadores por finalidade e certidão | 2 | regras de suspensão/averbação |
+| Ponto eletrônico | 091–097 | Escala, apuração, banco de horas e importação | 2 | lote real com aceites/rejeições |
+| Concurso público | 098–106 | Concurso, vaga, candidato, classificação e nomeação | 2 | fluxo de candidato até assunção/desistência |
+| Folha de pagamento | 107–138 | Rubricas, cálculo, conferência, fechamento, retificação e provisões | 3 | cenário reproduzível e snapshot fechado |
+| Geração de arquivos | 139–153 | Arquivos versionados, lote e retorno | 5 | arquivo/recibo ou rejeição documentada |
+| Relatórios | 154–180 | Relatórios, fichas, mapas e comparativos | 4 e 5 | filtro, competência, total e fonte |
+| eSocial | 181–201 | Eventos, certificados, transmissão e retorno | 5 | lote homologado, recibo/rejeição |
+
+A matriz não presume que todos os IDs sejam telas independentes. Cada requisito terá, no backlog de execução, link para modelo/serviço, caso de teste, massa de dados e evidência.
+
+---
+
+## 7. Contrato de integração com o Portal do Servidor
+
+### Leitura atual que será preservada
+
+O Portal deve continuar consumindo a mesma base de:
+
+- identificação e ficha funcional do servidor;
+- atos pessoais publicados;
+- registros de ponto;
+- férias e afastamentos em nível administrativo permitido;
+- benefícios vinculados;
+- itens de folha de competências fechadas/publicadas.
+
+A associação é feita pelo servidor do usuário autenticado, não por um parâmetro de URL. O Portal não deve mostrar CID, motivo de licença, laudo, anexo médico, dados de outro servidor, cálculo em rascunho ou evento que ainda não foi publicado pelo RH.
+
+### Evolução proposta
+
+| Necessidade do Portal | Fonte RH | Regra de publicação | Fluxo de retorno ao RH |
+|---|---|---|---|
+| Ficha funcional | vínculo e atributos liberados | versão vigente, sem dados bancários/sensíveis | pedido de correção de dado pessoal |
+| Férias | período, saldo e agenda | dados aprovados/publicados | solicitação de programação ou ajuste, submetida à análise |
+| Ponto | espelho e inconsistências permitidas | competência apurada | contestação com justificativa e anexo |
+| Benefícios | elegibilidade e histórico | benefício vigente/publicado | solicitação de adesão/alteração conforme regra |
+| Folha | snapshot de competência | somente demonstrativo publicado após fechamento | consulta; retificação é decisão de RH |
+| Documentos/atos | documento classificado e liberado | versão, sigilo e URL temporária | solicitação de documento/declaração |
+
+O novo fluxo de solicitações terá estado `rascunho`, `enviada`, `em análise`, `aguardando complemento`, `deferida`, `indeferida`, `aplicada` ou `cancelada`, além de histórico e auditoria. A transição para `aplicada` exige que o RH tenha efetuado ou vinculado a movimentação válida no núcleo. Quando a regra municipal exigir protocolo, a solicitação poderá criar ou referenciar um processo interno, mediante configuração da Prefeitura.
+
+---
+
+## 8. Segurança, LGPD e documentos
+
+1. Registrar finalidade, perfil, operação e data de acesso aos dados pessoais sensíveis.
+2. Separar permissões de RH geral, Folha, Saúde/Ocupacional, gestor aprovador, auditoria e Portal do Servidor.
+3. Não expor CID, razão clínica, laudos, atestados ou histórico médico fora da área autorizada. Dados necessários para efeitos administrativos serão minimizados no Portal e nos relatórios gerais.
+4. Manter documentos no Blob por metadados, classificação, retenção, versão, hash e URL temporária. O Blob é armazenamento; não substitui controle de acesso, auditoria ou assinatura.
+5. Tratar credenciais de integrações em cofre/configuração segura, nunca em código, formulário aberto ou log.
+6. Definir com a Prefeitura a base legal, responsáveis, prazo de retenção, política de descarte e canal de atendimento aos titulares. O sistema deve permitir execução e evidência da política aprovada, sem inventá-la.
+
+Mensagem padrão para áreas de consulta restrita:
+
+> **Dados pessoais protegidos:** utilize estas informações somente para a finalidade administrativa autorizada. O acesso é registrado e o compartilhamento indevido é vedado. Dados de saúde e documentos sensíveis possuem acesso restrito.
+
+---
+
+## 9. Dependências externas e decisões necessárias
+
+### 9.1 Decisões funcionais da Prefeitura
+
+| Decisão | Necessária antes de | Responsável sugerido |
+|---|---|---|
+| Regimes jurídicos, estatuto, plano de cargos, carreiras, tabelas de referência e vigências | Fases 1 e 3 | RH e Jurídico |
+| Calendário de competências, datas de corte, tipos de folha e responsáveis por cada aprovação | Fase 3 | RH e Contabilidade |
+| Regras de férias, licença-prêmio, afastamentos, retorno, maternidade, adicionais e contagem de tempo | Fase 2 | RH e Jurídico |
+| Política de acesso a CID, laudos, CAT, perícia e medicina ocupacional | Fase 2 | Saúde ocupacional, RH e DPO/Encarregado |
+| Rubricas, incidências, prioridades, RGPS/RPPS, pensão, consignações, margem, teto e arredondamentos | Fase 3 | RH, Contabilidade e Jurídico |
+| Conceito e emissor do resultado RHF-136, documentos que serão oficiais e assinatura necessária | Fases 3 e 4 | RH e Secretaria competente |
+| Tipos de solicitação do Portal, prazos, aprovadores e quais exigem Processo/Protocolo | Fase 4 | RH, Ouvidoria/Processos e Secretaria competente |
+| Fontes e qualidade dos dados legados a migrar | Fase 6 | RH e TI |
+
+### 9.2 Dependências de terceiros
+
+| Dependência | Informação/artefato necessário | Fase |
+|---|---|---:|
+| REP/relógio de ponto | fabricante, modelo, leiaute de exportação, regras de apuração e arquivo de homologação | 2/5 |
+| Banco | convênio, layout de remessa/retorno, ambiente de teste, credenciais e responsável | 5 |
+| Consignatárias | contrato, margem, layout, regras de rejeição e conciliação | 3/5 |
+| Benefícios/vale-transporte | fornecedores, catálogo, layout e política de elegibilidade | 2/5 |
+| Contabilidade/Tesouraria | plano de contas, eventos, layout, competência e critérios de conciliação | 3/5 |
+| Tribunal/arquivos oficiais | destinatário, versão válida do leiaute, ambiente e amostra homologada | 5 |
+| eSocial | certificado, procuração, versão de schema, ambiente de homologação e responsável legal | 5 |
+| Assinatura e publicação | provedor, certificado, política de assinatura e publicação | 2/4 |
+
+Sem esses contratos, o CeleriFlow pode manter o dado e preparar uma prévia, mas não deve marcar a operação como integrada, transmitida, paga ou aceita.
+
+---
+
+## 10. Estratégia de testes e evidências
+
+### Testes técnicos
+
+- migration incremental validada em base de teste, sem reset destrutivo;
+- testes unitários para CPF/PIS, sobreposição de vigência, saldos, fórmulas, arredondamentos, prioridades e transições de estado;
+- testes de integração para tenant, perfil, histórico, idempotência de lote, snapshot fechado e publicação;
+- testes de autorização negativos: outro servidor, usuário sem vínculo funcional, perfil sem saúde e documento sem liberação; teste positivo temporário para perfil autenticado sem permissão granular de Portal, sempre limitado ao próprio vínculo;
+- build, lint e verificações de rotas antes de cada commit.
+
+### Testes de interface
+
+- lista com 0, 1, 20, 21 e mais de 40 registros, com filtro e ordenação persistidos;
+- notebook e desktop sem barra de rolagem global/tabela, com cabeçalho, rodapé e paginação visíveis;
+- telas de altura reduzida em modo responsivo de cartões, sem ocultar ações críticas;
+- subpágina de servidor com histórico, status e retorno à lista preservando filtros;
+- navegação por teclado, rótulos, foco, contraste e mensagens de erro úteis.
+
+### Cenários funcionais de aceite
+
+1. Admitir servidor, criar vínculo, lotação e referência; alterar cargo em data futura; consultar as duas versões.
+2. Registrar férias, aprovar fracionamento e validar saldo e efeito de competência.
+3. Registrar licença sem expor CID ao Portal; validar que o perfil de saúde autorizado pode acessar a evidência necessária.
+4. Importar ponto com linha inválida, conferir rejeição e corrigir sem duplicar as linhas aceitas.
+5. Calcular competência piloto, fechar snapshot, publicar demonstrativo e confirmar que alteração posterior de cadastro não modifica o resultado publicado.
+6. Abrir solicitação pelo Portal, tratar no RH, aplicar decisão e confirmar histórico nas duas áreas.
+7. Gerar lote de integração em homologação e armazenar retorno/rejeição antes de qualquer status final.
+
+A cada fase, os cenários devem ser vinculados aos IDs RHF cobertos, com massa de dados sintética ou anonimizada e evidência reproduzível.
+
+---
+
+## 11. Ordem recomendada de execução
+
+1. **Fase 0**, incluindo correções P0 e padrão de 20 linhas/paginação.
+2. **Fase 1**, para estabelecer fonte histórica e permissões antes de novos cálculos.
+3. **Fase 2**, para gerar movimentos confiáveis de férias, licença, ponto e benefícios.
+4. **Fase 3**, com piloto controlado de folha e regras municipais recebidas.
+5. **Fase 4**, com publicação/snapshot no Portal e solicitações rastreáveis.
+6. **Fase 5**, após contratos e homologação das contrapartes externas.
+7. **Fase 6**, com paralelismo, aceite e entrada em produção.
+
+A sequência evita repetir o problema de criar telas bonitas sobre uma base que ainda não preserva histórico ou de publicar no Portal um cálculo que não passou por fechamento. Ela também permite entregar valor visual e operacional já na Fase 0, sem afirmar que as obrigações reguladas posteriores estão concluídas.

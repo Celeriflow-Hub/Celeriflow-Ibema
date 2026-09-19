@@ -14,12 +14,12 @@ function run(command, args) {
 
 run("prisma", ["generate"]);
 
-// The GitHub main branch produces the production Vercel deployment. Apply
-// additive Prisma migrations there before the application build, while preview
-// deployments remain schema-safe and do not alter the production database.
-if (process.env.VERCEL_ENV === "production") {
+// Database migrations are an explicit production operation. This avoids
+// applying an unbaselined history during an ordinary application deployment.
+// Enable only after the Neon migration history has been reviewed.
+if (process.env.VERCEL_ENV === "production" && process.env.APPLY_PRISMA_MIGRATIONS === "true") {
   if (!process.env.DATABASE_URL?.trim()) {
-    throw new Error("DATABASE_URL is required to apply Prisma migrations in the production Vercel build.");
+    throw new Error("DATABASE_URL is required when APPLY_PRISMA_MIGRATIONS=true.");
   }
   run("prisma", ["migrate", "deploy"]);
 }

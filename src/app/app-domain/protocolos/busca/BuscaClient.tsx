@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { FileText, Pencil, Search } from "lucide-react";
 import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";

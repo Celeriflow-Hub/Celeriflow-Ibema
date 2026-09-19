@@ -20,18 +20,18 @@ export function InventoryStartClient({ warehouses }: { warehouses: Array<{ id: s
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-3">
-      <label className="grid gap-1 text-sm font-medium">
-        Almoxarifado
-        <select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className="h-10 min-w-64 rounded-md border bg-white px-3">
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <label className="flex items-center gap-2 text-[11px] font-medium text-slate-700">
+        <span className="hidden lg:inline">Almoxarifado</span>
+        <select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className="h-8 min-w-44 max-w-64 rounded-md border border-input bg-white px-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring">
           <option value="">Selecione</option>
           {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
         </select>
       </label>
-      <button type="button" onClick={start} disabled={pending || !warehouseId} className="h-10 rounded-md bg-amber-600 px-4 text-sm font-medium text-white disabled:opacity-50">
+      <button type="button" onClick={start} disabled={pending || !warehouseId} className="h-8 rounded-md bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">
         {pending ? "Iniciando..." : "Iniciar inventário"}
       </button>
-      {message && <p className="basis-full text-sm text-muted-foreground">{message}</p>}
+      {message && <p className="basis-full text-right text-[11px] text-muted-foreground" role="status">{message}</p>}
     </div>
   );
 }

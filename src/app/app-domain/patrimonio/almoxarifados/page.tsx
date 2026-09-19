@@ -1,102 +1,115 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { buttonVariants } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { 
-  Plus,
-  Search
-} from "lucide-react"
-import Link from "next/link"
+import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
+import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
+import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import type { Prisma } from "@prisma/client";
-import { PageFrame } from "@/components/app-ui/PageFrame";
-import { PageHeader } from "@/components/app-ui/PageHeader";
+import { Plus, Search } from "lucide-react";
+import Link from "next/link";
+import {
+  clampPatrimonioListPage,
+  patrimonioListHref,
+  parsePatrimonioListPage,
+  PATRIMONIO_LIST_PAGE_SIZE,
+} from "../listing";
 
-export default async function AlmoxarifadosPage(
-  props: { searchParams?: Promise<{ q?: string }> }
-) {
+type SearchParams = { q?: string; page?: string };
+
+export default async function AlmoxarifadosPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
   const { prisma } = await getTenantContextForModule("PATRIMONIO");
-  const searchParams = await props.searchParams;
-  const q = searchParams?.q || "";
+  const params = await searchParams;
+  const q = params?.q?.trim() || "";
+  const requestedPage = parsePatrimonioListPage(params?.page);
+  const where: Prisma.WarehouseWhereInput = q
+    ? { name: { contains: q, mode: "insensitive" } }
+    : {};
 
-  const where: Prisma.WarehouseWhereInput = {};
-  if (q) {
-    where.name = { contains: q, mode: 'insensitive' };
-  }
-
+  const total = await prisma.warehouse.count({ where });
+  const page = clampPatrimonioListPage(requestedPage, total);
   const warehouses = await prisma.warehouse.findMany({
     where,
-    orderBy: { name: 'asc' },
-    include: {
-      manager: true
-    }
-  })
+    skip: (page - 1) * PATRIMONIO_LIST_PAGE_SIZE,
+    take: PATRIMONIO_LIST_PAGE_SIZE,
+    orderBy: { name: "asc" },
+    include: { manager: true },
+  });
 
   return (
-    <PageFrame className="space-y-2">
-      <PageHeader title="Almoxarifados" action={<Link href="/patrimonio/almoxarifados/novo" className={buttonVariants({ size: "sm" })}><Plus className="size-3.5" /><span className="hidden sm:inline">Novo Almoxarifado</span></Link>} />
+    <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 sm:p-3">
+      <ErpPageTitle
+        title="Almoxarifados"
+        description="Depósitos, responsáveis e centros de distribuição física."
+        action={
+          <Link href="/patrimonio/almoxarifados/novo" className={buttonVariants({ size: "sm" })}>
+            <Plus className="size-3.5" />
+            <span className="hidden sm:inline">Novo almoxarifado</span>
+            <span className="sm:hidden">Novo</span>
+          </Link>
+        }
+      />
 
-      <Card className="rounded-md">
-        <CardHeader className="border-b p-3">
-          <CardTitle className="text-sm">Centros de Distribuição</CardTitle>
-          <CardDescription className="text-xs">
-            Gestão dos depósitos físicos e locais de armazenamento.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-3">
-          <form className="mb-3 flex flex-wrap items-center gap-2 rounded-md border bg-slate-50 p-2">
-            <div className="min-w-0 flex-1 sm:min-w-72">
-              <Input 
-                name="q"
-                defaultValue={q}
-                placeholder="Buscar por nome do almoxarifado..." 
-                className="bg-white"
-              />
-            </div>
-            <button type="submit" className={buttonVariants()}>
-              <Search className="h-4 w-4 mr-2" />
+      <ErpListFrame
+        toolbar={
+          <form className="flex items-center gap-2" role="search">
+            <Input
+              name="q"
+              defaultValue={q}
+              placeholder="Nome do almoxarifado"
+              className="h-8 min-w-0 flex-1 bg-white text-xs sm:max-w-xl"
+            />
+            <button type="submit" className={buttonVariants({ size: "sm" })}>
+              <Search className="size-3.5" />
               Buscar
             </button>
           </form>
-
-          <div className="overflow-x-auto rounded-md border">
-            <table className="min-w-[620px] w-full text-sm text-left">
-              <thead className="bg-muted text-muted-foreground border-b">
-                <tr>
-                  <th className="font-medium p-4 whitespace-nowrap">Nome</th>
-                  <th className="font-medium p-4 whitespace-nowrap">Tipo</th>
-                  <th className="font-medium p-4 whitespace-nowrap">Gerente Responsável</th>
-                  <th className="font-medium p-4 whitespace-nowrap">Status</th>
+        }
+        summary={<p className="text-[11px] text-slate-600"><strong className="text-slate-900">{total}</strong> almoxarifado(s) no recorte selecionado</p>}
+        pagination={
+          <ErpPagination
+            page={page}
+            total={total}
+            pageSize={PATRIMONIO_LIST_PAGE_SIZE}
+            label="almoxarifados"
+            previousHref={patrimonioListHref("/patrimonio/almoxarifados", page - 1, { q })}
+            nextHref={patrimonioListHref("/patrimonio/almoxarifados", page + 1, { q })}
+          />
+        }
+      >
+        <table className="w-full table-fixed text-left text-[11px] leading-4 text-slate-700">
+          <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            <tr className="h-7">
+              <th className="w-[36%] px-3 text-left">Nome</th>
+              <th className="w-[20%] px-3 text-left">Tipo</th>
+              <th className="w-[30%] px-3 text-left">Responsável</th>
+              <th className="w-[14%] px-3 text-left">Situação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {warehouses.length === 0 ? (
+              <tr><td colSpan={4} className="px-3 py-10 text-center text-slate-500">Nenhum almoxarifado encontrado.</td></tr>
+            ) : (
+              warehouses.map((warehouse) => (
+                <tr key={warehouse.id} className="h-[clamp(18px,2.65vh,28px)] border-b border-slate-100 hover:bg-slate-50">
+                  <td className="px-3 py-0 font-semibold text-emerald-800"><span className="block truncate">{warehouse.name}</span></td>
+                  <td className="px-3 py-0"><span className="block truncate">{warehouse.type}</span></td>
+                  <td className="px-3 py-0 text-slate-600"><span className="block truncate">{warehouse.manager?.name || "Sem responsável definido"}</span></td>
+                  <td className="px-3 py-0">
+                    <Badge variant={warehouse.isActive ? "default" : "secondary"} className="px-1.5 py-0 text-[10px] leading-4">
+                      {warehouse.isActive ? "Ativo" : "Inativo"}
+                    </Badge>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {warehouses.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="text-center p-8 text-muted-foreground">
-                      Nenhum almoxarifado encontrado.
-                    </td>
-                  </tr>
-                ) : (
-                  warehouses.map((warehouse) => (
-                    <tr key={warehouse.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="p-4 font-bold whitespace-nowrap text-indigo-700">{warehouse.name}</td>
-                      <td className="p-4 whitespace-nowrap">{warehouse.type}</td>
-                      <td className="p-4 text-muted-foreground whitespace-nowrap">
-                        {warehouse.manager?.name || "Sem responsável definido"}
-                      </td>
-                      <td className="p-4 whitespace-nowrap">
-                        <Badge variant={warehouse.isActive ? "default" : "secondary"}>
-                          {warehouse.isActive ? "Ativo" : "Inativo"}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-    </PageFrame>
-  )
+              ))
+            )}
+          </tbody>
+        </table>
+      </ErpListFrame>
+    </div>
+  );
 }

@@ -108,7 +108,7 @@ export async function ensureDefaultModulos() {
     { codigo: "FINANCEIRO", nome: "Financeiro, Orçamento & Tesouraria" },
     { codigo: "COMPRAS", nome: "Compras, Licitações & Cotações" },
     { codigo: "RH", nome: "Recursos Humanos & Servidores" },
-    { codigo: "PATRIMONIO", nome: "Patrimônio, Almoxarifado & Estoque" },
+    { codigo: "PATRIMONIO", nome: "Almoxarifado e Patrimônio" },
     { codigo: "EDUCACAO", nome: "Educação Pública & Escolas" },
     { codigo: "SAUDE", nome: "Saúde Pública & UBSs" },
     { codigo: "SOCIAL", nome: "Assistência Social & CRAS" },
@@ -134,6 +134,20 @@ export async function ensureDefaultModulos() {
       });
     }
   }
+
+  await prisma.configuracaoModulo.updateMany({
+    where: {
+      codigo: "PATRIMONIO",
+      nome: {
+        in: [
+          "Patrimônio e Almoxarifado",
+          "Patrimônio, Almoxarifado & Estoque",
+          "Patrimônio, Almoxarifado e Estoque",
+        ],
+      },
+    },
+    data: { nome: "Almoxarifado e Patrimônio" },
+  });
 }
 
 // --- Perfis de Acesso ---

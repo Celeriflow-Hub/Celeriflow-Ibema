@@ -41,6 +41,8 @@ test("Frotas · persistência e cenários da POC em banco isolado", { timeout: 1
     const context: AppContext = { prisma: db, user: { id: actor.id, firebaseUid: "fixture-not-authenticated", email: actor.email, name: actor.nome, role: "Operador DEMO", profileCode: profile.codigo, permissions: JSON.stringify({ modules: { FROTAS: permission } }), modulePermissions: [], allowedBudgetUnitIds: [], employeeId: null, departmentId: department.id, secretariatId: secretariat.id } };
     const mutation = (value: Omit<FleetMutationInput, "requestId">) => mutateFleet(context, { ...value, requestId: randomUUID() });
     const query = (input: Record<string, string | number> = {}) => fleetQuerySchema.parse(input);
+    assert.equal(query().pageSize, 20);
+    assert.equal(query({ pageSize: 5 }).pageSize, 20);
     const ids: string[] = [], planIds: string[] = [], orderIds: string[] = [];
     const codes = ["V-DEMO-01", "V-DEMO-02", "M-DEMO-01", "E-DEMO-01", "A-DEMO-01"];
     const categories = ["VEICULO", "VEICULO", "MAQUINA", "EQUIPAMENTO", "AGREGADO"] as const;
@@ -134,8 +136,8 @@ test("Frotas · persistência e cenários da POC em banco isolado", { timeout: 1
     });
     await t.test("FRO-012 · 27 registros, busca global e emissão além da primeira página", async () => {
       for (let i = 1; i <= 27; i++) await mutateFleet(context, { requestId: randomUUID(), kind: "unit", data: { code: `PAG-${String(i).padStart(2, "0")}`, name: `Unidade de paginação DEMO ${i}`, category: i <= 20 ? "VEICULO" : i <= 24 ? "MAQUINA" : "EQUIPAMENTO", status: "ATIVO", departmentId: department.id } });
-      const q = query({ q: "PAG-", pageSize: 10 });
-      assert.equal((await queryFleet(context, q)).rows.length, 10); assert.equal((await queryFleet(context, query({ q: "PAG-", pageSize: 10, page: 3 }))).rows.length, 7);
+      const q = query({ q: "PAG-", pageSize: 20 });
+      assert.equal((await queryFleet(context, q)).rows.length, 20); assert.equal((await queryFleet(context, query({ q: "PAG-", pageSize: 20, page: 2 }))).rows.length, 7);
       assert.equal((await queryFleet(context, query({ q: "PAG-27" }))).total, 1);
       const dataset = await createFleetReportDataset(context, { query: q }); assert.equal(dataset.sections[0].rows.length, 27);
       const presentation = { institution: null, template: createDefaultReportTemplate(), emission: { issuedAt: "2026-09-18", issuedBy: "Operador DEMO" } };
@@ -154,8 +156,8 @@ test("Frotas · persistência e cenários da POC em banco isolado", { timeout: 1
     await t.test("Datas inclusivas, exportação de 12 fatos e custo não informado", async () => {
       const unit = await mutateFleet(context, { requestId: randomUUID(), kind: "unit", data: { code: "BORDAS-DEMO", name: "Unidade isolada de limites DEMO", category: "VEICULO", status: "ATIVO", departmentId: department.id } });
       for (let i = 0; i < 14; i++) await mutateFleet(context, { requestId: randomUUID(), kind: "consumption", data: { unitId: unit.id, type: "COMBUSTIVEL", origin: "PROPRIO", occurredAt: i === 0 ? "2026-08-31" : i === 13 ? "2026-10-01" : i === 12 ? "2026-09-30" : "2026-09-01", material: "Combustível de limites DEMO", measurementUnit: "L", quantity: "1", ...(i !== 5 ? { cost: "1.00" } : {}) } });
-      const q = query({ area: "relatorios", report: "abastecimentos", unitId: unit.id, from: "2026-09-01", to: "2026-09-30", pageSize: 10 });
-      const list = await queryFleet(context, q); assert.equal(list.total, 12); assert.equal(list.rows.length, 10); assert.equal(list.missingCosts, 1); assert.equal(list.amount, "11.00");
+      const q = query({ area: "relatorios", report: "abastecimentos", unitId: unit.id, from: "2026-09-01", to: "2026-09-30", pageSize: 20 });
+      const list = await queryFleet(context, q); assert.equal(list.total, 12); assert.equal(list.rows.length, 12); assert.equal(list.missingCosts, 1); assert.equal(list.amount, "11.00");
       const report = await createFleetReportDataset(context, { query: q }); assert.equal(report.sections[0].rows.length, 12); assert.equal(report.warnings.length, 1);
       assert.equal((await queryFleet(context, query({ area: "consumos", unitId: unit.id, from: "2026-07-01", to: "2026-07-31" }))).total, 0);
       assert.equal(nextOccurrence(dateOnly("2026-09-10"), 30).toISOString().slice(0, 10), "2026-10-10");

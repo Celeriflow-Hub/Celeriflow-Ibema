@@ -24,7 +24,7 @@ import {
   Truck,
   ArrowUpRight
 } from "lucide-react";
-import { canShowDashboardCard, canViewModule, getOptionalTenantContext, isModuleActive, isModuleBlockedForUser } from "@/lib/platform/tenant-context";
+import { canShowDashboardCard, canUseInactiveModule, canViewModule, getOptionalTenantContext, isModuleBlockedForUser } from "@/lib/platform/tenant-context";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
 
@@ -52,7 +52,7 @@ const menuItems: MenuItem[] = [
   { code: "FINANCEIRO", name: "Financeiro e Contábil", description: "Orçamento e caixa", href: "/financeiro", icon: CircleDollarSign, color: "text-[#16A34A]", bg: "bg-[#DCFCE7]", solid: "bg-[#16A34A]" },
   { code: "COMPRAS", name: "Compras e Contratos", description: "Gestão de compras", href: "/compras", icon: ShoppingCart, color: "text-[#9333EA]", bg: "bg-[#F3E8FF]", solid: "bg-[#9333EA]" },
   { code: "RH", name: "RH e Folha", description: "Servidores e folha", href: "/rh", icon: Users, color: "text-[#EC4899]", bg: "bg-[#FCE7F3]", solid: "bg-[#EC4899]" },
-  { code: "PATRIMONIO", name: "Patrimônio e Almoxarifado", description: "Controle de bens", href: "/patrimonio", icon: Package, color: "text-[#D97706]", bg: "bg-[#FEF3C7]", solid: "bg-[#D97706]" },
+  { code: "PATRIMONIO", name: "Almoxarifado e Patrimônio", description: "Estoque, bens e inventários", href: "/patrimonio", icon: Package, color: "text-[#D97706]", bg: "bg-[#FEF3C7]", solid: "bg-[#D97706]" },
   { code: "EDUCACAO", name: "Educação", description: "Escolas e alunos", href: "/educacao", icon: GraduationCap, color: "text-[#6366F1]", bg: "bg-[#E0E7FF]", solid: "bg-[#6366F1]" },
   { code: "SAUDE", name: "Saúde", description: "SUS, postos e pacientes", href: "/saude", icon: HeartPulse, color: "text-[#EF4444]", bg: "bg-[#FEE2E2]", solid: "bg-[#EF4444]" },
   { code: "SOCIAL", name: "Assistência Social", description: "Benefícios e CRAS", href: "/social", icon: Handshake, color: "text-[#DB2777]", bg: "bg-[#FCE7F3]", solid: "bg-[#DB2777]" },
@@ -79,17 +79,16 @@ export default async function PainelPage() {
     console.warn("Notice: Failed to fetch configuracaoModulo status", err);
   }
 
-  const visibleMenuItems = menuItems.filter((item) =>
-    context && isModuleActive(moduleActivationByCode.get(item.code)) && canShowDashboardCard(context.user, item.code),
-  );
+  const visibleMenuItems = menuItems.filter((item) => context && canShowDashboardCard(context.user, item.code));
 
   return (
     <PageFrame className="flex flex-col gap-2 px-1 py-1 md:px-2">
       <PageHeader title="Módulos do sistema" />
       <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7">
         {visibleMenuItems.map((item) => {
+          const isConfig = item.code === "CONFIGURACOES";
           const isProfileBlocked = !context || isModuleBlockedForUser(context.user, item.code) || !canViewModule(context.user, item.code);
-          const isLocked = isProfileBlocked;
+          const isLocked = isProfileBlocked || (!isConfig && moduleActivationByCode.get(item.code) === false && !canUseInactiveModule(context.user));
 
           if (isLocked) {
             return (

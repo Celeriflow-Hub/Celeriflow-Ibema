@@ -76,7 +76,7 @@ export const fleetQuerySchema = z.object({
   unitId: z.string().max(200).default(""), unitIds: z.string().max(4100).default("").refine(v => !v || (v.split(",").length <= 50 && v.split(",").every(id => /^[a-zA-Z0-9_-]{1,80}$/.test(id))), "Selecione até 50 unidades válidas."), category: z.enum([...categories, ""]).default(""),
   status: z.string().max(40).default(""), type: z.string().max(40).default(""), origin: z.enum(["PROPRIO", "TERCEIRO", ""]).default(""),
   from: z.union([dateSchema, z.literal("")]).default(""), to: z.union([dateSchema, z.literal("")]).default(""),
-  page: z.coerce.number().int().min(1).max(100000).default(1), pageSize: z.coerce.number().int().min(1).max(10).default(5),
+  page: z.coerce.number().int().min(1).max(100000).default(1), pageSize: z.coerce.number().int().min(1).max(20).default(20).transform(() => 20),
   report: z.enum(["frota", "vencimentos", "abastecimentos", "gastos", "manutencoes"]).default("frota"),
 }).refine(v => !v.from || !v.to || v.from <= v.to, { message: "A data final deve ser igual ou posterior à inicial.", path: ["to"] });
 export type FleetQuery = z.output<typeof fleetQuerySchema>;

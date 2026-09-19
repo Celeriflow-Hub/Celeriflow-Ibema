@@ -1,7 +1,6 @@
 import { AlertTriangle, Archive, ClipboardList, FileBox, FileCheck2, FileText, MessageSquareWarning, Timer } from "lucide-react";
 import Link from "next/link";
-import { PageFrame } from "@/components/app-ui/PageFrame";
-import { PageHeader } from "@/components/app-ui/PageHeader";
+import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import { getProtocolContext, protocolScope } from "@/lib/protocols/access";
 import { getOmbudsmanContextForProtocols, ombudsmanScope } from "@/lib/attendance/access";
 
@@ -36,24 +35,31 @@ export default async function ProtocolosDashboardPage() {
   ];
 
   return (
-    <PageFrame className="space-y-2">
-      <PageHeader title="Painel de Protocolos" icon={<ClipboardList className="size-4 shrink-0 text-indigo-600" />} />
+    <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 sm:p-3">
+      <ErpPageTitle
+        title="Painel operacional"
+        description="Visão consolidada de processos, prazos, ouvidoria e avisos públicos."
+        icon={<ClipboardList className="size-5 shrink-0 text-emerald-700" />}
+      />
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Indicadores de processos e protocolos">
         {stats.map((stat) => (
-          <Link key={stat.title} href={stat.href} className="block group">
-            <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white p-3 shadow-sm transition-colors hover:border-slate-300 hover:shadow-md">
-              <div>
-                <p className="text-sm font-medium text-slate-500">{stat.title}</p>
-                <p className="mt-0.5 text-2xl font-bold text-slate-900">{stat.value}</p>
-              </div>
-              <div className={`flex size-9 items-center justify-center rounded-md ${stat.bg} ${stat.color} transition-transform duration-200 group-hover:scale-105`}>
-                <stat.icon className="size-5" strokeWidth={2.5} />
-              </div>
+          <Link
+            key={stat.title}
+            href={stat.href}
+            className="flex min-h-16 items-center gap-3 border border-slate-300 bg-white px-3 py-2 shadow-sm outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-emerald-600"
+          >
+            <div className={`flex size-8 shrink-0 items-center justify-center rounded ${stat.bg} ${stat.color}`}>
+              <stat.icon className="size-4" strokeWidth={2.25} />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500">{stat.title}</p>
+              <p className="text-xl font-semibold leading-tight tabular-nums text-slate-900">{stat.value}</p>
+              <p className="truncate text-[10px] font-medium text-emerald-800">Abrir visão</p>
             </div>
           </Link>
         ))}
-      </div>
-    </PageFrame>
+      </section>
+    </div>
   );
 }

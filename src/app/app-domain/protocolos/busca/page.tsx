@@ -1,34 +1,60 @@
+import type { Prisma } from "@prisma/client";
 import { getProtocolContext, protocolScope } from "@/lib/protocols/access";
-import BuscaClient from "./BuscaClient"; // Force IDE reload
+import { parseProcessListFilters, PROCESS_LIST_PAGE_SIZE, resolveProcessListPage } from "@/lib/protocols/process-listing-policy";
+import BuscaClient from "./BuscaClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function BuscarProcessoPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined }
-}) {
-  const context = await getProtocolContext();
-  const { prisma } = context;
-  const query = searchParams?.q as string | undefined;
+type SearchParams = {
+  q?: string | string[];
+  page?: string | string[];
+};
 
-  const processos = await prisma.process.findMany({
-    where: {
-      ...protocolScope(context),
-      ...(query ? { OR: [
-        { protocolNumber: { contains: query, mode: 'insensitive' } },
-        { description: { contains: query, mode: 'insensitive' } }
-      ] } : {}),
+export default async function BuscarProcessoPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const context = await getProtocolContext();
+  const filters = parseProcessListFilters(await searchParams);
+  const conditions: Prisma.ProcessWhereInput[] = [protocolScope(context)];
+
+  if (filters.q) {
+    conditions.push({
+      OR: [
+        { protocolNumber: { contains: filters.q, mode: "insensitive" } },
+        { description: { contains: filters.q, mode: "insensitive" } },
+        { processType: { is: { name: { contains: filters.q, mode: "insensitive" } } } },
+        { subject: { is: { name: { contains: filters.q, mode: "insensitive" } } } },
+        { person: { is: { fullName: { contains: filters.q, mode: "insensitive" } } } },
+        { company: { is: { corporateName: { contains: filters.q, mode: "insensitive" } } } },
+      ],
+    });
+  }
+
+  const where: Prisma.ProcessWhereInput = { AND: conditions };
+  const total = await context.prisma.process.count({ where });
+  const page = resolveProcessListPage(filters.page, total);
+  const processos = await context.prisma.process.findMany({
+    where,
+    select: {
+      id: true,
+      protocolNumber: true,
+      status: true,
+      createdAt: true,
+      processType: { select: { name: true } },
+      subject: { select: { name: true } },
+      person: { select: { fullName: true } },
+      company: { select: { corporateName: true } },
     },
-    include: {
-      processType: true,
-      subject: true,
-      person: true,
-      company: true,
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 50
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    skip: (page - 1) * PROCESS_LIST_PAGE_SIZE,
+    take: PROCESS_LIST_PAGE_SIZE,
   });
 
-  return <BuscaClient initialProcessos={processos} query={query || ""} />;
+  return (
+    <BuscaClient
+      processos={processos}
+      query={filters.q}
+      total={total}
+      page={page}
+      pageSize={PROCESS_LIST_PAGE_SIZE}
+    />
+  );
 }

@@ -1,10 +1,16 @@
-"use client";
-
 import Link from "next/link";
-import { Archive, Search } from "lucide-react";
+import { Archive, Pencil, Search } from "lucide-react";
 import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
 import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
+import {
+  ErpTableContainer,
+  ErpTableThead,
+  ErpTableTh,
+  ErpTableTr,
+  ErpTableTd,
+  ErpStatusBadge,
+} from "@/components/app-ui/erp/ErpTable";
 
 type Processo = {
   id: string;
@@ -42,46 +48,39 @@ export default function ArquivadosClient({
   page: number;
   pageSize: number;
 }) {
-  const firstVisible = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const lastVisible = Math.min(page * pageSize, total);
-
   return (
-    <div className="flex h-full min-h-0 flex-col gap-1.5 p-2 lg:p-3">
-      <ErpPageTitle
-        title="Processos arquivados"
-        description="Arquivo definitivo dentro do escopo autorizado."
-        icon={<Archive className="size-5 shrink-0 text-emerald-700" />}
-      />
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+      <ErpPageTitle title="Processos arquivados" />
 
       <ErpListFrame
         toolbar={(
-          <form action="/protocolos/arquivados" method="GET" className="grid items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto]">
-            <label className="relative block">
+          <form action="/protocolos/arquivados" method="GET" className="flex flex-wrap items-center gap-2">
+            <label className="relative flex-1 min-w-[240px] max-w-xl">
               <span className="sr-only">Buscar nos processos arquivados</span>
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
               <input
                 name="q"
                 type="search"
                 defaultValue={query}
-                placeholder="Protocolo, interessado, tipo ou assunto"
-                className="h-7 w-full rounded border border-slate-300 bg-white py-1 pl-8 pr-2 text-xs outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
+                placeholder="Buscar por número, interessado, tipo ou assunto arquivado"
+                className="h-8 w-full rounded-md border border-slate-200 bg-white py-1 pl-8 pr-2.5 text-xs outline-none transition-colors placeholder:text-slate-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-800"
               />
             </label>
-            <button className="h-7 rounded bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-700">
-              Aplicar
+            <button
+              type="submit"
+              className="h-8 rounded-md bg-slate-900 px-3 text-xs font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600"
+            >
+              Pesquisar
             </button>
-            <Link href="/protocolos/arquivados" className="inline-flex h-7 items-center justify-center rounded border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+            <Link
+              href="/protocolos/arquivados"
+              className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
               Limpar
             </Link>
           </form>
         )}
-        summary={(
-          <p className="min-h-5 text-[11px] text-slate-600">
-            <strong className="text-slate-900">{total}</strong> processo(s) arquivado(s) no recorte autorizado
-            {total ? " · exibindo " + firstVisible + "–" + lastVisible : ""}.
-          </p>
-        )}
-        pagination={(
+        pagination={
           <ErpPagination
             page={page}
             total={total}
@@ -90,59 +89,100 @@ export default function ArquivadosClient({
             nextHref={archiveListHref(query, page + 1)}
             label="processos arquivados"
           />
-        )}
+        }
       >
         {processos.length === 0 ? (
           <div className="flex h-full min-h-[220px] flex-col items-center justify-center p-6 text-center">
-            <div className="mb-2 flex size-9 items-center justify-center rounded-full bg-slate-100">
+            <div className="mb-2 flex size-9 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
               <Archive className="size-5 text-slate-400" />
             </div>
-            <h2 className="text-sm font-bold text-slate-700">Nenhum processo arquivado encontrado</h2>
-            <p className="mt-1 max-w-md text-xs text-slate-500">Revise a busca ou aguarde o arquivamento de novos processos no seu escopo.</p>
+            <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300">Nenhum processo arquivado encontrado</h2>
+            <p className="mt-1 max-w-md text-xs text-slate-500">Revise os filtros ou aguarde o arquivamento de novos processos.</p>
           </div>
         ) : (
           <>
             <div className="hidden h-full md:block">
-              <table className="h-full w-full table-fixed border-collapse text-left text-[11px] leading-3">
-                <thead className="border-b border-slate-200 bg-slate-100 text-[10px] font-bold uppercase tracking-[0.06em] text-slate-600">
+              <ErpTableContainer>
+                <ErpTableThead>
                   <tr>
-                    <th className="w-[17%] px-2 py-1">Protocolo</th>
-                    <th className="px-2 py-1">Tipo e assunto</th>
-                    <th className="hidden w-[23%] px-2 py-1 xl:table-cell">Interessado</th>
-                    <th className="w-[16%] px-2 py-1">Situação</th>
-                    <th className="hidden w-[12%] px-2 py-1 lg:table-cell">Arquivado em</th>
-                    <th className="w-[10%] px-2 py-1 text-right">Ação</th>
+                    <ErpTableTh sortable className="w-[140px]">Protocolo</ErpTableTh>
+                    <ErpTableTh sortable>Tipo / Assunto</ErpTableTh>
+                    <ErpTableTh sortable className="w-[24%]">Interessado</ErpTableTh>
+                    <ErpTableTh sortable className="w-[120px]">Arquivado em</ErpTableTh>
+                    <ErpTableTh sortable className="w-[110px] text-center">Status</ErpTableTh>
+                    <th className="w-[90px] px-2.5 py-2 text-right font-semibold text-slate-500">Ação</th>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
+                </ErpTableThead>
+                <tbody>
                   {processos.map((processo) => {
                     const processLabel = processo.processType.name + " · " + processo.subject.name;
                     return (
-                      <tr key={processo.id} className="h-5 hover:bg-slate-50">
-                        <td className="truncate px-2 py-0.5 font-semibold text-slate-800" title={processo.protocolNumber}>{processo.protocolNumber}</td>
-                        <td className="truncate px-2 py-0.5 text-slate-700" title={processLabel}>{processLabel}</td>
-                        <td className="hidden truncate px-2 py-0.5 text-slate-700 xl:table-cell" title={interestedName(processo)}>{interestedName(processo)}</td>
-                        <td className="px-2 py-0.5"><span className="inline-flex max-w-full truncate rounded bg-slate-100 px-1.5 py-0 text-[10px] font-semibold leading-3 text-slate-600">{processo.status}</span></td>
-                        <td className="hidden whitespace-nowrap px-2 py-0.5 text-[10px] text-slate-600 lg:table-cell">{processo.archivedAt ? new Date(processo.archivedAt).toLocaleDateString("pt-BR") : "Não informado"}</td>
-                        <td className="px-2 py-0.5 text-right"><Link href={"/protocolos/processos/" + processo.id} className="text-[10px] font-semibold text-emerald-700 hover:text-emerald-900">Abrir</Link></td>
-                      </tr>
+                      <ErpTableTr key={processo.id}>
+                        <ErpTableTd className="font-semibold text-slate-800 dark:text-slate-100">
+                          {processo.protocolNumber}
+                        </ErpTableTd>
+                        <ErpTableTd title={processLabel}>
+                          {processLabel}
+                        </ErpTableTd>
+                        <ErpTableTd title={interestedName(processo)}>
+                          {interestedName(processo)}
+                        </ErpTableTd>
+                        <ErpTableTd className="text-slate-500 tabular-nums">
+                          {processo.archivedAt ? new Date(processo.archivedAt).toLocaleDateString("pt-BR") : "—"}
+                        </ErpTableTd>
+                        <td className="px-2.5 py-1.5 text-center">
+                          <ErpStatusBadge variant="neutral">
+                            {processo.status}
+                          </ErpStatusBadge>
+                        </td>
+                        <td className="px-2.5 py-1.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Link
+                              href={"/protocolos/processos/" + processo.id}
+                              className="text-[11px] font-semibold text-sky-600 hover:text-sky-700 hover:underline dark:text-sky-400"
+                            >
+                              Abrir
+                            </Link>
+                            <Link
+                              href={"/protocolos/processos/" + processo.id}
+                              title="Ver arquivo"
+                              className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                            >
+                              <Pencil className="size-3.5" />
+                            </Link>
+                          </div>
+                        </td>
+                      </ErpTableTr>
                     );
                   })}
                 </tbody>
-              </table>
+              </ErpTableContainer>
             </div>
-            <div className="divide-y divide-slate-100 overflow-y-auto md:hidden">
+
+            {/* Mobile View */}
+            <div className="divide-y divide-slate-100 overflow-y-auto md:hidden dark:divide-slate-800">
               {processos.map((processo) => (
                 <article key={processo.id} className="space-y-1.5 p-3">
                   <div className="flex items-start justify-between gap-2">
-                    <span className="font-semibold text-slate-900">{processo.protocolNumber}</span>
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">{processo.status}</span>
+                    <span className="font-bold text-slate-900 dark:text-slate-100">{processo.protocolNumber}</span>
+                    <ErpStatusBadge variant="neutral">
+                      {processo.status}
+                    </ErpStatusBadge>
                   </div>
-                  <p className="text-xs font-medium text-slate-800">{processo.processType.name} · {processo.subject.name}</p>
-                  <p className="text-xs text-slate-600">{interestedName(processo)}</p>
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-500">{processo.archivedAt ? "Arquivado em " + new Date(processo.archivedAt).toLocaleDateString("pt-BR") : "Data não informada"}</span>
-                    <Link href={"/protocolos/processos/" + processo.id} className="font-semibold text-emerald-700">Abrir</Link>
+                  <p className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                    {processo.processType.name} · {processo.subject.name}
+                  </p>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">{interestedName(processo)}</p>
+                  <div className="flex items-center justify-between text-[11px] pt-1">
+                    <span className="text-slate-500">
+                      {processo.archivedAt ? "Arquivado em " + new Date(processo.archivedAt).toLocaleDateString("pt-BR") : "Data não informada"}
+                    </span>
+                    <Link
+                      href={"/protocolos/processos/" + processo.id}
+                      className="font-semibold text-sky-600 hover:underline dark:text-sky-400"
+                    >
+                      Abrir detalhes
+                    </Link>
                   </div>
                 </article>
               ))}

@@ -11,13 +11,13 @@ type ErpPageTitleProps = {
 
 export function ErpPageTitle({ title, description, action, icon, className }: ErpPageTitleProps) {
   return (
-    <header className={cn("flex min-h-10 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 sm:flex-nowrap sm:justify-between", className)}>
-      <div className="min-w-0">
-        <h1 className="flex min-w-0 items-center gap-2 text-[22px] font-semibold leading-tight tracking-tight text-slate-900">
-          {icon}
-          <span className="truncate">{title}</span>
+    <header className={cn("flex min-h-8 shrink-0 flex-wrap items-center justify-between gap-2 px-1 py-0.5", className)}>
+      <div className="flex min-w-0 items-center gap-2">
+        {icon}
+        <h1 className="truncate text-[18px] font-bold leading-tight tracking-tight text-slate-800 dark:text-slate-100">
+          {title}
         </h1>
-        {description && <p className="mt-0.5 truncate text-[11px] text-slate-500">{description}</p>}
+        {description && <span className="hidden text-[11px] text-slate-400 xl:inline">· {description}</span>}
       </div>
       {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
     </header>

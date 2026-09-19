@@ -1,12 +1,19 @@
-"use client";
-
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { CheckSquare, FileBox, FileText, Plus, Search } from "lucide-react";
+import { CheckSquare, FileText, Pencil, Plus, Search } from "lucide-react";
 import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
 import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
+import {
+  ErpTableContainer,
+  ErpTableThead,
+  ErpTableTh,
+  ErpTableTr,
+  ErpTableTd,
+  ErpStatusBadge,
+  type ErpStatusVariant,
+} from "@/components/app-ui/erp/ErpTable";
 import type { ProcessListFilters } from "@/lib/protocols/process-listing-policy";
 import { processListHref } from "@/lib/protocols/process-listing-policy";
 import { receiveProcess, receiveProcessesBatch } from "../actions";
@@ -23,12 +30,12 @@ type Processo = {
   company: { corporateName: string } | null;
 };
 
-function statusClass(status: string) {
-  if (["Concluido", "Concluído"].includes(status)) return "bg-emerald-100 text-emerald-700";
-  if (status === "Aguardando Recebimento") return "bg-blue-100 text-blue-700";
-  if (status === "Arquivado") return "bg-slate-100 text-slate-600";
-  if (["Cancelado", "Rejeitado"].includes(status)) return "bg-red-100 text-red-700";
-  return "bg-amber-100 text-amber-700";
+function getStatusVariant(status: string): ErpStatusVariant {
+  if (["Concluido", "Concluído", "Finalizada"].includes(status)) return "success";
+  if (["Aguardando Recebimento", "Pendente"].includes(status)) return "warning";
+  if (["Em Analise", "Recebido", "Atendimento"].includes(status)) return "info";
+  if (["Cancelado", "Rejeitado"].includes(status)) return "danger";
+  return "neutral";
 }
 
 function interestedName(processo: Processo) {
@@ -60,8 +67,6 @@ export default function ProcessosClient({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const firstVisible = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const lastVisible = Math.min(page * pageSize, total);
   const receivableIds = processos
     .filter((processo) => canReceive && processo.currentDepartmentId === currentDepartmentId && processo.status === "Aguardando Recebimento")
     .map((processo) => processo.id);
@@ -107,13 +112,14 @@ export default function ProcessosClient({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-1.5 p-2 lg:p-3">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
       <ErpPageTitle
-        title="Caixa do Setor"
-        description="Processos distribuídos no escopo autorizado."
-        icon={<FileBox className="size-5 shrink-0 text-emerald-700" />}
+        title="Protocolos"
         action={canCreate ? (
-          <Link href="/protocolos/processos/novo" className="inline-flex h-8 items-center gap-1.5 rounded bg-emerald-700 px-3 text-xs font-semibold text-white outline-none hover:bg-emerald-800 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
+          <Link
+            href="/protocolos/processos/novo"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-amber-500 px-3 text-xs font-bold text-slate-950 shadow-xs transition-colors hover:bg-amber-600 active:bg-amber-700"
+          >
             <Plus className="size-3.5" />
             Novo protocolo
           </Link>
@@ -122,86 +128,228 @@ export default function ProcessosClient({
 
       <ErpListFrame
         toolbar={(
-          <form action="/protocolos/processos" method="GET" className="grid items-center gap-2 md:grid-cols-[minmax(0,1fr)_180px_auto_auto]">
-            <label className="relative block">
-              <span className="sr-only">Buscar processo</span>
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-              <input name="q" defaultValue={filters.q} placeholder="Protocolo, interessado, tipo ou assunto" className="h-7 w-full rounded border border-slate-300 bg-white py-1 pl-8 pr-2 text-xs outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15" />
-            </label>
-            <label className="sr-only" htmlFor="status">Situação</label>
-            <select id="status" name="status" defaultValue={filters.status || "ATIVOS"} className="h-7 rounded border border-slate-300 bg-white px-2 text-xs outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15">
-              <option value="ATIVOS">Não arquivados</option>
-              <option value="Aguardando Recebimento">Aguardando recebimento</option>
-              <option value="Recebido">Recebido</option>
-              <option value="Em Analise">Em análise</option>
-              <option value="Concluido">Concluído</option>
-              <option value="Arquivado">Arquivado</option>
-              <option value="Cancelado">Cancelado</option>
-            </select>
-            <button className="h-7 rounded bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-700">Aplicar</button>
-            <Link href="/protocolos/processos" className="inline-flex h-7 items-center justify-center rounded border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">Limpar</Link>
-          </form>
-        )}
-        summary={(
-          <div className="flex min-h-5 flex-wrap items-center justify-between gap-2 text-[11px]">
-            <div className="flex min-w-0 items-center gap-2 text-slate-600">
-              <span><strong className="text-slate-900">{total}</strong> processo(s) no recorte autorizado{total ? " · exibindo " + firstVisible + "–" + lastVisible : ""}.</span>
-              {notice && <span className="truncate font-medium text-slate-700" aria-live="polite">{notice}</span>}
+          <form action="/protocolos/processos" method="GET" className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-1 flex-wrap items-center gap-2 max-w-2xl">
+              <label className="relative min-w-[200px] flex-1">
+                <span className="sr-only">Buscar processo</span>
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+                <input
+                  name="q"
+                  defaultValue={filters.q}
+                  placeholder="Buscar protocolo, interessado, tipo ou assunto"
+                  className="h-8 w-full rounded-md border border-slate-200 bg-white py-1 pl-8 pr-2.5 text-xs outline-none transition-colors placeholder:text-slate-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-800"
+                />
+              </label>
+
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="status" className="text-[11px] font-medium text-slate-500">Status</label>
+                <select
+                  id="status"
+                  name="status"
+                  defaultValue={filters.status || "ATIVOS"}
+                  className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 outline-none transition-colors focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  <option value="ATIVOS">Todos ativos</option>
+                  <option value="Aguardando Recebimento">Aguardando recebimento</option>
+                  <option value="Recebido">Recebido</option>
+                  <option value="Em Analise">Em análise</option>
+                  <option value="Concluido">Concluído</option>
+                  <option value="Arquivado">Arquivado</option>
+                  <option value="Cancelado">Cancelado</option>
+                </select>
+              </div>
+
+              <button
+                type="submit"
+                className="h-8 rounded-md bg-slate-900 px-3 text-xs font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600"
+              >
+                Filtrar
+              </button>
+              <Link
+                href="/protocolos/processos"
+                className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Limpar
+              </Link>
             </div>
+
             {selectedReceivableIds.length > 0 && (
-              <button disabled={isPending} onClick={handleBatchReceive} className="inline-flex h-7 items-center justify-center gap-1 rounded bg-blue-700 px-2 text-[11px] font-semibold text-white disabled:opacity-50">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={handleBatchReceive}
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-blue-700 px-3 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-blue-800 disabled:opacity-50"
+              >
                 <CheckSquare className="size-3.5" />
                 Receber ({selectedReceivableIds.length})
               </button>
             )}
-          </div>
+          </form>
         )}
-        pagination={<ErpPagination page={page} total={total} pageSize={pageSize} previousHref={processListHref(filters, page - 1)} nextHref={processListHref(filters, page + 1)} label="processos" />}
+        summary={notice ? (
+          <div className="flex items-center text-[11px] font-medium text-emerald-700 dark:text-emerald-400" aria-live="polite">
+            {notice}
+          </div>
+        ) : undefined}
+        pagination={
+          <ErpPagination
+            page={page}
+            total={total}
+            pageSize={pageSize}
+            previousHref={processListHref(filters, page - 1)}
+            nextHref={processListHref(filters, page + 1)}
+            label="protocolos"
+          />
+        }
       >
         {processos.length === 0 ? (
           <div className="flex h-full min-h-[220px] flex-col items-center justify-center p-6 text-center">
-            <div className="mb-2 flex size-9 items-center justify-center rounded-full bg-slate-100"><FileText className="size-5 text-slate-400" /></div>
-            <h2 className="text-sm font-bold text-slate-700">Nenhum processo encontrado</h2>
-            <p className="mt-1 max-w-md text-xs text-slate-500">Revise os filtros ou aguarde uma nova distribuição para o seu setor.</p>
+            <div className="mb-2 flex size-9 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+              <FileText className="size-5 text-slate-400" />
+            </div>
+            <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300">Nenhum protocolo encontrado</h2>
+            <p className="mt-1 max-w-md text-xs text-slate-500">Revise os filtros de busca ou aguarde novas distribuições.</p>
           </div>
         ) : (
           <>
             <div className="hidden h-full md:block">
-              <table className="w-full table-fixed border-collapse text-left text-[11px] leading-3">
-                <thead className="border-b border-slate-200 bg-slate-100 text-[10px] font-bold uppercase tracking-[0.06em] text-slate-600">
+              <ErpTableContainer>
+                <ErpTableThead>
                   <tr>
-                    <th className="w-8 px-2 py-1"><span className="sr-only">Selecionar</span></th>
-                    <th className="w-[16%] px-2 py-1">Protocolo</th>
-                    <th className="px-2 py-1">Tipo e assunto</th>
-                    <th className="hidden w-[20%] px-2 py-1 2xl:table-cell">Interessado</th>
-                    <th className="w-[15%] px-2 py-1">Situação</th>
-                    <th className="hidden w-[11%] px-2 py-1 xl:table-cell">Abertura</th>
-                    <th className="w-[11%] px-2 py-1 text-right">Ações</th>
+                    <th className="w-8 select-none px-2 py-2 text-center">
+                      <span className="sr-only">Selecionar</span>
+                    </th>
+                    <ErpTableTh sortable className="w-[140px]">Protocolo</ErpTableTh>
+                    <ErpTableTh sortable className="w-[130px]">Origem</ErpTableTh>
+                    <ErpTableTh sortable>Tipo / Assunto</ErpTableTh>
+                    <ErpTableTh sortable className="w-[22%]">Interessado</ErpTableTh>
+                    <ErpTableTh sortable className="w-[110px]">Data</ErpTableTh>
+                    <ErpTableTh sortable className="w-[120px] text-center">Status</ErpTableTh>
+                    <th className="w-[100px] px-2.5 py-2 text-right font-semibold text-slate-500">Ação</th>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
+                </ErpTableThead>
+                <tbody>
                   {processos.map((processo) => {
                     const canReceiveThis = canReceive && processo.currentDepartmentId === currentDepartmentId && processo.status === "Aguardando Recebimento";
                     const processLabel = processo.processType.name + " · " + processo.subject.name;
                     return (
-                      <tr key={processo.id} className="h-5 hover:bg-slate-50">
-                        <td className="px-2 py-0.5">{canReceiveThis && <input aria-label={"Selecionar " + processo.protocolNumber} type="checkbox" checked={selectedIds.includes(processo.id)} onChange={(event) => setSelected(processo.id, event.target.checked)} />}</td>
-                        <td className="truncate px-2 py-0.5 font-semibold text-slate-800" title={processo.protocolNumber}>{processo.protocolNumber}</td>
-                        <td className="truncate px-2 py-0.5 text-slate-700" title={processLabel}>{processLabel}</td>
-                        <td className="hidden truncate px-2 py-0.5 text-slate-700 2xl:table-cell" title={interestedName(processo)}>{interestedName(processo)}</td>
-                        <td className="px-2 py-0.5"><span className={["inline-flex max-w-full truncate rounded px-1.5 py-0 text-[10px] font-semibold leading-3", statusClass(processo.status)].join(" ")}>{processo.status}</span></td>
-                        <td className="hidden whitespace-nowrap px-2 py-0.5 text-[10px] text-slate-600 xl:table-cell">{new Date(processo.createdAt).toLocaleDateString("pt-BR")}</td>
-                        <td className="px-2 py-0.5 text-right"><div className="flex justify-end gap-2 whitespace-nowrap"><Link href={processHref(processo.id)} className="text-[10px] font-semibold text-emerald-700 hover:text-emerald-900">Abrir</Link>{canReceiveThis && <button disabled={isPending} onClick={() => handleReceive(processo.id)} className="text-[10px] font-semibold text-blue-700 hover:text-blue-900 disabled:opacity-50">Receber</button>}</div></td>
-                      </tr>
+                      <ErpTableTr key={processo.id}>
+                        <td className="w-8 px-2 py-1 text-center">
+                          {canReceiveThis ? (
+                            <input
+                              aria-label={"Selecionar " + processo.protocolNumber}
+                              type="checkbox"
+                              checked={selectedIds.includes(processo.id)}
+                              onChange={(event) => setSelected(processo.id, event.target.checked)}
+                              className="size-3.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                            />
+                          ) : (
+                            <span className="inline-block size-3.5" />
+                          )}
+                        </td>
+                        <ErpTableTd className="font-semibold text-slate-800 dark:text-slate-100">
+                          {processo.protocolNumber}
+                        </ErpTableTd>
+                        <ErpTableTd className="text-slate-500">
+                          Digital
+                        </ErpTableTd>
+                        <ErpTableTd title={processLabel}>
+                          {processLabel}
+                        </ErpTableTd>
+                        <ErpTableTd title={interestedName(processo)}>
+                          {interestedName(processo)}
+                        </ErpTableTd>
+                        <ErpTableTd className="text-slate-500 tabular-nums">
+                          {new Date(processo.createdAt).toLocaleDateString("pt-BR")}
+                        </ErpTableTd>
+                        <td className="px-2.5 py-1.5 text-center">
+                          <ErpStatusBadge variant={getStatusVariant(processo.status)}>
+                            {processo.status}
+                          </ErpStatusBadge>
+                        </td>
+                        <td className="px-2.5 py-1.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Link
+                              href={processHref(processo.id)}
+                              className="text-[11px] font-semibold text-sky-600 hover:text-sky-700 hover:underline dark:text-sky-400"
+                            >
+                              Ver atendimento...
+                            </Link>
+                            {canReceiveThis && (
+                              <button
+                                type="button"
+                                disabled={isPending}
+                                onClick={() => handleReceive(processo.id)}
+                                className="text-[11px] font-semibold text-amber-700 hover:text-amber-800 disabled:opacity-50 dark:text-amber-400"
+                              >
+                                Receber
+                              </button>
+                            )}
+                            <Link
+                              href={processHref(processo.id)}
+                              title="Abrir processo"
+                              className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                            >
+                              <Pencil className="size-3.5" />
+                            </Link>
+                          </div>
+                        </td>
+                      </ErpTableTr>
                     );
                   })}
                 </tbody>
-              </table>
+              </ErpTableContainer>
             </div>
-            <div className="divide-y divide-slate-100 overflow-y-auto md:hidden">
+
+            {/* Mobile / Tablet Responsive View */}
+            <div className="divide-y divide-slate-100 overflow-y-auto md:hidden dark:divide-slate-800">
               {processos.map((processo) => {
                 const canReceiveThis = canReceive && processo.currentDepartmentId === currentDepartmentId && processo.status === "Aguardando Recebimento";
-                return <article key={processo.id} className="space-y-1.5 p-3"><div className="flex items-start justify-between gap-2"><div>{canReceiveThis && <input aria-label={"Selecionar " + processo.protocolNumber} type="checkbox" checked={selectedIds.includes(processo.id)} onChange={(event) => setSelected(processo.id, event.target.checked)} className="mr-2" />}<span className="font-semibold text-slate-900">{processo.protocolNumber}</span></div><span className={["rounded px-1.5 py-0.5 text-[10px] font-semibold", statusClass(processo.status)].join(" ")}>{processo.status}</span></div><p className="text-xs font-medium text-slate-800">{processo.processType.name} · {processo.subject.name}</p><p className="text-xs text-slate-600">{interestedName(processo)}</p><div className="flex items-center justify-between text-[11px]"><span className="text-slate-500">Aberto em {new Date(processo.createdAt).toLocaleDateString("pt-BR")}</span><span className="flex gap-3"><Link href={processHref(processo.id)} className="font-semibold text-emerald-700">Abrir</Link>{canReceiveThis && <button disabled={isPending} onClick={() => handleReceive(processo.id)} className="font-semibold text-blue-700 disabled:opacity-50">Receber</button>}</span></div></article>;
+                return (
+                  <article key={processo.id} className="space-y-1.5 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {canReceiveThis && (
+                          <input
+                            aria-label={"Selecionar " + processo.protocolNumber}
+                            type="checkbox"
+                            checked={selectedIds.includes(processo.id)}
+                            onChange={(event) => setSelected(processo.id, event.target.checked)}
+                            className="size-3.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                          />
+                        )}
+                        <span className="font-bold text-slate-900 dark:text-slate-100">{processo.protocolNumber}</span>
+                      </div>
+                      <ErpStatusBadge variant={getStatusVariant(processo.status)}>
+                        {processo.status}
+                      </ErpStatusBadge>
+                    </div>
+                    <p className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                      {processo.processType.name} · {processo.subject.name}
+                    </p>
+                    <p className="text-xs text-slate-600 dark:text-slate-400">{interestedName(processo)}</p>
+                    <div className="flex items-center justify-between text-[11px] pt-1">
+                      <span className="text-slate-500">
+                        {new Date(processo.createdAt).toLocaleDateString("pt-BR")}
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <Link href={processHref(processo.id)} className="font-semibold text-sky-600 hover:underline dark:text-sky-400">
+                          Ver atendimento...
+                        </Link>
+                        {canReceiveThis && (
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => handleReceive(processo.id)}
+                            className="font-semibold text-amber-700 hover:underline disabled:opacity-50 dark:text-amber-400"
+                          >
+                            Receber
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                );
               })}
             </div>
           </>

@@ -23,8 +23,8 @@ export type EmployeePortalAccess =
  * Resolves the portal identity exclusively from the authenticated session.
  *
  * This boundary deliberately accepts no employee identifier from the browser.
- * A valid PORTAL_SERVIDOR permission alone is insufficient: the linked
- * employee must also be active before any personal portal data is returned.
+ * The Portal is available to every authenticated profile, but a linked active
+ * employee is still required before any personal data is returned.
  */
 export async function getEmployeePortalAccess(): Promise<EmployeePortalAccess> {
   const context = await getTenantContextForModule("PORTAL_SERVIDOR");

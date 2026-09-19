@@ -70,13 +70,13 @@ export default function NovaPaginaPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-700">Conteúdo (HTML/Texto)</label>
+            <label className="text-sm font-semibold text-slate-700">Conteúdo</label>
             <textarea 
               name="content"
               required
               rows={12}
               className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-purple-600/20 focus:border-purple-600"
-              placeholder="<h1>Nossa História</h1><p>A cidade foi fundada em...</p>"
+              placeholder="Escreva o conteúdo institucional que será publicado no portal."
             ></textarea>
           </div>
 

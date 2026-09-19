@@ -3357,8 +3357,13 @@ model PreliminaryTechnicalStudy {
   processId String
   process   PurchaseProcess @relation(fields: [processId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt                     DateTime                       @default(now())
+  updatedAt                     DateTime                       @updatedAt
+  biddingAppointmentAssignments BiddingAppointmentAssignment[]
+  biddingPhases                 BiddingPhase[]
+  biddingActs                   BiddingAct[]
+  biddingParticipants           BiddingParticipant[]
+  biddingLots                   BiddingLot[]
 }
 
 model TermOfReference {
@@ -3675,17 +3680,19 @@ model BiddingAppointmentMember {
 }
 
 model BiddingAppointmentAssignment {
-  id            String             @id @default(cuid())
-  biddingId     String
-  bidding       Bidding            @relation(fields: [biddingId], references: [id], onDelete: Restrict)
-  appointmentId String
-  appointment   BiddingAppointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
-  role          String?
-  assignedAt    DateTime           @default(now())
-  endedAt       DateTime?
-  status        String             @default("Ativa")
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  id                          String                     @id @default(cuid())
+  biddingId                   String
+  bidding                     Bidding                    @relation(fields: [biddingId], references: [id], onDelete: Restrict)
+  appointmentId               String
+  appointment                 BiddingAppointment         @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  role                        String?
+  assignedAt                  DateTime                   @default(now())
+  endedAt                     DateTime?
+  status                      String                     @default("Ativa")
+  createdAt                   DateTime                   @default(now())
+  updatedAt                   DateTime                   @updatedAt
+  preliminaryTechnicalStudy   PreliminaryTechnicalStudy? @relation(fields: [preliminaryTechnicalStudyId], references: [id])
+  preliminaryTechnicalStudyId String?
 
   @@unique([biddingId, appointmentId])
   @@index([appointmentId, status])
@@ -3706,7 +3713,9 @@ model BiddingPhase {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  acts BiddingAct[]
+  acts                        BiddingAct[]
+  preliminaryTechnicalStudy   PreliminaryTechnicalStudy? @relation(fields: [preliminaryTechnicalStudyId], references: [id])
+  preliminaryTechnicalStudyId String?
 
   @@unique([biddingId, code, version])
   @@unique([biddingId, sequence, version])
@@ -3733,7 +3742,9 @@ model BiddingAct {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  result BiddingResult? @relation("BiddingResultAct")
+  result                      BiddingResult?             @relation("BiddingResultAct")
+  preliminaryTechnicalStudy   PreliminaryTechnicalStudy? @relation(fields: [preliminaryTechnicalStudyId], references: [id])
+  preliminaryTechnicalStudyId String?
 
   @@index([biddingId, occurredAt])
   @@index([phaseId])
@@ -3754,9 +3765,11 @@ model BiddingParticipant {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  bids                 BiddingBid[]
-  eligibilityDecisions BiddingEligibility[]
-  results              BiddingResult[]
+  bids                        BiddingBid[]
+  eligibilityDecisions        BiddingEligibility[]
+  results                     BiddingResult[]
+  preliminaryTechnicalStudy   PreliminaryTechnicalStudy? @relation(fields: [preliminaryTechnicalStudyId], references: [id])
+  preliminaryTechnicalStudyId String?
 
   @@unique([biddingId, supplierId])
   @@unique([biddingId, displayCode])
@@ -3774,11 +3787,13 @@ model BiddingLot {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  items                BiddingLotItem[]
-  bids                 BiddingBid[]
-  acts                 BiddingAct[]
-  eligibilityDecisions BiddingEligibility[]
-  results              BiddingResult[]
+  items                       BiddingLotItem[]
+  bids                        BiddingBid[]
+  acts                        BiddingAct[]
+  eligibilityDecisions        BiddingEligibility[]
+  results                     BiddingResult[]
+  preliminaryTechnicalStudy   PreliminaryTechnicalStudy? @relation(fields: [preliminaryTechnicalStudyId], references: [id])
+  preliminaryTechnicalStudyId String?
 
   @@unique([biddingId, number])
   @@index([biddingId, status])

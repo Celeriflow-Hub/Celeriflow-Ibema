@@ -34,7 +34,7 @@ O objetivo é um núcleo único de dados de RH e Folha. O Portal do Servidor con
 | Prioridade | Achado | Efeito | Correção planejada |
 |---|---|---|---|
 | P0 | A ação de licença grava `description`, enquanto o modelo `Leave` usa `reason`; o formulário também lê o campo inexistente. | Inclusão/alteração pode falhar em tempo de execução e o dado médico fica tratado de modo inconsistente. | Corrigir o mapeamento para `reason`, revisar consumidores e separar campos administrativos de informação médica restrita. |
-| P0 | A interface oferece `PORTAL_SERVIDOR`, mas a lista de módulos aceita ao salvar perfis não inclui esse código. | Perfil granular pode perder a permissão do Portal ao ser salvo. | Unificar a enumeração de módulos usada na interface, validação e autorização; testar um perfil restritivo. |
+| P0 | A gestão granular de perfis ainda está em revisão. | Enquanto ela não estiver homologada, negar o Portal por perfil bloquearia o autosserviço. | Durante a demonstração, liberar o card e as rotas do Portal para todo usuário autenticado e ativo; manter a exigência de vínculo funcional ativo e a consulta limitada ao próprio `employeeId`. Reintroduzir a matriz granular quando a gestão de perfis for revisada. |
 | P0 | Listas recentes do RH ainda usam consultas sem paginação uniforme ou limites de 50/100; o shell fixo não inclui `/rh`; há contêineres `overflow-auto`. | A tela não atende 20 itens por página nem a regra de não haver rolagem desktop. | Aplicar paginação no servidor, shell de altura fixa e o padrão visual definido neste plano. |
 | P0 | O painel de RH aponta para `/rh/cargos` e `/rh/treinamentos`, rotas que não existem, e chama a folha de “holerites”. | Navegação quebrada e comunicação que sugere documento oficial não implementado. | Corrigir destinos, rotular a saída atual como demonstrativo enquanto não houver publicação oficial e exibir somente indicadores verificáveis. |
 | P1 | Cadastro de empregado é básico e não representa vínculo funcional, carreira, regime, referência, lotação, banco e alterações de forma histórica. | Alterações podem reescrever o passado e inviabilizam cálculo e rastreabilidade. | Criar entidades efetivas por vigência e ficha funcional consolidada. |
@@ -71,6 +71,8 @@ flowchart LR
 
 A pessoa e sua identidade podem ser comuns. Vínculo, cargo, lotação, regime, período de vigência, finalidade, competência e permissão não podem ser confundidos. Toda consulta do Portal será limitada ao `employeeId` derivado do usuário autenticado e do tenant corrente.
 
+Durante a demonstração, o acesso ao **Portal do Servidor** fica disponível a todos os perfis autenticados e ativos. Isso não abre o RH administrativo, não elimina a ativação global do módulo e não permite que alguém sem vínculo funcional leia dados de servidor. A matriz granular voltará a ser aplicada ao final da revisão de perfis.
+
 ### 3.2 Princípios obrigatórios do domínio
 
 1. **Vigência e histórico.** Alterações de cargo, referência, salário, lotação, regime, banco, dependente, benefício ou evento devem criar versão efetiva, nunca sobrescrever uma competência já fechada.
@@ -80,6 +82,16 @@ A pessoa e sua identidade podem ser comuns. Vínculo, cargo, lotação, regime, 
 5. **Segurança por dado.** Dados de saúde, CID, atestado, perícia, conta bancária, pensão e documentos pessoais terão acesso por finalidade, perfil e operação, além de auditoria.
 6. **Integração por contrato.** Importadores e exportadores terão versão de leiaute, lote, total, rejeições, idempotência e recibo/retorno quando houver contraparte.
 7. **Sem dupla base.** Portal, RH, Processos e demais módulos referenciam identificadores e versões do núcleo, sem copiar cadastro funcional ou documento como fonte paralela.
+
+### 3.3 Parametrização persistida aprovada para a demonstração
+
+As regras demonstrativas do módulo passam a ser registradas em tabelas versionadas no **Neon**, vinculadas à instância municipal: conjunto de regras e vigência, regras tipadas, rubricas e incidências, regimes e faixas previdenciárias, políticas de férias, política de cálculo e regimes de vínculo. Cada alteração guarda evidência de antes/depois em log append-only, sem registrar dados pessoais, clínicos ou financeiros de servidores.
+
+A migration `20260919210000_add_rh_payroll_configuration` deve ser aplicada ao Neon por operação controlada com `prisma migrate deploy`, depois de conferir o histórico já existente no banco. O build da Vercel não executa migrations: a estrutura do banco deve ser conciliada em etapa própria, com `DATABASE_URL` disponível e histórico revisado.
+
+O conjunto inicial é identificado como **DEMONSTRAÇÃO** e não substitui estatuto, plano de cargos, tabela previdenciária, convênio de consignação, eSocial ou homologação. Rubricas novas também não alimentam o motor de folha legado; essa ligação ocorrerá somente quando a competência versionada puder congelar uma cópia auditável das regras.
+
+O Portal do Servidor continua a consultar apenas a própria ficha e demonstrativos fechados/pagos. A regra configurável `PORTAL_DEMONSTRATIVOS_HABILITADOS` controla essa visualização, sem liberar rascunhos. O futuro Portal da Transparência receberá somente projeções agregadas e publicáveis, com filtros de anonimização e aprovação; ele não acessará cadastro funcional, documentos, conta bancária, CID, afastamentos ou demonstrativos individuais.
 
 ---
 
@@ -320,7 +332,7 @@ Sem esses contratos, o CeleriFlow pode manter o dado e preparar uma prévia, mas
 - migration incremental validada em base de teste, sem reset destrutivo;
 - testes unitários para CPF/PIS, sobreposição de vigência, saldos, fórmulas, arredondamentos, prioridades e transições de estado;
 - testes de integração para tenant, perfil, histórico, idempotência de lote, snapshot fechado e publicação;
-- testes de autorização negativos: outro servidor, usuário sem vínculo, perfil sem Portal, perfil sem saúde e documento sem liberação;
+- testes de autorização negativos: outro servidor, usuário sem vínculo funcional, perfil sem saúde e documento sem liberação; teste positivo temporário para perfil autenticado sem permissão granular de Portal, sempre limitado ao próprio vínculo;
 - build, lint e verificações de rotas antes de cada commit.
 
 ### Testes de interface
@@ -356,4 +368,3 @@ A cada fase, os cenários devem ser vinculados aos IDs RHF cobertos, com massa d
 7. **Fase 6**, com paralelismo, aceite e entrada em produção.
 
 A sequência evita repetir o problema de criar telas bonitas sobre uma base que ainda não preserva histórico ou de publicar no Portal um cálculo que não passou por fechamento. Ela também permite entregar valor visual e operacional já na Fase 0, sem afirmar que as obrigações reguladas posteriores estão concluídas.
-

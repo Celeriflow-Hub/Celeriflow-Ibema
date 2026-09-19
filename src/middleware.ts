@@ -22,7 +22,9 @@ export default function middleware(req: NextRequest) {
   const url = req.nextUrl;
   const isPublicValidation = /^\/validar-(?:documento|aviso)\/[^/]+$/.test(url.pathname);
   const isPublicProtocolPortal = url.pathname === "/portal-protocolos";
-  if (isPublicValidation || isPublicProtocolPortal) {
+  const isPublicInstitutionalPortal = url.pathname === "/portal" || url.pathname.startsWith("/portal/");
+  const isPublicTransparencyPortal = url.pathname === "/portal-transparencia";
+  if (isPublicValidation || isPublicProtocolPortal || isPublicInstitutionalPortal || isPublicTransparencyPortal) {
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || req.headers.get("x-real-ip") || "unknown";
     const rateLimit = checkRateLimit(`public-read:${ip}`);
     if (!rateLimit.allowed) {

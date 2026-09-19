@@ -1,13 +1,26 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
-const memoryOption = "--max-old-space-size=4096";
+const minimumHeapMegabytes = 4096;
+const heapOptionPattern = /--max[-_]old[-_]space[-_]size(?:=(\d+)|\s+(\d+))?/g;
 const inheritedNodeOptions = process.env.NODE_OPTIONS?.trim() ?? "";
-const nodeOptions = inheritedNodeOptions.includes("--max-old-space-size")
-  ? inheritedNodeOptions
-  : [inheritedNodeOptions, memoryOption].filter(Boolean).join(" ");
+let containsHeapOption = false;
+const nodeOptions = inheritedNodeOptions.replace(
+  heapOptionPattern,
+  (option, equalsValue, spacedValue) => {
+    containsHeapOption = true;
+    const configuredHeap = Number(equalsValue ?? spacedValue ?? 0);
+    return configuredHeap >= minimumHeapMegabytes
+      ? option
+      : `--max-old-space-size=${minimumHeapMegabytes}`;
+  },
+);
 
-const environment = { ...process.env, NODE_OPTIONS: nodeOptions };
+const normalizedNodeOptions = containsHeapOption
+  ? nodeOptions
+  : [nodeOptions, `--max-old-space-size=${minimumHeapMegabytes}`].filter(Boolean).join(" ");
+
+const environment = { ...process.env, NODE_OPTIONS: normalizedNodeOptions };
 const commands = {
   prisma: join(process.cwd(), "node_modules", "prisma", "build", "index.js"),
   next: join(process.cwd(), "node_modules", "next", "dist", "bin", "next"),

@@ -4155,6 +4155,228 @@ model PersonnelAct {
   updatedAt   DateTime @updatedAt
 }
 
+model HrPayrollRuleSet {
+  id                      String                        @id @default(cuid())
+  configuracaoInstanciaId String
+  configuracaoInstancia   ConfiguracaoInstancia         @relation(fields: [configuracaoInstanciaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  code                    String
+  name                    String
+  status                  String                        @default("RASCUNHO")
+  scope                   String                        @default("DEMONSTRACAO")
+  effectiveFrom           DateTime
+  effectiveUntil          DateTime?
+  legalReference          String?
+  notes                   String?
+  isDemo                  Boolean                       @default(true)
+  approvedAt              DateTime?
+  archivedAt              DateTime?
+  createdAt               DateTime                      @default(now())
+  updatedAt               DateTime                      @updatedAt
+
+  rules                  HrPayrollRule[]
+  rubrics                HrPayrollRubric[]
+  socialSecuritySchemes  HrSocialSecurityScheme[]
+  vacationPolicies       HrVacationPolicy[]
+  calculationPolicy      HrCalculationPolicy?
+  employmentRegimes      HrEmploymentRegime[]
+  configurationChanges   HrPayrollConfigurationChange[]
+
+  @@unique([configuracaoInstanciaId, code, effectiveFrom])
+  @@index([configuracaoInstanciaId, status, effectiveFrom])
+}
+
+model HrPayrollRule {
+  id             String           @id @default(cuid())
+  ruleSetId      String
+  ruleSet        HrPayrollRuleSet @relation(fields: [ruleSetId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  category       String
+  code           String
+  name           String
+  description    String?
+  valueType      String
+  value          Json
+  unit           String?
+  sortOrder      Int              @default(100)
+  legalReference String?
+  isRequired     Boolean          @default(false)
+  isActive       Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([ruleSetId, code])
+  @@index([ruleSetId, category, sortOrder])
+}
+
+model HrPayrollRubric {
+  id                  String           @id @default(cuid())
+  ruleSetId           String
+  ruleSet             HrPayrollRuleSet @relation(fields: [ruleSetId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  code                String
+  name                String
+  type                String
+  esocialNatureCode   String?
+  calculationMethod   String           @default("MANUAL")
+  formulaExpression   String?
+  calculationBaseCode String?
+  fixedValue          Decimal?         @db.Decimal(18, 2)
+  percentageRate      Decimal?         @db.Decimal(9, 6)
+  priority            Int              @default(100)
+  legalReference      String?
+  notes               String?
+  isActive            Boolean          @default(true)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  incidences HrPayrollRubricIncidence[]
+
+  @@unique([ruleSetId, code])
+  @@index([ruleSetId, type, priority])
+}
+
+model HrPayrollRubricIncidence {
+  id            String          @id @default(cuid())
+  rubricId      String
+  rubric        HrPayrollRubric @relation(fields: [rubricId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  incidenceType String
+  isIncluded    Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([rubricId, incidenceType])
+  @@index([incidenceType])
+}
+
+model HrSocialSecurityScheme {
+  id                        String           @id @default(cuid())
+  ruleSetId                 String
+  ruleSet                   HrPayrollRuleSet @relation(fields: [ruleSetId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  code                      String
+  name                      String
+  regime                    String
+  employeeCalculationMethod String           @default("PROGRESSIVA")
+  ceilingValue              Decimal?         @db.Decimal(18, 2)
+  employerContributionRate  Decimal?         @db.Decimal(9, 6)
+  actuarialContributionRate Decimal?         @db.Decimal(9, 6)
+  legalReference            String?
+  notes                     String?
+  isActive                  Boolean          @default(true)
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
+
+  bands             HrSocialSecurityBand[]
+  employmentRegimes HrEmploymentRegime[]
+
+  @@unique([ruleSetId, code])
+  @@index([ruleSetId, regime, isActive])
+}
+
+model HrSocialSecurityBand {
+  id                     String                 @id @default(cuid())
+  socialSecuritySchemeId String
+  socialSecurityScheme   HrSocialSecurityScheme @relation(fields: [socialSecuritySchemeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  sequence               Int
+  lowerLimit             Decimal                @db.Decimal(18, 2)
+  upperLimit             Decimal?               @db.Decimal(18, 2)
+  employeeRate           Decimal                @db.Decimal(9, 6)
+  employerRate           Decimal?               @db.Decimal(9, 6)
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+
+  @@unique([socialSecuritySchemeId, sequence])
+  @@index([socialSecuritySchemeId, lowerLimit])
+}
+
+model HrVacationPolicy {
+  id                      String           @id @default(cuid())
+  ruleSetId               String
+  ruleSet                 HrPayrollRuleSet @relation(fields: [ruleSetId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  code                    String
+  name                    String
+  employmentNature        String
+  acquisitionMonths       Int              @default(12)
+  concessionMonths        Int              @default(12)
+  entitlementDays         Int              @default(30)
+  maxSplits               Int              @default(3)
+  minFirstSplitDays       Int              @default(14)
+  minOtherSplitDays       Int              @default(5)
+  additionalPayRate       Decimal          @default(33.333333) @db.Decimal(9, 6)
+  allowsCashAbono         Boolean          @default(false)
+  maxCashAbonoDays        Int              @default(0)
+  allowsAdvanceThirteenth Boolean          @default(false)
+  requiresApproval        Boolean          @default(true)
+  legalReference          String?
+  notes                   String?
+  isActive                Boolean          @default(true)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  employmentRegimes HrEmploymentRegime[]
+
+  @@unique([ruleSetId, code])
+  @@index([ruleSetId, employmentNature, isActive])
+}
+
+model HrCalculationPolicy {
+  id                       String           @id @default(cuid())
+  ruleSetId                String           @unique
+  ruleSet                  HrPayrollRuleSet @relation(fields: [ruleSetId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  currency                 String           @default("BRL")
+  roundingMode             String           @default("HALF_UP")
+  roundingScale            Int              @default(2)
+  movementCutoffDay        Int              @default(20)
+  paymentDay               Int?
+  negativeNetPayPolicy     String           @default("BLOQUEAR")
+  maxConsignmentMarginRate Decimal?         @db.Decimal(9, 6)
+  remunerationCeiling      Decimal?         @db.Decimal(18, 2)
+  freezeOnClose            Boolean          @default(true)
+  legalReference           String?
+  notes                    String?
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+}
+
+model HrEmploymentRegime {
+  id                     String                  @id @default(cuid())
+  ruleSetId              String
+  ruleSet                HrPayrollRuleSet        @relation(fields: [ruleSetId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  code                   String
+  name                   String
+  employmentNature       String
+  esocialCategory        String?
+  defaultMonthlyHours    Int?
+  socialSecuritySchemeId String?
+  socialSecurityScheme   HrSocialSecurityScheme? @relation(fields: [socialSecuritySchemeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  vacationPolicyId       String?
+  vacationPolicy         HrVacationPolicy?       @relation(fields: [vacationPolicyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  legalReference         String?
+  isActive               Boolean                 @default(true)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  @@unique([ruleSetId, code])
+  @@index([ruleSetId, employmentNature, isActive])
+  @@index([socialSecuritySchemeId])
+  @@index([vacationPolicyId])
+}
+
+model HrPayrollConfigurationChange {
+  id             String           @id @default(cuid())
+  ruleSetId      String
+  ruleSet        HrPayrollRuleSet @relation(fields: [ruleSetId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  entityType     String
+  entityId       String
+  operation      String
+  beforeValue    Json?
+  afterValue     Json?
+  actorUsuarioId String
+  actorUsuario   Usuario          @relation(fields: [actorUsuarioId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdAt      DateTime         @default(now())
+
+  @@index([ruleSetId, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@index([actorUsuarioId, createdAt])
+}
+
 // --- MÃ³dulo 11: PatrimÃ´nio e Almoxarifado ---
 
 // PatrimÃ´nio
@@ -6500,6 +6722,7 @@ model ConfiguracaoInstancia {
   status         String  @default("Ativa") // Ativa, Suspensa, ManutenÃ§Ã£o
 
   parametros ConfiguracaoParametroInstancia[]
+  hrPayrollRuleSets HrPayrollRuleSet[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -6768,6 +6991,7 @@ model Usuario {
   approvedPersonMergeRequests         PersonMergeRequest[]               @relation("PersonMergeApprover")
   reversedPersonMergeRequests         PersonMergeRequest[]               @relation("PersonMergeReverser")
   personMergeLedger                   PersonMergeLedger[]                @relation("PersonMergeLedgerActor")
+  hrPayrollConfigurationChanges       HrPayrollConfigurationChange[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

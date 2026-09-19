@@ -325,4 +325,106 @@ BEGIN
     "id", "ruleSetId", "code", "name", "employmentNature", "acquisitionMonths", "concessionMonths", "entitlementDays", "maxSplits", "minFirstSplitDays", "minOtherSplitDays", "additionalPayRate", "allowsCashAbono", "maxCashAbonoDays", "allowsAdvanceThirteenth", "requiresApproval", "legalReference", "notes", "isActive", "createdAt", "updatedAt"
   ) VALUES
     ('rh-demo-vacation-statutory-' || v_rule_set_id, v_rule_set_id, 'ESTATUTARIO_DEMO', 'Férias estatutárias — demonstração', 'ESTATUTARIO', 12, 12, 30, 3, 14, 5, 33.333333, false, 0, false, true, 'Demonstração. O estatuto municipal e atos vigentes devem substituir estes valores antes de produção.', 'Abono e antecipação ficam desativados até validação normativa.', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('rh-demo-vacation-clt-' || v_rule_set_id, v_rule_set_id, 'CLT_PADRAO', 'Férias CLT — referência parametrizável', 'CLT', 12, 12, 30, 3, 14, 5, 33.333333, 
+    ('rh-demo-vacation-clt-' || v_rule_set_id, v_rule_set_id, 'CLT_PADRAO', 'Férias CLT — referência parametrizável', 'CLT', 12, 12, 30, 3, 14, 5, 33.333333, true, 10, true, true, 'Referência demonstrativa da CLT. Confirmar regras aplicáveis, convenções e atos municipais antes de produção.', 'Abono e antecipação do décimo terceiro exigem validação do RH antes do uso em folha oficial.', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  ON CONFLICT ("ruleSetId", "code") DO NOTHING;
+
+  SELECT "id" INTO v_statutory_vacation_id
+  FROM "HrVacationPolicy"
+  WHERE "ruleSetId" = v_rule_set_id
+    AND "code" = 'ESTATUTARIO_DEMO'
+  LIMIT 1;
+
+  SELECT "id" INTO v_clt_vacation_id
+  FROM "HrVacationPolicy"
+  WHERE "ruleSetId" = v_rule_set_id
+    AND "code" = 'CLT_PADRAO'
+  LIMIT 1;
+
+  INSERT INTO "HrSocialSecurityScheme" (
+    "id", "ruleSetId", "code", "name", "regime", "employeeCalculationMethod", "ceilingValue", "employerContributionRate", "actuarialContributionRate", "legalReference", "notes", "isActive", "createdAt", "updatedAt"
+  ) VALUES (
+    'rh-demo-rpps-' || v_rule_set_id,
+    v_rule_set_id,
+    'RPPS_MUNICIPAL_DEMO',
+    'RPPS municipal — demonstração',
+    'RPPS',
+    'PROGRESSIVA',
+    4000.00,
+    20.000000,
+    NULL,
+    'Faixas sintéticas de demonstração. Substituir pela legislação e avaliação atuarial vigentes do ente.',
+    'Não utilizar estas alíquotas para retenção ou recolhimento oficial.',
+    true,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+  ) ON CONFLICT ("ruleSetId", "code") DO NOTHING;
+
+  SELECT "id" INTO v_rpps_id
+  FROM "HrSocialSecurityScheme"
+  WHERE "ruleSetId" = v_rule_set_id
+    AND "code" = 'RPPS_MUNICIPAL_DEMO'
+  LIMIT 1;
+
+  INSERT INTO "HrSocialSecurityBand" (
+    "id", "socialSecuritySchemeId", "sequence", "lowerLimit", "upperLimit", "employeeRate", "employerRate", "createdAt", "updatedAt"
+  ) VALUES
+    ('rh-demo-rpps-band-1-' || v_rpps_id, v_rpps_id, 1, 0.00, 1000.00, 5.000000, 20.000000, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('rh-demo-rpps-band-2-' || v_rpps_id, v_rpps_id, 2, 1000.01, 3000.00, 10.000000, 20.000000, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('rh-demo-rpps-band-3-' || v_rpps_id, v_rpps_id, 3, 3000.01, 4000.00, 15.000000, 20.000000, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  ON CONFLICT ("socialSecuritySchemeId", "sequence") DO NOTHING;
+
+  INSERT INTO "HrPayrollRubric" (
+    "id", "ruleSetId", "code", "name", "type", "esocialNatureCode", "calculationMethod", "formulaExpression", "calculationBaseCode", "fixedValue", "percentageRate", "priority", "legalReference", "notes", "isActive", "createdAt", "updatedAt"
+  ) VALUES (
+    'rh-demo-rubric-base-' || v_rule_set_id,
+    v_rule_set_id,
+    'VENCIMENTO_BASE_DEMO',
+    'Vencimento-base — demonstração',
+    'PROVENTO',
+    NULL,
+    'MANUAL',
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    10,
+    'Rubrica demonstrativa. Validar natureza, incidências e mapeamento eSocial antes de produção.',
+    'Base ilustrativa para testar a configuração versionada; não integra o motor de folha legado.',
+    true,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+  ) ON CONFLICT ("ruleSetId", "code") DO NOTHING;
+
+  SELECT "id" INTO v_rubric_id
+  FROM "HrPayrollRubric"
+  WHERE "ruleSetId" = v_rule_set_id
+    AND "code" = 'VENCIMENTO_BASE_DEMO'
+  LIMIT 1;
+
+  INSERT INTO "HrPayrollRubricIncidence" (
+    "id", "rubricId", "incidenceType", "isIncluded", "createdAt", "updatedAt"
+  ) VALUES
+    ('rh-demo-incidence-rpps-' || v_rubric_id, v_rubric_id, 'RPPS', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('rh-demo-incidence-irrf-' || v_rubric_id, v_rubric_id, 'IRRF', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('rh-demo-incidence-vacation-' || v_rubric_id, v_rubric_id, 'FERIAS', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('rh-demo-incidence-thirteenth-' || v_rubric_id, v_rubric_id, 'DECIMO_TERCEIRO', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('rh-demo-incidence-ceiling-' || v_rubric_id, v_rubric_id, 'TETO_REMUNERATORIO', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  ON CONFLICT ("rubricId", "incidenceType") DO NOTHING;
+
+  INSERT INTO "HrPayrollRubric" (
+    "id", "ruleSetId", "code", "name", "type", "esocialNatureCode", "calculationMethod", "formulaExpression", "calculationBaseCode", "fixedValue", "percentageRate", "priority", "legalReference", "notes", "isActive", "createdAt", "updatedAt"
+  ) VALUES
+    ('rh-demo-rubric-vacation-' || v_rule_set_id, v_rule_set_id, 'ADICIONAL_FERIAS_DEMO', 'Adicional de férias — demonstração', 'PROVENTO', NULL, 'PERCENTUAL', NULL, 'VENCIMENTO_BASE_DEMO', NULL, 33.333333, 20, 'Demonstração de um terço. Confirmar incidências e critérios do vínculo antes de produção.', 'A política de férias mantém a fonte de verdade deste percentual.', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('rh-demo-rubric-social-security-' || v_rule_set_id, v_rule_set_id, 'PREVIDENCIA_SERVIDOR_DEMO', 'Contribuição do servidor — demonstração', 'DESCONTO', NULL, 'FORMULA_CONTROLADA', 'VENCIMENTO_BASE_DEMO * 10 / 100', 'VENCIMENTO_BASE_DEMO', NULL, NULL, 30, 'Alíquota exclusivamente didática. A tabela previdenciária vigente deve ser parametrizada e homologada.', 'Usada apenas para conferir o catálogo e as prioridades da demonstração.', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('rh-demo-rubric-employer-charge-' || v_rule_set_id, v_rule_set_id, 'ENCARGO_PATRONAL_DEMO', 'Encargo patronal — demonstração', 'INFORMATIVA', NULL, 'FORMULA_CONTROLADA', 'VENCIMENTO_BASE_DEMO * 20 / 100', 'VENCIMENTO_BASE_DEMO', NULL, NULL, 40, 'Valor ilustrativo, separado do líquido do servidor e sujeito à validação atuarial e contábil.', 'Não representa guia, obrigação de recolhimento ou lançamento contábil oficial.', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('rh-demo-rubric-consignment-' || v_rule_set_id, v_rule_set_id, 'CONSIGNACAO_DEMO', 'Consignação — demonstração', 'DESCONTO', NULL, 'MANUAL', NULL, NULL, NULL, NULL, 50, 'Demonstração. Convênio, margem e autorização do servidor devem ser validados antes de produção.', 'A política de cálculo contém a margem máxima demonstrativa.', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  ON CONFLICT ("ruleSetId", "code") DO NOTHING;
+
+  INSERT INTO "HrEmploymentRegime" (
+    "id", "ruleSetId", "code", "name", "employmentNature", "esocialCategory", "defaultMonthlyHours", "socialSecuritySchemeId", "vacationPolicyId", "legalReference", "isActive", "createdAt", "updatedAt"
+  ) VALUES
+    ('rh-demo-regime-statutory-' || v_rule_set_id, v_rule_set_id, 'ESTATUTARIO_DEMO', 'Vínculo estatutário — demonstração', 'ESTATUTARIO', NULL, NULL, v_rpps_id, v_statutory_vacation_id, 'Demonstração. A vinculação efetiva depende do estatuto e do enquadramento previdenciário municipal.', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('rh-demo-regime-clt-' || v_rule_set_id, v_rule_set_id, 'CLT_DEMO', 'Vínculo CLT — demonstração', 'CLT', NULL, NULL, NULL, v_clt_vacation_id, 'Demonstração. O enquadramento RGPS, jornada e categoria eSocial devem ser validados antes de produção.', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  ON CONFLICT ("ruleSetId", "code") DO NOTHING;
+END;
+$$;

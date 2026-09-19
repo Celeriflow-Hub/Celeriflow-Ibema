@@ -185,6 +185,10 @@ export function isSystemAdministrator(user: AppContext["user"]) {
   return user.profileCode === SYSTEM_ADMIN_PROFILE_CODE;
 }
 
+export function isModuleActive(active: boolean | undefined) {
+  return active !== false;
+}
+
 export function isPocEvaluator(user: AppContext["user"]) {
   return user.role.startsWith("POC Avaliador");
 }

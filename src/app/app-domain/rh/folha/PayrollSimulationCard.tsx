@@ -22,7 +22,7 @@ export function PayrollSimulationCard({ payrollId, status }: { payrollId: string
   };
 
   return (
-    <Card size="sm" className="mt-1 max-w-3xl rounded-md border-blue-200 shadow-none">
+    <Card size="sm" className="mt-1 rounded-md border-blue-200 shadow-none dark:border-blue-900">
       <CardHeader className="border-b bg-blue-50/50 pb-2">
         <CardTitle className="text-blue-800 flex items-center">
           <Calculator className="w-5 h-5 mr-2" />

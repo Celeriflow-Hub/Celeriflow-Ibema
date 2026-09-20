@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { Plus, ArrowLeft, ReceiptText } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
-import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import type { Prisma } from "@prisma/client";
+import { RhListFrame as ErpListFrame } from "../../_components/RhListFrame";
+import { RhPagination } from "../../_components/RhPagination";
+import { RhSearchToolbar } from "../../_components/RhSearchToolbar";
+import { rhPagination } from "@/lib/rh/list-pagination";
 import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import {
   ErpTableContainer,
@@ -19,14 +23,25 @@ function eventoVariant(type: string): ErpStatusVariant {
   return "neutral";
 }
 
-export default async function EventosPage() {
+export default async function EventosPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
   const { prisma } = await getTenantContextForModule("RH");
+  const { q = "", page } = await searchParams;
+  const where: Prisma.PayrollEventWhereInput = q ? { OR: [
+    { code: { contains: q, mode: "insensitive" } },
+    { name: { contains: q, mode: "insensitive" } },
+    { type: { contains: q, mode: "insensitive" } },
+  ] } : {};
+  const total = await prisma.payrollEvent.count({ where });
+  const pagination = rhPagination(page, total);
   const events = await prisma.payrollEvent.findMany({
-    orderBy: { code: "asc" },
+    where,
+    take: pagination.take,
+    skip: pagination.skip,
+    orderBy: [{ code: "asc" }, { id: "asc" }],
   });
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden bg-slate-50 p-3 dark:bg-slate-950">
       <ErpPageTitle
         title="Eventos da Folha"
         icon={<ReceiptText className="size-4 text-violet-600" />}
@@ -50,8 +65,11 @@ export default async function EventosPage() {
         }
       />
 
-      <ErpListFrame>
-        <ErpTableContainer>
+      <ErpListFrame
+        toolbar={<RhSearchToolbar pathname="/rh/folha/eventos" query={q} placeholder="Buscar por código, descrição ou tipo" />}
+        pagination={<RhPagination {...pagination} total={total} pathname="/rh/folha/eventos" filters={{ q }} />}
+      >
+        <ErpTableContainer className="min-w-[800px] overflow-visible">
           <ErpTableThead>
             <tr>
               <ErpTableTh className="w-[12%]">Código</ErpTableTh>

@@ -2,7 +2,11 @@ import Link from "next/link";
 import { Plus, Wallet } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { FolhaRowActions } from "./FolhaRowActions";
-import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import type { Prisma } from "@prisma/client";
+import { RhListFrame as ErpListFrame } from "../_components/RhListFrame";
+import { RhPagination } from "../_components/RhPagination";
+import { RhSearchToolbar } from "../_components/RhSearchToolbar";
+import { rhPagination } from "@/lib/rh/list-pagination";
 import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import {
   ErpTableContainer,
@@ -20,20 +24,30 @@ function folhaVariant(status: string): ErpStatusVariant {
   return "neutral";
 }
 
-export default async function FolhaPage() {
+export default async function FolhaPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
   const { prisma } = await getTenantContextForModule("RH");
+  const { q = "", page } = await searchParams;
+  const where: Prisma.PayrollWhereInput = q ? { OR: [
+    { competence: { contains: q, mode: "insensitive" } },
+    { type: { contains: q, mode: "insensitive" } },
+    { status: { contains: q, mode: "insensitive" } },
+  ] } : {};
+  const total = await prisma.payroll.count({ where });
+  const pagination = rhPagination(page, total);
   const payrolls = await prisma.payroll.findMany({
-    take: 50,
-    orderBy: { createdAt: "desc" },
+    where,
+    take: pagination.take,
+    skip: pagination.skip,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
   });
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden bg-slate-50 p-3 dark:bg-slate-950">
       <ErpPageTitle
         title="Folha de Pagamento"
         icon={<Wallet className="size-4 text-violet-600" />}
         action={
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Link
               href="/rh/folha/eventos"
               className="inline-flex h-8 items-center px-3 rounded-md border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50"
@@ -51,8 +65,11 @@ export default async function FolhaPage() {
         }
       />
 
-      <ErpListFrame>
-        <ErpTableContainer>
+      <ErpListFrame
+        toolbar={<RhSearchToolbar pathname="/rh/folha" query={q} placeholder="Buscar por competência, tipo ou status" />}
+        pagination={<RhPagination {...pagination} total={total} pathname="/rh/folha" filters={{ q }} />}
+      >
+        <ErpTableContainer className="min-w-[720px] overflow-visible">
           <ErpTableThead>
             <tr>
               <ErpTableTh className="w-[30%]">Competência</ErpTableTh>

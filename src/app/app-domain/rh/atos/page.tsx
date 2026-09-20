@@ -4,7 +4,9 @@ import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { AtoRowActions } from "./AtoRowActions";
 import { format } from "date-fns";
 import type { Prisma } from "@prisma/client";
-import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import { RhListFrame as ErpListFrame } from "../_components/RhListFrame";
+import { RhPagination } from "../_components/RhPagination";
+import { rhPagination } from "@/lib/rh/list-pagination";
 import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import {
   ErpTableContainer,
@@ -24,23 +26,26 @@ function atoVariant(type: string): ErpStatusVariant {
   return "neutral";
 }
 
-export default async function AtosPage({ searchParams }: { searchParams: Promise<{ q?: string; type?: string }> }) {
+export default async function AtosPage({ searchParams }: { searchParams: Promise<{ q?: string; type?: string; page?: string }> }) {
   const { prisma } = await getTenantContextForModule("RH");
-  const { q, type } = await searchParams;
+  const { q, type, page } = await searchParams;
 
   const whereClause: Prisma.PersonnelActWhereInput = {};
   if (q) whereClause.employee = { name: { contains: q, mode: "insensitive" } };
   if (type && type !== "all") whereClause.type = type;
 
+  const total = await prisma.personnelAct.count({ where: whereClause });
+  const pagination = rhPagination(page, total);
   const acts = await prisma.personnelAct.findMany({
     where: whereClause,
-    take: 50,
-    orderBy: { date: "desc" },
+    take: pagination.take,
+    skip: pagination.skip,
+    orderBy: [{ date: "desc" }, { id: "asc" }],
     include: { employee: true },
   });
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden bg-slate-50 p-3 dark:bg-slate-950">
       <ErpPageTitle
         title="Atos de Pessoal"
         icon={<FileSignature className="size-4 text-violet-600" />}
@@ -56,6 +61,7 @@ export default async function AtosPage({ searchParams }: { searchParams: Promise
       />
 
       <ErpListFrame
+        pagination={<RhPagination {...pagination} total={total} pathname="/rh/atos" filters={{ q, type }} />}
         toolbar={
           <form action="/rh/atos" method="GET" className="flex flex-wrap items-center gap-2">
             <label className="relative min-w-[180px] flex-1">
@@ -93,7 +99,7 @@ export default async function AtosPage({ searchParams }: { searchParams: Promise
           </form>
         }
       >
-        <ErpTableContainer>
+        <ErpTableContainer className="min-w-[720px] overflow-visible">
           <ErpTableThead>
             <tr>
               <ErpTableTh className="w-[12%]">Data</ErpTableTh>

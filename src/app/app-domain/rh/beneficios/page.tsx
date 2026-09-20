@@ -3,7 +3,9 @@ import { Plus, Gift, Search } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { BeneficioRowActions } from "./BeneficioRowActions";
 import type { Prisma } from "@prisma/client";
-import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import { RhListFrame as ErpListFrame } from "../_components/RhListFrame";
+import { RhPagination } from "../_components/RhPagination";
+import { rhPagination } from "@/lib/rh/list-pagination";
 import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import {
   ErpTableContainer,
@@ -15,7 +17,7 @@ import {
 } from "@/components/app-ui/erp/ErpTable";
 
 export default async function BeneficiosPage(
-  props: { searchParams?: Promise<{ q?: string }> }
+  props: { searchParams?: Promise<{ q?: string; page?: string }> }
 ) {
   const { prisma } = await getTenantContextForModule("RH");
   const searchParams = await props.searchParams;
@@ -24,17 +26,20 @@ export default async function BeneficiosPage(
   const where: Prisma.BenefitConfigWhereInput = {};
   if (q) where.name = { contains: q, mode: "insensitive" };
 
+  const total = await prisma.benefitConfig.count({ where });
+  const pagination = rhPagination(searchParams?.page, total);
   const benefits = await prisma.benefitConfig.findMany({
     where,
-    take: 50,
-    orderBy: { name: "asc" },
+    take: pagination.take,
+    skip: pagination.skip,
+    orderBy: [{ name: "asc" }, { id: "asc" }],
     include: {
       supplier: { include: { company: true, person: true } },
     },
   });
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden bg-slate-50 p-3 dark:bg-slate-950">
       <ErpPageTitle
         title="Benefícios"
         icon={<Gift className="size-4 text-violet-600" />}
@@ -50,6 +55,7 @@ export default async function BeneficiosPage(
       />
 
       <ErpListFrame
+        pagination={<RhPagination {...pagination} total={total} pathname="/rh/beneficios" filters={{ q }} />}
         toolbar={
           <form action="/rh/beneficios" method="GET" className="flex flex-wrap items-center gap-2">
             <label className="relative min-w-[180px] flex-1">
@@ -71,7 +77,7 @@ export default async function BeneficiosPage(
           </form>
         }
       >
-        <ErpTableContainer>
+        <ErpTableContainer className="min-w-[800px] overflow-visible">
           <ErpTableThead>
             <tr>
               <ErpTableTh className="w-[28%]">Nome</ErpTableTh>

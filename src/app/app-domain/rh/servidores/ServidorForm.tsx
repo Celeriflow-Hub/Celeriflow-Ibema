@@ -15,7 +15,7 @@ import { EmployeeBenefitsCard } from "./EmployeeBenefitsCard";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import type { BenefitConfig, Department, Dependent, Employee, PayrollBenefit, Role, Secretariat } from "@prisma/client";
 import { PageFrame } from "@/components/app-ui/PageFrame";
-import { PageHeader } from "@/components/app-ui/PageHeader";
+import { ErpPageTitle as PageHeader } from "@/components/app-ui/erp/ErpPageTitle";
 
 // Formata CPF: 000.000.000-00
 const formatCPF = (value: string) => {
@@ -83,7 +83,7 @@ export function ServidorForm({
   }
 
   return (
-    <PageFrame className="space-y-2">
+    <PageFrame className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
       <PageHeader
         title={data ? "Editar Servidor" : "Novo Servidor"}
         action={<Link href="/rh/servidores">
@@ -93,8 +93,9 @@ export function ServidorForm({
         </Link>}
       />
 
+      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="grid gap-3 md:grid-cols-2">
-        <Card size="sm" className="rounded-md shadow-none md:col-span-2">
+        <Card size="sm" className="rounded-none border-0 bg-transparent shadow-none md:col-span-2">
           <CardHeader className="border-b pb-2">
             <CardTitle>Dados do Servidor</CardTitle>
           </CardHeader>
@@ -240,9 +241,9 @@ export function ServidorForm({
             </CardHeader>
             <CardContent>
               {data.dependents && data.dependents.length > 0 ? (
-                  <div className="overflow-x-auto rounded-md border">
-                  <table className="w-full text-sm text-left">
-                    <thead className="bg-muted text-muted-foreground border-b">
+                  <div className="max-h-72 overflow-auto rounded-md border">
+                  <table className="w-full min-w-[560px] border-collapse text-left text-[11px] [&_td]:px-2.5 [&_td]:py-1.5 [&_th]:px-2.5 [&_th]:py-2">
+                    <thead className="sticky top-0 z-10 border-b bg-slate-50 text-[10px] uppercase tracking-wider text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                       <tr>
                         <th className="p-3 font-medium">Nome</th>
                         <th className="p-3 font-medium">Parentesco</th>
@@ -279,6 +280,7 @@ export function ServidorForm({
 
         {/* Benefícios Concedidos Interno */}
         {data && <EmployeeBenefitsCard employee={data} benefitConfigs={benefitConfigs} />}
+      </div>
       </div>
     </PageFrame>
   );

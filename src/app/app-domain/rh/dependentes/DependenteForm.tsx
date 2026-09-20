@@ -13,7 +13,7 @@ import { ArrowLeft, Save } from "lucide-react";
 import { MaskedInput } from "@/components/ui/MaskedInput";
 import type { Dependent, Employee } from "@prisma/client";
 import { PageFrame } from "@/components/app-ui/PageFrame";
-import { PageHeader } from "@/components/app-ui/PageHeader";
+import { ErpPageTitle as PageHeader } from "@/components/app-ui/erp/ErpPageTitle";
 
 export function DependenteForm({ data, employees = [], defaultEmployeeId }: { data?: Dependent, employees?: Employee[], defaultEmployeeId?: string }) {
   const router = useRouter();
@@ -41,7 +41,7 @@ export function DependenteForm({ data, employees = [], defaultEmployeeId }: { da
   const effectiveEmployee = effectiveEmployeeId ? employees.find(e => e.id === effectiveEmployeeId) : null;
 
   return (
-    <PageFrame className="space-y-2">
+    <PageFrame className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
       <PageHeader
         title={data ? "Editar Dependente" : "Cadastrar Dependente"}
         action={<Link href="/rh/dependentes">
@@ -51,7 +51,8 @@ export function DependenteForm({ data, employees = [], defaultEmployeeId }: { da
         </Link>}
       />
 
-      <Card size="sm" className="max-w-4xl rounded-md shadow-none">
+      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <Card size="sm" className="rounded-none border-0 bg-transparent shadow-none">
         <CardHeader className="border-b pb-2">
           <CardTitle>Dados do Dependente</CardTitle>
         </CardHeader>
@@ -135,6 +136,7 @@ export function DependenteForm({ data, employees = [], defaultEmployeeId }: { da
           </form>
         </CardContent>
       </Card>
+      </div>
     </PageFrame>
   );
 }

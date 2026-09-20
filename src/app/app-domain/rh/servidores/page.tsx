@@ -3,7 +3,9 @@ import { Plus, Users, Search } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { ServidorRowActions } from "./ServidorRowActions";
 import type { Prisma } from "@prisma/client";
-import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import { RhListFrame as ErpListFrame } from "../_components/RhListFrame";
+import { RhPagination } from "../_components/RhPagination";
+import { rhPagination } from "@/lib/rh/list-pagination";
 import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import {
   ErpTableContainer,
@@ -20,6 +22,7 @@ export default async function ServidoresPage(
       q?: string;
       status?: string;
       departmentId?: string;
+      page?: string;
     }>;
   }
 ) {
@@ -44,18 +47,21 @@ export default async function ServidoresPage(
     where.departmentId = departmentId;
   }
 
+  const total = await prisma.employee.count({ where });
+  const pagination = rhPagination(searchParams?.page, total);
   const [employees, departments] = await Promise.all([
     prisma.employee.findMany({
       where,
-      take: 50,
-      orderBy: { name: "asc" },
+      take: pagination.take,
+      skip: pagination.skip,
+      orderBy: [{ name: "asc" }, { id: "asc" }],
       include: { role: true, department: true },
     }),
     prisma.department.findMany({ orderBy: { name: "asc" } }),
   ]);
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden bg-slate-50 p-3 dark:bg-slate-950">
       <ErpPageTitle
         title="Servidores"
         icon={<Users className="size-4 text-violet-600" />}
@@ -71,6 +77,7 @@ export default async function ServidoresPage(
       />
 
       <ErpListFrame
+        pagination={<RhPagination {...pagination} total={total} pathname="/rh/servidores" filters={{ q, status, departmentId }} />}
         toolbar={
           <form action="/rh/servidores" method="GET" className="flex flex-wrap items-center gap-2">
             <label className="relative min-w-[200px] flex-1">
@@ -125,7 +132,7 @@ export default async function ServidoresPage(
           </form>
         }
       >
-        <ErpTableContainer>
+        <ErpTableContainer className="min-w-[800px] overflow-visible">
           <ErpTableThead>
             <tr>
               <ErpTableTh className="w-[32%]">Nome</ErpTableTh>

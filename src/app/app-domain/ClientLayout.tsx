@@ -62,17 +62,7 @@ export default function ClientLayout({
   const userName = user?.name ?? "Usuário";
   const userRole = user?.role ? getRoleLabel(user.role) : "Gestor do Sistema";
   const initials = getInitials(userName);
-  const isFixedRhListWorkspace = [
-    "/rh/servidores",
-    "/rh/dependentes",
-    "/rh/folha",
-    "/rh/folha/eventos",
-    "/rh/beneficios",
-    "/rh/ponto",
-    "/rh/ferias",
-    "/rh/licencas",
-    "/rh/atos",
-  ].includes(pathname);
+  const isFixedRhWorkspace = pathname === "/rh" || pathname.startsWith("/rh/");
   const isFixedErpWorkspace = [
     "/protocolos",
     "/protocolos/processos",
@@ -96,7 +86,7 @@ export default function ClientLayout({
     "/patrimonio/materiais",
     "/patrimonio/requisicoes",
     "/patrimonio/inventarios",
-  ].includes(pathname) || isFixedRhListWorkspace;
+  ].includes(pathname) || isFixedRhWorkspace;
 
   return (
     <div className={isFixedErpWorkspace ? "flex h-dvh w-full flex-col overflow-hidden bg-slate-100" : "flex min-h-dvh w-full flex-col bg-slate-100"}>

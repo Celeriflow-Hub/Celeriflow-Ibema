@@ -5,7 +5,9 @@ import { PontoRowActions } from "./PontoRowActions";
 import { UploadCSVButton } from "./UploadCSVButton";
 import { format } from "date-fns";
 import type { Prisma } from "@prisma/client";
-import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import { RhListFrame as ErpListFrame } from "../_components/RhListFrame";
+import { RhPagination } from "../_components/RhPagination";
+import { rhPagination } from "@/lib/rh/list-pagination";
 import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import {
   ErpTableContainer,
@@ -24,9 +26,9 @@ function pontoVariant(status: string): ErpStatusVariant {
   return "neutral";
 }
 
-export default async function PontoPage({ searchParams }: { searchParams: Promise<{ q?: string; month?: string }> }) {
+export default async function PontoPage({ searchParams }: { searchParams: Promise<{ q?: string; month?: string; page?: string }> }) {
   const { prisma } = await getTenantContextForModule("RH");
-  const { q, month } = await searchParams;
+  const { q, month, page } = await searchParams;
 
   const whereClause: Prisma.AttendanceRecordWhereInput = {};
   if (q) whereClause.employee = { name: { contains: q, mode: "insensitive" } };
@@ -37,15 +39,18 @@ export default async function PontoPage({ searchParams }: { searchParams: Promis
     whereClause.date = { gte: startDate, lte: endDate };
   }
 
+  const total = await prisma.attendanceRecord.count({ where: whereClause });
+  const pagination = rhPagination(page, total);
   const records = await prisma.attendanceRecord.findMany({
     where: whereClause,
-    take: 50,
-    orderBy: { date: "desc" },
+    take: pagination.take,
+    skip: pagination.skip,
+    orderBy: [{ date: "desc" }, { id: "asc" }],
     include: { employee: true },
   });
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden bg-slate-50 p-3 dark:bg-slate-950">
       <ErpPageTitle
         title="Registro de Ponto"
         icon={<Clock className="size-4 text-violet-600" />}
@@ -64,6 +69,7 @@ export default async function PontoPage({ searchParams }: { searchParams: Promis
       />
 
       <ErpListFrame
+        pagination={<RhPagination {...pagination} total={total} pathname="/rh/ponto" filters={{ q, month }} />}
         toolbar={
           <form action="/rh/ponto" method="GET" className="flex flex-wrap items-center gap-2">
             <label className="relative min-w-[160px] flex-1">
@@ -95,7 +101,7 @@ export default async function PontoPage({ searchParams }: { searchParams: Promis
           </form>
         }
       >
-        <ErpTableContainer>
+        <ErpTableContainer className="min-w-[960px] overflow-visible">
           <ErpTableThead>
             <tr>
               <ErpTableTh className="w-[11%]">Data</ErpTableTh>

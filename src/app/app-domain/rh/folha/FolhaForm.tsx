@@ -13,7 +13,7 @@ import { ArrowLeft, Save } from "lucide-react";
 import { PayrollSimulationCard } from "./PayrollSimulationCard";
 import type { Payroll } from "@prisma/client";
 import { PageFrame } from "@/components/app-ui/PageFrame";
-import { PageHeader } from "@/components/app-ui/PageHeader";
+import { ErpPageTitle as PageHeader } from "@/components/app-ui/erp/ErpPageTitle";
 
 export function FolhaForm({ data }: { data?: Payroll }) {
   const router = useRouter();
@@ -34,7 +34,7 @@ export function FolhaForm({ data }: { data?: Payroll }) {
   }
 
   return (
-    <PageFrame className="space-y-2">
+    <PageFrame className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
       <PageHeader
         title={data ? "Editar Folha" : "Nova Folha"}
         action={<Link href="/rh/folha">
@@ -44,7 +44,8 @@ export function FolhaForm({ data }: { data?: Payroll }) {
         </Link>}
       />
 
-      <Card size="sm" className="max-w-3xl rounded-md shadow-none">
+      <div className="min-h-0 flex-1 space-y-2 overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <Card size="sm" className="rounded-none border-0 bg-transparent shadow-none">
         <CardHeader className="border-b pb-2">
           <CardTitle>Dados da Folha de Pagamento</CardTitle>
         </CardHeader>
@@ -115,6 +116,7 @@ export function FolhaForm({ data }: { data?: Payroll }) {
       {data && (
         <PayrollSimulationCard payrollId={data.id} status={data.status} />
       )}
+      </div>
     </PageFrame>
   );
 }

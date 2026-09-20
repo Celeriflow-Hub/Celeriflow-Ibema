@@ -1,7 +1,7 @@
 import { SlidersHorizontal } from "lucide-react";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { PageFrame } from "@/components/app-ui/PageFrame";
-import { PageHeader } from "@/components/app-ui/PageHeader";
+import { ErpPageTitle as PageHeader } from "@/components/app-ui/erp/ErpPageTitle";
 import { HrPayrollSettingsClient, type HrPayrollSettingsView } from "./HrPayrollSettingsClient";
 
 export const dynamic = "force-dynamic";
@@ -113,7 +113,7 @@ export default async function RhParametrizacoesPage({ searchParams }: { searchPa
     : null;
 
   return (
-    <PageFrame className="flex min-h-0 flex-1 flex-col gap-2 px-1 py-1 md:px-2">
+    <PageFrame className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
       <PageHeader
         title="Parametrizações de RH e Folha"
         icon={<SlidersHorizontal className="size-4 shrink-0 text-emerald-700" />}

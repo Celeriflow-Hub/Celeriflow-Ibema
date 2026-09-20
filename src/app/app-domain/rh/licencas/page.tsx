@@ -4,7 +4,9 @@ import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { LicencaRowActions } from "./LicencaRowActions";
 import { format } from "date-fns";
 import type { Prisma } from "@prisma/client";
-import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import { RhListFrame as ErpListFrame } from "../_components/RhListFrame";
+import { RhPagination } from "../_components/RhPagination";
+import { rhPagination } from "@/lib/rh/list-pagination";
 import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import {
   ErpTableContainer,
@@ -23,23 +25,26 @@ function licencaVariant(status: string): ErpStatusVariant {
   return "neutral";
 }
 
-export default async function LicencasPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string }> }) {
+export default async function LicencasPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string; page?: string }> }) {
   const { prisma } = await getTenantContextForModule("RH");
-  const { q, status } = await searchParams;
+  const { q, status, page } = await searchParams;
 
   const whereClause: Prisma.LeaveWhereInput = {};
   if (q) whereClause.employee = { name: { contains: q, mode: "insensitive" } };
   if (status && status !== "all") whereClause.status = status;
 
+  const total = await prisma.leave.count({ where: whereClause });
+  const pagination = rhPagination(page, total);
   const leaves = await prisma.leave.findMany({
     where: whereClause,
-    take: 50,
-    orderBy: { startDate: "desc" },
+    take: pagination.take,
+    skip: pagination.skip,
+    orderBy: [{ startDate: "desc" }, { id: "asc" }],
     include: { employee: true },
   });
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden bg-slate-50 p-3 dark:bg-slate-950">
       <ErpPageTitle
         title="Licenças e Afastamentos"
         icon={<HeartPulse className="size-4 text-violet-600" />}
@@ -55,6 +60,7 @@ export default async function LicencasPage({ searchParams }: { searchParams: Pro
       />
 
       <ErpListFrame
+        pagination={<RhPagination {...pagination} total={total} pathname="/rh/licencas" filters={{ q, status }} />}
         toolbar={
           <form action="/rh/licencas" method="GET" className="flex flex-wrap items-center gap-2">
             <label className="relative min-w-[180px] flex-1">
@@ -90,7 +96,7 @@ export default async function LicencasPage({ searchParams }: { searchParams: Pro
           </form>
         }
       >
-        <ErpTableContainer>
+        <ErpTableContainer className="min-w-[720px] overflow-visible">
           <ErpTableThead>
             <tr>
               <ErpTableTh className="w-[30%]">Servidor</ErpTableTh>

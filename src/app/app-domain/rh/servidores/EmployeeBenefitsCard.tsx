@@ -80,9 +80,9 @@ export function EmployeeBenefitsCard({ employee, benefitConfigs }: { employee: E
       </CardHeader>
       <CardContent>
         {employee.benefits && employee.benefits.length > 0 ? (
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-muted text-muted-foreground border-b">
+          <div className="max-h-72 overflow-auto rounded-md border">
+            <table className="w-full min-w-[560px] border-collapse text-left text-[11px] [&_td]:px-2.5 [&_td]:py-1.5 [&_th]:px-2.5 [&_th]:py-2">
+              <thead className="sticky top-0 z-10 border-b bg-slate-50 text-[10px] uppercase tracking-wider text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 <tr>
                   <th className="p-3 font-medium">Benefício</th>
                   <th className="p-3 font-medium">Tipo</th>

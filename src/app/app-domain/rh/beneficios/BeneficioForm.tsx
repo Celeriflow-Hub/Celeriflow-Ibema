@@ -14,7 +14,7 @@ import { ArrowLeft, Save } from "lucide-react";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import type { BenefitConfig, Company, Person, Supplier } from "@prisma/client";
 import { PageFrame } from "@/components/app-ui/PageFrame";
-import { PageHeader } from "@/components/app-ui/PageHeader";
+import { ErpPageTitle as PageHeader } from "@/components/app-ui/erp/ErpPageTitle";
 
 type SupplierWithIdentity = Supplier & { company: Company | null; person: Person | null };
 
@@ -46,7 +46,7 @@ export function BeneficioForm({ data, suppliers = [] }: { data?: BenefitConfig, 
   }
 
   return (
-    <PageFrame className="space-y-2">
+    <PageFrame className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
       <PageHeader
         title={data ? "Editar Benefício" : "Novo Benefício"}
         action={<Link href="/rh/beneficios">
@@ -56,7 +56,8 @@ export function BeneficioForm({ data, suppliers = [] }: { data?: BenefitConfig, 
         </Link>}
       />
 
-      <Card size="sm" className="max-w-2xl rounded-md shadow-none">
+      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <Card size="sm" className="rounded-none border-0 bg-transparent shadow-none">
         <CardHeader className="border-b pb-2">
           <CardTitle>Configuração do Benefício</CardTitle>
         </CardHeader>
@@ -141,6 +142,7 @@ export function BeneficioForm({ data, suppliers = [] }: { data?: BenefitConfig, 
           </form>
         </CardContent>
       </Card>
+      </div>
     </PageFrame>
   );
 }

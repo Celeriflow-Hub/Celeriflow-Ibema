@@ -184,10 +184,9 @@ function ruleValueForInput(rule: RuleView) {
 
 function PageControls({ page, total, onPageChange }: { page: number; total: number; onPageChange: (page: number) => void }) {
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  if (total <= PAGE_SIZE) return null;
   return (
-    <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">
-      <span>{(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} de {total}</span>
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+      <span>{total} registros{total > 0 && ` · ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, total)}`}</span>
       <span className="flex items-center gap-1">
         <button type="button" aria-label="Página anterior" disabled={page === 1} onClick={() => onPageChange(page - 1)} className="rounded p-1 hover:bg-slate-100 disabled:opacity-40"><ChevronLeft className="size-4" /></button>
         <span>Página {page} de {pages}</span>
@@ -212,7 +211,7 @@ function SectionHeader({ title, description, action }: { title: string; descript
 }
 
 function TableShell({ children, footer }: { children: React.ReactNode; footer?: React.ReactNode }) {
-  return <section className="overflow-hidden rounded border border-slate-200 bg-white shadow-sm"><div className="overflow-hidden">{children}</div>{footer}</section>;
+  return <section className="flex max-h-[60dvh] min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="min-h-0 flex-1 overflow-auto">{children}</div>{footer}</section>;
 }
 
 export function HrPayrollSettingsClient({ ruleSets, settings }: { ruleSets: RuleSetView[]; settings: HrPayrollSettingsView | null }) {
@@ -240,7 +239,7 @@ export function HrPayrollSettingsClient({ ruleSets, settings }: { ruleSets: Rule
 
   if (!settings) {
     return (
-      <section className="flex min-h-[320px] flex-1 flex-col items-center justify-center border border-dashed border-slate-300 bg-white p-6 text-center">
+      <section className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center dark:border-slate-800 dark:bg-slate-900">
         <Settings2 className="size-7 text-slate-400" />
         <h2 className="mt-3 text-sm font-semibold text-slate-900">Nenhum conjunto de regras de RH disponível</h2>
         <p className="mt-1 max-w-lg text-xs leading-5 text-slate-600">Inicialize a referência municipal demonstrativa. Ela será persistida no Neon, poderá ser editada nesta área e fica identificada como não normativa.</p>
@@ -251,13 +250,13 @@ export function HrPayrollSettingsClient({ ruleSets, settings }: { ruleSets: Rule
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <section className="flex flex-wrap items-center justify-between gap-2 border border-slate-200 bg-white px-3 py-2 shadow-sm">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <section className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white p-2.5 dark:border-slate-800 dark:bg-slate-900">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-slate-900">{settings.ruleSet.name}</p>
           <p className="text-[11px] text-slate-500">{settings.ruleSet.code} · vigência {prettyDate(settings.ruleSet.effectiveFrom)}{settings.ruleSet.effectiveUntil ? ` até ${prettyDate(settings.ruleSet.effectiveUntil)}` : ""}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className={`rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${settings.ruleSet.isDemo ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{activeLabel}</span>
           <select aria-label="Selecionar conjunto de regras" value={settings.ruleSet.id} onChange={(event) => router.push(`/rh/parametrizacoes?ruleSet=${event.target.value}`)} className="h-8 max-w-56 rounded border border-slate-300 bg-white px-2 text-xs text-slate-700">
             {ruleSets.map((ruleSet) => <option key={ruleSet.id} value={ruleSet.id}>{ruleSet.name}</option>)}
@@ -267,9 +266,7 @@ export function HrPayrollSettingsClient({ ruleSets, settings }: { ruleSets: Rule
 
       {feedback && <p role="status" className={`border px-3 py-2 text-xs ${feedback.type === "error" ? "border-rose-200 bg-rose-50 text-rose-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{feedback.text}</p>}
 
-      <Notice><span><strong>Referência controlada:</strong> as rubricas desta tela são versionadas e não alteram nem são consumidas pelo motor de folha legado. O motor novo deverá copiar esta configuração para o snapshot da competência antes do cálculo. O Portal mantém o filtro de folhas <strong>Fechada</strong> ou <strong>Paga</strong>, mesmo quando a publicação de demonstrativos estiver habilitada.</span></Notice>
-
-      <nav aria-label="Seções de parametrizações" className="flex flex-wrap gap-1 border-b border-slate-200 pb-2">
+      <nav aria-label="Seções de parametrizações" className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-200 p-2 dark:border-slate-800">
         {tabItems.map((item) => {
           const Icon = item.icon;
           const active = tab === item.key;
@@ -277,6 +274,8 @@ export function HrPayrollSettingsClient({ ruleSets, settings }: { ruleSets: Rule
         })}
       </nav>
 
+      <div className="min-h-0 flex-1 space-y-2 overflow-auto p-2.5">
+      <Notice><span><strong>Referência controlada:</strong> as rubricas desta tela são versionadas e não alteram nem são consumidas pelo motor de folha legado. O motor novo deverá copiar esta configuração para o snapshot da competência antes do cálculo. O Portal mantém o filtro de folhas <strong>Fechada</strong> ou <strong>Paga</strong>, mesmo quando a publicação de demonstrativos estiver habilitada.</span></Notice>
       {tab === "visao" && <Overview settings={settings} onEditRuleSet={() => setEditingRuleSet(settings.ruleSet)} onNewRuleSet={() => setEditingRuleSet("new")} />}
       {tab === "regras" && <RulesEditor settings={settings} pending={pending} execute={execute} />}
       {tab === "rubricas" && <RubricsEditor settings={settings} pending={pending} execute={execute} />}
@@ -286,6 +285,7 @@ export function HrPayrollSettingsClient({ ruleSets, settings }: { ruleSets: Rule
       {tab === "vinculos" && <EmploymentRegimeEditor settings={settings} pending={pending} execute={execute} />}
 
        {editingRuleSet && <RuleSetEditor current={editingRuleSet === "new" ? null : editingRuleSet} onClose={() => setEditingRuleSet(null)} onSaved={(ruleSetId) => { setEditingRuleSet(null); router.push(`/rh/parametrizacoes?ruleSet=${ruleSetId}`); }} pending={pending} execute={execute} />}
+      </div>
     </div>
   );
 }
@@ -573,6 +573,7 @@ function SocialSecurityBandsEditor({ scheme, selectedBandId, onSelectBand, pendi
   return (
     <section className="overflow-hidden rounded border border-slate-200 bg-white shadow-sm">
       <SectionHeader title={`Faixas de ${scheme.code}`} description="Limites são inclusivos e não podem se sobrepor." action={<button type="button" onClick={() => onSelectBand(null)} className={secondaryButtonClass}><Plus className="size-4" />Nova faixa</button>} />
+      <div className="max-h-72 overflow-auto">
       <CompactTable headers={["Seq.", "Limite inicial", "Limite final", "Servidor", "Patronal"]}>
         {scheme.bands.length === 0 && <EmptyTableRow columns={5} message="Nenhuma faixa cadastrada neste regime." />}
         {scheme.bands.map((band) => (
@@ -585,6 +586,7 @@ function SocialSecurityBandsEditor({ scheme, selectedBandId, onSelectBand, pendi
           </tr>
         ))}
       </CompactTable>
+      </div>
       <form key={selected?.id || "new"} className="grid gap-3 border-t border-slate-200 p-3 md:grid-cols-2" onSubmit={(event) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
@@ -726,7 +728,7 @@ function Checkbox({ name, value, label, defaultChecked = false }: { name: string
 }
 
 function CompactTable({ headers, children }: { headers: string[]; children: React.ReactNode }) {
-  return <div className="overflow-x-auto"><table className="min-w-full text-left text-xs"><thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500"><tr>{headers.map((header) => <th key={header} className="whitespace-nowrap px-3 py-2 font-bold">{header}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{children}</tbody></table></div>;
+  return <table className="w-full min-w-[560px] border-collapse text-left text-[11px] sm:text-xs"><thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300"><tr>{headers.map((header) => <th key={header} className="whitespace-nowrap px-2.5 py-2 font-semibold">{header}</th>)}</tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{children}</tbody></table>;
 }
 
 function EmptyTableRow({ columns, message }: { columns: number; message: string }) {

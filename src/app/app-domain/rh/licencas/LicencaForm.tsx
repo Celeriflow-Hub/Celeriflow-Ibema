@@ -13,7 +13,7 @@ import Link from "next/link";
 import { ArrowLeft, Save } from "lucide-react";
 import type { Employee, Leave } from "@prisma/client";
 import { PageFrame } from "@/components/app-ui/PageFrame";
-import { PageHeader } from "@/components/app-ui/PageHeader";
+import { ErpPageTitle as PageHeader } from "@/components/app-ui/erp/ErpPageTitle";
 
 type LeaveFormData = Leave;
 
@@ -43,7 +43,7 @@ export function LicencaForm({ data, employees = [] }: { data?: LeaveFormData, em
   };
 
   return (
-    <PageFrame className="space-y-2">
+    <PageFrame className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
       <PageHeader
         title={data ? "Editar Licença" : "Registrar Licença/Afastamento"}
         action={<Link href="/rh/licencas">
@@ -53,7 +53,8 @@ export function LicencaForm({ data, employees = [] }: { data?: LeaveFormData, em
         </Link>}
       />
 
-      <Card size="sm" className="max-w-4xl rounded-md shadow-none">
+      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <Card size="sm" className="rounded-none border-0 bg-transparent shadow-none">
         <CardHeader className="border-b pb-2">
           <CardTitle>Dados da Licença</CardTitle>
         </CardHeader>
@@ -141,6 +142,7 @@ export function LicencaForm({ data, employees = [] }: { data?: LeaveFormData, em
           </form>
         </CardContent>
       </Card>
+      </div>
     </PageFrame>
   );
 }

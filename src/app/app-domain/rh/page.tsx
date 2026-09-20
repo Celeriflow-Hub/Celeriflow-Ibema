@@ -10,7 +10,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { PageFrame } from "@/components/app-ui/PageFrame"
-import { PageHeader } from "@/components/app-ui/PageHeader"
+import { ErpPageTitle as PageHeader } from "@/components/app-ui/erp/ErpPageTitle"
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 
 export default async function RHDashboard() {
@@ -25,9 +25,10 @@ export default async function RHDashboard() {
   const totalAttendances = await prisma.attendanceRecord.count().catch(() => 0)
 
   return (
-    <PageFrame className="space-y-2">
+    <PageFrame className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
       <PageHeader title="RH e Folha" icon={<Users className="size-4 shrink-0 text-violet-600" />} />
 
+      <div className="min-h-0 flex-1 space-y-2 overflow-auto rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4">
         <Card size="sm" className="rounded-md">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
@@ -153,6 +154,7 @@ export default async function RHDashboard() {
               </div>
             </CardContent>
         </Card>
+      </div>
       </div>
     </PageFrame>
   )

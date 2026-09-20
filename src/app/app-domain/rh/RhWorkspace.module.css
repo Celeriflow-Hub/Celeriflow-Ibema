@@ -1,0 +1,46 @@
+/* Theme the legacy form controls inside RH without changing other modules. */
+.workspace {
+  color: var(--color-slate-800);
+}
+
+.workspace header > div:last-child {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.workspace table {
+  font-size: 11px;
+}
+
+:global(.dark) .workspace {
+  color-scheme: dark;
+  color: var(--color-slate-200);
+}
+
+:global(.dark) .workspace :is([class~="bg-white"], [class~="bg-slate-50"]) {
+  background-color: var(--color-slate-900);
+}
+
+:global(.dark) .workspace :is([class~="text-slate-600"], [class~="text-slate-700"], [class~="text-slate-800"], [class~="text-slate-900"]) {
+  color: var(--color-slate-200);
+}
+
+:global(.dark) .workspace :is([class~="border-slate-100"], [class~="border-slate-200"], [class~="border-slate-300"]) {
+  border-color: var(--color-slate-700);
+}
+
+:global(.dark) .workspace :is([class~="hover:bg-slate-50"], [class~="hover:bg-slate-100"]):hover {
+  background-color: var(--color-slate-800);
+}
+
+:global(.dark) .workspace [class~="text-emerald-800"] {
+  color: var(--color-emerald-300);
+}
+
+:global(.dark) .workspace :is([class~="bg-emerald-50"], [class~="bg-emerald-50/40"]) {
+  background-color: var(--color-emerald-950);
+}
+
+:global(.dark) .workspace [class~="hover:bg-slate-50"]:hover {
+  color: var(--color-slate-100);
+}

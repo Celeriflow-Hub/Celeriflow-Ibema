@@ -9,7 +9,7 @@ export default async function RecebimentosPage() {
   const [contracts, documents, employees, warehouses, receipts] = await Promise.all([
     prisma.contract.findMany({
       where: { status: "Vigente" },
-      select: { id: true, number: true, process: { select: { items: { select: { id: true, quantity: true, estimatedUnitValue: true, material: { select: { id: true, name: true } } } } } } },
+      select: { id: true, number: true, process: { select: { items: { select: { id: true, quantity: true, estimatedUnitValue: true, material: { select: { id: true, name: true, type: true } } } } } } },
       orderBy: { number: "asc" },
     }),
     prisma.document.findMany({ where: { status: "Válido", documentType: { not: "Modelo" } }, select: { id: true, title: true }, orderBy: { createdAt: "desc" }, take: 100 }),

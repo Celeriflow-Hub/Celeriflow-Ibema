@@ -34,14 +34,14 @@ export async function operateAsset(context: AppContext, raw: unknown) {
         if (m.endDate?.valueOf() === endDate.valueOf() && m.description === input.description && m.cost === cost) return { assetId: m.assetId };
         throw new AssetOperationError("A manutenção já foi concluída com outros dados.");
       }
-      if (m.asset.status === "Baixado") throw new AssetOperationError("O bem está baixado.");
+      if (m.asset.status === "Baixado" || m.asset.status === "Inativo") throw new AssetOperationError("O bem está baixado ou inativo.");
       if (endDate > dateOnly(todayInBrazil()) || endDate < dateOnly(m.startDate.toISOString().slice(0, 10))) throw new AssetOperationError("A conclusão deve ocorrer entre o início e a data atual.");
       await tx.assetMaintenance.update({ where: { id: m.id, updatedAt: m.updatedAt }, data: { status: "Concluída", endDate, cost, description: input.description } });
       await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "ASSET_MAINTENANCE", targetId: m.id });
       return { assetId: m.assetId };
     }
     const asset = await tx.asset.findFirst({ where: { id: input.assetId, ...scope } });
-    if (!asset || asset.status === "Baixado") throw new AssetOperationError("Bem não encontrado, baixado ou fora do seu setor.");
+    if (!asset || asset.status === "Baixado" || asset.status === "Inativo") throw new AssetOperationError("Bem não encontrado, baixado, inativo ou fora do seu setor.");
     if (asset.updatedAt.toISOString() !== input.version) throw new AssetOperationError("O bem foi alterado por outra sessão. Reabra a ficha.");
     if (input.kind === "transfer") {
       const department = await tx.department.findFirst({ where: { id: input.departmentId, isActive: true } });

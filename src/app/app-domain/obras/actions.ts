@@ -179,7 +179,7 @@ export async function configureServicoIntegration(data: {
   ]);
   if (!service) return { error: "Ordem de serviço não encontrada." };
   if (value.departmentId && !department) return { error: "Departamento não encontrado." };
-  if (value.targetAssetId && (!asset || asset.status === "Baixado")) return { error: "Bem patrimonial não disponível." };
+  if (value.targetAssetId && (!asset || asset.status === "Baixado" || asset.status === "Inativo")) return { error: "Bem patrimonial não disponível." };
   if (value.budgetAppropriationId && !appropriation) return { error: "Dotação orçamentária não encontrada." };
   if (value.commitmentId && (!commitment || commitment.status === "Anulado")) return { error: "Empenho não disponível." };
   if (commitment && value.budgetAppropriationId && commitment.appropriationId !== value.budgetAppropriationId) {
@@ -245,7 +245,7 @@ export async function assignEquipmentToServico(serviceId: string, assetId: strin
   if (!text.safeParse(serviceId).success || !text.safeParse(assetId).success) return { error: "Dados de equipamento inválidos." };
   const [service, asset] = await Promise.all([
     prisma.obrasServico.findFirst({ where: { id: serviceId, active: true }, select: { id: true } }),
-    prisma.asset.findFirst({ where: { id: assetId, status: { not: "Baixado" } }, select: { id: true } }),
+    prisma.asset.findFirst({ where: { id: assetId, status: { notIn: ["Baixado", "Inativo"] } }, select: { id: true } }),
   ]);
   if (!service || !asset) return { error: "Ordem de serviço ou equipamento não disponível." };
   try {

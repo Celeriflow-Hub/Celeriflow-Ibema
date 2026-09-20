@@ -3571,6 +3571,9 @@ model PurchaseReceiptItem {
   unitCost                  Float
   batchNumber               String                     @default("")
   expirationDate            DateTime?
+  brand                     String?
+  model                     String?
+  serialNumber              String?
   stockMovementId           String                     @unique
   stockMovement             MaterialMovement           @relation("PurchaseReceiptItemMovement", fields: [stockMovementId], references: [id], onDelete: Restrict)
   assets                    Asset[]
@@ -4613,14 +4616,23 @@ model AssetIntegrationPendingConfiguration {
 
 // Almoxarifado
 model Warehouse {
-  id       String  @id @default(cuid())
-  name     String
-  type     String  @default("Central") // Central, Setorial
-  address  String?
-  isActive Boolean @default(true)
+  id           String  @id @default(cuid())
+  name         String
+  type         String  @default("Central") // Central, Setorial
+  address      String?
+  zipCode      String?
+  streetName   String?
+  number       String?
+  neighborhood String?
+  city         String?
+  state        String?
+  isActive     Boolean @default(true)
 
   managerId String?
   manager   Employee? @relation("WarehouseManager", fields: [managerId], references: [id])
+
+  costCenterId String?
+  costCenter   CostCenter? @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -4631,6 +4643,20 @@ model Warehouse {
   inventorySessions InventorySession[]
 
   schoolMeals SchoolMeal[]
+
+  @@index([costCenterId])
+}
+
+model CostCenter {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  name        String
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  warehouses Warehouse[]
 }
 
 model MaterialCategory {
@@ -4649,10 +4675,12 @@ model Material {
   code          String  @unique
   name          String
   description   String?
+  type          String  @default("MATERIAL") // MATERIAL, PATRIMONIO
   unitOfMeasure String  @default("UN") // UN, KG, CX, PCT
   minStock      Float   @default(0)
   maxStock      Float   @default(0)
   isPerishable  Boolean @default(false)
+  isActive      Boolean @default(true)
 
   categoryId String
   category   MaterialCategory @relation(fields: [categoryId], references: [id])

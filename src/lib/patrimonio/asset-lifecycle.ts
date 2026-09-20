@@ -103,7 +103,7 @@ function depreciationPeriod(acquisitionDate: Date, referenceMonth: Date) {
 export async function depreciateAssetsForMonth(db: PrismaClient, referenceDate: Date) {
   const referenceMonth = normalizeReferenceMonth(referenceDate);
   const assets = await db.asset.findMany({
-    where: { status: { not: "Baixado" } },
+    where: { status: { notIn: ["Baixado", "Inativo"] } },
     select: {
       id: true,
       acquisitionDate: true,
@@ -146,7 +146,7 @@ export async function depreciateAssetsForMonth(db: PrismaClient, referenceDate: 
           where: { id: asset.id },
           select: { currentValue: true, status: true },
         });
-        if (currentAsset.status === "Baixado") return false;
+        if (currentAsset.status === "Baixado" || currentAsset.status === "Inativo") return false;
 
         // Recalculate over the remaining useful life so capitalized costs and
         // valuation changes are amortized prospectively, not retroactively.
@@ -198,7 +198,7 @@ export async function recordAssetValueAdjustment(db: PrismaClient, input: AssetV
       select: { id: true, status: true, acquisitionDate: true, acquisitionValue: true, currentValue: true },
     });
     if (!asset) throw new AssetLifecycleError("Bem patrimonial não encontrado.");
-    if (asset.status === "Baixado") throw new AssetLifecycleError("Não é possível ajustar um bem baixado.");
+    if (asset.status === "Baixado" || asset.status === "Inativo") throw new AssetLifecycleError("Não é possível ajustar um bem baixado ou inativo.");
     if (input.date < asset.acquisitionDate) throw new AssetLifecycleError("O ajuste não pode ser anterior à aquisição do bem.");
     const latestDepreciation = await tx.assetValueHistory.findFirst({
       where: { assetId: asset.id }, orderBy: { referenceMonth: "desc" }, select: { referenceMonth: true },
@@ -209,7 +209,7 @@ export async function recordAssetValueAdjustment(db: PrismaClient, input: AssetV
 
     const calculation = calculateAssetValueAdjustment(asset.currentValue, input.type, input.value);
     const updated = await tx.asset.updateMany({
-      where: { id: asset.id, currentValue: asset.currentValue, status: { not: "Baixado" } },
+      where: { id: asset.id, currentValue: asset.currentValue, status: { notIn: ["Baixado", "Inativo"] } },
       data: {
         currentValue: calculation.closingValue,
         ...(input.type === "SUBSEQUENT_COST" ? { acquisitionValue: roundCurrency(asset.acquisitionValue + calculation.adjustmentValue) } : {}),
@@ -296,7 +296,7 @@ export async function recordAssetDisposal(db: PrismaClient, input: AssetDisposal
       select: { id: true, status: true, currentValue: true, name: true, maintenances: { where: { status: { in: ["Solicitada", "Em manutenção"] } }, select: { id: true }, take: 1 } },
     });
     if (!asset) throw new AssetLifecycleError("Bem patrimonial não encontrado.");
-    if (asset.status === "Baixado") throw new AssetLifecycleError("Este bem já foi baixado.");
+    if (asset.status === "Baixado" || asset.status === "Inativo") throw new AssetLifecycleError("Este bem está baixado ou inativo.");
     if (asset.maintenances.length) throw new AssetLifecycleError("Conclua as manutenções abertas antes da baixa patrimonial.");
 
     const existing = await tx.assetWriteOff.findFirst({ where: { assetId: asset.id }, select: { id: true } });

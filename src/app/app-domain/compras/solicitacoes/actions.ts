@@ -112,7 +112,7 @@ export async function savePurchaseRequest(payload: PurchaseRequestInput) {
         catalogItemIds.length
           ? tx.catalogItem.findMany({
             where: { id: { in: catalogItemIds }, isActive: true },
-            select: { id: true, materials: { select: { id: true } } },
+            select: { id: true, materials: { select: { id: true, isActive: true } } },
           })
           : [],
         tx.budgetAppropriation.findMany({
@@ -132,6 +132,9 @@ export async function savePurchaseRequest(payload: PurchaseRequestInput) {
       }
       if (catalogItems.some((item) => item.materials.length > 1)) {
         return { error: "Um item do catálogo está vinculado a mais de um material. Corrija o cadastro antes de criar a solicitação." };
+      }
+      if (catalogItems.some((item) => item.materials.some((material) => !material.isActive))) {
+        return { error: "Um item do catálogo está vinculado a material inativo. Selecione outro item ou reative o material." };
       }
       if (budgetAppropriations.length !== budgetAppropriationIds.length) {
         return { error: "Selecione dotações orçamentárias existentes, acessíveis e vinculadas à secretaria da solicitação." };

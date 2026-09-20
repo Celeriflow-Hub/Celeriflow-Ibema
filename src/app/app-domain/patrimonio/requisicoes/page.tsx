@@ -51,7 +51,6 @@ export default async function RequisicoesPage({
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 sm:p-3">
       <ErpPageTitle
         title="Requisições internas"
-        description="Pedidos de materiais, separação e atendimento aos setores."
         action={
           <Link href="/patrimonio/requisicoes/nova" className={buttonVariants({ size: "sm" })}>
             <Plus className="size-3.5" />

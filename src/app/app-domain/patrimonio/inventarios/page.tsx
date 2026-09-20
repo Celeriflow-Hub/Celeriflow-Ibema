@@ -53,7 +53,6 @@ export default async function InventariosPage({
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 sm:p-3">
       <ErpPageTitle
         title="Inventários de estoque"
-        description="A contagem bloqueia as movimentações do almoxarifado até a aprovação e o encerramento."
       />
 
       <ErpListFrame

@@ -6,7 +6,9 @@ import {
   ChartNoAxesCombined,
   ClipboardList,
   LayoutDashboard,
+  Landmark,
   Package,
+  Truck,
   Warehouse,
 } from "lucide-react";
 import { ModuleShell, type ModuleNavGroup } from "@/components/app-ui/erp/ModuleShell";
@@ -19,19 +21,21 @@ const navigation: ModuleNavGroup[] = [
     ],
   },
   {
+    title: "Almoxarifado",
+    items: [
+      { title: "Almoxarifados", href: "/patrimonio/almoxarifados", icon: Warehouse },
+      { title: "Estoque", href: "/patrimonio/materiais", icon: Boxes },
+      { title: "Requisições internas", href: "/patrimonio/requisicoes", icon: ClipboardList },
+      { title: "Inventários", href: "/patrimonio/inventarios", icon: ClipboardList },
+      { title: "Fornecedores", href: "/cadastros/fornecedores", icon: Truck },
+      { title: "Centros de custo", href: "/patrimonio/centros-custo", icon: Landmark },
+    ],
+  },
+  {
     title: "Patrimônio",
     items: [
       { title: "Bens patrimoniais", href: "/patrimonio/bens", icon: Archive },
       { title: "Ciclo de vida", href: "/patrimonio/ciclo-vida", icon: ChartNoAxesCombined },
-    ],
-  },
-  {
-    title: "Almoxarifado",
-    items: [
-      { title: "Almoxarifados", href: "/patrimonio/almoxarifados", icon: Warehouse },
-      { title: "Materiais e estoque", href: "/patrimonio/materiais", icon: Boxes },
-      { title: "Requisições internas", href: "/patrimonio/requisicoes", icon: ClipboardList },
-      { title: "Inventários", href: "/patrimonio/inventarios", icon: ClipboardList },
     ],
   },
 ];
@@ -40,9 +44,10 @@ export default function PatrimonioLayout({ children }: { children: React.ReactNo
   return (
     <ModuleShell
       moduleTitle="Almoxarifado e Patrimônio"
-      moduleCaption="Bens, estoque e inventário"
       moduleIcon={Package}
       navigation={navigation}
+      sidebarVariant="light"
+      desktopCollapsible
     >
       {children}
     </ModuleShell>

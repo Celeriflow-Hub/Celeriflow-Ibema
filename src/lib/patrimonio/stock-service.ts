@@ -91,13 +91,15 @@ function updateMetadata(input: ValidStockMovementInput) {
 async function ensureStockTarget(tx: Prisma.TransactionClient, input: ValidStockMovementInput) {
   const [warehouse, material, settlement] = await Promise.all([
     tx.warehouse.findFirst({ where: { id: input.warehouseId, isActive: true }, select: { id: true } }),
-    tx.material.findUnique({ where: { id: input.materialId }, select: { id: true } }),
+    tx.material.findUnique({ where: { id: input.materialId }, select: { id: true, isActive: true } }),
     input.settlementId?.trim()
       ? tx.settlement.findFirst({ where: { id: input.settlementId.trim(), status: "Liquidado" }, select: { id: true } })
       : null,
   ]);
   if (!warehouse) throw new StockServiceError("Almoxarifado não encontrado ou inativo.");
-  if (!material) throw new StockServiceError("Material não encontrado.");
+  const continuingLifecycle = ["APPROVED_PURCHASE_RECEIPT", "MATERIAL_REQUEST_ISSUE", "ASSET_ACQUISITION"].includes(input.sourceType || "")
+    || (input.kind === "ADJUSTMENT" && Boolean(input.inventorySessionId?.trim()));
+  if (!material || (material.isActive === false && !continuingLifecycle)) throw new StockServiceError("Material não encontrado ou inativo.");
   if (input.settlementId?.trim() && !settlement) throw new StockServiceError("Liquidação não encontrada ou não está ativa.");
 }
 

@@ -1,10 +1,9 @@
 import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
 import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { canPerformModuleOperation, getTenantContextForModule } from "@/lib/platform/tenant-context";
 import type { Prisma } from "@prisma/client";
 import { Plus, Search } from "lucide-react";
 import Link from "next/link";
@@ -14,6 +13,7 @@ import {
   parsePatrimonioListPage,
   PATRIMONIO_LIST_PAGE_SIZE,
 } from "../listing";
+import { WarehouseTable } from "./WarehouseTable";
 
 type SearchParams = { q?: string; page?: string };
 
@@ -22,7 +22,8 @@ export default async function AlmoxarifadosPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { prisma } = await getTenantContextForModule("PATRIMONIO");
+  const context = await getTenantContextForModule("PATRIMONIO");
+  const { prisma } = context;
   const params = await searchParams;
   const q = params?.q?.trim() || "";
   const requestedPage = parsePatrimonioListPage(params?.page);
@@ -37,20 +38,22 @@ export default async function AlmoxarifadosPage({
     skip: (page - 1) * PATRIMONIO_LIST_PAGE_SIZE,
     take: PATRIMONIO_LIST_PAGE_SIZE,
     orderBy: { name: "asc" },
-    include: { manager: true },
+    include: { manager: true, costCenter: true },
   });
+  const canCreate = canPerformModuleOperation(context.user, "PATRIMONIO", "create");
+  const canUpdate = canPerformModuleOperation(context.user, "PATRIMONIO", "update");
+  const canDelete = canPerformModuleOperation(context.user, "PATRIMONIO", "delete");
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 sm:p-3">
       <ErpPageTitle
         title="Almoxarifados"
-        description="Depósitos, responsáveis e centros de distribuição física."
         action={
-          <Link href="/patrimonio/almoxarifados/novo" className={buttonVariants({ size: "sm" })}>
+          canCreate ? <Link href="/patrimonio/almoxarifados/novo" className={buttonVariants({ size: "sm" })}>
             <Plus className="size-3.5" />
             <span className="hidden sm:inline">Novo almoxarifado</span>
             <span className="sm:hidden">Novo</span>
-          </Link>
+          </Link> : undefined
         }
       />
 
@@ -81,34 +84,7 @@ export default async function AlmoxarifadosPage({
           />
         }
       >
-        <table className="w-full table-fixed text-left text-[11px] leading-4 text-slate-700">
-          <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-            <tr className="h-7">
-              <th className="w-[36%] px-3 text-left">Nome</th>
-              <th className="w-[20%] px-3 text-left">Tipo</th>
-              <th className="w-[30%] px-3 text-left">Responsável</th>
-              <th className="w-[14%] px-3 text-left">Situação</th>
-            </tr>
-          </thead>
-          <tbody>
-            {warehouses.length === 0 ? (
-              <tr><td colSpan={4} className="px-3 py-10 text-center text-slate-500">Nenhum almoxarifado encontrado.</td></tr>
-            ) : (
-              warehouses.map((warehouse) => (
-                <tr key={warehouse.id} className="h-[clamp(18px,2.65vh,28px)] border-b border-slate-100 hover:bg-slate-50">
-                  <td className="px-3 py-0 font-semibold text-emerald-800"><span className="block truncate">{warehouse.name}</span></td>
-                  <td className="px-3 py-0"><span className="block truncate">{warehouse.type}</span></td>
-                  <td className="px-3 py-0 text-slate-600"><span className="block truncate">{warehouse.manager?.name || "Sem responsável definido"}</span></td>
-                  <td className="px-3 py-0">
-                    <Badge variant={warehouse.isActive ? "default" : "secondary"} className="px-1.5 py-0 text-[10px] leading-4">
-                      {warehouse.isActive ? "Ativo" : "Inativo"}
-                    </Badge>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+        <WarehouseTable warehouses={warehouses.map((warehouse) => ({ id: warehouse.id, name: warehouse.name, type: warehouse.type, address: warehouse.address, zipCode: warehouse.zipCode, streetName: warehouse.streetName, number: warehouse.number, neighborhood: warehouse.neighborhood, city: warehouse.city, state: warehouse.state, isActive: warehouse.isActive, managerName: warehouse.manager?.name || null, costCenterName: warehouse.costCenter ? `${warehouse.costCenter.code} · ${warehouse.costCenter.name}` : null }))} canUpdate={canUpdate} canDelete={canDelete} />
       </ErpListFrame>
     </div>
   );

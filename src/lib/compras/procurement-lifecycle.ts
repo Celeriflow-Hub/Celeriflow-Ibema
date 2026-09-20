@@ -32,6 +32,13 @@ function required(value: string | null | undefined, label: string) {
   return normalized;
 }
 
+function optionalText(value: string | undefined, label: string, maximum = 160) {
+  const normalized = value?.trim();
+  if (!normalized) return null;
+  if (normalized.length > maximum) throw new ProcurementLifecycleError(`${label} deve ter no máximo ${maximum} caracteres.`);
+  return normalized;
+}
+
 function quantity(value: number, label: string) {
   if (!Number.isFinite(value) || value <= 0) throw new ProcurementLifecycleError(`${label} deve ser maior que zero.`);
   return value;
@@ -69,7 +76,7 @@ export async function createMaterialRequest(db: Db, actor: ProcurementActor, inp
         where: { id: requesterId, isActive: true, department: { is: { isActive: true } } },
         select: { id: true, departmentId: true },
       }),
-      tx.material.findMany({ where: { id: { in: input.items.map((item) => item.materialId) } }, select: { id: true } }),
+      tx.material.findMany({ where: { id: { in: input.items.map((item) => item.materialId) }, isActive: true }, select: { id: true } }),
     ]);
     if (!requester?.departmentId) throw new ProcurementLifecycleError("O solicitante deve estar vinculado a um setor ativo.");
     if (materials.length !== input.items.length) throw new ProcurementLifecycleError("Selecione apenas materiais existentes.");
@@ -306,6 +313,9 @@ export type ApprovePurchaseReceiptInput = {
     unitCost: number;
     batchNumber?: string;
     expirationDate?: Date;
+    brand?: string;
+    model?: string;
+    serialNumber?: string;
   }>;
 };
 
@@ -318,6 +328,12 @@ export async function approvePurchaseReceipt(db: Db, actor: ProcurementActor, ra
     receiverId: required(rawInput.receiverId, "Recebedor"),
     attesterId: required(rawInput.attesterId, "Atestador"),
     idempotencyKey: required(rawInput.idempotencyKey, "Chave de idempotência"),
+    items: rawInput.items.map((item) => ({
+      ...item,
+      brand: optionalText(item.brand, "Marca"),
+      model: optionalText(item.model, "Modelo"),
+      serialNumber: optionalText(item.serialNumber, "Número de série"),
+    })),
   };
   if (!Number.isFinite(input.receivedAt.valueOf())) throw new ProcurementLifecycleError("Data de recebimento inválida.");
   if (!input.items.length) throw new ProcurementLifecycleError("O recebimento deve possuir ao menos um item.");
@@ -361,7 +377,7 @@ export async function approvePurchaseReceipt(db: Db, actor: ProcurementActor, ra
 
     const processItemIds = input.items.map((item) => item.purchaseProcessItemId);
     const [processItems, priorReceiptItems] = await Promise.all([
-      tx.purchaseProcessItem.findMany({ where: { id: { in: processItemIds }, purchaseProcessId: contract.processId }, select: { id: true, quantity: true, materialId: true } }),
+      tx.purchaseProcessItem.findMany({ where: { id: { in: processItemIds }, purchaseProcessId: contract.processId }, select: { id: true, quantity: true, materialId: true, material: { select: { type: true } } } }),
       tx.purchaseReceiptItem.findMany({
         where: { purchaseProcessItemId: { in: processItemIds }, purchaseReceipt: { status: "APPROVED" } },
         select: { purchaseProcessItemId: true, quantity: true },
@@ -375,8 +391,17 @@ export async function approvePurchaseReceipt(db: Db, actor: ProcurementActor, ra
       if (source.materialId !== item.materialId) {
         throw new ProcurementLifecycleError("O material recebido deve corresponder ao item de material do processo de compra.");
       }
+      if (!source.material) {
+        throw new ProcurementLifecycleError("O item do processo não possui material disponível para recebimento.");
+      }
       if ((priorByItem.get(source.id) ?? 0) + item.quantity > source.quantity) {
         throw new ProcurementLifecycleError("A quantidade recebida excede o saldo do item do processo.");
+      }
+      if (source.material.type === "PATRIMONIO" && !Number.isInteger(item.quantity)) {
+        throw new ProcurementLifecycleError("Itens patrimoniais devem ser recebidos em quantidade inteira.");
+      }
+      if (source.material.type === "PATRIMONIO" && item.serialNumber && item.quantity !== 1) {
+        throw new ProcurementLifecycleError("Um item patrimonial com número de série deve ser recebido em quantidade unitária.");
       }
     }
 
@@ -418,6 +443,9 @@ export async function approvePurchaseReceipt(db: Db, actor: ProcurementActor, ra
           unitCost: item.unitCost,
           batchNumber: item.batchNumber?.trim() ?? "",
           expirationDate: item.expirationDate,
+          brand: item.brand,
+          model: item.model,
+          serialNumber: item.serialNumber,
           stockMovementId: movement.id,
         },
       });

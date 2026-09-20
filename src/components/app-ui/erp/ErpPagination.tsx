@@ -9,6 +9,10 @@ type ErpPaginationProps = {
   previousHref: string;
   nextHref: string;
   label?: string;
+  jumpTo?: {
+    pathname: string;
+    values?: Record<string, string | undefined>;
+  };
 };
 
 export function ErpPagination({
@@ -18,10 +22,9 @@ export function ErpPagination({
   previousHref,
   nextHref,
   label = "registros",
+  jumpTo,
 }: ErpPaginationProps) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const first = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const last = Math.min(page * pageSize, total);
   const previousDisabled = page <= 1;
   const nextDisabled = page >= totalPages;
 
@@ -47,6 +50,14 @@ export function ErpPagination({
         <span className="whitespace-nowrap px-1 text-[11px] font-medium text-slate-600 tabular-nums dark:text-slate-300">
           {page} de {totalPages}
         </span>
+        {jumpTo && totalPages > 1 && (
+          <form method="get" action={jumpTo.pathname} className="flex items-center gap-1">
+            {Object.entries(jumpTo.values || {}).map(([key, value]) => value ? <input key={key} type="hidden" name={key} value={value} /> : null)}
+            <label className="sr-only" htmlFor={`jump-page-${label}`}>Ir para página</label>
+            <input id={`jump-page-${label}`} type="number" name="page" min={1} max={totalPages} defaultValue={page} aria-label="Ir para página" className="h-7 w-12 rounded border border-slate-200 bg-white px-1 text-center text-[11px] text-slate-700 outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200" />
+            <button type="submit" className="h-7 rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">Ir</button>
+          </form>
+        )}
         <Link
           aria-disabled={nextDisabled}
           href={nextHref}

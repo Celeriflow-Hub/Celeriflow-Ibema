@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
 import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
-import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { canPerformModuleOperation, getTenantContextForModule } from "@/lib/platform/tenant-context";
 import type { Prisma } from "@prisma/client";
 import { Plus, Search } from "lucide-react";
 import Link from "next/link";
@@ -14,6 +14,7 @@ import {
   parsePatrimonioListPage,
   PATRIMONIO_LIST_PAGE_SIZE,
 } from "../listing";
+import { AssetRowActions } from "./AssetRowActions";
 
 type SearchParams = { q?: string; status?: string; page?: string };
 
@@ -22,7 +23,8 @@ export default async function BensPatrimoniaisPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { prisma } = await getTenantContextForModule("PATRIMONIO");
+  const context = await getTenantContextForModule("PATRIMONIO");
+  const { prisma } = context;
   const params = await searchParams;
   const q = params?.q?.trim() || "";
   const status = params?.status || "";
@@ -52,12 +54,12 @@ export default async function BensPatrimoniaisPage({
     },
   });
   const hrefValues = { q, status };
+  const canUpdate = canPerformModuleOperation(context.user, "PATRIMONIO", "update");
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 sm:p-3">
       <ErpPageTitle
         title="Bens patrimoniais"
-        description="Cadastro, localização e responsabilidade dos bens permanentes."
         action={
           <>
             <Link href="/patrimonio/ciclo-vida" className={buttonVariants({ variant: "outline", size: "sm" })}>
@@ -93,6 +95,7 @@ export default async function BensPatrimoniaisPage({
               <option value="Em uso">Em uso</option>
               <option value="Ocioso">Ocioso</option>
               <option value="Em manutenção">Em manutenção</option>
+              <option value="Inativo">Inativo</option>
               <option value="Baixado">Baixado</option>
             </select>
             <button type="submit" className={buttonVariants({ size: "sm" })}>
@@ -116,18 +119,19 @@ export default async function BensPatrimoniaisPage({
         <table className="w-full table-fixed text-left text-[11px] leading-4 text-slate-700">
           <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
             <tr className="h-7">
-              <th className="w-[14%] px-3 text-left">Tombamento</th>
-              <th className="w-[40%] px-3 text-left">Descrição</th>
-              <th className="hidden w-[15%] px-3 text-left xl:table-cell">Categoria</th>
-              <th className="hidden w-[20%] px-3 text-left 2xl:table-cell">Localização</th>
-              <th className="w-[15%] px-3 text-left">Situação</th>
-              <th className="w-[16%] px-3 text-right">Valor contábil</th>
+              <th className="w-[13%] px-3 text-left">Tombamento</th>
+              <th className="w-[35%] px-3 text-left">Descrição</th>
+              <th className="hidden w-[14%] px-3 text-left xl:table-cell">Categoria</th>
+              <th className="hidden w-[18%] px-3 text-left 2xl:table-cell">Localização</th>
+              <th className="w-[13%] px-3 text-left">Situação</th>
+              <th className="w-[14%] px-3 text-right">Valor contábil</th>
+              <th className="w-[3.5rem] px-2 text-right">Ações</th>
             </tr>
           </thead>
           <tbody>
             {assets.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-10 text-center text-slate-500">
+                <td colSpan={7} className="px-3 py-10 text-center text-slate-500">
                   Nenhum bem patrimonial encontrado para os filtros informados.
                 </td>
               </tr>
@@ -156,10 +160,11 @@ export default async function BensPatrimoniaisPage({
                       {asset.status}
                     </Badge>
                   </td>
-                  <td className="px-3 py-0 text-right font-medium tabular-nums">
-                    {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(asset.currentValue)}
-                  </td>
-                </tr>
+                   <td className="px-3 py-0 text-right font-medium tabular-nums">
+                     {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(asset.currentValue)}
+                   </td>
+                   <td className="px-2 py-0"><AssetRowActions asset={{ id: asset.id, name: asset.name, status: asset.status }} canUpdate={canUpdate} /></td>
+                 </tr>
               ))
             )}
           </tbody>

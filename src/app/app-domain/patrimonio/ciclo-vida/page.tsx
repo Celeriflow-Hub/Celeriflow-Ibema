@@ -54,18 +54,13 @@ export default async function AssetLifecyclePage({
   const params = await searchParams;
   const view = parseLifecycleView(params?.view);
   const requestedPage = parsePatrimonioListPage(params?.page);
-  const activeAssetWhere = { status: { not: "Baixado" } };
-  const [assetTotal, activeAssetTotal, activeAssetValue, writeOffTotal, adjustmentTotal, activeAssets] = await Promise.all([
+  const activeAssetWhere = { status: { notIn: ["Baixado", "Inativo"] } };
+  const [assetTotal, activeAssetTotal, activeAssetValue, writeOffTotal, adjustmentTotal] = await Promise.all([
     prisma.asset.count(),
     prisma.asset.count({ where: activeAssetWhere }),
     prisma.asset.aggregate({ where: activeAssetWhere, _sum: { currentValue: true } }),
     prisma.assetWriteOff.count(),
     prisma.assetValueAdjustment.count(),
-    prisma.asset.findMany({
-      where: activeAssetWhere,
-      orderBy: { patrimonyNumber: "asc" },
-      select: { id: true, patrimonyNumber: true, name: true, currentValue: true },
-    }),
   ]);
   const total = view === "posicao" ? assetTotal : view === "baixas" ? writeOffTotal : adjustmentTotal;
   const page = clampPatrimonioListPage(requestedPage, total);
@@ -111,7 +106,6 @@ export default async function AssetLifecyclePage({
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2 sm:p-3">
       <ErpPageTitle
         title="Ciclo de vida patrimonial"
-        description="Posição contábil, baixas, alienações, reavaliações e custos posteriores."
       />
 
       <details className="shrink-0 border border-slate-300 bg-white shadow-sm">
@@ -120,7 +114,7 @@ export default async function AssetLifecyclePage({
           <span className="ml-2 font-normal text-slate-500">Processar depreciação, registrar baixa, alienação ou ajuste de valor.</span>
         </summary>
         <div className="border-t border-slate-200 p-3">
-          <AssetLifecycleClient assets={activeAssets} initialCompetence={initialCompetence} />
+          <AssetLifecycleClient initialCompetence={initialCompetence} />
         </div>
       </details>
 
@@ -147,7 +141,6 @@ export default async function AssetLifecyclePage({
                 </Link>
               ))}
             </nav>
-            <p className="hidden text-[11px] text-slate-500 lg:block">20 registros por página</p>
           </div>
         }
         summary={

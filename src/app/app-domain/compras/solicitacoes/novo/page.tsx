@@ -10,7 +10,7 @@ export default async function NovaSolicitacaoPage() {
   const budgetUnitScope = isSystemAdministrator(context.user) ? {} : { budgetUnitId: { in: context.user.allowedBudgetUnitIds } };
   const [catalogItems, secretarias, departments, budgetAppropriations] = await Promise.all([
     prisma.catalogItem.findMany({
-      where: { isActive: true },
+      where: { isActive: true, materials: { none: { isActive: false } } },
       orderBy: { name: 'asc' }
     }),
     prisma.secretariat.findMany({

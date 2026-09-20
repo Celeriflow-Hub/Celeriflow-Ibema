@@ -1,16 +1,16 @@
 "use client";
 
-import { adjustMaterialStockAction, registerMaterialEntryAction, registerMaterialExitAction } from "./actions";
+import { adjustMaterialStockAction, registerMaterialExitAction } from "./actions";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 type Option = { id: string; label: string };
-type Operation = "ENTRY" | "EXIT" | "ADJUSTMENT";
+type Operation = "EXIT" | "ADJUSTMENT";
 type SettlementOption = { id: string; label: string };
 
 export function StockOperationsClient({ materials, warehouses, settlements }: { materials: Option[]; warehouses: Option[]; settlements: SettlementOption[] }) {
   const router = useRouter();
-  const [operation, setOperation] = useState<Operation>("ENTRY");
+  const [operation, setOperation] = useState<Operation>("EXIT");
   const [pending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -28,11 +28,9 @@ export function StockOperationsClient({ materials, warehouses, settlements }: { 
     };
 
     startTransition(async () => {
-      const result = operation === "ENTRY"
-        ? await registerMaterialEntryAction(data)
-        : operation === "EXIT"
-          ? await registerMaterialExitAction(data)
-          : await adjustMaterialStockAction(data);
+      const result = operation === "EXIT"
+        ? await registerMaterialExitAction(data)
+        : await adjustMaterialStockAction(data);
       setFeedback(result.error ?? result.message ?? null);
       if (!result.error) router.refresh();
     });
@@ -42,7 +40,7 @@ export function StockOperationsClient({ materials, warehouses, settlements }: { 
     return <p className="text-sm text-muted-foreground">Cadastre ao menos um material e um almoxarifado para movimentar o estoque.</p>;
   }
 
-  const labels = { ENTRY: "Entrada", EXIT: "Saída", ADJUSTMENT: "Ajuste" } as const;
+  const labels = { EXIT: "Saída", ADJUSTMENT: "Ajuste" } as const;
   return (
     <form action={submit} className="grid gap-3 text-sm md:grid-cols-2">
       <div className="md:col-span-2 flex flex-wrap gap-2" role="group" aria-label="Tipo de movimentação">

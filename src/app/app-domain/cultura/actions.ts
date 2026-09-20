@@ -62,7 +62,7 @@ export async function createEspaco(data: { nome: string; tipo: string; capacidad
     parsed.data.assetId ? prisma.asset.findUnique({ where: { id: parsed.data.assetId }, select: { id: true, status: true } }) : null,
     parsed.data.responsibleEmployeeId ? prisma.employee.findFirst({ where: { id: parsed.data.responsibleEmployeeId, isActive: true }, select: { id: true } }) : null,
   ]);
-  if ((parsed.data.realEstateId && !property) || (parsed.data.assetId && (!asset || asset.status === "Baixado")) || (parsed.data.responsibleEmployeeId && !employee)) return { error: "Uma das referências informadas não está disponível." };
+  if ((parsed.data.realEstateId && !property) || (parsed.data.assetId && (!asset || asset.status === "Baixado" || asset.status === "Inativo")) || (parsed.data.responsibleEmployeeId && !employee)) return { error: "Uma das referências informadas não está disponível." };
   try {
     await prisma.culturaEspaco.create({ data: { nome: parsed.data.nome, tipo: parsed.data.tipo, capacidade: parsed.data.capacidade, realEstateId: property?.id, assetId: asset?.id, responsibleEmployeeId: employee?.id } });
   } catch (error) { return { error: databaseError(error, "Não foi possível cadastrar o espaço.") }; }

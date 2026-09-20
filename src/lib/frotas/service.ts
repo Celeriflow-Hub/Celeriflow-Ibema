@@ -24,8 +24,8 @@ async function requireDepartment(tx: Tx, scope: FleetScope, id: string) {
   if (!department) throw new FleetError("Selecione um setor ativo do organograma.");
 }
 async function requireUnit(tx: Tx, scope: FleetScope, id: string, active = true) {
-  const unit = await tx.fleetUnit.findFirst({ where: { id, ...departmentWhere(scope) } });
-  if (!unit || (active && (unit.status === "INATIVO" || !unit.departmentId))) throw new FleetError("Unidade da frota não encontrada, inativa, baixada, sem setor ou fora do seu setor.");
+  const unit = await tx.fleetUnit.findFirst({ where: { id, ...departmentWhere(scope) }, include: { asset: { select: { status: true } } } });
+  if (!unit || (active && (unit.status === "INATIVO" || !unit.departmentId || unit.asset?.status === "Baixado" || unit.asset?.status === "Inativo"))) throw new FleetError("Unidade da frota não encontrada, inativa, baixada, sem setor ou fora do seu setor.");
   return unit;
 }
 async function requireReplayScope(tx: Tx, scope: FleetScope, type: string, id: string) {
@@ -82,7 +82,7 @@ async function apply(tx: Tx, scope: FleetScope, input: FleetMutation): Promise<{
       }
       if (d.assetId && d.assetId !== existing?.assetId) {
         if (!scope.canReadAssets) throw new FleetError("Seu perfil não permite consultar Patrimônio para criar esse vínculo.");
-        const asset = await tx.asset.findFirst({ where: { id: d.assetId, departmentId: d.departmentId, status: { not: "Baixado" } }, select: { id: true } });
+        const asset = await tx.asset.findFirst({ where: { id: d.assetId, departmentId: d.departmentId, status: { notIn: ["Baixado", "Inativo"] } }, select: { id: true } });
         if (!asset) throw new FleetError("O bem patrimonial deve estar ativo e pertencer ao mesmo setor.");
       }
       if (d.assetId) {
@@ -152,7 +152,7 @@ async function apply(tx: Tx, scope: FleetScope, input: FleetMutation): Promise<{
         return { targetType: "FLEET_WORK_ORDER", targetId: order.id };
       }
       const unit = await requireUnit(tx, scope, order.unitId, false);
-      if (unit.patrimonyStatus === "Baixado") throw new FleetError("O bem foi baixado. Conclua a manutenção em Patrimônio antes de registrar a baixa.");
+      if (unit.asset?.status === "Baixado" || unit.asset?.status === "Inativo") throw new FleetError("O bem está baixado ou inativo. Conclua a manutenção em Patrimônio antes de registrar a operação.");
       if (order.status !== "EM_EXECUCAO") throw new FleetError("Inicie a execução antes de concluir a OS.");
       const completedAt = dateOnly(d.completedAt);
       if (completedAt > dateOnly(todayInBrazil())) throw new FleetError("Uma execução realizada não pode ter data futura.");

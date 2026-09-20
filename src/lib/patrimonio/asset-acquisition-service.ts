@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 import { applyStockMovement } from "./stock-service";
+import { nextAssetPatrimonyNumber } from "./identifiers";
 
 export class AssetAcquisitionError extends Error {}
 
@@ -11,14 +12,9 @@ export type AssetAcquisitionActor = {
 
 export type AssetAcquisitionInput = {
   purchaseReceiptItemId: string;
-  patrimonyNumber: string;
-  name: string;
   categoryId: string;
   departmentId?: string;
   responsibleId?: string;
-  brand?: string;
-  model?: string;
-  serialNumber?: string;
 };
 
 function required(value: string | undefined, label: string) {
@@ -30,14 +26,9 @@ function required(value: string | undefined, label: string) {
 export function normalizeAssetAcquisitionInput(input: AssetAcquisitionInput) {
   return {
     purchaseReceiptItemId: required(input.purchaseReceiptItemId, "Item do recebimento"),
-    patrimonyNumber: required(input.patrimonyNumber, "Número de tombamento"),
-    name: required(input.name, "Nome do bem"),
     categoryId: required(input.categoryId, "Categoria patrimonial"),
     departmentId: input.departmentId?.trim() || undefined,
     responsibleId: input.responsibleId?.trim() || undefined,
-    brand: input.brand?.trim() || undefined,
-    model: input.model?.trim() || undefined,
-    serialNumber: input.serialNumber?.trim() || undefined,
   };
 }
 
@@ -49,6 +40,7 @@ export async function acquireAssetFromPurchaseReceipt(db: PrismaClient, actor: A
     const receiptItem = await tx.purchaseReceiptItem.findUnique({
       where: { id: input.purchaseReceiptItemId },
       include: {
+        material: { select: { name: true, description: true, type: true } },
         purchaseReceipt: {
           select: {
             number: true,
@@ -65,15 +57,29 @@ export async function acquireAssetFromPurchaseReceipt(db: PrismaClient, actor: A
     if (receiptItem.quantityIncorporated >= receiptItem.quantity) {
       throw new AssetAcquisitionError("Todos os itens deste recebimento já foram tombados.");
     }
+    if (receiptItem.material.type !== "PATRIMONIO") {
+      throw new AssetAcquisitionError("Somente itens patrimoniais recebidos podem ser tombados.");
+    }
+    if (!Number.isInteger(receiptItem.quantity) || !Number.isInteger(receiptItem.quantityIncorporated)) {
+      throw new AssetAcquisitionError("O item patrimonial recebido deve possuir quantidade inteira para tombamento unitário.");
+    }
+    if (receiptItem.serialNumber && receiptItem.quantity !== 1) {
+      throw new AssetAcquisitionError("Um item patrimonial com número de série deve ser recebido em quantidade unitária.");
+    }
+    if (input.responsibleId && !input.departmentId) {
+      throw new AssetAcquisitionError("Selecione o setor responsável antes de vincular um servidor.");
+    }
 
     const [category, department, responsible] = await Promise.all([
       tx.assetCategory.findFirst({ where: { id: input.categoryId, isActive: true }, select: { id: true } }),
-      input.departmentId ? tx.department.findUnique({ where: { id: input.departmentId }, select: { id: true } }) : null,
-      input.responsibleId ? tx.employee.findFirst({ where: { id: input.responsibleId, isActive: true }, select: { id: true } }) : null,
+      input.departmentId ? tx.department.findFirst({ where: { id: input.departmentId, isActive: true }, select: { id: true } }) : null,
+      input.responsibleId ? tx.employee.findFirst({ where: { id: input.responsibleId, departmentId: input.departmentId!, isActive: true }, select: { id: true } }) : null,
     ]);
     if (!category) throw new AssetAcquisitionError("Categoria patrimonial não encontrada ou inativa.");
     if (input.departmentId && !department) throw new AssetAcquisitionError("Setor responsável não encontrado.");
-    if (input.responsibleId && !responsible) throw new AssetAcquisitionError("Servidor responsável não encontrado ou inativo.");
+    if (input.responsibleId && !responsible) throw new AssetAcquisitionError("O servidor responsável deve estar ativo e vinculado ao setor selecionado.");
+
+    const patrimonyNumber = await nextAssetPatrimonyNumber(tx);
 
     // The compare-and-swap increment makes concurrent tombamentos compete for
     // the same remaining unit instead of over-incorporating the receipt.
@@ -93,17 +99,18 @@ export async function acquireAssetFromPurchaseReceipt(db: PrismaClient, actor: A
       batchNumber: receiptItem.batchNumber,
       quantity: 1,
       unitCost: receiptItem.unitCost,
-      reason: `Tombamento ${input.patrimonyNumber} do recebimento ${receiptItem.purchaseReceipt.number}`,
+      reason: `Tombamento ${patrimonyNumber} do recebimento ${receiptItem.purchaseReceipt.number}`,
       actor,
     });
 
     const asset = await tx.asset.create({
       data: {
-        patrimonyNumber: input.patrimonyNumber,
-        name: input.name,
-        brand: input.brand,
-        model: input.model,
-        serialNumber: input.serialNumber,
+        patrimonyNumber,
+        name: receiptItem.material.name,
+        description: receiptItem.material.description,
+        brand: receiptItem.brand,
+        model: receiptItem.model,
+        serialNumber: receiptItem.serialNumber,
         acquisitionDate: receiptItem.purchaseReceipt.receivedAt,
         incorporationDate: receiptItem.purchaseReceipt.receivedAt,
         acquisitionValue: receiptItem.unitCost,

@@ -67,7 +67,7 @@ export async function registerFleetOperation(db: PrismaClient, actor: Actor, inp
   if (!["ABASTECIMENTO", "MANUTENCAO", "ORDEM_SERVICO"].includes(input.type)) throw new C7OperationError("Tipo de operação de frota inválido.");
   return db.$transaction(async (tx) => {
     const [asset, evidence] = await Promise.all([
-      tx.asset.findFirst({ where: { id: assetId, status: { not: "Baixado" }, category: { OR: [{ code: { startsWith: "V" } }, { name: { contains: "veículo", mode: "insensitive" } }] } }, select: { id: true } }),
+      tx.asset.findFirst({ where: { id: assetId, status: { notIn: ["Baixado", "Inativo"] }, category: { OR: [{ code: { startsWith: "V" } }, { name: { contains: "veículo", mode: "insensitive" } }] } }, select: { id: true } }),
       input.evidenceDocumentId?.trim() ? tx.document.findFirst({ where: { id: input.evidenceDocumentId.trim(), status: "Válido" }, select: { id: true } }) : null,
     ]);
     if (!asset) throw new C7OperationError("Selecione um bem patrimonial ativo classificado como veículo.");

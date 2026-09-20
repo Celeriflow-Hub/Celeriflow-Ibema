@@ -36,5 +36,8 @@ function run(command, args) {
   if (process.exitCode !== 0) process.exit(process.exitCode);
 }
 
+// Production builds use the production database, so deploy committed schema
+// migrations before compiling code that depends on their columns.
+if (process.env.VERCEL_ENV === "production") run("prisma", ["migrate", "deploy"]);
 run("prisma", ["generate"]);
 run("next", ["build"]);

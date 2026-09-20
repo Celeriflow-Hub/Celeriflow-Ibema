@@ -21,10 +21,11 @@ export default function AppDomainError({
         <h2 className="text-xl font-semibold">
           Erro Interno do Servidor
         </h2>
-        <p className="text-muted-foreground">
-          Ocorreu um erro inesperado ao carregar esta página. Nossa equipe foi notificada.
-        </p>
-        <div className="pt-4 flex gap-4 justify-center">
+         <p className="text-muted-foreground">
+           Ocorreu um erro inesperado ao carregar esta página. Nossa equipe foi notificada.
+         </p>
+          {error.digest && <p className="break-all text-xs text-muted-foreground">Referência do erro: {error.digest}</p>}
+          <div className="pt-4 flex gap-4 justify-center">
           <Button onClick={() => window.location.href = "/"}>Voltar ao Início</Button>
           <Button variant="outline" onClick={() => reset()}>Tentar Novamente</Button>
         </div>

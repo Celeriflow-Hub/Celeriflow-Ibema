@@ -10,7 +10,7 @@ if (!tests.length) {
 
 console.log(`Running ${tests.length} committed Group A test file(s).`);
 const tsxCli = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
-const result = spawnSync(process.execPath, [tsxCli, "--test", ...tests], { stdio: "inherit" });
+const result = spawnSync(process.execPath, ["--conditions=react-server", tsxCli, "--test", ...tests], { stdio: "inherit" });
 
 if (result.error) throw result.error;
 process.exit(result.status ?? 1);

@@ -8,7 +8,15 @@ export default async function Page() {
   const { prisma } = await getTenantContextForModule("SAUDE");
   const items = await prisma.healthTeam.findMany({
     orderBy: { createdAt: 'desc' },
-    include: { unit: true }
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      microarea: true,
+      unitId: true,
+      isActive: true,
+      unit: { select: { id: true, name: true } },
+    },
   });
 
   const units = await prisma.healthUnit.findMany({

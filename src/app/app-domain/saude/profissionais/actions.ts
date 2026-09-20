@@ -1,90 +1,106 @@
 "use server";
 
-import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
-import { revalidatePath } from 'next/cache';
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { AccessError, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
+import { HealthOperationError } from "@/lib/saude/appointment-service";
+import { healthEntityIdSchema, healthProfessionalInputSchema, type HealthProfessionalInput } from "@/lib/saude/contract";
 
-async function getTenantPrisma(operation: ModuleOperation) {
-  return (await getTenantContextForModuleOperation("SAUDE", operation)).prisma;
+function revalidateHealthProfessionals() {
+  for (const path of ["/app-domain/saude", "/app-domain/saude/profissionais", "/app-domain/saude/agenda", "/app-domain/saude/atendimentos"]) {
+    revalidatePath(path);
+  }
 }
 
-type HealthProfessionalInput = {
-  employeeId: string;
-  specialty?: string | null;
-  councilType?: string | null;
-  councilNumber?: string | null;
-};
+function hasErrorCode(error: unknown, code: string) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
+}
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback;
+function actionError(error: unknown, fallback: string) {
+  if (error instanceof z.ZodError) return error.issues[0]?.message || "Revise os campos informados.";
+  if (error instanceof AccessError || error instanceof HealthOperationError) return error.message;
+  if (hasErrorCode(error, "P2002")) return "Este servidor ja esta cadastrado como profissional de saude.";
+  return fallback;
 }
 
 export async function createHealthProfessional(data: HealthProfessionalInput) {
-  const prisma = await getTenantPrisma("create");
   try {
-    const existing = await prisma.healthProfessional.findUnique({
-      where: { employeeId: data.employeeId }
+    const input = healthProfessionalInputSchema.parse(data);
+    const context = await getTenantContextForModuleOperation("SAUDE", "create");
+    await context.prisma.$transaction(async tx => {
+      const employee = await tx.employee.findFirst({ where: { id: input.employeeId, isActive: true }, select: { id: true } });
+      if (!employee) throw new HealthOperationError("Selecione um servidor ativo do RH.");
+      const existing = await tx.healthProfessional.findUnique({ where: { employeeId: input.employeeId }, select: { id: true } });
+      if (existing) throw new HealthOperationError("Este servidor ja esta cadastrado como profissional de saude.");
+      const professional = await tx.healthProfessional.create({
+        data: {
+          employeeId: input.employeeId,
+          specialty: input.specialty,
+          councilName: input.councilType,
+          councilNumber: input.councilNumber,
+          isActive: true,
+        },
+      });
+      await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "HEALTH_PROFESSIONAL", targetId: professional.id });
     });
-    if (existing) {
-      return { error: "Este servidor já está cadastrado como profissional de saúde." };
-    }
-
-    await prisma.healthProfessional.create({
-      data: {
-        employeeId: data.employeeId,
-        specialty: data.specialty || null,
-        councilName: data.councilType || null,
-        councilNumber: data.councilNumber || null,
-        isActive: true,
-      }
-    });
-    revalidatePath('/app-domain/saude/profissionais');
+    revalidateHealthProfessionals();
     return { success: true };
   } catch (error) {
-    return { error: getErrorMessage(error, "Erro ao criar profissional") };
+    return { error: actionError(error, "Nao foi possivel criar o profissional de saude. Os dados foram preservados.") };
   }
 }
 
 export async function updateHealthProfessional(id: string, data: HealthProfessionalInput) {
-  const prisma = await getTenantPrisma("update");
   try {
-    await prisma.healthProfessional.update({
-      where: { id },
-      data: {
-        specialty: data.specialty || null,
-        councilName: data.councilType || null,
-        councilNumber: data.councilNumber || null,
-      }
+    const professionalId = healthEntityIdSchema.parse(id);
+    const input = healthProfessionalInputSchema.parse(data);
+    const context = await getTenantContextForModuleOperation("SAUDE", "update");
+    await context.prisma.$transaction(async tx => {
+      const professional = await tx.healthProfessional.update({
+        where: { id: professionalId },
+        data: {
+          specialty: input.specialty,
+          councilName: input.councilType,
+          councilNumber: input.councilNumber,
+        },
+      });
+      await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "HEALTH_PROFESSIONAL", targetId: professional.id });
     });
-    revalidatePath('/app-domain/saude/profissionais');
+    revalidateHealthProfessionals();
     return { success: true };
   } catch (error) {
-    return { error: getErrorMessage(error, "Erro ao atualizar profissional") };
+    return { error: actionError(error, "Nao foi possivel atualizar o profissional de saude. Os dados foram preservados.") };
   }
 }
 
 export async function toggleHealthProfessionalStatus(id: string, isActive: boolean) {
-  const prisma = await getTenantPrisma("update");
   try {
-    await prisma.healthProfessional.update({
-      where: { id },
-      data: { isActive },
+    const input = z.object({ id: healthEntityIdSchema, isActive: z.boolean() }).parse({ id, isActive });
+    const context = await getTenantContextForModuleOperation("SAUDE", "update");
+    await context.prisma.$transaction(async tx => {
+      const professional = await tx.healthProfessional.update({ where: { id: input.id }, data: { isActive: input.isActive } });
+      await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "HEALTH_PROFESSIONAL", targetId: professional.id });
     });
-    revalidatePath('/app-domain/saude/profissionais');
+    revalidateHealthProfessionals();
     return { success: true };
   } catch (error) {
-    return { error: getErrorMessage(error, "Erro ao alterar status do profissional") };
+    return { error: actionError(error, "Nao foi possivel alterar o status do profissional.") };
   }
 }
 
 export async function deleteHealthProfessional(id: string) {
-  const prisma = await getTenantPrisma("delete");
   try {
-    await prisma.healthProfessional.delete({
-      where: { id },
+    const professionalId = healthEntityIdSchema.parse(id);
+    const context = await getTenantContextForModuleOperation("SAUDE", "delete");
+    await context.prisma.$transaction(async tx => {
+      await tx.healthProfessional.delete({ where: { id: professionalId } });
+      await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "HEALTH_PROFESSIONAL", targetId: professionalId });
     });
-    revalidatePath('/app-domain/saude/profissionais');
+    revalidateHealthProfessionals();
     return { success: true };
-  } catch {
-    return { error: "Não é possível excluir este profissional pois ele possui prontuários ou agendamentos vinculados." };
+  } catch (error) {
+    if (hasErrorCode(error, "P2003")) return { error: "Nao e possivel excluir este profissional pois ele possui prontuarios, agendamentos ou outros vinculos." };
+    return { error: actionError(error, "Nao foi possivel excluir este profissional.") };
   }
 }

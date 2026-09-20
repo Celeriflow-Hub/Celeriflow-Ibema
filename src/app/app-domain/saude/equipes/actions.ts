@@ -1,90 +1,106 @@
 "use server";
 
-import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
-import { revalidatePath } from 'next/cache';
+import { revalidatePath } from "next/cache";
+import type { Prisma } from "@prisma/client";
+import { z } from "zod";
+import { AccessError, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
+import { HealthOperationError } from "@/lib/saude/appointment-service";
+import { healthEntityIdSchema, healthTeamInputSchema, type HealthTeamInput } from "@/lib/saude/contract";
 
-async function getTenantPrisma(operation: ModuleOperation) {
-  return (await getTenantContextForModuleOperation("SAUDE", operation)).prisma;
-}
-
-type HealthTeamInput = {
-  name: string;
-  code: string | null;
-  microarea: string | null;
-  unitId: string;
-};
-
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback;
+function revalidateHealthTeams() {
+  for (const path of ["/app-domain/saude", "/app-domain/saude/equipes", "/app-domain/saude/pacientes", "/app-domain/saude/agenda"]) {
+    revalidatePath(path);
+  }
 }
 
 function hasErrorCode(error: unknown, code: string) {
   return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
+function actionError(error: unknown, fallback: string) {
+  if (error instanceof z.ZodError) return error.issues[0]?.message || "Revise os campos informados.";
+  if (error instanceof AccessError || error instanceof HealthOperationError) return error.message;
+  if (hasErrorCode(error, "P2002")) return "Ja existe uma equipe cadastrada com este codigo.";
+  return fallback;
+}
+
+async function requireActiveUnit(tx: Prisma.TransactionClient, unitId: string) {
+  const unit = await tx.healthUnit.findFirst({ where: { id: unitId, isActive: true }, select: { id: true } });
+  if (!unit) throw new HealthOperationError("Selecione uma unidade de saude ativa.");
+}
+
 export async function createHealthTeam(data: HealthTeamInput) {
-  const prisma = await getTenantPrisma("create");
   try {
-    await prisma.healthTeam.create({
-      data: {
-        name: data.name,
-        code: data.code,
-        microarea: data.microarea,
-        unitId: data.unitId,
-        isActive: true,
-      }
+    const input = healthTeamInputSchema.parse(data);
+    const context = await getTenantContextForModuleOperation("SAUDE", "create");
+    await context.prisma.$transaction(async tx => {
+      await requireActiveUnit(tx, input.unitId);
+      const team = await tx.healthTeam.create({ data: { ...input, isActive: true } });
+      await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "HEALTH_TEAM", targetId: team.id });
     });
-    revalidatePath('/app-domain/saude/equipes');
+    revalidateHealthTeams();
     return { success: true };
   } catch (error) {
-    if (hasErrorCode(error, "P2002")) return { error: "Já existe uma equipe cadastrada com este código." };
-    return { error: getErrorMessage(error, "Erro ao criar equipe") };
+    return { error: actionError(error, "Nao foi possivel criar a equipe. Os dados foram preservados.") };
   }
 }
 
 export async function updateHealthTeam(id: string, data: HealthTeamInput) {
-  const prisma = await getTenantPrisma("update");
   try {
-    await prisma.healthTeam.update({
-      where: { id },
-      data: {
-        name: data.name,
-        code: data.code,
-        microarea: data.microarea,
-        unitId: data.unitId,
+    const teamId = healthEntityIdSchema.parse(id);
+    const input = healthTeamInputSchema.parse(data);
+    const context = await getTenantContextForModuleOperation("SAUDE", "update");
+    await context.prisma.$transaction(async tx => {
+      await requireActiveUnit(tx, input.unitId);
+      const current = await tx.healthTeam.findUnique({ where: { id: teamId }, select: { id: true, unitId: true } });
+      if (!current) throw new HealthOperationError("Equipe nao encontrada.");
+      if (current.unitId !== input.unitId) {
+        const [patients, professionals] = await Promise.all([
+          tx.patient.count({ where: { teamId } }),
+          tx.healthProfessional.count({ where: { teamId } }),
+        ]);
+        if (patients || professionals) {
+          throw new HealthOperationError("Uma equipe com pacientes ou profissionais vinculados nao pode mudar de unidade.");
+        }
       }
+      const team = await tx.healthTeam.update({ where: { id: teamId }, data: input });
+      await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "HEALTH_TEAM", targetId: team.id });
     });
-    revalidatePath('/app-domain/saude/equipes');
+    revalidateHealthTeams();
     return { success: true };
   } catch (error) {
-    if (hasErrorCode(error, "P2002")) return { error: "Já existe uma equipe cadastrada com este código." };
-    return { error: getErrorMessage(error, "Erro ao atualizar equipe") };
+    return { error: actionError(error, "Nao foi possivel atualizar a equipe. Os dados foram preservados.") };
   }
 }
 
 export async function toggleHealthTeamStatus(id: string, isActive: boolean) {
-  const prisma = await getTenantPrisma("update");
   try {
-    await prisma.healthTeam.update({
-      where: { id },
-      data: { isActive },
+    const input = z.object({ id: healthEntityIdSchema, isActive: z.boolean() }).parse({ id, isActive });
+    const context = await getTenantContextForModuleOperation("SAUDE", "update");
+    await context.prisma.$transaction(async tx => {
+      const team = await tx.healthTeam.update({ where: { id: input.id }, data: { isActive: input.isActive } });
+      await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "HEALTH_TEAM", targetId: team.id });
     });
-    revalidatePath('/app-domain/saude/equipes');
+    revalidateHealthTeams();
     return { success: true };
   } catch (error) {
-    return { error: getErrorMessage(error, "Erro ao alterar status da equipe") };
+    return { error: actionError(error, "Nao foi possivel alterar o status da equipe.") };
   }
 }
 
 export async function deleteHealthTeam(id: string) {
-  const prisma = await getTenantPrisma("delete");
   try {
-    await prisma.healthTeam.delete({
-      where: { id },
+    const teamId = healthEntityIdSchema.parse(id);
+    const context = await getTenantContextForModuleOperation("SAUDE", "delete");
+    await context.prisma.$transaction(async tx => {
+      await tx.healthTeam.delete({ where: { id: teamId } });
+      await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "HEALTH_TEAM", targetId: teamId });
     });
-    revalidatePath('/app-domain/saude/equipes');
+    revalidateHealthTeams();
     return { success: true };
-  } catch {
-    return { error: "Não é possível excluir esta equipe pois ela possui vínculos." };
+  } catch (error) {
+    if (hasErrorCode(error, "P2003")) return { error: "Nao e possivel excluir esta equipe pois ela possui vinculos." };
+    return { error: actionError(error, "Nao foi possivel excluir esta equipe.") };
   }
 }

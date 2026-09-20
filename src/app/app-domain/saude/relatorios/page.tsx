@@ -1,8 +1,10 @@
 import { FileText } from 'lucide-react';
+import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
 
-export default function Page() {
+export default async function Page() {
+  await getTenantContextForModule("SAUDE");
   return (
     <PageFrame className="space-y-2 px-1 py-1 md:px-2">
       <PageHeader title="Relatórios Básicos" icon={<FileText className="size-4 shrink-0 text-emerald-600" />} className="dark:border-gray-700 dark:bg-gray-800 dark:[&>h1]:text-white" />

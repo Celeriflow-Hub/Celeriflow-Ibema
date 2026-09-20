@@ -5239,11 +5239,13 @@ model HealthTeam {
 }
 
 model HealthAppointment {
-  id        String   @id @default(cuid())
-  date      DateTime
-  specialty String?
-  priority  String   @default("Normal") // Normal, Prioridade, UrgÃªncia
-  status    String   @default("Agendado") // Agendado, Aguardando, Em Atendimento, Atendido, Faltou
+  id                 String   @id @default(cuid())
+  date               DateTime
+  specialty          String?
+  priority           String   @default("Normal") // Normal, Prioridade, UrgÃªncia
+  status             String   @default("Agendado") // Agendado, Aguardando, Em Atendimento, Atendido, Faltou, Cancelado
+  cancelledAt        DateTime?
+  cancellationReason String?
 
   patientId String
   patient   Patient @relation(fields: [patientId], references: [id])
@@ -5258,6 +5260,10 @@ model HealthAppointment {
   updatedAt DateTime @updatedAt
 
   medicalRecord MedicalRecord?
+
+  @@index([unitId, date])
+  @@index([professionalId, date])
+  @@index([patientId, date])
 }
 
 model MedicalRecord {

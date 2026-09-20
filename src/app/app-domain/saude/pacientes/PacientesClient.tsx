@@ -429,7 +429,7 @@ export default function PacientesClient({
                 </button>
                 <button
                   type="submit"
-                  disabled={isSaving || (!editingId && (!availablePeople || availablePeople.length === 0))}
+                  disabled={isSaving || (!editingId && !isNewPerson && availablePeople.length === 0)}
                   className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none disabled:opacity-50"
                 >
                   {isSaving ? "Salvando..." : "Salvar"}

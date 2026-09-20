@@ -7,7 +7,14 @@ export default async function Page() {
   const { prisma } = await getTenantContextForModule("SAUDE");
   const items = await prisma.vaccinationRecord.findMany({
     orderBy: { createdAt: 'desc' },
-    include: { patient: { include: { person: true } }, vaccine: true }
+    select: {
+      id: true,
+      date: true,
+      doseNumber: true,
+      lotNumber: true,
+      patient: { select: { person: { select: { fullName: true } } } },
+      vaccine: { select: { name: true } },
+    },
   });
 
   return (

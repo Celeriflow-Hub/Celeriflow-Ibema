@@ -11,6 +11,7 @@ import {
 } from "@/lib/compras/procurement-finance-bridge";
 import {
   ContractLifecycleError,
+  assertInstrumentAggregateTotalWithinCurrentValue,
   calculateInclusiveContractTermDays,
   contractBudgetUnitIdsForMutation,
   isContractAmendmentType,
@@ -307,6 +308,28 @@ export async function saveContractAmendment(formData: FormData): Promise<Contrac
       if (type === "Rescisão" && contract.status === "Rescindido") throw new ContractLifecycleError("O contrato já está rescindido.");
 
       const effect = resolveContractAmendmentEffect(contract, { type, newValue, newEndDate });
+      if (effect.contractUpdate.updatedValue !== undefined) {
+        const [measurementAggregate, installmentAggregate] = await Promise.all([
+          tx.instrumentMeasurement.aggregate({
+            where: { contractId: contract.id, status: { in: ["Rascunho", "Em análise", "Atestada"] } },
+            _sum: { valueDecimal: true },
+          }),
+          tx.instrumentInstallment.aggregate({
+            where: { contractId: contract.id, status: "Programada" },
+            _sum: { valueDecimal: true },
+          }),
+        ]);
+        assertInstrumentAggregateTotalWithinCurrentValue(
+          effect.contractUpdate.updatedValue,
+          measurementAggregate._sum.valueDecimal ?? 0,
+          "medições ativas",
+        );
+        assertInstrumentAggregateTotalWithinCurrentValue(
+          effect.contractUpdate.updatedValue,
+          installmentAggregate._sum.valueDecimal ?? 0,
+          "parcelas programadas",
+        );
+      }
       const amendment = await tx.contractAmendment.create({
         data: {
           type,

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ContractLifecycleError,
+  assertDateWithinInstrumentValidity,
+  assertInstrumentAggregateTotalWithinCurrentValue,
   assertLifecycleDateRange,
   assertMeasurementCanBeAttested,
   assertMeasurementStatusTransition,
@@ -89,6 +91,28 @@ test("instrument execution validates paired physical quantities, periods, and id
   assert.throws(() => parseInstrumentPartyReference("EMPLOYEE:server-1:extra"), ContractLifecycleError);
 });
 
+test("instrument execution keeps measurement dates and active amounts within the current instrument", () => {
+  const start = new Date("2026-09-01T12:00:00.000Z");
+  const end = new Date("2026-09-30T12:00:00.000Z");
+
+  assert.doesNotThrow(() => assertDateWithinInstrumentValidity(start, start, end, "A data da medição"));
+  assert.doesNotThrow(() => assertDateWithinInstrumentValidity(end, start, end, "A data da medição"));
+  assert.throws(
+    () => assertDateWithinInstrumentValidity(new Date("2026-10-01T12:00:00.000Z"), start, end, "A data da medição"),
+    /dentro da vigência/i,
+  );
+  assert.doesNotThrow(() => assertInstrumentAggregateTotalWithinCurrentValue("1000.00", "1000.00", "medições ativas"));
+  assert.throws(
+    () => assertInstrumentAggregateTotalWithinCurrentValue("1000.00", "1000.01", "parcelas programadas"),
+    /não pode exceder/i,
+  );
+  assert.doesNotThrow(() => assertInstrumentAggregateTotalWithinCurrentValue(0.1 + 0.2, "0.30", "medições ativas"));
+  assert.throws(
+    () => assertInstrumentAggregateTotalWithinCurrentValue("1000.00", "1000.001", "medições ativas"),
+    /não foi possível validar/i,
+  );
+});
+
 test("attestation keeps physical execution auditable and does not reopen finalized measurements", () => {
   assert.throws(
     () => assertMeasurementCanBeAttested({ quantity: null, unit: null, value: 100, itemCount: 0, itemValueTotal: 0 }),
@@ -100,5 +124,7 @@ test("attestation keeps physical execution auditable and does not reopen finaliz
   );
   assert.doesNotThrow(() => assertMeasurementCanBeAttested({ quantity: 1, unit: "UN", value: 100, itemCount: 1, itemValueTotal: 100 }));
   assert.throws(() => assertMeasurementStatusTransition("Atestada", "Rascunho"), /não pode ser reaberta/i);
+  assert.doesNotThrow(() => assertMeasurementStatusTransition("Atestada", "Cancelada"));
+  assert.throws(() => assertMeasurementStatusTransition("Cancelada", "Atestada"), /não pode ser reaberta/i);
   assert.doesNotThrow(() => assertMeasurementStatusTransition("Rascunho", "Atestada"));
 });

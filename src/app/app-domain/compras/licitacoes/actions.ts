@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { getCurrentTenantContext, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { nextYearlyCode } from "@/lib/sequence";
+import { BIDDING_NUMBER_DUPLICATE_ERROR, biddingNumberDuplicateError } from "@/lib/compras/bidding-number-integrity";
 import {
   BIDDING_BID_STATUS,
   BIDDING_ELIGIBILITY_STATUS,
@@ -363,7 +364,7 @@ export async function saveBidding(formData: FormData): Promise<BiddingActionResu
         where: { number, id: { not: existing.id } },
         select: { id: true },
       });
-      if (duplicate) return { success: false, error: "Já existe uma licitação com este número." };
+      if (duplicate) return { success: false, error: BIDDING_NUMBER_DUPLICATE_ERROR };
 
       await context.prisma.bidding.update({
         where: { id: existing.id },
@@ -386,7 +387,7 @@ export async function saveBidding(formData: FormData): Promise<BiddingActionResu
       const duplicate = number
         ? await tx.bidding.findFirst({ where: { number: finalNumber }, select: { id: true } })
         : null;
-      if (duplicate) throw new BiddingWorkflowError("Já existe uma licitação com este número.");
+      if (duplicate) throw new BiddingWorkflowError(BIDDING_NUMBER_DUPLICATE_ERROR);
 
       const bidding = await tx.bidding.create({
         data: {
@@ -421,6 +422,8 @@ export async function saveBidding(formData: FormData): Promise<BiddingActionResu
     revalidateBiddingPaths(biddingId);
     return { success: true, id: biddingId };
   } catch (error) {
+    const duplicateNumberError = biddingNumberDuplicateError(error);
+    if (duplicateNumberError) return { success: false, ...duplicateNumberError };
     return actionError(error, "Falha ao salvar a licitação.");
   }
 }

@@ -3414,7 +3414,7 @@ model PriceQuote {
 
 model Bidding {
   id              String    @id @default(cuid())
-  number          String
+  number          String    @unique
   modality        String
   status          String    @default("Em ElaboraÃ§Ã£o")
   publicationDate DateTime?

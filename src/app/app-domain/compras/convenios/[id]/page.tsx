@@ -35,6 +35,7 @@ export default async function ConvenioDetalhesPage({ params }: { params: Promise
       measurements: {
         orderBy: { number: "asc" },
         include: {
+          document: { select: { id: true, title: true } },
           items: {
             orderBy: { createdAt: "asc" },
             include: {
@@ -65,7 +66,7 @@ export default async function ConvenioDetalhesPage({ params }: { params: Promise
   });
   if (!covenant) notFound();
 
-  const [events, employees, suppliers, people, companies] = await Promise.all([
+  const [events, employees, suppliers, people, companies, documents] = await Promise.all([
     prisma.procurementLifecycleEvent.findMany({
       where: { sourceType: "COVENANT", sourceId: covenant.id },
       include: { actorUsuario: { select: { nome: true } } },
@@ -76,6 +77,7 @@ export default async function ConvenioDetalhesPage({ params }: { params: Promise
     prisma.supplier.findMany({ where: { status: "Ativo" }, select: { id: true, company: { select: { corporateName: true, tradeName: true } }, person: { select: { fullName: true } } }, orderBy: { createdAt: "desc" } }),
     prisma.person.findMany({ where: { status: "Ativo" }, select: { id: true, fullName: true }, orderBy: { fullName: "asc" } }),
     prisma.company.findMany({ where: { status: "Ativo" }, select: { id: true, corporateName: true, tradeName: true }, orderBy: { corporateName: "asc" } }),
+    prisma.document.findMany({ where: { status: "Válido", documentType: { not: "Modelo" } }, select: { id: true, title: true }, orderBy: { createdAt: "desc" }, take: 100 }),
   ]);
 
   const money = (value: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -122,6 +124,7 @@ export default async function ConvenioDetalhesPage({ params }: { params: Promise
     INSTRUMENT_PARTY_DELETED: "Parte do instrumento excluída",
     INSTRUMENT_MEASUREMENT_CREATED: "Medição criada",
     INSTRUMENT_MEASUREMENT_UPDATED: "Medição atualizada",
+    INSTRUMENT_MEASUREMENT_CANCELLED: "Medição cancelada",
     INSTRUMENT_MEASUREMENT_DELETED: "Medição excluída",
     INSTRUMENT_MEASUREMENT_ITEM_CREATED: "Item de medição incluído",
     INSTRUMENT_MEASUREMENT_ITEM_UPDATED: "Item de medição atualizado",
@@ -168,6 +171,8 @@ export default async function ConvenioDetalhesPage({ params }: { params: Promise
             quantity: measurement.quantity,
             unit: measurement.unit,
             valueDecimal: Number(measurement.valueDecimal),
+            documentId: measurement.documentId,
+            documentTitle: measurement.document?.title ?? null,
             items: measurement.items.map((item) => ({
               id: item.id,
               purchaseProcessItemId: item.purchaseProcessItemId,
@@ -181,6 +186,7 @@ export default async function ConvenioDetalhesPage({ params }: { params: Promise
             })),
           }))}
           processItems={[]}
+          documents={documents}
           installments={covenant.installments.map((installment) => ({
             id: installment.id,
             number: installment.number,

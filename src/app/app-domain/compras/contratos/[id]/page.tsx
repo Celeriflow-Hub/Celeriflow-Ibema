@@ -75,6 +75,7 @@ export default async function ContratoDetalhesPage({ params }: { params: Promise
       measurements: {
         orderBy: { number: "asc" },
         include: {
+          document: { select: { id: true, title: true } },
           items: {
             orderBy: { createdAt: "asc" },
             include: {
@@ -116,7 +117,7 @@ export default async function ContratoDetalhesPage({ params }: { params: Promise
 
   if (!contrato) notFound();
 
-  const [lifecycleEvents, employees, suppliers, people, companies] = await Promise.all([
+  const [lifecycleEvents, employees, suppliers, people, companies, documents] = await Promise.all([
     prisma.procurementLifecycleEvent.findMany({
       where: { sourceType: "CONTRACT", sourceId: contrato.id },
       include: { actorUsuario: { select: { nome: true } } },
@@ -135,6 +136,7 @@ export default async function ContratoDetalhesPage({ params }: { params: Promise
     }),
     prisma.person.findMany({ where: { status: "Ativo" }, select: { id: true, fullName: true }, orderBy: { fullName: "asc" } }),
     prisma.company.findMany({ where: { status: "Ativo" }, select: { id: true, corporateName: true, tradeName: true }, orderBy: { corporateName: "asc" } }),
+    prisma.document.findMany({ where: { status: "Válido", documentType: { not: "Modelo" } }, select: { id: true, title: true }, orderBy: { createdAt: "desc" }, take: 100 }),
   ]);
 
   const contracted = contrato.updatedValue;
@@ -330,10 +332,12 @@ export default async function ContratoDetalhesPage({ params }: { params: Promise
               periodEnd: measurement.periodEnd?.toISOString() ?? null,
               measuredAt: measurement.measuredAt.toISOString(),
               status: measurement.status,
-              quantity: measurement.quantity,
-              unit: measurement.unit,
-              valueDecimal: Number(measurement.valueDecimal),
-              items: measurement.items.map((item) => ({
+               quantity: measurement.quantity,
+               unit: measurement.unit,
+               valueDecimal: Number(measurement.valueDecimal),
+               documentId: measurement.documentId,
+               documentTitle: measurement.document?.title ?? null,
+               items: measurement.items.map((item) => ({
                 id: item.id,
                 purchaseProcessItemId: item.purchaseProcessItemId,
                 purchaseProcessItemLabel: item.purchaseProcessItem ? item.purchaseProcessItem.catalogItem?.name ?? item.purchaseProcessItem.material?.name ?? item.purchaseProcessItem.customName ?? "Item sem descrição" : null,
@@ -346,6 +350,7 @@ export default async function ContratoDetalhesPage({ params }: { params: Promise
               })),
             }))}
             processItems={processItems}
+            documents={documents}
             installments={contrato.installments.map((installment) => ({
               id: installment.id,
               number: installment.number,

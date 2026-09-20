@@ -88,6 +88,7 @@ function eventLabel(eventType: string) {
     INSTRUMENT_PARTY_DELETED: "Parte do instrumento excluída",
     INSTRUMENT_MEASUREMENT_CREATED: "Medição criada",
     INSTRUMENT_MEASUREMENT_UPDATED: "Medição atualizada",
+    INSTRUMENT_MEASUREMENT_CANCELLED: "Medição cancelada",
     INSTRUMENT_MEASUREMENT_DELETED: "Medição excluída",
     INSTRUMENT_MEASUREMENT_ITEM_CREATED: "Item de medição incluído",
     INSTRUMENT_MEASUREMENT_ITEM_UPDATED: "Item de medição atualizado",

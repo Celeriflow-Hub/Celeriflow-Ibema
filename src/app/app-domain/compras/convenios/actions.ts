@@ -3,13 +3,20 @@
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { AccessError, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
-import { ContractLifecycleError, calculateInclusiveContractTermDays, parseContractDate, requiredLifecycleText } from "@/lib/compras/contract-lifecycle";
+import {
+  ContractLifecycleError,
+  assertInstrumentAggregateTotalWithinCurrentValue,
+  calculateInclusiveContractTermDays,
+  parseContractDate,
+  requiredLifecycleText,
+} from "@/lib/compras/contract-lifecycle";
 import { dispatchSiaficEvents } from "@/lib/siafic/dispatcher";
 import { queueCovenantSnapshot } from "@/lib/siafic/source";
 
 type CovenantActionResult = { success: true } | { success: false; error: string };
 
 const covenantStatuses = ["Ativo", "Suspenso", "Encerrado", "Rescindido", "Em análise"];
+const activeMeasurementStatuses = ["Rascunho", "Em análise", "Atestada"];
 
 function formString(formData: FormData, name: string) {
   const value = formData.get(name);
@@ -102,6 +109,26 @@ export async function saveCovenant(formData: FormData): Promise<CovenantActionRe
 
       const existing = await tx.covenant.findUnique({ where: { id }, select: { id: true, status: true, updatedAt: true } });
       if (!existing) throw new ContractLifecycleError("Convênio não encontrado.");
+      const [measurementAggregate, installmentAggregate] = await Promise.all([
+        tx.instrumentMeasurement.aggregate({
+          where: { covenantId: existing.id, status: { in: activeMeasurementStatuses } },
+          _sum: { valueDecimal: true },
+        }),
+        tx.instrumentInstallment.aggregate({
+          where: { covenantId: existing.id, status: "Programada" },
+          _sum: { valueDecimal: true },
+        }),
+      ]);
+      assertInstrumentAggregateTotalWithinCurrentValue(
+        totalValueDecimal,
+        measurementAggregate._sum.valueDecimal ?? new Prisma.Decimal(0),
+        "medições ativas",
+      );
+      assertInstrumentAggregateTotalWithinCurrentValue(
+        totalValueDecimal,
+        installmentAggregate._sum.valueDecimal ?? new Prisma.Decimal(0),
+        "parcelas programadas",
+      );
       const updated = await tx.covenant.updateMany({ where: { id: existing.id, updatedAt: existing.updatedAt }, data });
       if (updated.count !== 1) throw new ContractLifecycleError("O convênio foi alterado por outra operação. Atualize e tente novamente.");
       await tx.procurementLifecycleEvent.create({
@@ -156,6 +183,13 @@ export async function deleteCovenant(id: string): Promise<CovenantActionResult> 
         },
       });
       if (!covenant) throw new ContractLifecycleError("Convênio não encontrado.");
+      const exported = await tx.siaficOutboxEvent.findFirst({
+        where: { entityType: "INSTRUMENT", entityId: covenant.id },
+        select: { id: true },
+      });
+      if (exported) {
+        throw new ContractLifecycleError("Convênio com histórico de integração SIAFIC não pode ser excluído. Use o encerramento do instrumento.");
+      }
       const dependencies = covenant._count.commitments + covenant._count.instrumentParties + covenant._count.responsibilityGroups + covenant._count.measurements + covenant._count.installments;
       if (dependencies) throw new ContractLifecycleError("Convênio com execução, partes, parcelas ou empenhos vinculados não pode ser excluído. Use o encerramento do instrumento.");
 

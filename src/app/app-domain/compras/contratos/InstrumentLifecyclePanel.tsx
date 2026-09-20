@@ -49,6 +49,8 @@ type InstrumentLifecyclePanelProps = {
     quantity: number | null;
     unit: string | null;
     valueDecimal: number;
+    documentId: string | null;
+    documentTitle: string | null;
     items: Array<{
       id: string;
       purchaseProcessItemId: string | null;
@@ -62,6 +64,7 @@ type InstrumentLifecyclePanelProps = {
     }>;
   }>;
   processItems: Array<{ id: string; label: string }>;
+  documents: Array<{ id: string; title: string }>;
   installments: Array<{
     id: string;
     number: number;
@@ -104,7 +107,7 @@ function SaveButton({ children, disabled }: { children: React.ReactNode; disable
   return <Button type="submit" size="sm" disabled={disabled}><Save className="size-3.5" />{children}</Button>;
 }
 
-export function InstrumentLifecyclePanel({ instrument, responsibilityGroups, parties, partyOptions, measurements, processItems, installments }: InstrumentLifecyclePanelProps) {
+export function InstrumentLifecyclePanel({ instrument, responsibilityGroups, parties, partyOptions, measurements, processItems, documents, installments }: InstrumentLifecyclePanelProps) {
   const router = useRouter();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -207,9 +210,10 @@ export function InstrumentLifecyclePanel({ instrument, responsibilityGroups, par
         {!isLocked && <form action={(formData) => submit(saveInstrumentMeasurement, formData, "Medição em rascunho registrada.")} className="grid gap-3 rounded-md border p-3 md:grid-cols-3">
           <HiddenInstrumentFields instrument={instrument} />
           <input type="hidden" name="status" value="Rascunho" />
-          <div className="space-y-1.5"><Label>Número</Label><Input name="number" required type="number" min="1" step="1" /></div>
-          <div className="space-y-1.5"><Label>Data da medição</Label><Input name="measuredAt" required type="date" defaultValue={toDateInput(new Date().toISOString())} /></div>
-          <div className="space-y-1.5"><Label>Valor físico aferido (R$)</Label><Input name="valueDecimal" required type="number" min="0" step="0.01" /></div>
+           <div className="space-y-1.5"><Label>Número</Label><Input name="number" required type="number" min="1" step="1" /></div>
+           <div className="space-y-1.5"><Label>Data da medição</Label><Input name="measuredAt" required type="date" defaultValue={toDateInput(new Date().toISOString())} /></div>
+           <div className="space-y-1.5"><Label>Valor físico aferido (R$)</Label><Input name="valueDecimal" required type="number" min="0" step="0.01" /></div>
+           <div className="space-y-1.5"><Label>Documento GED</Label><select name="documentId" defaultValue="" className="flex h-9 w-full rounded-md border bg-background px-3 text-sm"><option value="">Sem documento vinculado</option>{documents.map((document) => <option key={document.id} value={document.id}>{document.title}</option>)}</select></div>
           <div className="space-y-1.5 md:col-span-3"><Label>Descrição</Label><Input name="description" placeholder="Etapa, serviço ou entrega aferida" /></div>
           <div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><Label>Período inicial</Label><Input name="periodStart" type="date" /></div><div className="space-y-1.5"><Label>Período final</Label><Input name="periodEnd" type="date" /></div></div>
           <div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><Label>Quantidade</Label><Input name="quantity" type="number" min="0" step="0.0001" /></div><div className="space-y-1.5"><Label>Unidade</Label><Input name="unit" placeholder="UN, h, km" /></div></div>
@@ -224,15 +228,18 @@ export function InstrumentLifecyclePanel({ instrument, responsibilityGroups, par
               <HiddenInstrumentFields instrument={instrument} />
               <input type="hidden" name="measurementId" value={measurement.id} />
               <div className="space-y-1.5"><Label>Número</Label><Input name="number" required type="number" min="1" step="1" defaultValue={measurement.number} /></div>
-              <div className="space-y-1.5"><Label>Situação</Label><select name="status" defaultValue={measurement.status} className="flex h-9 w-full rounded-md border bg-background px-3 text-sm"><option value="Rascunho">Rascunho</option><option value="Em análise">Em análise</option><option value="Atestada">Atestada</option><option value="Rejeitada">Rejeitada</option><option value="Cancelada">Cancelada</option></select></div>
-              <div className="space-y-1.5"><Label>Data da medição</Label><Input name="measuredAt" required type="date" defaultValue={toDateInput(measurement.measuredAt)} /></div>
-              <div className="space-y-1.5 md:col-span-3"><Label>Descrição</Label><Input name="description" defaultValue={measurement.description ?? ""} /></div>
+               <div className="space-y-1.5"><Label>Situação</Label><select name="status" defaultValue={measurement.status} className="flex h-9 w-full rounded-md border bg-background px-3 text-sm"><option value="Rascunho">Rascunho</option><option value="Em análise">Em análise</option><option value="Atestada">Atestada</option><option value="Rejeitada">Rejeitada</option><option value="Cancelada">Cancelada</option></select></div>
+               <div className="space-y-1.5"><Label>Data da medição</Label><Input name="measuredAt" required type="date" defaultValue={toDateInput(measurement.measuredAt)} /></div>
+               <div className="space-y-1.5"><Label>Documento GED</Label><select name="documentId" defaultValue={measurement.documentId ?? ""} className="flex h-9 w-full rounded-md border bg-background px-3 text-sm"><option value="">Sem documento vinculado</option>{measurement.documentId && !documents.some((document) => document.id === measurement.documentId) && <option value={measurement.documentId}>{measurement.documentTitle ?? "Documento GED vinculado"}</option>}{documents.map((document) => <option key={document.id} value={document.id}>{document.title}</option>)}</select></div>
+               <div className="space-y-1.5 md:col-span-3"><Label>Descrição</Label><Input name="description" defaultValue={measurement.description ?? ""} /></div>
+               <div className="space-y-1.5 md:col-span-3"><Label>Justificativa do cancelamento</Label><Textarea name="cancellationReason" rows={2} placeholder="Obrigatória ao cancelar; a evidência original será preservada." /></div>
               <div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><Label>Período inicial</Label><Input name="periodStart" type="date" defaultValue={toDateInput(measurement.periodStart)} /></div><div className="space-y-1.5"><Label>Período final</Label><Input name="periodEnd" type="date" defaultValue={toDateInput(measurement.periodEnd)} /></div></div>
               <div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><Label>Quantidade</Label><Input name="quantity" type="number" min="0" step="0.0001" defaultValue={measurement.quantity ?? ""} /></div><div className="space-y-1.5"><Label>Unidade</Label><Input name="unit" defaultValue={measurement.unit ?? ""} /></div></div>
               <div className="space-y-1.5"><Label>Valor físico aferido (R$)</Label><Input name="valueDecimal" required type="number" min="0" step="0.01" defaultValue={measurement.valueDecimal} /></div>
               <div className="flex flex-wrap items-end justify-between gap-2 md:col-span-3"><SaveButton disabled={isSaving}>Salvar medição</SaveButton><Button type="button" size="sm" variant="outline" disabled={isSaving || measurement.status !== "Rascunho"} onClick={() => deleteRecord(deleteInstrumentMeasurement, { measurementId: measurement.id }, "Medição em rascunho excluída.", "esta medição em rascunho")}><Trash2 className="size-3.5" />Excluir rascunho</Button></div>
             </form>}
-            {!editable && <p className="mt-3 text-xs text-muted-foreground">Medição {measurement.status.toLocaleLowerCase("pt-BR")} em {formatDate(measurement.measuredAt)}. Seus itens permanecem somente para consulta.</p>}
+             {measurement.status === "Atestada" && !isLocked && <form action={(formData) => submit(saveInstrumentMeasurement, formData, "Medição cancelada e evidência preservada.")} className="mt-3 space-y-3 rounded-md border border-amber-200 bg-amber-50/60 p-3"><HiddenInstrumentFields instrument={instrument} /><input type="hidden" name="measurementId" value={measurement.id} /><input type="hidden" name="status" value="Cancelada" /><div className="space-y-1.5"><Label>Justificativa do cancelamento</Label><Textarea name="cancellationReason" required rows={2} placeholder="Informe o motivo. A ação só é permitida sem liquidação financeira ativa." /></div><div><SaveButton disabled={isSaving}>Cancelar medição atestada</SaveButton></div></form>}
+             {!editable && <div className="mt-3 space-y-1 text-xs text-muted-foreground"><p>Medição {measurement.status.toLocaleLowerCase("pt-BR")} em {formatDate(measurement.measuredAt)}. Seus itens permanecem somente para consulta.</p>{measurement.description && <p className="whitespace-pre-wrap">{measurement.description}</p>}{measurement.documentTitle && <p>Documento GED: {measurement.documentTitle}</p>}</div>}
 
             <div className="mt-4 space-y-2 border-t pt-3">
               <p className="text-xs font-semibold text-slate-700">Itens da medição</p>

@@ -180,6 +180,31 @@ export function assertLifecycleDateRange(startDate: Date | null, endDate: Date |
   }
 }
 
+export function assertDateWithinInstrumentValidity(date: Date, startDate: Date, endDate: Date, label: string) {
+  const value = utcCalendarDay(date);
+  const start = utcCalendarDay(startDate);
+  const end = utcCalendarDay(endDate);
+  if (value < start || value > end) {
+    throw new ContractLifecycleError(`${label} deve estar dentro da vigência do instrumento.`);
+  }
+}
+
+export function assertInstrumentAggregateTotalWithinCurrentValue(
+  currentValue: string | number | { toString(): string },
+  aggregateTotal: string | number | { toString(): string },
+  label: string,
+) {
+  const cents = (value: string | number | { toString(): string }) => {
+    const normalized = typeof value === "number" ? value.toFixed(2) : value.toString();
+    const match = normalized.match(/^(\d+)(?:\.(\d{1,2}))?$/);
+    if (!match) throw new ContractLifecycleError("Não foi possível validar o valor atual do instrumento.");
+    return BigInt(match[1]) * BigInt(100) + BigInt((match[2] ?? "").padEnd(2, "0"));
+  };
+  if (cents(aggregateTotal) > cents(currentValue)) {
+    throw new ContractLifecycleError(`O total de ${label} não pode exceder o valor atual do instrumento.`);
+  }
+}
+
 export function assertPositiveSequence(value: number | null, label: string): number {
   if (!Number.isSafeInteger(value) || value! <= 0) throw new ContractLifecycleError(`${label} deve ser um número inteiro maior que zero.`);
   return value!;
@@ -202,7 +227,7 @@ export function assertEditableMeasurementStatus(status: string) {
 
 export function assertMeasurementStatusTransition(currentStatus: string, requestedStatus: string) {
   if (!isInstrumentMeasurementStatus(requestedStatus)) throw new ContractLifecycleError("Situação da medição inválida.");
-  if (currentStatus === "Atestada" && requestedStatus !== currentStatus) {
+  if (currentStatus === "Atestada" && ![currentStatus, "Cancelada"].includes(requestedStatus)) {
     throw new ContractLifecycleError("Uma medição atestada não pode ser reaberta.");
   }
   if (currentStatus === "Cancelada" && requestedStatus !== currentStatus) {

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { 
   ShieldCheck, Plus, Search, X, Pencil, CheckCircle2, SlidersHorizontal, 
-  Building2, Users, FileText, HeadphonesIcon, ShoppingCart, FileSpreadsheet, DollarSign, 
+  Building2, Users, FileText, HeadphonesIcon, ShoppingCart, DollarSign,
   Package, Receipt, Stethoscope, GraduationCap, HeartHandshake, HardHat, 
   Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, Lock, CheckSquare, Square, Trash2, Truck, BadgeCheck
 } from "lucide-react";
@@ -27,33 +27,30 @@ type Perfil = {
 
 // Modules that can appear on the dashboard or have their own access boundary.
 const MODULES_LIST = [
-  { code: "ADMINISTRACAO", label: "Administração Geral & Entidades", icon: Building2, color: "text-blue-500" },
-  { code: "RH", label: "Recursos Humanos & Servidores", icon: Users, color: "text-indigo-500" },
-  { code: "PORTAL_SERVIDOR", label: "Portal do Servidor", icon: BadgeCheck, color: "text-sky-700" },
-  { code: "CADASTROS", label: "Pessoas & Cadastros Gerais", icon: FileText, color: "text-purple-500" },
-  { code: "DOCUMENTOS", label: "Documentos, GED & Emissões", icon: FileText, color: "text-amber-500" },
-  { code: "ATENDIMENTO", label: "Atendimento, Ouvidoria & Chamados", icon: HeadphonesIcon, color: "text-orange-500" },
-  { code: "COMPRAS", label: "Compras, Licitações & Cotações", icon: ShoppingCart, color: "text-emerald-500" },
-  { code: "CONTRATOS", label: "Gestão de Contratos Públicos", icon: FileSpreadsheet, color: "text-teal-500" },
-  { code: "FINANCEIRO", label: "Financeiro, Orçamento & Tesouraria", icon: DollarSign, color: "text-green-500" },
+  { code: "ADMINISTRACAO", label: "Administração", icon: Building2, color: "text-blue-500" },
   { code: "PATRIMONIO", label: "Almoxarifado e Patrimônio", icon: Package, color: "text-amber-500" },
-  { code: "TRIBUTACAO", label: "Tributação, Arrecadação & IPTU", icon: Receipt, color: "text-orange-500" },
-  { code: "PROCESSOS", label: "Processos Administrativos & Protocolos", icon: Share2, color: "text-cyan-500" },
-  { code: "SAUDE", label: "Saúde Pública & UBSs", icon: Stethoscope, color: "text-rose-500" },
-  { code: "EDUCACAO", label: "Educação Pública & Escolas", icon: GraduationCap, color: "text-yellow-500" },
-  { code: "SOCIAL", label: "Assistência Social & CRAS", icon: HeartHandshake, color: "text-pink-500" },
-  { code: "OBRAS", label: "Obras Públicas & Vistorias", icon: HardHat, color: "text-lime-500" },
-  { code: "FROTAS", label: "Frotas", icon: Truck, color: "text-teal-600" },
-  { code: "MEIO_AMBIENTE", label: "Meio Ambiente & Licenciamento", icon: Trees, color: "text-emerald-600" },
-  { code: "SEGURANCA", label: "Segurança Pública & Guarda Municipal", icon: Shield, color: "text-slate-500" },
-  { code: "SANEAMENTO", label: "Saneamento, Água & Esgoto", icon: Droplets, color: "text-blue-600" },
+  { code: "SOCIAL", label: "Assistência Social", icon: HeartHandshake, color: "text-pink-500" },
+  { code: "ATENDIMENTO", label: "Atendimento ao Cidadão", icon: HeadphonesIcon, color: "text-orange-500" },
+  { code: "SANEAMENTO", label: "Água e Saneamento", icon: Droplets, color: "text-blue-600" },
+  { code: "CADASTROS", label: "Cadastros", icon: FileText, color: "text-purple-500" },
   { code: "CAMARA", label: "Câmara Municipal & Legislação", icon: Landmark, color: "text-violet-500" },
-  { code: "CULTURA", label: "Cultura, Esporte & Turismo", icon: Palette, color: "text-fuchsia-500" },
-  { code: "TRANSPARENCIA", label: "Portal da Transparência & LAI", icon: Share2, color: "text-sky-500" },
-  { code: "CONFIGURACOES", label: "Configurações do Sistema & Integrações", icon: Settings, color: "text-slate-600" },
+  { code: "COMPRAS", label: "Compras e Contratos", icon: ShoppingCart, color: "text-emerald-500" },
+  { code: "CONFIGURACOES", label: "Configurações e Integrações", icon: Settings, color: "text-slate-600" },
+  { code: "CULTURA", label: "Cultura e Lazer", icon: Palette, color: "text-fuchsia-500" },
+  { code: "DOCUMENTOS", label: "Documentos / GED", icon: FileText, color: "text-amber-500" },
+  { code: "EDUCACAO", label: "Educação", icon: GraduationCap, color: "text-yellow-500" },
+  { code: "FINANCEIRO", label: "Financeiro e Contábil", icon: DollarSign, color: "text-green-500" },
+  { code: "FROTAS", label: "Frotas", icon: Truck, color: "text-teal-600" },
+  { code: "MEIO_AMBIENTE", label: "Meio Ambiente", icon: Trees, color: "text-emerald-600" },
+  { code: "OBRAS", label: "Obras e Serviços Públicos", icon: HardHat, color: "text-lime-500" },
+  { code: "PORTAL_SERVIDOR", label: "Portal do Servidor", icon: BadgeCheck, color: "text-sky-700" },
+  { code: "TRANSPARENCIA", label: "Portal e Transparência", icon: Share2, color: "text-sky-500" },
+  { code: "PROCESSOS", label: "Processos e Protocolo", icon: Share2, color: "text-cyan-500" },
+  { code: "RH", label: "RH e Folha", icon: Users, color: "text-indigo-500" },
+  { code: "SAUDE", label: "Saúde", icon: Stethoscope, color: "text-rose-500" },
+  { code: "SEGURANCA", label: "Segurança e Mobilidade", icon: Shield, color: "text-slate-500" },
+  { code: "TRIBUTACAO", label: "Tributário", icon: Receipt, color: "text-orange-500" },
 ];
-
-const HIDDEN_DASHBOARD_CARDS = new Set(["ATENDIMENTO"]);
 
 type ModulePermission = {
   showDashboardCard: boolean;
@@ -64,8 +61,8 @@ type ModulePermission = {
   issueReports: boolean;
 };
 
-type PermissionKey = keyof Omit<ModulePermission, "blocked">;
-const ACTIONS_LABELS: { key: Exclude<PermissionKey, "showDashboardCard">; label: string }[] = [
+type PermissionKey = keyof Omit<ModulePermission, "blocked" | "showDashboardCard">;
+const ACTIONS_LABELS: { key: PermissionKey; label: string }[] = [
   { key: "create", label: "Criar" },
   { key: "update", label: "Editar" },
   { key: "delete", label: "Excluir" },
@@ -73,7 +70,7 @@ const ACTIONS_LABELS: { key: Exclude<PermissionKey, "showDashboardCard">; label:
 ];
 
 const emptyPermission = (): ModulePermission => ({
-  showDashboardCard: false,
+  showDashboardCard: true,
   blocked: true,
   create: false,
   update: false,
@@ -113,12 +110,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
 
   function parsePermissionsJSON(jsonStr: string | null, legacyModuleCodes: string[] = []): { accessLevel: "operacional"; map: Record<string, ModulePermission> } {
     const map = Object.fromEntries(MODULES_LIST.map((moduleItem) => [moduleItem.code, emptyPermission()])) as Record<string, ModulePermission>;
-    const finalizeMap = () => {
-      for (const code of HIDDEN_DASHBOARD_CARDS) {
-        if (map[code]) map[code].showDashboardCard = false;
-      }
-      return { accessLevel: "operacional" as const, map };
-    };
+    const finalizeMap = () => ({ accessLevel: "operacional" as const, map });
 
     if (!jsonStr) return finalizeMap();
     try {
@@ -143,7 +135,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
           const permission = raw as Partial<ModulePermission>;
           const blocked = permission.blocked === true;
           map[moduleItem.code] = {
-            showDashboardCard: permission.showDashboardCard === true,
+            showDashboardCard: true,
             blocked,
             create: !blocked && permission.create === true,
             update: !blocked && permission.update === true,
@@ -157,12 +149,12 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
       const allowedModules = Array.isArray(parsed.modulosPermitidos) ? parsed.modulosPermitidos : null;
       for (const moduleItem of MODULES_LIST) {
         const legacyActions = Array.isArray(parsed[moduleItem.code]) ? parsed[moduleItem.code] as string[] : [];
-        const blocked = blockedModules.includes(moduleItem.code);
         const allowed = allowedModules
           ? allowedModules.includes(moduleItem.code)
           : legacyActions.length > 0 || legacyModuleCodes.includes(moduleItem.code);
+        const blocked = blockedModules.includes(moduleItem.code) || !allowed;
         map[moduleItem.code] = {
-          showDashboardCard: !blocked && allowed,
+          showDashboardCard: true,
           blocked,
           create: !blocked && legacyActions.includes("create"),
           update: !blocked && legacyActions.includes("update"),
@@ -177,12 +169,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
   }
 
   function serializePermissionsJSON(accessLevel: "operacional", map: Record<string, ModulePermission>): string {
-    const cleanedMap = { ...map };
-    for (const code of HIDDEN_DASHBOARD_CARDS) {
-      if (cleanedMap[code]) {
-        cleanedMap[code] = { ...cleanedMap[code], showDashboardCard: false };
-      }
-    }
+    const cleanedMap = Object.fromEntries(Object.entries(map).map(([code, permission]) => [code, { ...permission, showDashboardCard: true }]));
     return JSON.stringify({
       acesso: accessLevel,
       modules: cleanedMap,
@@ -217,7 +204,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
     });
   };
 
-  const toggleBlocked = (moduleCode: string) => {
+  const toggleModuleAccess = (moduleCode: string) => {
     setFormData((prev) => {
       const current = prev.permissionsMap[moduleCode] || emptyPermission();
       const blocked = !current.blocked;
@@ -234,11 +221,10 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
   const toggleAllModuleActions = (moduleCode: string) => {
     setFormData((prev) => {
       const current = prev.permissionsMap[moduleCode] || emptyPermission();
-      const isHiddenCard = HIDDEN_DASHBOARD_CARDS.has(moduleCode);
-      const allSelected = !current.blocked && (isHiddenCard || current.showDashboardCard) && current.create && current.update && current.delete && current.issueReports;
+      const allSelected = !current.blocked && current.create && current.update && current.delete && current.issueReports;
       const updated = allSelected
         ? emptyPermission()
-        : { showDashboardCard: isHiddenCard ? false : true, blocked: false, create: true, update: true, delete: true, issueReports: true };
+        : { showDashboardCard: true, blocked: false, create: true, update: true, delete: true, issueReports: true };
       return {
         ...prev,
         permissionsMap: { ...prev.permissionsMap, [moduleCode]: updated },
@@ -249,11 +235,10 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
   const applyPreset = (preset: "FULL" | "READ_ONLY" | "CLEAR") => {
     const newMap: Record<string, ModulePermission> = {};
     MODULES_LIST.forEach((m) => {
-      const isHiddenCard = HIDDEN_DASHBOARD_CARDS.has(m.code);
       if (preset === "FULL") {
-        newMap[m.code] = { showDashboardCard: isHiddenCard ? false : true, blocked: false, create: true, update: true, delete: true, issueReports: true };
+        newMap[m.code] = { showDashboardCard: true, blocked: false, create: true, update: true, delete: true, issueReports: true };
       } else if (preset === "READ_ONLY") {
-        newMap[m.code] = { showDashboardCard: isHiddenCard ? false : true, blocked: false, create: false, update: false, delete: false, issueReports: false };
+        newMap[m.code] = { showDashboardCard: true, blocked: false, create: false, update: false, delete: false, issueReports: false };
       } else {
         newMap[m.code] = emptyPermission();
       }
@@ -525,11 +510,14 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
 
               {activeTab === "matriz" && (
                 <div className="space-y-4">
+                  <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
+                    Módulos ativos sempre aparecem no Dashboard. Quando o perfil fica sem acesso, o cartão permanece visível, acinzentado e bloqueado. A ativação geral é administrada em Configurações e Integrações &gt; Módulos.
+                  </p>
                   <div className="grid grid-cols-1 gap-3">
                     {MODULES_LIST.map((moduleItem) => {
                       const IconComponent = moduleItem.icon;
                        const permission = formData.permissionsMap[moduleItem.code] || emptyPermission();
-                       const isAllSelected = !permission.blocked && permission.showDashboardCard && permission.create && permission.update && permission.delete;
+                       const isAllSelected = !permission.blocked && permission.create && permission.update && permission.delete && permission.issueReports;
 
                       return (
                         <div
@@ -557,25 +545,11 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
                             </button>
                           </div>
 
-                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
-                             {HIDDEN_DASHBOARD_CARDS.has(moduleItem.code) ? (
-                               <label
-                                 title="Este card está desativado do painel em todos os perfis do sistema."
-                                 className="flex items-center gap-2 p-2 rounded-lg border text-xs font-medium cursor-not-allowed bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 select-none"
-                               >
-                                 <input type="checkbox" checked={false} disabled className="rounded border-slate-300 text-slate-400 focus:ring-0 w-3.5 h-3.5 cursor-not-allowed opacity-50" />
-                                 <span>Card desativado do painel</span>
-                               </label>
-                             ) : (
-                               <label className="flex items-center gap-2 p-2 rounded-lg border text-xs font-medium cursor-pointer bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400">
-                                 <input type="checkbox" checked={permission.showDashboardCard} onChange={() => toggleAction(moduleItem.code, "showDashboardCard")} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5" />
-                                 <span>Exibir card no dashboard</span>
-                               </label>
-                             )}
-                             <label className={`flex items-center gap-2 p-2 rounded-lg border text-xs font-medium cursor-pointer ${permission.blocked ? "bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-900 text-rose-800 dark:text-rose-200" : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"}`}>
-                               <input type="checkbox" checked={permission.blocked} onChange={() => toggleBlocked(moduleItem.code)} className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 w-3.5 h-3.5" />
-                               <span>Bloquear acesso ao módulo</span>
-                             </label>
+                           <div className="grid grid-cols-1 gap-2 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
+                              <label className={`flex items-center gap-2 p-2 rounded-lg border text-xs font-medium cursor-pointer ${permission.blocked ? "bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-900 text-rose-800 dark:text-rose-200" : "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-900 text-emerald-800 dark:text-emerald-200"}`}>
+                                <input type="checkbox" checked={!permission.blocked} onChange={() => toggleModuleAccess(moduleItem.code)} className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5" />
+                                <span>Acessar e visualizar módulo {!permission.blocked ? "(liberado)" : "(cartão bloqueado no Dashboard)"}</span>
+                              </label>
                            </div>
                             {!permission.blocked ? (
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">

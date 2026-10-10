@@ -15,6 +15,7 @@ import {
   GraduationCap,
   HeartPulse,
   Handshake,
+  Leaf,
   Droplets,
   HardHat,
   Palette,
@@ -24,7 +25,7 @@ import {
   ArrowUpRight,
   BadgeCheck
 } from "lucide-react";
-import { canShowDashboardCard, canUseInactiveModule, canViewModule, getOptionalTenantContext, isModuleBlockedForUser } from "@/lib/platform/tenant-context";
+import { canShowDashboardCard, canViewModule, getOptionalTenantContext, isModuleBlockedForUser } from "@/lib/platform/tenant-context";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
 
@@ -42,14 +43,6 @@ type MenuItem = {
   solid: string;
 };
 
-const hiddenDashboardModuleCodes = new Set([
-  "CULTURA",
-  "DOCUMENTOS",
-  "EDUCACAO",
-  "SANEAMENTO",
-  "SEGURANCA",
-]);
-
 const menuItems: MenuItem[] = [
   { code: "ADMINISTRACAO", name: "Administração", description: "Gestão interna e controle", href: "/administracao", icon: Building2, color: "text-[#2563EB]", bg: "bg-[#DBEAFE]", solid: "bg-[#2563EB]" },
   { code: "CADASTROS", name: "Cadastros", description: "Pessoas, empresas e locais", href: "/cadastros", icon: Database, color: "text-[#64748B]", bg: "bg-[#E2E8F0]", solid: "bg-[#64748B]" },
@@ -66,6 +59,7 @@ const menuItems: MenuItem[] = [
   { code: "EDUCACAO", name: "Educação", description: "Escolas e alunos", href: "/educacao", icon: GraduationCap, color: "text-[#6366F1]", bg: "bg-[#E0E7FF]", solid: "bg-[#6366F1]" },
   { code: "SAUDE", name: "Saúde", description: "SUS, postos e pacientes", href: "/saude", icon: HeartPulse, color: "text-[#EF4444]", bg: "bg-[#FEE2E2]", solid: "bg-[#EF4444]" },
   { code: "SOCIAL", name: "Assistência Social", description: "Benefícios e CRAS", href: "/social", icon: Handshake, color: "text-[#DB2777]", bg: "bg-[#FCE7F3]", solid: "bg-[#DB2777]" },
+  { code: "MEIO_AMBIENTE", name: "Meio Ambiente", description: "Licenças e fiscalização", href: "/meio-ambiente", icon: Leaf, color: "text-[#65A30D]", bg: "bg-[#ECFCCB]", solid: "bg-[#65A30D]" },
   { code: "SANEAMENTO", name: "Água e Saneamento", description: "Água e esgoto", href: "/saneamento", icon: Droplets, color: "text-[#0284C7]", bg: "bg-[#E0F2FE]", solid: "bg-[#0284C7]" },
   { code: "OBRAS", name: "Obras e Serviços Públicos", description: "Obras, infraestrutura e serviços urbanos", href: "/obras", icon: HardHat, color: "text-[#B45309]", bg: "bg-[#FEF3C7]", solid: "bg-[#B45309]" },
   { code: "FROTAS", name: "Frotas", description: "Veículos, máquinas e manutenção", href: "/frotas", icon: Truck, color: "text-[#0F766E]", bg: "bg-[#CCFBF1]", solid: "bg-[#0F766E]" },
@@ -89,15 +83,9 @@ export default async function PainelPage() {
   }
 
   const visibleMenuItems = menuItems
-    .filter((item) => !hiddenDashboardModuleCodes.has(item.code))
+    .filter((item) => moduleActivationByCode.get(item.accessCode ?? item.code) !== false)
     .filter((item) => context && canShowDashboardCard(context.user, item.accessCode ?? item.code))
-    .sort((left, right) => {
-      if (left.code === "ADMINISTRACAO") return -1;
-      if (right.code === "ADMINISTRACAO") return 1;
-      if (left.code === "CONFIGURACOES") return 1;
-      if (right.code === "CONFIGURACOES") return -1;
-      return left.name.localeCompare(right.name, "pt-BR");
-    });
+    .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
 
   return (
     <PageFrame className="flex flex-col gap-2 px-1 py-1 md:px-2">
@@ -105,15 +93,13 @@ export default async function PainelPage() {
       <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7">
         {visibleMenuItems.map((item) => {
           const accessCode = item.accessCode ?? item.code;
-          const isConfig = item.code === "CONFIGURACOES";
           const isProfileBlocked = !context || isModuleBlockedForUser(context.user, accessCode) || !canViewModule(context.user, accessCode);
-          const isLocked = isProfileBlocked || (!isConfig && moduleActivationByCode.get(accessCode) === false && !canUseInactiveModule(context.user));
 
-          if (isLocked) {
+          if (isProfileBlocked) {
             return (
               <div
                 key={item.name}
-                title={isProfileBlocked ? "Acesso bloqueado ou sem permissão de visualização neste perfil." : "Módulo não contratado nesta instância municipal. Ative em Configurações e Integrações > Módulos."}
+                title="Acesso bloqueado ou sem permissão de visualização neste perfil."
                 className="relative flex h-full min-h-[126px] cursor-not-allowed flex-col justify-center overflow-hidden rounded-md border border-dashed border-slate-300 bg-slate-100/90 px-2 py-3 text-center opacity-60 grayscale select-none dark:border-slate-800 dark:bg-slate-900/60"
               >
                 {/* Top Gray Bar */}
@@ -133,7 +119,7 @@ export default async function PainelPage() {
                       {item.name}
                     </h3>
                     <span className="mt-1 inline-block rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                       {isProfileBlocked ? "Acesso Bloqueado" : "Não Contratado"}
+                       Acesso Bloqueado
                     </span>
                   </div>
                 </div>

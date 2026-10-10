@@ -182,7 +182,7 @@ test("uses the same profile permissions for dashboard visibility and route acces
   assert.equal(canViewModule(explicitlyBlocked, "COMPRAS"), false);
 });
 
-test("applies dashboard visibility, blocking, and operational module permissions independently", () => {
+test("keeps active module cards visible while profile permissions control access", () => {
   const profile = {
     role: "Gestor",
     permissions: JSON.stringify({
@@ -195,13 +195,34 @@ test("applies dashboard visibility, blocking, and operational module permissions
     modulePermissions: [],
   } as unknown as Parameters<typeof canViewModule>[0];
 
-  assert.equal(canShowDashboardCard(profile, "FINANCEIRO"), false);
+  assert.equal(canShowDashboardCard(profile, "FINANCEIRO"), true);
   assert.equal(canViewModule(profile, "FINANCEIRO"), true);
   assert.equal(canEditModule(profile, "FINANCEIRO"), true);
   assert.equal(canShowDashboardCard(profile, "COMPRAS"), true);
   assert.equal(isModuleBlockedForUser(profile, "COMPRAS"), true);
   assert.equal(canViewModule(profile, "COMPRAS"), false);
   assert.equal(canEditModule(profile, "COMPRAS"), false);
+});
+
+test("applies profile access rules to employee and patient portals", () => {
+  const profile = {
+    ...permissionUser,
+    role: "Operador",
+    profileCode: "OPERACIONAL",
+    permissions: JSON.stringify({
+      modules: {
+        PORTAL_SERVIDOR: { showDashboardCard: true, blocked: true },
+        PORTAL_PACIENTE: { showDashboardCard: true, blocked: true },
+      },
+    }),
+    modulePermissions: [],
+  } as Parameters<typeof canViewModule>[0];
+
+  assert.equal(canShowDashboardCard(profile, "PORTAL_SERVIDOR"), true);
+  assert.equal(isModuleBlockedForUser(profile, "PORTAL_SERVIDOR"), true);
+  assert.equal(canViewModule(profile, "PORTAL_SERVIDOR"), false);
+  assert.equal(isModuleBlockedForUser(profile, "PORTAL_PACIENTE"), true);
+  assert.equal(canViewModule(profile, "PORTAL_PACIENTE"), false);
 });
 
 test("shows every dashboard module to the protected system administrator", () => {

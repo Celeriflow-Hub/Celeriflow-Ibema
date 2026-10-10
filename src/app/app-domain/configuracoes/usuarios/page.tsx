@@ -13,7 +13,7 @@ export default async function UsuariosPage() {
       include: {
         perfil: true,
         permissoesModulo: true,
-        employee: { include: { department: true } }
+        employee: { include: { department: true, secretariat: true } }
       },
       orderBy: { nome: 'asc' }
     }),

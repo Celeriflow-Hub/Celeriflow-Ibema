@@ -80,8 +80,8 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
 
   return (
     <PageFrame className="space-y-3 px-1 py-1 md:px-2">
-      <PageHeader title="Módulos contratados" icon={<Blocks className="size-4 shrink-0 text-slate-700 dark:text-slate-300" />} className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white" />
-      <p className="text-sm text-slate-500 dark:text-slate-400">{totalAtivos} de {initialModulos.length} ativos. Ative ou bloqueie o acesso conforme o plano contratado.</p>
+      <PageHeader title="Módulos" icon={<Blocks className="size-4 shrink-0 text-slate-700 dark:text-slate-300" />} className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white" />
+      <p className="text-sm text-slate-500 dark:text-slate-400">{totalAtivos} de {initialModulos.length} ativos. A ativação define quais módulos estão disponíveis nesta instância.</p>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -100,7 +100,7 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
             <Unlock className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Liberados / Contratados</p>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Módulos ativos</p>
             <h3 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{totalAtivos}</h3>
           </div>
         </div>
@@ -110,7 +110,7 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
             <Lock className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Bloqueados / Não Contratados</p>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Módulos inativos</p>
             <h3 className="text-2xl font-bold text-rose-600 dark:text-rose-400">{totalInativos}</h3>
           </div>
         </div>
@@ -120,7 +120,7 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
       <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200 sm:text-sm">
         <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
         <div>
-          <span className="font-bold">Como funciona a liberação de módulos:</span> Ao desativar um módulo nesta tela, o card correspondente na página inicial do sistema ficará <strong>escurecido com um ícone de cadeado 🔒</strong>, impedindo a entrada de usuários nas subpáginas. As rotas internas de integração continuam preservadas no banco de dados.
+          <span className="font-bold">Como funciona a liberação de módulos:</span> Ao desativar um módulo nesta tela, o cartão correspondente deixa de aparecer no Dashboard e o acesso direto às páginas e operações do módulo é bloqueado para todos os perfis. O código e os dados permanecem preservados para uma futura reativação.
         </div>
       </div>
 
@@ -157,7 +157,7 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
               }`}
             >
-              Contratados ({totalAtivos})
+              Ativos ({totalAtivos})
             </button>
             <button
               onClick={() => setFilterStatus("INACTIVE")}
@@ -167,7 +167,7 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
               }`}
             >
-              Bloqueados ({totalInativos})
+              Inativos ({totalInativos})
             </button>
           </div>
         </div>

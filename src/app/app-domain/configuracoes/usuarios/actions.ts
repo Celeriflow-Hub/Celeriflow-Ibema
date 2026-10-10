@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { assertAdministratorLifecycleChange, isSystemAdministratorEmail, isSystemAdministratorProfileCode, SYSTEM_ADMIN_PROFILE_CODE } from "@/lib/administration/c3-policy";
+import { assertAdministratorLifecycleChange, isSystemAdministratorEmail, isSystemAdministratorProfileCode, requiresSecretariatScope, SYSTEM_ADMIN_PROFILE_CODE } from "@/lib/administration/c3-policy";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 import { AccessError, getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
 import { adminAuth } from "@/lib/firebase/server";
@@ -38,12 +38,18 @@ export async function upsertUsuario(data: {
     if (duplicateEmailUser && duplicateEmailUser.id !== existing?.id) return { error: "Já existe um usuário com este e-mail." };
 
     const employeeId = data.employeeId || null;
+    if (requiresSecretariatScope(perfil.codigo) && !employeeId) {
+      return { error: "Este perfil exige vínculo com um servidor lotado em uma secretaria." };
+    }
     if (employeeId) {
       const employee = await prisma.employee.findFirst({
         where: { id: employeeId, isActive: true },
-        select: { id: true },
+        select: { id: true, secretariatId: true },
       });
       if (!employee) return { error: "Selecione um servidor ativo para vincular ao usuário." };
+      if (requiresSecretariatScope(perfil.codigo) && !employee.secretariatId) {
+        return { error: "O servidor selecionado precisa estar lotado em uma secretaria para utilizar este perfil." };
+      }
 
       const linkedUser = await prisma.usuario.findUnique({ where: { employeeId }, select: { id: true } });
       if (linkedUser && linkedUser.id !== existing?.id) {

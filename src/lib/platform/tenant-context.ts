@@ -71,16 +71,6 @@ function hasModuleAccess(values: unknown, moduleCode: string) {
   return Array.isArray(values) && values.some((value) => value === moduleCode);
 }
 
-// During the demonstration, the employee and patient portals are open to every
-// authenticated profile. The active module configuration remains the
-// system-wide availability boundary; administrative permissions are not
-// changed by this exception.
-const OPEN_TO_AUTHENTICATED_PROFILES = new Set(["PORTAL_SERVIDOR", "PORTAL_PACIENTE"]);
-
-function isOpenToAuthenticatedProfiles(moduleCode: string) {
-  return OPEN_TO_AUTHENTICATED_PROFILES.has(moduleCode.toUpperCase());
-}
-
 function getModuleProfilePermission(rolePermissions: RolePermissions | null, moduleCode: string): ModuleProfilePermission | null {
   if (!rolePermissions?.modules || typeof rolePermissions.modules !== "object" || Array.isArray(rolePermissions.modules)) return null;
   const raw = (rolePermissions.modules as Record<string, unknown>)[moduleCode];
@@ -101,7 +91,6 @@ function getModuleProfilePermission(rolePermissions: RolePermissions | null, mod
 }
 
 export function isModuleBlockedForUser(user: AppContext["user"], moduleCode: string) {
-  if (isOpenToAuthenticatedProfiles(moduleCode)) return false;
   if (isSystemAdministrator(user)) return false;
   const codeUpper = moduleCode.toUpperCase();
   const rolePermissions = parseRolePermissions(user.permissions);
@@ -110,18 +99,14 @@ export function isModuleBlockedForUser(user: AppContext["user"], moduleCode: str
 }
 
 export function canShowDashboardCard(user: AppContext["user"], moduleCode: string) {
-  if (isOpenToAuthenticatedProfiles(moduleCode)) return true;
-  if (isSystemAdministrator(user)) return true;
-
-  const codeUpper = moduleCode.toUpperCase();
-  const rolePermissions = parseRolePermissions(user.permissions);
-  const permission = getModuleProfilePermission(rolePermissions, codeUpper);
-  if (permission) return permission.showDashboardCard;
-  return canViewModule(user, codeUpper);
+  // Module activation controls card presence. Profile permissions only control
+  // whether the visible card is accessible or rendered as locked.
+  void user;
+  void moduleCode;
+  return true;
 }
 
 export function canViewModule(user: AppContext["user"], moduleCode: string) {
-  if (isOpenToAuthenticatedProfiles(moduleCode)) return true;
   if (isSystemAdministrator(user)) return true;
 
   const codeUpper = moduleCode.toUpperCase();
@@ -191,15 +176,6 @@ export function isSystemAdministrator(user: AppContext["user"]) {
 
 export function isModuleActive(active: boolean | undefined) {
   return active !== false;
-}
-
-export function isPocEvaluator(user: AppContext["user"]) {
-  return user.role.startsWith("POC Avaliador");
-}
-
-export function canUseInactiveModule(user: AppContext["user"]) {
-  // São João do Ivaí evaluators remain limited to the modules enabled for the POC.
-  return !isPocEvaluator(user);
 }
 
 export function assertBudgetUnitAccess(user: AppContext["user"], budgetUnitId: string) {
@@ -370,7 +346,7 @@ export async function getTenantContextForModule(moduleCode: string): Promise<App
     where: { codigo: codeUpper },
     select: { ativo: true },
   });
-  if (moduleConfig && !moduleConfig.ativo && !canUseInactiveModule(context.user)) {
+  if (moduleConfig && !moduleConfig.ativo) {
     throw new AccessError(`O módulo ${moduleCode} está inativo nesta instância.`, 423);
   }
   if (!canViewModule(context.user, codeUpper)) {

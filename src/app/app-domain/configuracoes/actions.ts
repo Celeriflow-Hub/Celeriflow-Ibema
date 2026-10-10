@@ -96,31 +96,32 @@ export async function ensureDefaultModulos() {
   const prisma = await getTenantPrisma();
   const existing = await prisma.configuracaoModulo.findMany({ select: { codigo: true } });
   const existingCodes = new Set(existing.map((m) => m.codigo.toUpperCase()));
-  const inactiveByDefault = new Set(["EDUCACAO", "SANEAMENTO", "CULTURA", "SEGURANCA"]);
+  const inactiveByDefault = new Set(["EDUCACAO", "SANEAMENTO", "CULTURA", "SEGURANCA", "MEIO_AMBIENTE"]);
 
   const defaultModules = [
-    { codigo: "ADMINISTRACAO", nome: "Administração Geral & Entidades" },
-    { codigo: "CADASTROS", nome: "Pessoas & Cadastros Gerais" },
-    { codigo: "PROCESSOS", nome: "Processos Administrativos & Protocolos" },
-    { codigo: "DOCUMENTOS", nome: "Documentos / GED & Certidões" },
-    { codigo: "ATENDIMENTO", nome: "Atendimento ao Cidadão & Ouvidoria" },
-    { codigo: "TRANSPARENCIA", nome: "Portal da Transparência & LAI" },
-    { codigo: "TRIBUTACAO", nome: "Tributação, Arrecadação & IPTU" },
-    { codigo: "FINANCEIRO", nome: "Financeiro, Orçamento & Tesouraria" },
-    { codigo: "COMPRAS", nome: "Compras, Licitações & Cotações" },
-    { codigo: "RH", nome: "Recursos Humanos & Servidores" },
+    { codigo: "ADMINISTRACAO", nome: "Administração" },
+    { codigo: "CADASTROS", nome: "Cadastros" },
+    { codigo: "PROCESSOS", nome: "Processos e Protocolo" },
+    { codigo: "DOCUMENTOS", nome: "Documentos / GED" },
+    { codigo: "ATENDIMENTO", nome: "Atendimento ao Cidadão" },
+    { codigo: "TRANSPARENCIA", nome: "Portal e Transparência" },
+    { codigo: "TRIBUTACAO", nome: "Tributário" },
+    { codigo: "FINANCEIRO", nome: "Financeiro e Contábil" },
+    { codigo: "COMPRAS", nome: "Compras e Contratos" },
+    { codigo: "RH", nome: "RH e Folha" },
     { codigo: "PORTAL_SERVIDOR", nome: "Portal do Servidor" },
     { codigo: "PATRIMONIO", nome: "Almoxarifado e Patrimônio" },
-    { codigo: "EDUCACAO", nome: "Educação Pública & Escolas" },
-    { codigo: "SAUDE", nome: "Saúde Pública & UBSs" },
-    { codigo: "SOCIAL", nome: "Assistência Social & CRAS" },
-    { codigo: "SANEAMENTO", nome: "Saneamento, Água & Esgoto" },
-    { codigo: "OBRAS", nome: "Obras Públicas & Vistorias" },
+    { codigo: "EDUCACAO", nome: "Educação" },
+    { codigo: "SAUDE", nome: "Saúde" },
+    { codigo: "SOCIAL", nome: "Assistência Social" },
+    { codigo: "MEIO_AMBIENTE", nome: "Meio Ambiente" },
+    { codigo: "SANEAMENTO", nome: "Água e Saneamento" },
+    { codigo: "OBRAS", nome: "Obras e Serviços Públicos" },
     { codigo: "FROTAS", nome: "Frotas" },
-    { codigo: "CULTURA", nome: "Cultura, Esporte & Turismo" },
-    { codigo: "CAMARA", nome: "Câmara Municipal & Legislação" },
-    { codigo: "SEGURANCA", nome: "Segurança Pública & Guarda Municipal" },
-    { codigo: "CONFIGURACOES", nome: "Configurações do Sistema & Integrações" },
+    { codigo: "CULTURA", nome: "Cultura e Lazer" },
+    { codigo: "CAMARA", nome: "Câmara Municipal" },
+    { codigo: "SEGURANCA", nome: "Segurança e Mobilidade" },
+    { codigo: "CONFIGURACOES", nome: "Configurações e Integrações" },
   ];
 
   for (const mod of defaultModules) {

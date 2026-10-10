@@ -3,11 +3,14 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import {
+  AREA_EMPLOYEE_PROFILE_CODE,
+  AREA_MANAGEMENT_PROFILE_CODE,
   assertAdministratorLifecycleChange,
   assertLifecycleCanDeactivate,
   isSystemAdministratorProfileCode,
   normalizeOptionalInstitutionIdentifiers,
   normalizeRestrictiveProfilePermissions,
+  requiresSecretariatScope,
   resolveEmployeeHierarchy,
   SYSTEM_ADMIN_PROFILE_CODE,
 } from "../src/lib/administration/c3-policy";
@@ -29,6 +32,29 @@ test("system administration uses a stable profile code and protects administrato
   assert.doesNotThrow(() => assertAdministratorLifecycleChange({ actorUsuarioId: "other", targetUsuarioId: "admin", targetIsSystemAdministrator: true, targetWillBeSystemAdministrator: false, targetWillBeActive: true, activeSystemAdministratorCount: 2 }));
   const permissions = JSON.parse(normalizeRestrictiveProfilePermissions(JSON.stringify({ acesso: "total", modules: {} }), new Set(["ADMINISTRACAO"])));
   assert.equal(permissions.acesso, "operacional");
+  const blocked = JSON.parse(normalizeRestrictiveProfilePermissions(JSON.stringify({ modules: { ADMINISTRACAO: { showDashboardCard: false, blocked: true } } }), new Set(["ADMINISTRACAO"])));
+  assert.equal(blocked.modules.ADMINISTRACAO.showDashboardCard, true);
+  assert.equal(blocked.modules.ADMINISTRACAO.blocked, true);
+});
+
+test("area profiles require a secretariat-scoped employee", () => {
+  assert.equal(requiresSecretariatScope(AREA_MANAGEMENT_PROFILE_CODE), true);
+  assert.equal(requiresSecretariatScope(AREA_EMPLOYEE_PROFILE_CODE), true);
+  assert.equal(requiresSecretariatScope("GESTAO_GERAL"), false);
+  assert.equal(requiresSecretariatScope(null), false);
+});
+
+test("default operational profiles remain editable and include complete permission matrices", async () => {
+  const migration = await readFile(
+    new URL("../prisma/migrations-ibema/20261010020000_default_access_profiles/migration.sql", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(migration, /'GESTAO_GERAL'/);
+  assert.match(migration, /'GESTAO_AREA_SECRETARIA'/);
+  assert.match(migration, /'SERVIDOR_AREA_SECRETARIA'/);
+  assert.match(migration, /'issueReports'/);
+  assert.match(migration, /ON CONFLICT \("codigo"\) DO NOTHING/);
 });
 
 test("employee hierarchy derives secretariat from department and rejects unsafe relations", () => {

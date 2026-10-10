@@ -2,6 +2,14 @@ import { requireValidCep, requireValidCnpj } from "@/lib/identifiers/brazilian-i
 
 export const SYSTEM_ADMIN_PROFILE_CODE = "SYSTEM_ADMINISTRATOR";
 export const DEFAULT_SYSTEM_ADMIN_EMAIL = "admin@email.com";
+export const GENERAL_MANAGEMENT_PROFILE_CODE = "GESTAO_GERAL";
+export const AREA_MANAGEMENT_PROFILE_CODE = "GESTAO_AREA_SECRETARIA";
+export const AREA_EMPLOYEE_PROFILE_CODE = "SERVIDOR_AREA_SECRETARIA";
+
+const AREA_SCOPED_PROFILE_CODES = new Set([
+  AREA_MANAGEMENT_PROFILE_CODE,
+  AREA_EMPLOYEE_PROFILE_CODE,
+]);
 
 export function getSystemAdministratorEmail() {
   return process.env.SYSTEM_ADMIN_EMAIL?.trim().toLowerCase() || DEFAULT_SYSTEM_ADMIN_EMAIL;
@@ -31,6 +39,10 @@ export function isSystemAdministratorProfileCode(code: string | null | undefined
   return code === SYSTEM_ADMIN_PROFILE_CODE;
 }
 
+export function requiresSecretariatScope(code: string | null | undefined) {
+  return Boolean(code && AREA_SCOPED_PROFILE_CODES.has(code));
+}
+
 export function normalizeRestrictiveProfilePermissions(value: string | undefined, moduleCodes: ReadonlySet<string>) {
   if (!value) return JSON.stringify({ acesso: "operacional", modules: {} });
   let parsed: unknown;
@@ -51,9 +63,8 @@ export function normalizeRestrictiveProfilePermissions(value: string | undefined
     if (!moduleCodes.has(code) || !raw || typeof raw !== "object" || Array.isArray(raw)) continue;
     const item = raw as Record<string, unknown>;
     const blocked = item.blocked === true;
-    const isHiddenCard = code === "CADASTROS" || code === "ATENDIMENTO";
     modules[code] = {
-      showDashboardCard: isHiddenCard ? false : item.showDashboardCard === true,
+      showDashboardCard: true,
       blocked,
       create: !blocked && item.create === true,
       update: !blocked && item.update === true,

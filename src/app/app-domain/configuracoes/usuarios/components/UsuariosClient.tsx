@@ -22,13 +22,14 @@ type Usuario = {
   perfilId: string;
   perfil: { nome: string };
   employeeId: string | null;
-  employee?: { department: { name: string } | null } | null;
+  employee?: { department: { name: string } | null; secretariat: { name: string } | null } | null;
   permissoesModulo: UsuarioModulo[];
 };
 type Servidor = {
   id: string;
   name: string;
   department: { name: string } | null;
+  secretariat: { name: string } | null;
 };
 
 export default function UsuariosClient({
@@ -189,7 +190,7 @@ export default function UsuariosClient({
                       {u.perfil.nome}
                     </span>
                   </td>
-                  <td className="hidden max-w-0 truncate px-2.5 py-1.5 text-slate-600 md:table-cell" title={u.employee?.department?.name || undefined}>{u.employee?.department?.name || "-"}</td>
+                  <td className="hidden max-w-0 truncate px-2.5 py-1.5 text-slate-600 md:table-cell" title={u.employee?.secretariat?.name || u.employee?.department?.name || undefined}>{u.employee?.secretariat?.name || u.employee?.department?.name || "-"}</td>
                   <td className="px-2.5 py-1.5">
                     <button
                       onClick={() => handleToggleStatus(u.id, !u.ativo)}
@@ -284,14 +285,14 @@ export default function UsuariosClient({
                     onChange={e => setFormData({...formData, employeeId: e.target.value})}
                     className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-gray-900 outline-none"
                   >
-                    <option value="">Sem vinculo operacional</option>
-                    {servidores.map(servidor => (
-                      <option key={servidor.id} value={servidor.id}>
-                        {servidor.name}{servidor.department ? ` - ${servidor.department.name}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-1 text-xs text-gray-500">Obrigatorio para operar Protocolos e Processos.</p>
+                      <option value="">Sem vinculo operacional</option>
+                      {servidores.map(servidor => (
+                        <option key={servidor.id} value={servidor.id}>
+                          {servidor.name}{servidor.secretariat ? ` - ${servidor.secretariat.name}` : ""}{servidor.department ? ` / ${servidor.department.name}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  <p className="mt-1 text-xs text-gray-500">Obrigatório para perfis por área/secretaria e para operar Protocolos e Processos.</p>
                 </div>
                 <div className="flex items-center mt-6">
                   <label className="flex items-center gap-2 cursor-pointer">

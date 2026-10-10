@@ -6,10 +6,10 @@ import { areaKeys, areaLabels, calculateConstructionArea } from "@/lib/obras/con
 import { openConstructionCase } from "../actions";
 
 type Option = { id: string; name: string };
-type Props = { configuration: { version: number; instructions: string; weights: Record<keyof typeof areaLabels, number> }; catalogs: (Option & { kind: string })[]; subjects: (Option & { processTypeId: string })[]; people: Option[]; companies: Option[]; properties: Option[] };
+type Props = { formVersion: number; fields: { key: string; label: string; type: string; required: boolean; options: string[] }[]; configuration: { version: number; instructions: string; weights: Record<keyof typeof areaLabels, number> }; catalogs: (Option & { kind: string })[]; subjects: (Option & { processTypeId: string })[]; people: Option[]; companies: Option[]; properties: Option[] };
 const field = "h-8 w-full rounded border bg-white px-2 text-sm dark:bg-slate-900";
 
-export default function ConstructionCaseForm({ configuration, catalogs, subjects, people, companies, properties }: Props) {
+export default function ConstructionCaseForm({ configuration, catalogs, subjects, people, companies, properties, fields, formVersion }: Props) {
   const router = useRouter();
   const requestKey = useRef("");
   const [category, setCategory] = useState("BUILDING");
@@ -24,6 +24,7 @@ export default function ConstructionCaseForm({ configuration, catalogs, subjects
   const [propertyIds, setPropertyIds] = useState([""]);
   const [areas, setAreas] = useState({ existingArea: "0", expandedArea: "0", irregularArea: "0", renovationArea: "0", demolitionArea: "0" });
   const [description, setDescription] = useState("");
+  const [additionalValues, setAdditionalValues] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   let calculated = "—";
@@ -32,7 +33,7 @@ export default function ConstructionCaseForm({ configuration, catalogs, subjects
     event.preventDefault(); setPending(true); setError("");
     if (!requestKey.current) requestKey.current = crypto.randomUUID();
     try {
-      const result = await openConstructionCase({ requestKey: requestKey.current, configurationVersion: configuration.version, processTypeId: subjects.find((subject) => subject.id === subjectId)?.processTypeId, subjectId, personId: applicantType === "person" ? applicantId : "", companyId: applicantType === "company" ? applicantId : "", category, locationType, regularization, modalityId, purposeId, constructionTypeId: category === "BUILDING" ? constructionTypeId : "", propertyIds, ...areas, description });
+      const result = await openConstructionCase({ requestKey: requestKey.current, configurationVersion: configuration.version, formVersion, additionalValues, processTypeId: subjects.find((subject) => subject.id === subjectId)?.processTypeId, subjectId, personId: applicantType === "person" ? applicantId : "", companyId: applicantType === "company" ? applicantId : "", category, locationType, regularization, modalityId, purposeId, constructionTypeId: category === "BUILDING" ? constructionTypeId : "", propertyIds, ...areas, description });
       if (result.error) { setError(result.error); return; }
       router.push(`/obras/construcao-civil/${result.id}`); router.refresh();
     } catch { setError("Falha de comunicação. Reenvie para recuperar a mesma solicitação."); } finally { setPending(false); }
@@ -51,6 +52,7 @@ export default function ConstructionCaseForm({ configuration, catalogs, subjects
       <fieldset className="space-y-2 rounded border p-2 sm:col-span-2"><legend className="text-xs">Imóveis vinculados</legend>{propertyIds.map((propertyId,index) => <div key={index} className="flex gap-2"><select aria-label={`Imóvel ${index + 1}`} required className={field} value={propertyId} onChange={(event) => setPropertyIds(propertyIds.map((value,i) => i === index ? event.target.value : value))}><option value="">Selecione</option>{properties.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button type="button" disabled={propertyIds.length === 1} aria-label="Remover imóvel" onClick={() => setPropertyIds(propertyIds.filter((_,i) => i !== index))}>×</button></div>)}<button type="button" disabled={propertyIds.length >= 100} className="text-xs text-blue-700 underline" onClick={() => setPropertyIds([...propertyIds, ""])}>Vincular outro imóvel</button></fieldset>
       <fieldset className="grid gap-2 rounded border p-2 sm:col-span-2 sm:grid-cols-5"><legend className="text-xs">Áreas declaradas (m²)</legend>{areaKeys.map((key) => <label key={key} className="text-xs">{areaLabels[key]}<input required min="0" max="9999999999.9999" step="0.0001" type="number" className={field} value={areas[key]} onChange={(event) => setAreas({ ...areas, [key]: event.target.value })} /></label>)}<p className="text-xs sm:col-span-5">Área total pela regra publicada: <strong>{calculated} m²</strong>. Informe componentes conforme a norma, evitando áreas sobrepostas.</p></fieldset>
       <label className="text-xs sm:col-span-2">Descrição da solicitação<textarea required minLength={3} maxLength={4000} rows={4} className="w-full rounded border bg-transparent p-2 text-sm" value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+      {fields.map((fieldDefinition) => <label key={fieldDefinition.key} className="text-xs">{fieldDefinition.label}{fieldDefinition.required ? " *" : ""}{fieldDefinition.type === "CHOICE" ? <select required={fieldDefinition.required} className={field} value={additionalValues[fieldDefinition.key] || ""} onChange={(event) => setAdditionalValues({ ...additionalValues, [fieldDefinition.key]: event.target.value })}><option value="">Selecione</option>{fieldDefinition.options.map((option) => <option key={option} value={option}>{option}</option>)}</select> : <input required={fieldDefinition.required} type={fieldDefinition.type === "DATE" ? "date" : fieldDefinition.type === "NUMBER" ? "number" : "text"} step={fieldDefinition.type === "NUMBER" ? "any" : undefined} maxLength={4000} className={field} value={additionalValues[fieldDefinition.key] || ""} onChange={(event) => setAdditionalValues({ ...additionalValues, [fieldDefinition.key]: event.target.value })} />}</label>)}
     </fieldset>
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}<div className="text-right"><button disabled={pending} className="rounded bg-blue-600 px-3 py-2 text-xs text-white disabled:opacity-50">{pending ? "Protocolando..." : "Abrir processo e solicitação"}</button></div>
   </form>;

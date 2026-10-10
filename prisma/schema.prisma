@@ -345,6 +345,7 @@ model CalendarEvent {
 
 // Pessoas FÃ­sicas
 model Person {
+  constructionProfessionals ConstructionProfessional[]
   socialFacts SocialPersonFact[]
   socialFinancialEntries SocialFinancialEntry[]
   socialProfile SocialPersonProfile?
@@ -435,6 +436,7 @@ model Person {
 
 // Pessoas JurÃ­dicas
 model Company {
+  constructionEmployers ConstructionProfessionalEmployer[]
   id             String    @id @default(cuid())
   corporateName  String
   tradeName      String?
@@ -941,6 +943,7 @@ model Street {
 
 // ImÃ³veis
 model RealEstate {
+  constructionZone ConstructionPropertyZone?
   constructionCases ConstructionCaseProperty[]
   id            String  @id @default(cuid())
   municipalInsc String? @unique
@@ -10889,7 +10892,121 @@ model ConstructionCase {
   assignedEmployee Employee? @relation(fields: [assignedEmployeeId], references: [id], onDelete: Restrict)
   createdBy String
   createdAt DateTime @default(now())
+  additionalValues Json @default("{}")
+  formSnapshot Json @default("{}")
+  viabilityResults ConstructionViabilityResult[]
+  reviewStatus String @default("SUBMITTED")
+  revisionCount Int @default(0)
+  firstAnalystId String?
+  correctionDeadline DateTime?
+  reviews ConstructionReview[]
   properties ConstructionCaseProperty[]
+}
+
+model ConstructionProfessional {
+  id String @id @default(cuid())
+  personId String
+  person Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+  professionalType String
+  council String
+  registration String
+  startsAt DateTime @db.Date
+  endsAt DateTime? @db.Date
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  employers ConstructionProfessionalEmployer[]
+  @@unique([council, registration])
+}
+
+model ConstructionProfessionalEmployer {
+  id String @id @default(cuid())
+  professionalId String
+  professional ConstructionProfessional @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  companyId String
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  startsAt DateTime @db.Date
+  endsAt DateTime? @db.Date
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([professionalId, companyId, startsAt])
+}
+
+model ConstructionDefinitionVersion {
+  id String @id @default(cuid())
+  kind String
+  version Int
+  definition Json
+  publishedBy String
+  publishedAt DateTime @default(now())
+  @@unique([kind, version])
+}
+
+model ConstructionDistributionVersion {
+  id String @id @default(cuid())
+  departmentId String
+  version Int
+  strategy String
+  employeeId String?
+  publishedBy String
+  publishedAt DateTime @default(now())
+  @@unique([departmentId, version])
+}
+
+model ConstructionZoneVersion {
+  id String @id @default(cuid())
+  code String
+  version Int
+  name String
+  legalBasis String
+  startsAt DateTime @db.Date
+  endsAt DateTime? @db.Date
+  allowedPurposeIds String[]
+  allowedCategories String[]
+  minimumLandArea Decimal @db.Decimal(14, 4)
+  maxFloorAreaRatio Decimal @db.Decimal(10, 4)
+  automatic Boolean
+  publishedBy String
+  publishedAt DateTime @default(now())
+  properties ConstructionPropertyZone[]
+  @@unique([code, version])
+}
+
+model ConstructionPropertyZone {
+  id String @id @default(cuid())
+  realEstateId String @unique
+  realEstate RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Restrict)
+  zoneId String
+  zone ConstructionZoneVersion @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  updatedAt DateTime @updatedAt
+}
+
+model ConstructionViabilityResult {
+  id String @id @default(cuid())
+  caseId String
+  case ConstructionCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  outcome String
+  calculationSnapshot Json
+  createdBy String
+  createdAt DateTime @default(now())
+}
+
+model ConstructionReview {
+  id String @id @default(cuid())
+  caseId String
+  case ConstructionCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  revision Int
+  reviewType String
+  decision String
+  notes String
+  definitionSnapshot Json
+  evidenceSnapshot Json
+  createdBy String
+  createdAt DateTime @default(now())
+  @@index([caseId, createdAt])
 }
 
 model ConstructionCaseProperty {

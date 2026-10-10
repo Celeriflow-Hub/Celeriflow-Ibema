@@ -8,6 +8,8 @@ import { writeAuditEvent, auditEventTypes } from "@/lib/platform/audit-evidence"
 import { constructionCatalogSchema, constructionConfigSchema, constructionStaffSchema, constructionCaseSchema, calculateConstructionArea } from "@/lib/obras/construction-policy";
 import { resolveConstructionAccess } from "@/lib/obras/construction-access";
 import { createValidatedProcess } from "@/lib/protocols/service";
+import { definitionSchema, validateConstructionFields } from "@/lib/obras/construction-rules";
+import { assignConstructionCase } from "@/lib/obras/construction-distribution";
 
 function errorMessage(error: unknown) {
   if (error instanceof z.ZodError) return error.issues[0].message;
@@ -95,6 +97,10 @@ export async function openConstructionCase(input: unknown) {
       if (!config) throw new Error("Publique a configuração urbanística antes de abrir solicitações.");
       if (config.version !== data.configurationVersion) throw new Error("A configuração mudou. Atualize a página e confira a nova regra antes de protocolar.");
       if (!config.subjectIds.includes(data.subjectId)) throw new Error("O assunto não está habilitado para Construção Civil.");
+      const form = await tx.constructionDefinitionVersion.findFirst({ where: { kind: "FORM" }, orderBy: { version: "desc" } });
+      if ((form?.version || 0) !== data.formVersion) throw new Error("O formulário mudou. Atualize a página antes de protocolar.");
+      const definition = definitionSchema.parse(form?.definition || { fields: [], checks: [], documents: [] });
+      const additionalValues = validateConstructionFields(definition, data.additionalValues);
       const properties = await tx.realEstate.findMany({ where: { id: { in: data.propertyIds } }, select: { id: true, municipalInsc: true, registration: true, streetName: true, number: true, lot: true, block: true, landArea: true, builtArea: true, propertyUse: true, fiscalZone: true, taxpayerId: true } });
       if (properties.length !== data.propertyIds.length) throw new Error("Um ou mais imóveis não estão disponíveis.");
       if (data.personId && !await tx.person.findFirst({ where: { id: data.personId, status: "Ativo" }, select: { id: true } })) throw new Error("Pessoa requerente inativa/inexistente.");
@@ -113,7 +119,9 @@ export async function openConstructionCase(input: unknown) {
         catalogSnapshot: { modality: { id: modality.id, name: modality.name }, purpose: { id: purpose.id, name: purpose.name }, constructionType: constructionType ? { id: constructionType.id, name: constructionType.name } : null },
         existingArea: data.existingArea, expandedArea: data.expandedArea, irregularArea: data.irregularArea, renovationArea: data.renovationArea, demolitionArea: data.demolitionArea, totalArea: calculation.total, calculationSnapshot: calculation.memory,
         createdBy: context.user.id, properties: { create: properties.map((property) => ({ realEstateId: property.id, cadastralSnapshot: property })) },
+        additionalValues, formSnapshot: { version: form?.version || 0, definition },
       } });
+      if (scope.currentDepartmentId) await assignConstructionCase(tx, { caseId: caseRecord.id, processId: process.id, departmentId: scope.currentDepartmentId, today: new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z") });
       await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "ConstructionCase", targetId: caseRecord.id });
       return caseRecord.id;
     });

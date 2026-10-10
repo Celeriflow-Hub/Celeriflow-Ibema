@@ -2,9 +2,9 @@
 
 **Fonte:** `docs/Termo de Referencia/Checklist real POC MÓDULOS EXECUTIVO e CAMARA.pdf`, páginas PDF 126–131, itens 1–52 do módulo Gestão da Construção Civil. O item 19 começa na página 127 e termina na 128; a página 131 encerra o módulo no item 52 e inicia Protocolo e Processo Digital, que não integra esta matriz.
 
-**Data da análise:** 10/10/2026. **Escopo desta entrega:** comparação do código e planejamento, sem implementação de funcionalidades ou alterações no banco.
+**Data da análise e atualização:** 10/10/2026. **Escopo:** plano dos 52 requisitos, diagnóstico inicial e registro das implementações internas. O planejamento está consolidado; a execução integral e a homologação da POC permanecem pendentes.
 
-> Diagnóstico por leitura estática do checklist, schema, páginas, componentes e serviços. Recursos genéricos existentes não comprovam atendimento do requisito específico. Não foram executados fluxos de Construção Civil no navegador, verificadas configurações municipais ou homologadas integrações externas. Os nomes de modelos e rotas futuros abaixo são propostas, não recursos já implementados.
+> A matriz da seção 3 preserva o diagnóstico inicial por leitura estática. O registro abaixo diferencia implementações de propostas futuras. Recursos genéricos existentes não comprovam atendimento do requisito específico. Não foram homologadas configurações municipais ou integrações externas nem executados fluxos civis no navegador. Os modelos futuros na arquitetura são propostas, salvo quando identificados no registro de execução.
 
 ## 1. Diagnóstico executivo
 
@@ -21,6 +21,39 @@
 - Migration aditiva: `prisma/migrations-ibema/20261010160000_construction_foundation/migration.sql`. Validada em PostgreSQL embarcado; não aplicada ao banco municipal/de destino nesta execução.
 - Checks: Prisma Client gerado, ESLint aprovado, build completo aprovado e nove testes aprovados (três de Construção Civil e seis de SST). Testes civis verificam precisão/regras de áreas, vigência, seed mínimo, unicidade, imutabilidade, referências cadastrais e isolamento SQL real por setor. Fluxo de abertura completo e comportamento visual ainda precisam de validação integrada; navegador da sessão desconectado.
 - Próximas entregas: perfis externos/construtoras/corretores, formulários/checklists configuráveis, zoneamento/plano diretor, distribuição avançada e portal, antes de análise/assinatura/vistoria/conclusão. A matriz abaixo permanece como diagnóstico inicial; nenhum item foi promovido a integralmente atendido sem sua demonstração completa.
+
+### Registro de execução — cadastros, regras e análise interna (10/10/2026)
+
+- Após o commit da fundação pelo usuário, repositório limpo e `git pull --ff-only origin main` executado: remoto já atualizado. As novas implementações permanecem locais, sem commit/push pelo agente.
+- `/obras/construcao-civil/profissionais`: engenheiros, arquitetos e corretores vinculados a `Person`, conselho compatível e registro único, vigência/inativação; vínculos de engenheiros/arquitetos com construtoras em `Company`. Identificação e início dos vínculos são imutáveis na edição. O cadastro de perfil não concede identidade ou representação externa.
+- `/obras/construcao-civil/regras`: publicação imutável de formulários/checklists por etapa, campos de texto/número/data/seleção, opções e obrigatoriedade. Abertura interna e parecer de projeto validam campos no servidor; a abertura preserva definição/valores e rejeita versão desatualizada. Critérios/documentos do formulário de abertura ainda não validam upload; critérios das etapas de vistoria/conclusão aguardam seus consumidores.
+- Distribuição publicada por setor: ao setor, usuário específico, gestor vigente ou analista com menor demanda. A abertura aplica a estratégia na mesma transação, valida elegibilidade por papel/lotação/vigência, sincroniza responsável em Protocolos e registra evento. Lock setorial serializa a distribuição; desempate determinístico por identificador. Se uma estratégia exige profissional e nenhum é elegível, a transação de abertura é revertida. Carga considera processos ativos do setor, sem contabilizar encerrados.
+- Zoneamento versionado com base legal declarada, vigência, finalidades/categorias permitidas, área mínima, coeficiente máximo e opção de avaliação automática. Vínculo explícito do imóvel à versão urbanística, separado da zona fiscal. Publicação de nova versão não migra imóveis automaticamente.
+- Detalhe da solicitação: avaliação interna idempotente de parâmetros urbanísticos, com regra, área territorial consultada, área proposta e motivos preservados. Usa cálculo decimal e compara com o limite exato antes da apresentação arredondada. Sem zona, fora de vigência, área territorial zero, automação desabilitada ou múltiplos imóveis seguem para análise manual. O resultado não é documento de viabilidade, não emite licença e não cobre todos os índices legais.
+- Análise interna: pró-análise e parecer do projeto, decisões motivadas, critérios obrigatórios e vínculo de documentos do protocolo com versão GED atual válida. Snapshot preserva checklist, campos, documentos/versões/hashes e decisão; pareceres são imutáveis. Pró-análise favorável mantém o projeto disponível para análise definitiva.
+- Exigência calcula prazo com os dias corridos da configuração preservada. Readequação incrementa a revisão e retorna ao analista inicial, exigindo vínculo vigente no setor atual; indisponibilidade bloqueia o retorno até regularização. Fluxo exige processo recebido/ativo; analistas atuam no caso atribuído, gestores podem atuar no setor. Substituição formal do analista, notificações de vencimento, resposta externa e anotação PDF ainda pendentes.
+- Franquia é consultada no deferimento: revisão acima da quantidade gratuita bloqueia parecer favorável até concluir a integração tributária. Não há cobrança automática nem vínculo de pagamento civil nesta etapa; esse bloqueio não comprova o item 4 integralmente.
+- Migrations aditivas `20261010170000_construction_rules_profiles` e `20261010180000_construction_project_reviews`, aplicadas em PostgreSQL embarcado de teste. Não aplicadas ao banco municipal/de destino.
+- Testes adicionados em `tests/construction-rules-reviews.test.ts`: validações de campos/perfis, precisão/limites da avaliação e fluxo real Prisma/PostgreSQL de distribuição, negativa setorial, checklist obrigatório, parecer idempotente, imutabilidade, exigência, reenvio único e retorno ao analista inicial. Não executam autenticação/actions completas, portal, assinatura ou homologação legal.
+- Verificação desta etapa: Prisma Client gerado, ESLint aprovado, 12 testes aprovados (seis civis e seis SST), `git diff --check` aprovado; matriz conferida com 52 itens únicos, sem ausências. Primeira tentativa de build compilou, mas excedeu dez minutos durante TypeScript; segunda tentativa com limite ampliado concluiu `npm run build` com código 0, incluindo TypeScript, geração das páginas e otimização. Verificação visual pendente (`browser.disconnected`).
+
+### Cobertura de execução por fase
+
+| Fase | Situação atual | Próximo critério verificável |
+|---|---|---|
+| F0 | Preparação técnica parcial | Aprovar regras e competências municipais e dataset de demonstração |
+| F1 | Implementada parcialmente | Termos versionados, vigência da construtora como entidade, integração dos demais índices e validação visual |
+| F2 | Abertura/distribuição internas implementadas parcialmente | Identidade e representação externas, participantes, aceite, upload e comunicação persistida |
+| F3 | Avaliação interna parcial de parâmetros | Viabilidade online com documento e motor de taxas, sem duplicação |
+| F4 | Pareceres/exigências/readequações internas implementados parcialmente | PDF anotado, resposta externa, taxa após franquia e substituição formal de analista |
+| F5 | Infraestrutura central disponível; integração civil pendente | Template, numeração, emissão, carimbo, assinatura PDF e gate de publicação |
+| F6 | Pendente | Início, vistorias, conclusão parcial/total, habite-se e atualização cadastral |
+| F7 | Pendente | Processo fiscal edilício, diligências, autos e embargo |
+| F8 | Aguardando definição do destino/leiaute | Exportação validada com evidência de aceitação |
+| F9 | Pendente | Extrator real PDF/OCR/IA com evidência e comparação |
+| F10 | Validação técnica parcial | Fluxos completos, banco de destino, navegador e 52 evidências de aceite |
+
+**Itens com avanço nesta etapa:** 4, 6, 8–9, 12, 18, 22–23, 26–27, 29 e 41. Isso indica implementação parcial e não atendimento integral. Os itens 3, 10–11, 15 e 17 possuem fundação anterior; a homologação continua necessária.
 
 O sistema possui uma base operacional de **Obras e Serviços Públicos**, com cadastro de obras, medições, serviços urbanos, iluminação, equipes, equipamentos, materiais, documentos e vínculos financeiros/de compras. O checklist exige também a **gestão municipal do licenciamento e da fiscalização da construção civil**, incluindo empreendimentos particulares urbanos/rurais e parcelamentos do solo.
 
@@ -351,8 +384,15 @@ Configurar a ordem e os bloqueios de taxas, análise e documentos conforme norma
 - **Repositório:** analisar consumidores antes de mudar assinaturas; preservar retorno de erro das actions chamadas no cliente; migrations aditivas; `npm run build` aprovado antes de commit. Não executar replace em massa.
 - Marcar item **atendido** somente quando todos os seus pontos tiverem persistência, autorização, comportamento e evidência de ponta a ponta. Estados intermediários: não iniciado, implementado parcial, aguardando integração/insumo, em validação e atendido.
 
-## 10. Próxima entrega recomendada
+## 10. Sequência final de execução e conclusão do planejamento
 
-Iniciar por **F0/F1**, com desenho e implementação do processo urbanístico especializado, cadastros/configurações e política setorial dentro de Obras. Em paralelo, antecipar validação do portal, formato de assinatura PDF, guia bancária, exportação federal e prova de extração IA. Esses pontos podem bloquear a demonstração integral mesmo após a conclusão das telas internas.
+1. **Completar F1/F2:** validar a base no banco de homologação; criar identidade/representação externas e participação profissional; termos com aceite, documentos obrigatórios na abertura e mensagens. Provar isolamento entre dois profissionais e negativa de acesso a arquivos.
+2. **Completar F3/F4:** configurar fatos geradores/taxas no motor existente, cobrança idempotente após franquia, integração de pagamento, substituição formal do analista e editor de anotação PDF. Testar revisão com reenvio, retorno e documentação preservada.
+3. **Executar F5:** definir formato de assinatura e signatários, templates municipais demonstrativos/versionados e numeração; emitir alvará no mesmo processo, com backup/carimbo e liberação condicionada à assinatura verificável.
+4. **Executar F6/F7:** início, vistorias, conclusões com saldo de área, verificação imobiliária de débitos, habite-se e processo vinculado de atualização; fiscalização de obra sem alvará com notificações, autos e embargo.
+5. **Executar F8/F9:** obter destino/leiaute federal e amostras de prancha; desenvolver exportação validável e extração real com evidências. As dependências constam na seção 7 e não são substituídas por CSV ou preenchimento manual.
+6. **Concluir F10:** aplicar migrations em homologação, validar o percurso completo no navegador e na impressão, executar cenários A–J e anexar evidências individualizadas aos 52 itens. Só então promover itens a atendidos.
+
+O planejamento dos 52 itens está consolidado em arquitetura, fases, integrações, dependências, cenários e critérios de aceite. A implementação integral do módulo não está concluída; as pendências acima fazem parte do escopo de execução.
 
 Este documento é o plano de execução para o EXE-18. A situação do módulo no checklist geral deve permanecer pendente até a homologação dos 52 requisitos.

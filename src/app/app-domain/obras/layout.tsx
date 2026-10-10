@@ -18,6 +18,8 @@ const navigation: ModuleNavGroup[] = [{
   items: [
     { title: "Solicitações Urbanísticas", href: "/obras/construcao-civil", icon: "building2", exact: true },
     { title: "Configurações Urbanísticas", href: "/obras/construcao-civil/configuracoes", icon: "settings" },
+    { title: "Profissionais e Construtoras", href: "/obras/construcao-civil/profissionais", icon: "users" },
+    { title: "Formulários e Zoneamento", href: "/obras/construcao-civil/regras", icon: "settings" },
   ],
 }];
 

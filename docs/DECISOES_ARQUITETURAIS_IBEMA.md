@@ -173,9 +173,11 @@ As referências numéricas abaixo são requisitos do TR. A divisão em component
 
 | Macrodomínio | Áreas oficiais relacionadas |
 |---|---|
-| Financeiro e Contábil | Planejamento e Orçamento, Contábil e Financeiro, Controle Interno, Custos |
+| Financeiro e Contábil | Contábil e Financeiro, Controle Interno, Custos |
+| Planejamento e Orçamento | PPA, LDO, LOA, programação e alterações orçamentárias, integrado ao Financeiro |
+| Segurança e Medicina do Trabalho | Saúde ocupacional e segurança dos servidores, integrado ao RH |
 | Administração | Compras e Licitações, Almoxarifado, Patrimônio, Frota, Protocolo e Processo Digital |
-| RH e Folha | Folha, Segurança e Medicina do Trabalho, eSocial |
+| RH e Folha | Folha, vínculos funcionais e eSocial |
 | Tributação | IPTU, ISS, ITBI, Receitas Diversas, Arrecadação, Dívida Ativa, NFS-e, Escrita Fiscal, Fiscalização Fazendária, Cemitérios |
 | Obras e Serviços | Construção Civil e Serviços Públicos |
 | Canais Externos | Aplicativo, Portal de Autoatendimento e Portal da Transparência |
@@ -184,6 +186,8 @@ As referências numéricas abaixo são requisitos do TR. A divisão em component
 | Legislativo | Áreas funcionais da Câmara previstas no caderno próprio |
 
 **Regra de volume.** Quantidade de requisitos define esforço, equipe e roteiro de testes, mas não deve, sozinha, definir fronteira de domínio. Módulos grandes recebem navegação e responsáveis próprios; módulos pequenos continuam separados quando possuem ciclo de vida, permissão ou avaliação independente.
+
+**Atualização aprovada em 10/10/2026.** Planejamento e Orçamento (`PLANEJAMENTO`) e Segurança e Medicina do Trabalho (`SST`) passam a ter cards, ativação, permissões e layouts próprios. A estrutura inicial e o mapeamento das dependências estão em `docs/MODULOS_PLANEJAMENTO_SST.md`. Os dados e fluxos existentes continuam compartilhados conforme as autorizações dos módulos de origem.
 
 **Implementação necessária.** Associar rotas e permissões a identificadores oficiais, criar matriz requisito-evidência e permitir acesso direto a cada área durante a demonstração.
 

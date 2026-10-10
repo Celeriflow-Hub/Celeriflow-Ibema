@@ -521,7 +521,7 @@ Evidências principais: `prisma/schema.prisma`, migration `20261010100000_comple
 | Módulo avaliado | Requisitos | Mínimo de 90% | Organização no produto |
 |---|---:|---:|---|
 | EXE-04 — Gestão e Controle de Custos | 31 | 28 | Área funcional própria dentro de Financeiro e Contábil, sem cartão separado no Dashboard |
-| EXE-10 — Segurança e Medicina do Trabalho | 74 | 67 | Área funcional própria dentro de RH e Folha, sem cartão separado no Dashboard |
+| EXE-10 — Segurança e Medicina do Trabalho | 74 | 67 | Módulo e cartão próprios (`SST`), integrado aos vínculos funcionais de RH |
 | EXE-11 — Gestão eSocial | 20 | 18 | Área funcional própria dentro de RH e Folha, sem cartão separado no Dashboard |
 | EXE-18 — Gestão da Construção Civil | Auditar checklist específico | Calcular após auditoria | Área própria dentro de Obras e Serviços Públicos, integrada aos cadastros imobiliário e tributário |
 | EXE-21 — Aplicativo (APP) Mobile | 73 | 66 | Aplicativo para iOS e Android consumindo os mesmos serviços do Portal de Autoatendimento |
@@ -539,7 +539,8 @@ Decisões de navegação:
 
 - Business Intelligence fica em Administração.
 - Gestão de Custos fica em Financeiro e Contábil.
-- Segurança e Medicina do Trabalho e eSocial ficam em RH e Folha, não em Saúde ou Assistência Social.
+- Planejamento e Orçamento possui módulo e cartão próprios (`PLANEJAMENTO`), integrado à base financeira existente; aplica-se a EXE-01 e LEG-01.
+- Segurança e Medicina do Trabalho possui módulo e cartão próprios (`SST`), com integração a RH; eSocial permanece integrado a RH e Folha.
 - Gestão da Construção Civil fica em Obras e Serviços Públicos, mantendo integração com Tributário.
 - O Portal do Servidor é mantido como acesso do funcionário aos serviços exigidos pelo Portal de Autoatendimento.
 - Gestão da Saúde, Faturamento da Saúde, Atenção Primária, Assistência à Saúde, Assistência Farmacêutica e Central de Regulação compartilham o cartão Saúde, mas serão auditados separadamente.

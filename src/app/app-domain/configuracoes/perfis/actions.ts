@@ -9,7 +9,7 @@ import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence"
 const MODULE_CODES = new Set([
   "ADMINISTRACAO", "CADASTROS", "PROCESSOS", "DOCUMENTOS", "ATENDIMENTO", "TRANSPARENCIA", "TRIBUTACAO", "FINANCEIRO", "COMPRAS", "RH",
   "PORTAL_SERVIDOR", "PATRIMONIO", "EDUCACAO", "SAUDE", "SOCIAL", "MEIO_AMBIENTE", "SANEAMENTO", "OBRAS", "FROTAS", "CULTURA", "CAMARA",
-  "SEGURANCA", "CONFIGURACOES", "CEMITERIOS", "AUDITORIA", "SUPORTE_TECNICO",
+  "SEGURANCA", "CONFIGURACOES", "CEMITERIOS", "AUDITORIA", "SUPORTE_TECNICO", "PLANEJAMENTO", "SST",
 ]);
 
 function normalizePermissions(value: string | undefined) {
@@ -128,6 +128,8 @@ function revalidatePermissionConsumers() {
   revalidatePath("/configuracoes");
   revalidatePath("/dashboard");
   revalidatePath("/app-domain/dashboard");
+  revalidatePath("/app-domain/planejamento", "layout");
+  revalidatePath("/app-domain/sst", "layout");
   revalidatePath("/");
 }
 

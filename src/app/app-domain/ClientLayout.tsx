@@ -123,7 +123,7 @@ export default function ClientLayout({
     "/patrimonio/materiais",
     "/patrimonio/requisicoes",
     "/patrimonio/inventarios",
-  ].includes(pathname) || isFixedRhWorkspace || isFixedComprasWorkspace || isFixedLote2Workspace || isFixedLote3Workspace;
+  ].includes(pathname) || pathname === "/planejamento" || pathname.startsWith("/planejamento/") || pathname === "/sst" || pathname.startsWith("/sst/") || isFixedRhWorkspace || isFixedComprasWorkspace || isFixedLote2Workspace || isFixedLote3Workspace;
 
   return (
     <div className={isFixedErpWorkspace ? "flex h-dvh w-full flex-col overflow-hidden bg-slate-100" : "flex min-h-dvh w-full flex-col bg-slate-100"}>

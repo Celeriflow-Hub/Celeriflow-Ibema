@@ -30,6 +30,8 @@ const MODULE_ICONS: Record<string, { icon: React.ElementType; color: string; bg:
   TRANSPARENCIA: { icon: Share2, color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-50 dark:bg-sky-950/50" },
   TRIBUTACAO: { icon: Receipt, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/50" },
   FINANCEIRO: { icon: DollarSign, color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-950/50" },
+  PLANEJAMENTO: { icon: Landmark, color: "text-indigo-700 dark:text-indigo-300", bg: "bg-indigo-50 dark:bg-indigo-950/50" },
+  SST: { icon: HardHat, color: "text-teal-700 dark:text-teal-300", bg: "bg-teal-50 dark:bg-teal-950/50" },
   COMPRAS: { icon: ShoppingCart, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-950/50" },
   RH: { icon: Users, color: "text-pink-600 dark:text-pink-400", bg: "bg-pink-50 dark:bg-pink-950/50" },
   PORTAL_SERVIDOR: { icon: BadgeCheck, color: "text-sky-700 dark:text-sky-300", bg: "bg-sky-50 dark:bg-sky-950/50" },

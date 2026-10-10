@@ -107,6 +107,8 @@ export async function ensureDefaultModulos() {
     { codigo: "TRANSPARENCIA", nome: "Portal Transparência" },
     { codigo: "TRIBUTACAO", nome: "Tributário" },
     { codigo: "FINANCEIRO", nome: "Financeiro e Contábil" },
+    { codigo: "PLANEJAMENTO", nome: "Planejamento e Orçamento" },
+    { codigo: "SST", nome: "Segurança e Medicina do Trabalho" },
     { codigo: "COMPRAS", nome: "Compras e Contratos" },
     { codigo: "RH", nome: "RH e Folha" },
     { codigo: "PORTAL_SERVIDOR", nome: "Portal do Servidor" },

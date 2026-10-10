@@ -55,6 +55,8 @@ const menuItems: MenuItem[] = [
   { code: "TRANSPARENCIA", name: "Portal Transparência", description: "Acesso à informação", href: "/transparencia", icon: Eye, color: "text-[#06B6D4]", bg: "bg-[#CFFAFE]", solid: "bg-[#06B6D4]" },
   { code: "TRIBUTACAO", name: "Tributário", description: "Impostos e taxas", href: "/tributacao", icon: Landmark, color: "text-[#059669]", bg: "bg-[#D1FAE5]", solid: "bg-[#059669]" },
   { code: "FINANCEIRO", name: "Financeiro e Contábil", description: "Orçamento e caixa", href: "/financeiro", icon: CircleDollarSign, color: "text-[#16A34A]", bg: "bg-[#DCFCE7]", solid: "bg-[#16A34A]" },
+  { code: "PLANEJAMENTO", name: "Planejamento e Orçamento", description: "PPA, LDO, LOA e gestão orçamentária", href: "/planejamento", icon: Landmark, color: "text-[#4338CA]", bg: "bg-[#E0E7FF]", solid: "bg-[#4338CA]" },
+  { code: "SST", name: "Segurança e Medicina do Trabalho", description: "Saúde ocupacional e segurança dos servidores", href: "/sst", icon: HardHat, color: "text-[#0F766E]", bg: "bg-[#CCFBF1]", solid: "bg-[#0F766E]" },
   { code: "COMPRAS", name: "Compras e Contratos", description: "Gestão de compras", href: "/compras", icon: ShoppingCart, color: "text-[#9333EA]", bg: "bg-[#F3E8FF]", solid: "bg-[#9333EA]" },
   { code: "RH", name: "RH e Folha", description: "Servidores e folha", href: "/rh", icon: Users, color: "text-[#EC4899]", bg: "bg-[#FCE7F3]", solid: "bg-[#EC4899]" },
   { code: "PORTAL_SERVIDOR", name: "Portal do Servidor", description: "Autosserviço, documentos e solicitações funcionais", href: "/portal-servidor", icon: BadgeCheck, color: "text-[#0F3D61]", bg: "bg-[#E8F0F7]", solid: "bg-[#0F3D61]" },

@@ -13,7 +13,10 @@ export function createPrismaClient(connectionString = process.env.DATABASE_URL!)
   const adapter = new PrismaNeon({
     connectionString,
   });
-  return new PrismaClient({ adapter });
+  return new PrismaClient({
+    adapter,
+    transactionOptions: { maxWait: 10_000, timeout: 30_000 },
+  });
 }
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();

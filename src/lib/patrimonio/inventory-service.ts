@@ -145,7 +145,7 @@ export async function closeApprovedInventory(db: PrismaClient, input: {
     });
     if (!session) throw new InventoryServiceError("Inventário não encontrado.");
     if (session.status !== "PENDING_APPROVAL") throw new InventoryServiceError("O inventário ainda não está aguardando aprovação.");
-    if (session.createdByUsuarioId === approvedByUsuarioId && process.env.STRICT_SEGREGATION === "true") {
+    if (session.createdByUsuarioId === approvedByUsuarioId) {
       throw new InventoryServiceError("Segregação de Funções: O aprovador do inventário deve ser diferente do servidor inventoriante que iniciou a sessão.");
     }
 

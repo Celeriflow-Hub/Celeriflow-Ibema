@@ -16,5 +16,5 @@ const navigation: ModuleNavGroup[] = [{
 }];
 
 export default function ObrasLayout({ children }: { children: React.ReactNode }) {
-  return <ModuleShell moduleTitle="Obras e Serviços" moduleCaption="Gestão urbana" moduleIcon="hardHat" navigation={navigation}>{children}</ModuleShell>;
+  return <ModuleShell moduleTitle="Obras e Serviços Públicos" moduleCaption="Infraestrutura e gestão urbana" moduleIcon="hardHat" navigation={navigation}>{children}</ModuleShell>;
 }

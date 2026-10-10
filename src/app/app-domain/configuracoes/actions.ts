@@ -96,6 +96,7 @@ export async function ensureDefaultModulos() {
   const prisma = await getTenantPrisma();
   const existing = await prisma.configuracaoModulo.findMany({ select: { codigo: true } });
   const existingCodes = new Set(existing.map((m) => m.codigo.toUpperCase()));
+  const inactiveByDefault = new Set(["EDUCACAO", "SANEAMENTO", "CULTURA", "SEGURANCA"]);
 
   const defaultModules = [
     { codigo: "ADMINISTRACAO", nome: "Administração Geral & Entidades" },
@@ -113,7 +114,6 @@ export async function ensureDefaultModulos() {
     { codigo: "EDUCACAO", nome: "Educação Pública & Escolas" },
     { codigo: "SAUDE", nome: "Saúde Pública & UBSs" },
     { codigo: "SOCIAL", nome: "Assistência Social & CRAS" },
-    { codigo: "MEIO_AMBIENTE", nome: "Meio Ambiente & Licenciamento" },
     { codigo: "SANEAMENTO", nome: "Saneamento, Água & Esgoto" },
     { codigo: "OBRAS", nome: "Obras Públicas & Vistorias" },
     { codigo: "FROTAS", nome: "Frotas" },
@@ -129,8 +129,8 @@ export async function ensureDefaultModulos() {
         data: {
           codigo: mod.codigo,
           nome: mod.nome,
-          ativo: true,
-          dataAtivacao: new Date(),
+          ativo: !inactiveByDefault.has(mod.codigo),
+          dataAtivacao: inactiveByDefault.has(mod.codigo) ? null : new Date(),
         },
       });
     }

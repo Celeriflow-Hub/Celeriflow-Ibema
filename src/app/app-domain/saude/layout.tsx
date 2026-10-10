@@ -35,7 +35,7 @@ const navigation: ModuleNavGroup[] = [
       { title: "Regulação", href: "/saude/regulacao", icon: "clipboardList" },
       { title: "Prestador", href: "/saude/prestador", icon: "handshake" },
       { title: "TFD", href: "/saude/tfd", icon: "bus" },
-      { title: "Produção SUS", href: "/saude/producao", icon: "factory" },
+      { title: "Faturamento da Saúde", href: "/saude/producao", icon: "factory" },
     ],
   },
   {

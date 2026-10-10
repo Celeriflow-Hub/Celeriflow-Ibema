@@ -9,6 +9,7 @@ const navigation: ModuleNavGroup[] = [{
     { title: "Prontuário Eletrônico", href: "/social/prontuario", icon: "fileText" },
     { title: "Visitas", href: "/social/visitas", icon: "home" },
     { title: "Unidades", href: "/social/unidades", icon: "building2" },
+    { title: "Configurações SUAS", href: "/social/configuracoes", icon: "settings" },
     { title: "Programas e Benefícios", href: "/social/beneficios", icon: "gift" },
   ],
 }];

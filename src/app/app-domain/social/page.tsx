@@ -1,8 +1,19 @@
 import { Users, Building2, FileText, Gift } from "lucide-react";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
+import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 
-export default function SocialDashboardPage() {
+export default async function SocialDashboardPage() {
+  const { prisma } = await getTenantContextForModuleOperation("SOCIAL", "issueReports");
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const [families, units, attendances, concessions] = await Promise.all([
+    prisma.socialFamily.count({ where: { status: "Ativo" } }),
+    prisma.socialUnit.count({ where: { isActive: true, type: { in: ["CRAS", "CREAS"] } } }),
+    prisma.socialAttendance.count({ where: { isActive: true, date: { gte: monthStart, lt: nextMonth } } }),
+    prisma.socialBenefitConcession.count({ where: { status: { in: ["Concedido", "Entregue"] }, date: { gte: monthStart, lt: nextMonth } } }),
+  ]);
   return (
     <PageFrame className="space-y-2 px-1 py-1 md:px-2">
       <PageHeader
@@ -17,8 +28,8 @@ export default function SocialDashboardPage() {
               <Users className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-500">Famílias Cadastradas</p>
-              <h3 className="text-2xl font-bold text-slate-800">42</h3>
+              <p className="text-sm font-medium text-slate-500">Famílias Ativas</p>
+              <h3 className="text-2xl font-bold text-slate-800">{families.toLocaleString("pt-BR")}</h3>
             </div>
           </div>
         </div>
@@ -30,7 +41,7 @@ export default function SocialDashboardPage() {
             </div>
             <div>
               <p className="text-sm font-medium text-slate-500">Unidades CRAS/CREAS</p>
-              <h3 className="text-2xl font-bold text-slate-800">5</h3>
+              <h3 className="text-2xl font-bold text-slate-800">{units.toLocaleString("pt-BR")}</h3>
             </div>
           </div>
         </div>
@@ -42,7 +53,7 @@ export default function SocialDashboardPage() {
             </div>
             <div>
               <p className="text-sm font-medium text-slate-500">Atendimentos no Mês</p>
-              <h3 className="text-2xl font-bold text-slate-800">128</h3>
+              <h3 className="text-2xl font-bold text-slate-800">{attendances.toLocaleString("pt-BR")}</h3>
             </div>
           </div>
         </div>
@@ -53,8 +64,8 @@ export default function SocialDashboardPage() {
               <Gift className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-500">Benefícios Concedidos</p>
-              <h3 className="text-2xl font-bold text-slate-800">35</h3>
+              <p className="text-sm font-medium text-slate-500">Concessões no Mês</p>
+              <h3 className="text-2xl font-bold text-slate-800">{concessions.toLocaleString("pt-BR")}</h3>
             </div>
           </div>
         </div>
@@ -62,6 +73,7 @@ export default function SocialDashboardPage() {
 
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="mb-2 text-sm font-semibold text-slate-800">Avisos e Ações Rápidas</h2>
+        <p className="mb-2 text-sm text-slate-500">Indicadores municipais. Período dos atendimentos e concessões: {monthStart.toLocaleDateString("pt-BR")} a {new Date(nextMonth.getTime() - 1).toLocaleDateString("pt-BR")}.</p>
         <p className="text-slate-600">
           Bem-vindo ao módulo de Gestão SUAS. Utilize o menu lateral para navegar entre Famílias, Unidades, Prontuário Eletrônico e Concessão de Benefícios.
         </p>

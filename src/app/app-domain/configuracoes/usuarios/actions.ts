@@ -14,13 +14,15 @@ export async function upsertUsuario(data: {
   perfilId: string;
   employeeId?: string;
   ativo: boolean;
-  permissoes: { moduloId: string; canView: boolean; canEdit: boolean }[];
 }) {
   try {
     const context = await getTenantContextForSystemAdministration();
     const { prisma } = context;
     const perfil = await prisma.configuracaoPerfil.findFirst({ where: { id: data.perfilId, ativo: true }, select: { id: true, codigo: true } });
     if (!perfil) return { error: "Selecione um perfil de acesso ativo." };
+    if (isSystemAdministratorProfileCode(perfil.codigo)) {
+      return { error: "O perfil técnico do administrador do sistema não pode ser atribuído nesta tela." };
+    }
 
     const email = data.email.trim().toLowerCase();
     if (!data.nome.trim() || !email) return { error: "Nome e e-mail são obrigatórios." };
@@ -87,13 +89,12 @@ export async function upsertUsuario(data: {
           where: { id: existing.id },
           data: {
             nome: data.nome.trim(), email, firebaseUid, perfilId: data.perfilId, employeeId, ativo: data.ativo,
-            permissoesModulo: { deleteMany: {}, create: data.permissoes.map((permission) => ({ moduloId: permission.moduloId, canView: permission.canView, canEdit: permission.canEdit })) },
+            permissoesModulo: { deleteMany: {} },
           },
         })
         : await tx.usuario.create({
           data: {
             nome: data.nome.trim(), email, firebaseUid, perfilId: data.perfilId, employeeId, ativo: data.ativo,
-            permissoesModulo: { create: data.permissoes.map((permission) => ({ moduloId: permission.moduloId, canView: permission.canView, canEdit: permission.canEdit })) },
           },
         });
       await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "USUARIO", targetId: user.id });

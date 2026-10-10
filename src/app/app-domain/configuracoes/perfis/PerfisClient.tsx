@@ -52,7 +52,7 @@ const MODULES_LIST = [
   { code: "RH", label: "RH e Folha", icon: Users, color: "text-indigo-500" },
   { code: "SAUDE", label: "Saúde", icon: Stethoscope, color: "text-rose-500" },
   { code: "SEGURANCA", label: "Segurança e Mobilidade", icon: Shield, color: "text-slate-500" },
-  { code: "SUPORTE_TECNICO", label: "Suporte Técnico Robonuvem", icon: Headset, color: "text-sky-700" },
+  { code: "SUPORTE_TECNICO", label: "Suporte Técnico", icon: Headset, color: "text-sky-700" },
   { code: "TRIBUTACAO", label: "Tributário", icon: Receipt, color: "text-orange-500" },
 ];
 

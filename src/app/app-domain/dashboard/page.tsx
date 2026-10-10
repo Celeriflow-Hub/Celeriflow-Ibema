@@ -52,7 +52,7 @@ const menuItems: MenuItem[] = [
   { code: "PROCESSOS", name: "Processos e Protocolo", description: "Gestão de trâmites", href: "/protocolos", icon: Files, color: "text-[#0EA5E9]", bg: "bg-[#E0F2FE]", solid: "bg-[#0EA5E9]" },
   { code: "DOCUMENTOS", name: "Documentos / GED", description: "Arquivos e emissões", href: "/documentos", icon: FileText, color: "text-[#F59E0B]", bg: "bg-[#FEF3C7]", solid: "bg-[#F59E0B]" },
   { code: "ATENDIMENTO", name: "Atendimento ao Cidadão", description: "Ouvidoria e chamados", href: "/atendimento", icon: HeadphonesIcon, color: "text-[#F97316]", bg: "bg-[#FFEDD5]", solid: "bg-[#F97316]" },
-  { code: "TRANSPARENCIA", name: "Portal e Transparência", description: "Acesso à informação", href: "/transparencia", icon: Eye, color: "text-[#06B6D4]", bg: "bg-[#CFFAFE]", solid: "bg-[#06B6D4]" },
+  { code: "TRANSPARENCIA", name: "Portal Transparência", description: "Acesso à informação", href: "/transparencia", icon: Eye, color: "text-[#06B6D4]", bg: "bg-[#CFFAFE]", solid: "bg-[#06B6D4]" },
   { code: "TRIBUTACAO", name: "Tributário", description: "Impostos e taxas", href: "/tributacao", icon: Landmark, color: "text-[#059669]", bg: "bg-[#D1FAE5]", solid: "bg-[#059669]" },
   { code: "FINANCEIRO", name: "Financeiro e Contábil", description: "Orçamento e caixa", href: "/financeiro", icon: CircleDollarSign, color: "text-[#16A34A]", bg: "bg-[#DCFCE7]", solid: "bg-[#16A34A]" },
   { code: "COMPRAS", name: "Compras e Contratos", description: "Gestão de compras", href: "/compras", icon: ShoppingCart, color: "text-[#9333EA]", bg: "bg-[#F3E8FF]", solid: "bg-[#9333EA]" },
@@ -71,8 +71,8 @@ const menuItems: MenuItem[] = [
   { code: "CAMARA", name: "Câmara Municipal", description: "Gestão Legislativa", href: "/camara", icon: Landmark, color: "text-[#9333EA]", bg: "bg-[#F3E8FF]", solid: "bg-[#9333EA]" },
   { code: "SEGURANCA", name: "Segurança e Mobilidade", description: "Guarda e trânsito", href: "/seguranca", icon: Shield, color: "text-[#0F766E]", bg: "bg-[#CCFBF1]", solid: "bg-[#0F766E]" },
   { code: "AUDITORIA", name: "Auditoria", description: "Controle e conformidade", href: "/auditoria", icon: ClipboardCheck, color: "text-[#7C3AED]", bg: "bg-[#EDE9FE]", solid: "bg-[#7C3AED]" },
-  { code: "SUPORTE_TECNICO", name: "Suporte Técnico Robonuvem", description: "Atendimento técnico especializado", href: "/suporte-tecnico", icon: Headset, color: "text-[#0369A1]", bg: "bg-[#E0F2FE]", solid: "bg-[#0369A1]" },
-  { code: "CONFIGURACOES", name: "Configurações e Integrações", description: "Gestão do sistema", href: "/configuracoes", icon: Settings, color: "text-[#475569]", bg: "bg-[#E2E8F0]", solid: "bg-[#475569]" },
+  { code: "SUPORTE_TECNICO", name: "Suporte Técnico", description: "Atendimento técnico especializado", href: "/suporte-tecnico", icon: Headset, color: "text-[#0369A1]", bg: "bg-[#E0F2FE]", solid: "bg-[#0369A1]" },
+  { code: "CONFIGURACOES", name: "Configurações", description: "Gestão do sistema", href: "/configuracoes", icon: Settings, color: "text-[#475569]", bg: "bg-[#E2E8F0]", solid: "bg-[#475569]" },
 ];
 
 export default async function PainelPage() {
@@ -91,7 +91,21 @@ export default async function PainelPage() {
   const visibleMenuItems = menuItems
     .filter((item) => moduleActivationByCode.get(item.accessCode ?? item.code) !== false)
     .filter((item) => context && canShowDashboardCard(context.user, item.accessCode ?? item.code))
-    .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+    .sort((left, right) => {
+      const pinnedOrder: Record<string, number> = {
+        ADMINISTRACAO: -1,
+        PORTAL_SERVIDOR: 1,
+        TRANSPARENCIA: 2,
+        SUPORTE_TECNICO: 3,
+        CONFIGURACOES: 4,
+      };
+      const leftPinned = pinnedOrder[left.code];
+      const rightPinned = pinnedOrder[right.code];
+      if (leftPinned !== undefined || rightPinned !== undefined) {
+        return (leftPinned ?? 0) - (rightPinned ?? 0);
+      }
+      return left.name.localeCompare(right.name, "pt-BR");
+    });
 
   return (
     <PageFrame className="flex flex-col gap-2 px-1 py-1 md:px-2">

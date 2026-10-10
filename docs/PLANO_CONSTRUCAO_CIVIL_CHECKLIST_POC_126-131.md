@@ -45,7 +45,7 @@
 | F1 | Implementada parcialmente | Termos versionados, vigência da construtora como entidade, integração dos demais índices e validação visual |
 | F2 | Abertura/distribuição internas implementadas parcialmente | Identidade e representação externas, participantes, aceite, upload e comunicação persistida |
 | F3 | Avaliação interna parcial de parâmetros | Viabilidade online com documento e motor de taxas, sem duplicação |
-| F4 | Pareceres/exigências/readequações internas implementados parcialmente | PDF anotado, resposta externa, taxa após franquia e substituição formal de analista |
+| F4 | Pareceres/exigências/readequações e substituição formal interna implementados parcialmente | PDF anotado, resposta externa e taxa após franquia |
 | F5 | Infraestrutura central disponível; integração civil pendente | Template, numeração, emissão, carimbo, assinatura PDF e gate de publicação |
 | F6 | Pendente | Início, vistorias, conclusão parcial/total, habite-se e atualização cadastral |
 | F7 | Pendente | Processo fiscal edilício, diligências, autos e embargo |
@@ -54,6 +54,26 @@
 | F10 | Validação técnica parcial | Fluxos completos, banco de destino, navegador e 52 evidências de aceite |
 
 **Itens com avanço nesta etapa:** 4, 6, 8–9, 12, 18, 22–23, 26–27, 29 e 41. Isso indica implementação parcial e não atendimento integral. Os itens 3, 10–11, 15 e 17 possuem fundação anterior; a homologação continua necessária.
+
+### Registro de execução — banco de destino e substituição formal (10/10/2026)
+
+- Repositório limpo após commit pelo usuário e `git pull --ff-only origin main` executado; base remota já atualizada. Nenhum commit/push pelo agente nesta etapa.
+- Executados `prisma migrate status` e `prisma migrate deploy` com a conexão definida em `prisma.config.ts` (`DATABASE_URL_UNPOOLED`, com fallback para `DATABASE_URL`). As migrations civis `20261010160000`, `20261010170000` e `20261010180000` já estavam aplicadas. Consulta direta de `_prisma_migrations` confirmou conclusão sem rollback, tabelas e gatilhos de imutabilidade presentes. As notas anteriores de ausência de aplicação descrevem as etapas históricas, não o estado atual do destino configurado.
+- Implementada substituição formal no detalhe da solicitação: gestor do setor/master seleciona analista ou gestor vigente no setor atual e informa motivo. A operação bloqueia responsável desatualizado, protocolo não recebido/encerrado e solicitação deferida/indeferida; atualiza a atribuição civil, o destino de retorno de readequações e o responsável central de Protocolos na mesma transação.
+- Histórico em `ConstructionAnalystReplacement` preserva analista de retorno anterior, atribuição anterior, substituto, setor, motivo, autor e data; chave idempotente e lock evitam repetição/conflitos. Relações no banco impedem referência a servidor/setor inexistente; trigger proíbe alteração/exclusão do histórico. Histórico no detalhe com total e paginação de 20 itens.
+- Migration aditiva `20261010190000_construction_analyst_replacement` testada em PostgreSQL embarcado e aplicada com sucesso ao banco de destino por `prisma migrate deploy`. Confirmados registro de conclusão sem rollback e gatilho de imutabilidade no destino. Total atual: 25 migrations no diretório configurado; quatro civis aplicadas.
+- Testes de integração ampliados: analista não pode substituir; gestor de outro setor não acessa; substituto sem vínculo é rejeitado; repetição mantém um único histórico; atualização stale é rejeitada; responsável anterior não reenvia; readequação retorna ao substituto. Imutabilidade verificada em SQL real. Os 12 testes civis/SST e ESLint passaram. `npm run build` concluído com código 0, incluindo TypeScript, geração das páginas e otimização; `git diff --check` aprovado.
+- Consulta de prontidão no destino: zero configurações civis publicadas, vínculos urbanísticos vigentes, perfis profissionais, checklists, versões de zona, imóveis zoneados e solicitações civis. As migrations preparam estrutura/catálogos; a operação depende da configuração municipal inicial abaixo. Não foi publicada regra legal ou concedido papel automaticamente.
+- Navegador continua desconectado; validação visual/fluxo autenticado permanece pendente. Aplicação de migrations não equivale a homologação dos 52 requisitos.
+
+### Configuração operacional inicial no destino
+
+1. **Master:** vincular usuários a servidores/lotação ativa e cadastrar vínculos analista/fiscal/gestor na equipe civil. Conceder as permissões correspondentes em Obras e Processos.
+2. **Protocolos e gestor:** definir tipo/assunto urbanístico com abertura interna e setor inicial compatível. Publicar configuração civil com assunto habilitado, regra de áreas, prazo, franquia e orientações aprovadas.
+3. **Gestor:** publicar campos do formulário de abertura e checklist de análise com critérios/documentos; escolher distribuição e profissional elegível quando exigido pela estratégia.
+4. **Urbanismo e Cadastro Imobiliário:** validar plano diretor/base legal, publicar zoneamento/índices e vincular imóveis à versão correta. Os dados demonstrativos devem ser identificados e usados em ambiente de homologação.
+5. **Analista:** executar solicitação de teste, receber protocolo, avaliar parâmetros, emitir exigência, complementar documentação no protocolo e registrar readequação/parecer. Validar também substituição motivada e negativas de acesso.
+6. **Homologação:** registrar processo, versões e evidências nos cenários A–J. Portal/licenciamento completo, taxas, PDFs e integrações das fases restantes ainda precisam de implementação e validação; a inicialização acima libera somente os fluxos internos já disponíveis.
 
 O sistema possui uma base operacional de **Obras e Serviços Públicos**, com cadastro de obras, medições, serviços urbanos, iluminação, equipes, equipamentos, materiais, documentos e vínculos financeiros/de compras. O checklist exige também a **gestão municipal do licenciamento e da fiscalização da construção civil**, incluindo empreendimentos particulares urbanos/rurais e parcelamentos do solo.
 
@@ -387,11 +407,11 @@ Configurar a ordem e os bloqueios de taxas, análise e documentos conforme norma
 ## 10. Sequência final de execução e conclusão do planejamento
 
 1. **Completar F1/F2:** validar a base no banco de homologação; criar identidade/representação externas e participação profissional; termos com aceite, documentos obrigatórios na abertura e mensagens. Provar isolamento entre dois profissionais e negativa de acesso a arquivos.
-2. **Completar F3/F4:** configurar fatos geradores/taxas no motor existente, cobrança idempotente após franquia, integração de pagamento, substituição formal do analista e editor de anotação PDF. Testar revisão com reenvio, retorno e documentação preservada.
+2. **Completar F3/F4:** configurar fatos geradores/taxas no motor existente, cobrança idempotente após franquia, integração de pagamento e editor de anotação PDF. Testar revisão com reenvio, retorno/substituição e documentação preservada.
 3. **Executar F5:** definir formato de assinatura e signatários, templates municipais demonstrativos/versionados e numeração; emitir alvará no mesmo processo, com backup/carimbo e liberação condicionada à assinatura verificável.
 4. **Executar F6/F7:** início, vistorias, conclusões com saldo de área, verificação imobiliária de débitos, habite-se e processo vinculado de atualização; fiscalização de obra sem alvará com notificações, autos e embargo.
 5. **Executar F8/F9:** obter destino/leiaute federal e amostras de prancha; desenvolver exportação validável e extração real com evidências. As dependências constam na seção 7 e não são substituídas por CSV ou preenchimento manual.
-6. **Concluir F10:** aplicar migrations em homologação, validar o percurso completo no navegador e na impressão, executar cenários A–J e anexar evidências individualizadas aos 52 itens. Só então promover itens a atendidos.
+6. **Concluir F10:** as quatro migrations civis atuais estão aplicadas no destino configurado; validar o percurso completo no navegador e na impressão, executar cenários A–J e anexar evidências individualizadas aos 52 itens. Aplicar as futuras migrations das demais fases após validação. Só então promover itens a atendidos.
 
 O planejamento dos 52 itens está consolidado em arquitetura, fases, integrações, dependências, cenários e critérios de aceite. A implementação integral do módulo não está concluída; as pendências acima fazem parte do escopo de execução.
 

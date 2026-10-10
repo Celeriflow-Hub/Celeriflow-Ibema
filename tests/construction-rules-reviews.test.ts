@@ -9,6 +9,7 @@ import { PrismaClient } from "@prisma/client";
 import { definitionSchema, evaluateConstructionViability, professionalSchema, validateConstructionFields } from "../src/lib/obras/construction-rules";
 import { assignConstructionCase } from "../src/lib/obras/construction-distribution";
 import { reviewConstructionProject, resubmitConstructionProject } from "../src/lib/obras/construction-review";
+import { replaceConstructionAnalyst } from "../src/lib/obras/construction-assignment";
 
 test("campos configuráveis validam tipos, opções, obrigatoriedade e chaves", () => {
   const definition = { fields: [{ key: "use", label: "Uso", type: "CHOICE", required: true, options: ["Residencial"] }, { key: "date", label: "Data", type: "DATE", required: false, options: [] }], checks: [], documents: [] };
@@ -49,7 +50,7 @@ test("PostgreSQL: migrations, menor demanda, parecer idempotente, exigência e r
       CREATE TABLE "DocumentVersion" (id TEXT PRIMARY KEY, "documentId" TEXT, "versionNumber" INTEGER, "hashSha256" TEXT, status TEXT);
       CREATE TABLE "ProcessDocument" (id TEXT PRIMARY KEY, "processId" TEXT, "documentId" TEXT);
     `);
-    for (const migration of ["20261010160000_construction_foundation", "20261010170000_construction_rules_profiles", "20261010180000_construction_project_reviews"]) await db.exec(readFileSync(`prisma/migrations-ibema/${migration}/migration.sql`, "utf8"));
+    for (const migration of ["20261010160000_construction_foundation", "20261010170000_construction_rules_profiles", "20261010180000_construction_project_reviews", "20261010190000_construction_analyst_replacement"]) await db.exec(readFileSync(`prisma/migrations-ibema/${migration}/migration.sql`, "utf8"));
     await db.exec(`
       INSERT INTO "Department" (id) VALUES ('sector'); INSERT INTO "Employee" (id,"departmentId") VALUES ('analyst-a','sector'),('analyst-b','sector');
       INSERT INTO "ConstructionStaffRole" (id,"employeeId","departmentId",role,"startsAt","updatedAt") VALUES ('role-a','analyst-a','sector','ANALYST','2026-01-01',CURRENT_TIMESTAMP),('role-b','analyst-b','sector','ANALYST','2026-01-01',CURRENT_TIMESTAMP);
@@ -76,17 +77,29 @@ test("PostgreSQL: migrations, menor demanda, parecer idempotente, exigência e r
     assert.equal(await prisma.$transaction((tx) => reviewConstructionProject(tx, access, "actor", correction)), reviewId);
     assert.equal(await prisma.constructionReview.count(), 1);
     await assert.rejects(db.exec(`DELETE FROM "ConstructionReview" WHERE id='${reviewId}'`));
-    await prisma.$transaction((tx) => resubmitConstructionProject(tx, access, { caseId: "case-a", revision: 0, notes: "Projeto complementado" }));
-    await assert.rejects(prisma.$transaction((tx) => resubmitConstructionProject(tx, access, { caseId: "case-a", revision: 0, notes: "Reenvio repetido" })), /exigência pendente/);
+    const replacement = { caseId: "case-a", requestKey: randomUUID(), expectedAnalystId: "analyst-a", expectedAssignedId: "analyst-a", employeeId: "analyst-b", reason: "Substituição por afastamento do analista inicial" };
+    const manager = { ...access, roles: ["MANAGER"] };
+    await assert.rejects(prisma.$transaction((tx) => replaceConstructionAnalyst(tx, access, "actor", replacement)), /restrita ao gestor/);
+    await assert.rejects(prisma.$transaction((tx) => replaceConstructionAnalyst(tx, { ...manager, departmentId: "other" }, "actor", replacement)), /indisponível/);
+    await assert.rejects(prisma.$transaction((tx) => replaceConstructionAnalyst(tx, manager, "actor", { ...replacement, employeeId: "missing" })), /vínculo vigente/);
+    const replacementId = await prisma.$transaction((tx) => replaceConstructionAnalyst(tx, manager, "actor", replacement));
+    assert.equal(await prisma.$transaction((tx) => replaceConstructionAnalyst(tx, manager, "actor", replacement)), replacementId);
+    assert.equal(await prisma.constructionAnalystReplacement.count(), 1);
+    await assert.rejects(db.exec(`DELETE FROM "ConstructionAnalystReplacement" WHERE id='${replacementId}'`));
+    await assert.rejects(prisma.$transaction((tx) => replaceConstructionAnalyst(tx, manager, "actor", { ...replacement, requestKey: randomUUID(), employeeId: "analyst-a" })), /responsável mudou/);
+    const newAccess = { ...access, employeeId: "analyst-b" };
+    await assert.rejects(prisma.$transaction((tx) => resubmitConstructionProject(tx, access, { caseId: "case-a", revision: 0, notes: "Projeto complementado" })), /reservado ao responsável/);
+    await prisma.$transaction((tx) => resubmitConstructionProject(tx, newAccess, { caseId: "case-a", revision: 0, notes: "Projeto complementado" }));
+    await assert.rejects(prisma.$transaction((tx) => resubmitConstructionProject(tx, newAccess, { caseId: "case-a", revision: 0, notes: "Reenvio repetido" })), /exigência pendente/);
     const record = await prisma.constructionCase.findUniqueOrThrow({ where: { id: "case-a" } });
-    assert.equal(record.revisionCount, 1); assert.equal(record.assignedEmployeeId, "analyst-a"); assert.equal(record.reviewStatus, "RESUBMITTED");
+    assert.equal(record.revisionCount, 1); assert.equal(record.assignedEmployeeId, "analyst-b"); assert.equal(record.reviewStatus, "RESUBMITTED");
     await db.exec(`INSERT INTO "DocumentVersion" VALUES ('version-cancelled','doc',2,'hash-cancelled','CANCELLED')`);
-    await assert.rejects(prisma.$transaction((tx) => reviewConstructionProject(tx, access, "actor", { ...input, requestKey: randomUUID(), revision: 1, checks: { rule: true }, documentIds: { Projeto: "doc" } })), /versão GED atual válida/);
+    await assert.rejects(prisma.$transaction((tx) => reviewConstructionProject(tx, newAccess, "actor", { ...input, requestKey: randomUUID(), revision: 1, checks: { rule: true }, documentIds: { Projeto: "doc" } })), /versão GED atual válida/);
     await db.exec(`DELETE FROM "DocumentVersion" WHERE id='version-cancelled'; UPDATE "ConstructionCase" SET "revisionCount"=2 WHERE id='case-a'`);
-    await assert.rejects(prisma.$transaction((tx) => reviewConstructionProject(tx, access, "actor", { ...input, requestKey: randomUUID(), revision: 2, checks: { rule: true }, documentIds: { Projeto: "doc" } })), /Franquia/);
+    await assert.rejects(prisma.$transaction((tx) => reviewConstructionProject(tx, newAccess, "actor", { ...input, requestKey: randomUUID(), revision: 2, checks: { rule: true }, documentIds: { Projeto: "doc" } })), /Franquia/);
     assert.equal(await prisma.constructionReview.count(), 1);
     await db.exec(`UPDATE "ConstructionCase" SET "revisionCount"=1 WHERE id='case-a'`);
-    await prisma.$transaction((tx) => reviewConstructionProject(tx, access, "actor", { ...input, requestKey: randomUUID(), revision: 1, checks: { rule: true }, documentIds: { Projeto: "doc" } }));
+    await prisma.$transaction((tx) => reviewConstructionProject(tx, newAccess, "actor", { ...input, requestKey: randomUUID(), revision: 1, checks: { rule: true }, documentIds: { Projeto: "doc" } }));
     assert.equal((await prisma.constructionCase.findUniqueOrThrow({ where: { id: "case-a" } })).reviewStatus, "APPROVED");
   } finally { await prisma?.$disconnect(); await server.stop(); await db.close(); }
 });

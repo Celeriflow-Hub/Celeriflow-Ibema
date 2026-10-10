@@ -10900,6 +10900,7 @@ model ConstructionCase {
   firstAnalystId String?
   correctionDeadline DateTime?
   reviews ConstructionReview[]
+  analystReplacements ConstructionAnalystReplacement[]
   properties ConstructionCaseProperty[]
 }
 
@@ -10991,6 +10992,21 @@ model ConstructionViabilityResult {
   calculationSnapshot Json
   createdBy String
   createdAt DateTime @default(now())
+}
+
+model ConstructionAnalystReplacement {
+  id String @id @default(cuid())
+  caseId String
+  case ConstructionCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  previousAnalystId String?
+  previousAssignedId String?
+  replacementEmployeeId String
+  departmentId String
+  reason String
+  createdBy String
+  createdAt DateTime @default(now())
+  @@index([caseId, createdAt])
 }
 
 model ConstructionReview {

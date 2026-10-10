@@ -52,13 +52,11 @@ export async function saveFamily(context: AppContext, input: { familyCode?: stri
   if (input.responsiblePersonId && !await context.prisma.person.findUnique({ where: { id: input.responsiblePersonId }, select: { id: true } })) throw new TerritoryError("Responsável não encontrado.");
   const familyCode = input.familyCode?.trim() || null;
   return context.prisma.$transaction(async (tx) => {
-    const [codeCandidate, socialCandidate] = await Promise.all([
-      familyCode ? tx.family.findUnique({ where: { code: familyCode }, include: { healthProfile: { select: { id: true } } } }) : null,
-      input.responsiblePersonId ? tx.socialFamily.findUnique({ where: { representativeId: input.responsiblePersonId }, select: { masterFamilyId: true } }) : null,
-    ]);
+    const codeCandidate = familyCode ? await tx.family.findUnique({ where: { code: familyCode }, include: { healthProfile: { select: { id: true } } } }) : null;
     if (codeCandidate?.healthProfile) throw new TerritoryError("O código familiar já está vinculado a outra família da Saúde.");
-    if (codeCandidate && socialCandidate?.masterFamilyId && codeCandidate.id !== socialCandidate.masterFamilyId) throw new TerritoryError("Código familiar e responsável apontam para famílias diferentes.");
-    const masterFamilyId = codeCandidate?.id || socialCandidate?.masterFamilyId || null;
+    if (codeCandidate?.responsiblePersonId && input.responsiblePersonId && codeCandidate.responsiblePersonId !== input.responsiblePersonId) throw new TerritoryError("O código familiar pertence a outro responsável.");
+    const masterFamilyId = codeCandidate?.id || null;
+    const responsiblePersonId = input.responsiblePersonId || codeCandidate?.responsiblePersonId || null;
     const masterFamily = masterFamilyId
       ? await tx.family.update({ where: { id: masterFamilyId }, data: { code: familyCode || undefined, responsiblePersonId: input.responsiblePersonId || undefined, status: "ATIVA" } })
       : await tx.family.create({ data: { code: familyCode, responsiblePersonId: input.responsiblePersonId || null } });
@@ -70,7 +68,7 @@ export async function saveFamily(context: AppContext, input: { familyCode?: stri
       });
     }
     return tx.healthFamily.create({
-      data: { familyCode, householdId: input.householdId || null, responsiblePersonId: input.responsiblePersonId || null, masterFamilyId: masterFamily.id },
+      data: { familyCode, householdId: input.householdId || null, responsiblePersonId, masterFamilyId: masterFamily.id },
       select: { id: true },
     });
   });

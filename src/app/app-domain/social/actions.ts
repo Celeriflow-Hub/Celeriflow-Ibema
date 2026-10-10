@@ -122,6 +122,7 @@ export async function updateFamily(id: string, data: { representativeId: string;
       if (!masterFamilyId && familyCode) {
         const candidate = await tx.family.findUnique({ where: { code: familyCode }, include: { socialProfile: { select: { id: true } } } });
         if (candidate?.socialProfile && candidate.socialProfile.id !== id) throw new Error("O código familiar já está vinculado a outro cadastro social.");
+        if (candidate?.responsiblePersonId && candidate.responsiblePersonId !== data.representativeId) throw new Error("O código familiar pertence a outro responsável.");
         masterFamilyId = candidate?.id || null;
       }
       const masterFamily = masterFamilyId

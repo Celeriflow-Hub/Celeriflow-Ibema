@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { CookieConsent } from "@/components/lgpd/CookieConsent";
 import "./globals.css";
 
 const inter = Inter({
@@ -23,9 +24,10 @@ export default function RootLayout({
       lang="pt-BR"
       className={`${inter.variable} h-full antialiased`}
     >
-      <head>
-      </head>
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <body className="min-h-full flex flex-col font-sans">
+        {children}
+        <CookieConsent />
+      </body>
     </html>
   );
 }

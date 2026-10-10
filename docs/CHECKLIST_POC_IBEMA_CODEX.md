@@ -9,6 +9,7 @@
 >
 > **Não inventar requisitos. Não substituir o texto do Edital/TR por boas práticas genéricas.**
 > Quando houver dúvida, usar o PDF oficial como fonte de verdade.
+> Referências a páginas neste arquivo usam a paginação do PDF integral publicado no portal oficial.
 
 ---
 
@@ -62,7 +63,7 @@ Faça primeiro uma **AUDITORIA**, sem alterar o código.
 ## 2.1 Primeira etapa — Padrão Tecnológico e Segurança
 
 - São **100 requisitos** no checklist do item 10.36.
-- É necessário atender **no mínimo 90%**.
+- É necessário atender **no mínimo 90%**, conforme itens `10.8`, `10.10` e `10.11` do edital (PDF, páginas 283-284).
 - Portanto:
   - mínimo para aprovação: **90/100**;
   - máximo permitido como “Não Atende”: **10/100**.
@@ -70,10 +71,10 @@ Faça primeiro uma **AUDITORIA**, sem alterar o código.
 ## 2.2 Segunda etapa — Requisitos funcionais
 
 - A avaliação ocorre **individualmente por módulo**.
-- Cada módulo precisa atingir **no mínimo 90% dos seus próprios requisitos**.
+- Cada módulo precisa atingir **no mínimo 90% dos seus próprios requisitos**, conforme itens `10.8`, `10.12`, `10.13` e `10.15` (PDF, páginas 283-284).
 - Não calcular média global entre módulos.
-- Se qualquer módulo ficar abaixo de 90%, há risco de desclassificação.
-- Quando o cálculo de 90% resultar em número fracionário, considerar o inteiro imediatamente superior.
+- Se qualquer módulo ficar abaixo de 90%, a proposta é desclassificada, conforme item `10.14`.
+- Quando o cálculo de 90% resultar em número fracionário, considerar o inteiro imediatamente superior, conforme item `10.32` (PDF, página 286).
 
 ## 2.3 Critério binário
 
@@ -88,6 +89,15 @@ O edital determina que:
 
 Por isso, na auditoria interna usar os estados abaixo, mas considerar `PARCIAL` como risco de reprovação até que fique completo.
 
+## 2.4 Regras operacionais da demonstração
+
+- A demonstração é presencial; não é permitida apresentação remota, conforme item `10.6` (PDF, página 283).
+- A licitante dispõe de uma única oportunidade para realizar a demonstração, conforme item `10.16` (PDF, página 284).
+- A demonstração de cada módulo deve ser concluída no mesmo dia em que for iniciada, conforme item `10.17` (PDF, página 284).
+- Interrupções alheias à licitante suspendem a contagem do prazo e devem ser registradas em ata, conforme itens `10.18` e `10.19` (PDF, página 284).
+- Equipamentos e conexão necessários à demonstração são responsabilidade da licitante, conforme itens `10.20` e `10.21` (PDF, página 284).
+- A licitante deve atingir `100%` dos requisitos em até 90 dias após a aprovação do Plano de Implantação, conforme item `10.26` (PDF, página 285).
+
 ---
 
 # 3. Status obrigatórios na auditoria
@@ -99,14 +109,24 @@ Use exatamente uma destas classificações para cada requisito:
 | `ATENDE` | Fluxo completo e demonstrável |
 | `PARCIAL` | Existe parte do requisito, mas não todo o comportamento exigido |
 | `NÃO ATENDE` | Não existe implementação suficiente |
-| `CONFIGURAÇÃO` | Existe no produto, mas precisa configurar dados/tenant/permissões |
-| `INTEGRAÇÃO_REAL` | Integração externa funcional com comunicação real |
-| `HOMOLOGAÇÃO` | Comunicação real com ambiente de homologação/teste |
-| `SIMULADO_POC` | Ambiente externo simulado de forma transparente |
-| `EVIDÊNCIA_INFRA` | Depende de documento/SLA/certificação do provedor, não de código |
-| `NÃO_VERIFICADO` | Ainda não foi possível comprovar no repositório |
+| `NÃO VERIFICADO` | Ainda não foi possível comprovar no repositório |
 
-> Para cálculo interno conservador, só `ATENDE`, `CONFIGURAÇÃO`, `INTEGRAÇÃO_REAL`, `HOMOLOGAÇÃO` e `EVIDÊNCIA_INFRA` comprovada devem entrar como “Atende”.
+> Para o cálculo conservador, somente `ATENDE` entra como atendimento. `PARCIAL`, `NÃO ATENDE` e `NÃO VERIFICADO` não pontuam.
+
+## 3.1 Tipo de evidência
+
+O tipo de evidência é independente do status. Configuração, integração, homologação ou infraestrutura nunca substituem a conclusão de conformidade.
+
+| Tipo de evidência | Significado |
+|---|---|
+| `NATIVO` | Funcionalidade existente no produto, com fluxo verificável |
+| `CONFIGURAÇÃO` | Atendimento obtido por parametrização demonstrável |
+| `INTEGRAÇÃO REAL` | Comunicação funcional com serviço externo |
+| `HOMOLOGAÇÃO` | Comunicação funcional com ambiente externo de teste |
+| `SIMULADO POC` | Serviço externo simulado de forma transparente; por si só não comprova atendimento |
+| `EVIDÊNCIA INFRA` | Documento, SLA ou certificação do provedor |
+| `MANUAL` | Procedimento operacional formal aceito pelo edital |
+| `SEM EVIDÊNCIA` | Não há comprovação suficiente |
 
 ---
 
@@ -127,8 +147,8 @@ docs/poc-ibema/
 
 Em cada checklist usar a tabela:
 
-| ID | Requisito do edital | Status | Evidência no código | Tela/rota para POC | Gap encontrado | Ação necessária | Prioridade |
-|---|---|---|---|---|---|---|---|
+| ID | Requisito do edital | Status | Tipo de evidência | Evidência no código | Tela/rota para POC | Gap encontrado | Ação necessária | Dependência externa | Prioridade |
+|---|---|---|---|---|---|---|---|---|---|
 
 Em **Evidência no código**, informar caminhos reais, por exemplo:
 
@@ -197,13 +217,13 @@ Referência principal: **item 10.36 do Termo de Referência**.
 
 ## Certificados e assinaturas digitais
 
-- [ ] **PT-037** — Repositório com certificado A1 da entidade e uso compartilhado mediante privilégio.
+- [x] **PT-037** — Repositório com certificado A1 da entidade e uso compartilhado mediante privilégio.
 - [ ] **PT-038** — Certificado individual para assinatura avançada conforme Lei 14.063/2020.
 - [ ] **PT-039** — Controle de vencimento e alertas dos certificados.
-- [ ] **PT-040** — Log de auditoria para cada utilização de certificado.
+- [x] **PT-040** — Log de auditoria para cada utilização de certificado.
 - [ ] **PT-041** — Assinatura Qualificada para Login do Sistema, Peticionamento Eletrônico e Escrituração Fiscal.
 - [ ] **PT-042** — Assinaturas Básica, Avançada e Qualificada em relatórios, pareceres e recebimento/envio de processos digitais.
-- [ ] **PT-043** — Assinatura diretamente na aplicação, sem depender de outro sistema, salvo acesso ao dispositivo local do certificado.
+- [x] **PT-043** — Assinatura diretamente na aplicação, sem depender de outro sistema, salvo acesso ao dispositivo local do certificado.
 - [ ] **PT-044** — Solicitações de assinatura com execução sequencial ou simultânea.
 - [ ] **PT-045** — Possibilidade de rejeitar documento recebido para assinatura.
 - [ ] **PT-046** — Notificação final ao criador e validação de conclusão de todas as assinaturas.
@@ -212,11 +232,13 @@ Referência principal: **item 10.36 do Termo de Referência**.
 - [ ] **PT-049** — Configuração de carimbos/estampas de assinatura por usuário ou entidade.
 - [ ] **PT-050** — Alerta quando usuário já assinou o documento.
 - [ ] **PT-051** — Assinatura com certificados do repositório e/ou locais, A1 ou A3.
-- [ ] **PT-052** — Listagem dos certificados disponíveis antes da assinatura.
-- [ ] **PT-053** — Indicação clara de certificado vencido.
-- [ ] **PT-054** — Fluxo de assinatura dentro da própria aplicação web por interface padronizada.
+- [x] **PT-052** — Listagem dos certificados disponíveis antes da assinatura.
+- [x] **PT-053** — Indicação clara de certificado vencido.
+- [x] **PT-054** — Fluxo de assinatura dentro da própria aplicação web por interface padronizada.
 - [ ] **PT-055** — Visualização do documento no momento da assinatura, inclusive documentos relacionados em lote.
 - [ ] **PT-056** — PDF assinado com estampa automática de autenticidade e QR Code.
+
+Evidência A1 atual: `/configuracoes/certificados`, `DigitalCertificate`, `DocumentIcpEvidence`, `CertificateUseAudit` e `/validar-documento/[code]`. A chave privada não é persistida no banco; somente a referência ao segredo protegido. A implementação atual assina o hash imutável da versão e não deve ser apresentada como PAdES: estampa/QR incorporados ao PDF, A3, revogação OCSP/CRL e LTV continuam pendentes nos itens não marcados.
 
 ## Emissão e gestão de relatórios
 
@@ -375,11 +397,23 @@ Nestes casos, o foco de auditoria deve ser geração/importação/exportação d
 - [ ] **INT-035 — AIH / SIH-SUS**
 - [ ] **INT-036 — RAAS**
 
+## 6.3 Outras integrações e intercâmbios expressamente exigidos
+
+Validar em cada requisito se o meio oficial é API, WebService, arquivo ou rotina assistida; não presumir o protocolo de comunicação.
+
+- [ ] **INT-037 — Ambiente de Dados Nacional da NFS-e (ADN)** — requisitos `1.1447` e `1.1525` a `1.1527`.
+- [ ] **INT-038 — SEFAZ** — requisito `1.168`.
+- [ ] **INT-039 — CADPREV** — requisito `1.731`.
+- [ ] **INT-040 — Arquivos bancários OFC/OFX** — requisito `1.277`.
+- [ ] **INT-041 — Cartórios e CRA** — requisitos `1.1010` e `1.1011`.
+- [ ] **INT-042 — CadÚnico** — requisitos `1.1716` e `1.1717`.
+- [ ] **INT-043 — Rede SUAS e RMA** — requisitos `1.1939` a `1.1946`.
+
 ### Regra para integração simulada na auditoria
 
 Quando depender de credencial que somente o Município/órgão externo possa fornecer:
 
-1. Não marcar como `INTEGRAÇÃO_REAL`.
+1. Não marcar o status como `ATENDE` sem comprovação suficiente.
 2. Verificar se há:
    - conector desacoplado;
    - configuração de endpoint;
@@ -391,7 +425,7 @@ Quando depender de credencial que somente o Município/órgão externo possa for
    - logs;
    - retry;
    - auditoria.
-3. Classificar como `HOMOLOGAÇÃO` ou `SIMULADO_POC`.
+3. Registrar `HOMOLOGAÇÃO` ou `SIMULADO POC` no campo **Tipo de evidência**, mantendo a conclusão independente no campo **Status**.
 4. O relatório deve explicar exatamente o que falta para produção oficial:
    - credencial;
    - certificado;
@@ -407,6 +441,8 @@ Quando depender de credencial que somente o Município/órgão externo possa for
 # 7. SEGUNDA ETAPA — Módulos do Executivo
 
 Referência oficial: **item 10.37 do Termo de Referência**.
+
+O checklist oficial contém `34` módulos do Executivo, com requisitos numerados de `1.6` a `1.2311`.
 
 > **IMPORTANTE PARA O CODEX:** o checklist abaixo contém os módulos. Para cada módulo, o Codex deve extrair do PDF oficial **todos os requisitos numerados daquele módulo**, sem resumir nem omitir, e criar uma subseção no relatório com o cálculo do percentual.
 
@@ -436,7 +472,7 @@ Referência oficial: **item 10.37 do Termo de Referência**.
 - [ ] **EXE-24 — Nota Fiscal Eletrônica**
 - [ ] **EXE-25 — Gestão e Escrita Fiscal**
 - [ ] **EXE-26 — Gestão e Fiscalização Fazendária**
-- [ ] **EXE-27 — Gestão de Cemitérios**
+- [x] **EXE-27 — Gestão de Cemitérios**
 - [ ] **EXE-28 — Gestão da Saúde**
 - [ ] **EXE-29 — Gestão de Faturamento da Saúde**
 - [ ] **EXE-30 — Gestão da Atenção Primária**
@@ -444,6 +480,39 @@ Referência oficial: **item 10.37 do Termo de Referência**.
 - [ ] **EXE-32 — Assistência Farmacêutica**
 - [ ] **EXE-33 — Central de Regulação**
 - [ ] **EXE-34 — Gestão da Assistência Social**
+
+### EXE-27 — Matriz requisito-evidência de Cemitérios
+
+| Item | Situação | Evidência implementada |
+|---|---|---|
+| 1.1661 | Atende | Todos os responsáveis, proprietários, declarantes e falecidos identificados são validados contra contribuinte ativo do Cadastro Único em `s9-service.ts`. |
+| 1.1662 | Atende | `TaxCemetery` registra nome, endereço e observações; `TaxCemeteryEmployee` relaciona coveiros e demais funcionários. |
+| 1.1663 | Atende | `CemeteryChapel` registra capela, pessoa vinculada e responsável do Cadastro Único. |
+| 1.1664 | Atende | `TaxFuneralHome.ownershipType` diferencia funerária pública e privada, com manutenção na tela. |
+| 1.1665 | Atende | `CemeteryOssuary` mantém endereço, capacidade, proprietário e ocupação. |
+| 1.1666 | Atende | `CemeteryIdentificationField` configura campos descritivos ou numéricos para lote e sepultura. |
+| 1.1667 | Atende | Causas de morte possuem cadastro operacional e vínculo com falecido/sepultamento. |
+| 1.1668 | Atende | `CemeteryLot` mantém situação livre/ocupado, atualizada pelas movimentações. |
+| 1.1669 | Atende | `CemeteryAttachment` vincula documentos GED a lote ou sepultura. |
+| 1.1670 | Atende | Lote exige identificador, cemitério, limite de sepulturas e proprietário do Cadastro Único. |
+| 1.1671 | Atende | `CemeteryFeeRule` mantém fórmulas de valor fixo ou base por quantidade, usadas na emissão automática de lançamento e DAM. |
+| 1.1672 | Atende | `CemeteryChangeHistory` preserva data/hora, campo, valor anterior, valor novo e usuário para lote/sepultura. |
+| 1.1673 | Atende | Sepultura pode ser vinculada a lote; trava transacional/advisory lock impede ultrapassar o limite configurado. |
+| 1.1674 | Atende | Campos adicionais configuráveis são armazenados em `additionalData`, sem intervenção técnica. |
+| 1.1675 | Atende | Lotes e sepulturas podem ser ativados/desativados; sepultura ocupada não pode ser desativada. |
+| 1.1676 | Atende | Lóculo é cadastrado como `GAVETA`, relacionado ao cemitério e ao proprietário. |
+| 1.1677 | Atende | `CemeteryProcess` agenda e acompanha sepultamentos, incluindo tipo, falecido, óbito, capela, funerária e causa. |
+| 1.1678 | Atende | `/cemiterios/comprovante/[code]` gera comprovante identificável e imprimível. |
+| 1.1679 | Atende | Processo de velório registra falecido, funerária, declarante, data e recupera óbito/causa do cadastro vinculado. |
+| 1.1680 | Atende | Processo de cremação possui o mesmo conjunto obrigatório e finalização controlada. |
+| 1.1681 | Atende | Documentos GED podem ser vinculados a sepultamento, velório e cremação. |
+| 1.1682 | Atende | Transferências cobrem outro lote, ossuário, exumação, cidade, cemitério, desapropriação, cremação e outros; o serviço bloqueia quem não está sepultado. |
+| 1.1683 | Atende | Consulta unificada filtra status, falecido, cemitério, funerária, causa e datas de óbito/agendamento. |
+| 1.1684 | Atende | Relatório imprimível de sepultados permite período e funerária. |
+| 1.1685 | Atende | Inclusão do sepultamento consulta lançamentos e dívida ativa do declarante e preserva o snapshot da verificação. |
+| 1.1686 | Atende | Finalização atualiza data de falecimento e aplica “ESPÓLIO” ao nome da pessoa física no Cadastro Único. |
+
+Evidências principais: `prisma/schema.prisma`, migration `20261010100000_complete_cemetery_domain`, `src/lib/tributacao/s9-service.ts`, `/cemiterios`, `/cemiterios/comprovante/[code]` e testes `s9-engine.test.ts`.
 
 ## 7.1 Organização funcional aprovada para a POC
 
@@ -459,6 +528,13 @@ Referência oficial: **item 10.37 do Termo de Referência**.
 | EXE-22 — Portal de Autoatendimento | 119 | 108 | Portal externo unificado para cidadão/contribuinte, fornecedor/credor e funcionário |
 | EXE-29 — Gestão de Faturamento da Saúde | Auditar checklist específico | Calcular após auditoria | Área própria dentro de Saúde |
 
+### Arquitetura multientidade e separação contratual
+
+- O item `15.1` do edital prevê dois contratos administrativos distintos, um para a Prefeitura e outro para a Câmara (PDF, página 291).
+- Os itens `4.12`, `8.2` e `3.117` exigem base única, segregação por entidade/unidade e consolidação quando aplicável.
+- A separação contratual não deve ser interpretada, sem determinação formal adicional, como exigência de bancos de dados separados.
+- O item `1.1182` contém redação aparentemente contraditória sobre banco compartilhado no aplicativo. Solicitar esclarecimento formal ao órgão e não usar esse item isoladamente para alterar a arquitetura definida pelos demais requisitos.
+
 Decisões de navegação:
 
 - Business Intelligence fica em Administração.
@@ -467,7 +543,7 @@ Decisões de navegação:
 - Gestão da Construção Civil fica em Obras e Serviços Públicos, mantendo integração com Tributário.
 - O Portal do Servidor é mantido como acesso do funcionário aos serviços exigidos pelo Portal de Autoatendimento.
 - Gestão da Saúde, Faturamento da Saúde, Atenção Primária, Assistência à Saúde, Assistência Farmacêutica e Central de Regulação compartilham o cartão Saúde, mas serão auditados separadamente.
-- IPTU, ISS, ITBI, Receitas Diversas, Arrecadação, Dívida Ativa, NFS-e, Escrita Fiscal, Fiscalização Fazendária e Cemitérios compartilham o cartão Tributário, mas serão auditados separadamente.
+- IPTU, ISS, ITBI, Receitas Diversas, Arrecadação, Dívida Ativa, NFS-e, Escrita Fiscal e Fiscalização Fazendária compartilham o cartão Tributário; Cemitérios usa módulo independente e reutiliza apenas os serviços tributários necessários.
 - Educação, Cultura e Lazer, Água e Saneamento e Segurança e Mobilidade ficam desativados e ocultos nesta instância.
 - Meio Ambiente não integra o catálogo visual desta instância.
 
@@ -482,8 +558,8 @@ Total de requisitos no edital: N
 Mínimo necessário para 90%: ceil(N * 0.90)
 Máximo de "Não Atende": N - ceil(N * 0.90)
 
-| Item | Texto do requisito | Status | Evidência | Gap | Prioridade |
-|---|---|---|---|---|---|
+| Item | Texto do requisito | Status | Tipo de evidência | Evidência | Gap | Dependência externa | Prioridade |
+|---|---|---|---|---|---|---|---|
 ```
 
 E ao final:
@@ -562,11 +638,15 @@ Exemplo:
 ### EXE-05.XX — Publicação/integração do processo de contratação
 
 Status: ATENDE
+Tipo de evidência: NATIVO
 
 Evidência técnica:
 - src/...
 - src/services/...
 - tabela ...
+
+Dependência externa:
+- nenhuma
 
 Roteiro POC:
 1. Abrir ...

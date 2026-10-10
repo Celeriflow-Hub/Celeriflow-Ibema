@@ -113,6 +113,10 @@ export default async function ConfiguracoesDashboard() {
           <div><h4 className="font-medium text-gray-900 dark:text-white flex items-center justify-between">Conexões e Integrações<ArrowRight className="h-4 w-4" /></h4><p className="text-xs text-gray-500 mt-1">Ambientes mock, homologação e produção</p></div>
         </Link>
         {isSystemAdministrator(user) && <>
+          <Link href="/configuracoes/certificados" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
+            <KeyRound className="h-6 w-6 text-emerald-700 dark:text-emerald-300 mb-2" />
+            <div><h4 className="font-medium text-gray-900 dark:text-white flex items-center justify-between">Certificados A1<ArrowRight className="h-4 w-4" /></h4><p className="text-xs text-gray-500 mt-1">Inventário, uso controlado e auditoria criptográfica</p></div>
+          </Link>
           <Link href="/configuracoes/auditoria" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
             <ClipboardList className="h-6 w-6 text-amber-700 dark:text-amber-300 mb-2" />
             <div><h4 className="font-medium text-gray-900 dark:text-white flex items-center justify-between">Auditoria de Uso<ArrowRight className="h-4 w-4" /></h4><p className="text-xs text-gray-500 mt-1">Interações, navegações e acessos dos usuários</p></div>

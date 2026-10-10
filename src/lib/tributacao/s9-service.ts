@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { concessionSituation, executionNext, formatCdaNumber, graveHasVacancy, internalProtocol, nextCdaVersion, occupancyStats, protestNext, sumBy, trendByMonth, validateEnrollmentEligibility, TributarioS9Error } from "./s9-engine";
+import { assertCemeteryTransferAllowed, assertLotCanReceiveGrave, cemeteryFeeAmount, concessionSituation, executionNext, formatCdaNumber, graveHasVacancy, internalProtocol, nextCdaVersion, occupancyStats, protestNext, sumBy, trendByMonth, validateEnrollmentEligibility, TributarioS9Error } from "./s9-engine";
 import { confirmTaxPayment, createTaxAssessment, enrollAssessmentInActiveDebt, generateTaxGuide } from "./index";
 import { MUNICIPALITY_LABEL, MUNICIPALITY_NAME } from "@/lib/municipality-identity";
 
@@ -9,6 +9,39 @@ const fullActor = (actor: Actor) => ({ usuarioId: actor.usuarioId, employeeId: a
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const money = (value: number | string | Prisma.Decimal) => new Prisma.Decimal(String(value)).toDecimalPlaces(2);
 const code = (prefix: string) => `${prefix}-${new Date().getUTCFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`;
+
+async function validateTaxpayer(db: PrismaClient | Prisma.TransactionClient, taxpayerId: string, label: string) {
+  const taxpayer = await db.taxpayer.findUnique({ where: { id: taxpayerId }, select: { id: true, status: true } });
+  if (!taxpayer || taxpayer.status !== "Ativo") throw new TributarioS9Error(`${label} deve estar vinculado a um contribuinte ativo do Cadastro Único.`);
+  return taxpayer;
+}
+
+async function validateCemeteryAdditionalData(db: PrismaClient | Prisma.TransactionClient, cemeteryId: string, targetType: "LOTE" | "SEPULTURA", value?: Record<string, unknown>) {
+  const fields = await db.cemeteryIdentificationField.findMany({ where: { cemeteryId, targetType, active: true } });
+  const data = value ?? {};
+  for (const field of fields) {
+    const fieldValue = data[field.fieldKey];
+    if (field.required && (fieldValue === undefined || fieldValue === null || String(fieldValue).trim() === "")) throw new TributarioS9Error(`O campo ${field.label} é obrigatório.`);
+    if (fieldValue !== undefined && fieldValue !== null && field.valueType === "NUMERICO" && !Number.isFinite(Number(fieldValue))) throw new TributarioS9Error(`O campo ${field.label} deve ser numérico.`);
+  }
+  return json(data);
+}
+
+async function cemeteryHistory(tx: Prisma.TransactionClient, actor: Actor, targetType: "LOTE" | "SEPULTURA", targetId: string, fieldName: string, previousValue: unknown, newValue: unknown) {
+  await tx.cemeteryChangeHistory.create({ data: { targetType, targetId, fieldName, previousValue: previousValue === undefined ? undefined : json(previousValue), newValue: newValue === undefined ? undefined : json(newValue), actorUsuarioId: actor.usuarioId } });
+}
+
+async function refreshCemeteryLotStatus(tx: Prisma.TransactionClient, actor: Actor, lotId?: string | null) {
+  if (!lotId) return;
+  const lot = await tx.cemeteryLot.findUnique({ where: { id: lotId }, select: { status: true } });
+  if (!lot) return;
+  const occupied = await tx.taxGrave.count({ where: { lotId, occupantCount: { gt: 0 } } });
+  const status = occupied ? "OCUPADO" : "LIVRE";
+  if (lot.status !== status) {
+    await tx.cemeteryLot.update({ where: { id: lotId }, data: { status } });
+    await cemeteryHistory(tx, actor, "LOTE", lotId, "status", lot.status, status);
+  }
+}
 
 async function nextSequence(tx: Prisma.TransactionClient, year: number, documentType: string) {
   const sequence = await tx.taxDocumentSequence.upsert({
@@ -33,6 +66,7 @@ function taxpayerDocument(taxpayer: { person?: { cpf?: string | null } | null; c
 
 // Defaults demonstrativos controlados: tributo de sepultamento, estrutura mínima de cemitério, causas e funerária.
 export async function ensureS9Defaults(db: PrismaClient, actor: Actor) {
+  void actor;
   const tax = await db.tax.upsert({ where: { id: "tax-sepultamento-s9" }, update: {}, create: { id: "tax-sepultamento-s9", name: "Taxa de Sepultamento", taxType: "Taxa", isActive: true } });
   const cemetery = await db.taxCemetery.upsert({ where: { code: "CEM-MUNICIPAL" }, update: {}, create: { code: "CEM-MUNICIPAL", name: `Cemitério Municipal de ${MUNICIPALITY_NAME}`, address: MUNICIPALITY_LABEL, wakePlace: "Capela municipal" } });
   const sector = await db.taxCemeterySector.upsert({ where: { cemeteryId_code: { cemeteryId: cemetery.id, code: "QUADRA-A" } }, update: {}, create: { cemeteryId: cemetery.id, code: "QUADRA-A", name: "Quadra A" } });
@@ -41,6 +75,8 @@ export async function ensureS9Defaults(db: PrismaClient, actor: Actor) {
   }
   await db.taxFuneralHome.upsert({ where: { id: "funeraria-s9" }, update: {}, create: { id: "funeraria-s9", name: "Funerária Paz Eterna", phone: "Não informado" } });
   await db.taxCemeteryEmployee.upsert({ where: { id: "coveiro-s9" }, update: {}, create: { id: "coveiro-s9", cemeteryId: cemetery.id, name: "Zelador do cemitério", role: "Coveiro" } });
+  const feeRule = await db.cemeteryFeeRule.findFirst({ where: { cemeteryId: cemetery.id, eventType: "SEPULTAMENTO", active: true } });
+  if (!feeRule) await db.cemeteryFeeRule.create({ data: { cemeteryId: cemetery.id, eventType: "SEPULTAMENTO", label: "Taxa de sepultamento", formula: "VALOR_FIXO", baseAmount: new Prisma.Decimal(100) } });
   return { tax, cemetery, sector };
 }
 
@@ -424,9 +460,9 @@ export async function scheduleHearing(db: PrismaClient, actor: Actor, input: { c
 }
 
 // S9-D — Cemitérios com taxas pelo motor tributário (TRI-408..436).
-export async function createCemetery(db: PrismaClient, input: { code: string; name: string; address?: string; phone?: string; wakePlace?: string }) {
+export async function createCemetery(db: PrismaClient, input: { code: string; name: string; address?: string; phone?: string; wakePlace?: string; observations?: string }) {
   if (!input.code.trim() || !input.name.trim()) throw new TributarioS9Error("Código e nome do cemitério são obrigatórios.");
-  return db.taxCemetery.create({ data: { code: input.code.trim().toUpperCase(), name: input.name.trim(), address: input.address?.trim() || null, phone: input.phone?.trim() || null, wakePlace: input.wakePlace?.trim() || null } });
+  return db.taxCemetery.create({ data: { code: input.code.trim().toUpperCase(), name: input.name.trim(), address: input.address?.trim() || null, phone: input.phone?.trim() || null, wakePlace: input.wakePlace?.trim() || null, observations: input.observations?.trim() || null } });
 }
 
 export async function createSector(db: PrismaClient, input: { cemeteryId: string; parentId?: string; code: string; name: string }) {
@@ -434,11 +470,23 @@ export async function createSector(db: PrismaClient, input: { cemeteryId: string
   return db.taxCemeterySector.create({ data: { cemeteryId: input.cemeteryId, parentId: input.parentId || null, code: input.code.trim().toUpperCase(), name: input.name.trim() } });
 }
 
-export async function createGrave(db: PrismaClient, input: { cemeteryId: string; sectorId?: string; code: string; graveType: string; capacity?: number; notes?: string }) {
+export async function createGrave(db: PrismaClient, actor: Actor, input: { cemeteryId: string; sectorId?: string; lotId?: string; code: string; graveType: string; capacity?: number; ownerTaxpayerId?: string; additionalData?: Record<string, unknown>; notes?: string }) {
   if (!input.code.trim()) throw new TributarioS9Error("Identificação da sepultura é obrigatória.");
   const capacity = input.capacity ?? 1;
   if (!Number.isInteger(capacity) || capacity < 1) throw new TributarioS9Error("Capacidade inválida.");
-  return db.taxGrave.create({ data: { cemeteryId: input.cemeteryId, sectorId: input.sectorId || null, code: input.code.trim().toUpperCase(), graveType: input.graveType, capacity, notes: input.notes?.trim() || null } });
+  return db.$transaction(async (tx) => {
+    if (input.ownerTaxpayerId) await validateTaxpayer(tx, input.ownerTaxpayerId, "O proprietário do lóculo");
+    if (input.lotId) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.lotId}))`;
+      const lot = await tx.cemeteryLot.findUnique({ where: { id: input.lotId }, include: { _count: { select: { graves: true } } } });
+      if (!lot || lot.cemeteryId !== input.cemeteryId || !lot.active) throw new TributarioS9Error("Lote ativo não encontrado no cemitério informado.");
+      assertLotCanReceiveGrave(lot._count.graves, lot.graveLimit);
+    }
+    const additionalData = await validateCemeteryAdditionalData(tx, input.cemeteryId, "SEPULTURA", input.additionalData);
+    const grave = await tx.taxGrave.create({ data: { cemeteryId: input.cemeteryId, sectorId: input.sectorId || null, lotId: input.lotId || null, code: input.code.trim().toUpperCase(), graveType: input.graveType, capacity, ownerTaxpayerId: input.ownerTaxpayerId || null, additionalData, notes: input.notes?.trim() || null } });
+    await cemeteryHistory(tx, actor, "SEPULTURA", grave.id, "*", null, { code: grave.code, graveType: grave.graveType, capacity: grave.capacity, lotId: grave.lotId });
+    return grave;
+  });
 }
 
 export async function registerEmployee(db: PrismaClient, input: { cemeteryId: string; name: string; role: string; phone?: string }) {
@@ -446,24 +494,101 @@ export async function registerEmployee(db: PrismaClient, input: { cemeteryId: st
   return db.taxCemeteryEmployee.create({ data: { cemeteryId: input.cemeteryId, name: input.name.trim(), role: input.role.trim(), phone: input.phone?.trim() || null } });
 }
 
-export async function registerFuneralHome(db: PrismaClient, input: { name: string; cnpj?: string; phone?: string }) {
+export async function registerFuneralHome(db: PrismaClient, input: { name: string; cnpj?: string; phone?: string; ownershipType?: "PUBLICA" | "PRIVADA" }) {
   if (!input.name.trim()) throw new TributarioS9Error("Nome da funerária é obrigatório.");
-  return db.taxFuneralHome.create({ data: { name: input.name.trim(), cnpj: input.cnpj?.trim() || null, phone: input.phone?.trim() || null } });
+  return db.taxFuneralHome.create({ data: { name: input.name.trim(), cnpj: input.cnpj?.trim() || null, phone: input.phone?.trim() || null, ownershipType: input.ownershipType ?? "PRIVADA" } });
+}
+
+export async function createDeathCause(db: PrismaClient, input: { code: string; description: string }) {
+  if (!input.code.trim() || !input.description.trim()) throw new TributarioS9Error("Código e descrição da causa são obrigatórios.");
+  return db.taxDeathCause.create({ data: { code: input.code.trim().toUpperCase(), description: input.description.trim() } });
+}
+
+export async function createCemeteryChapel(db: PrismaClient, input: { cemeteryId: string; name: string; address?: string; personTaxpayerId?: string; responsibleTaxpayerId: string }) {
+  if (!input.name.trim()) throw new TributarioS9Error("Nome da capela é obrigatório.");
+  await validateTaxpayer(db, input.responsibleTaxpayerId, "O responsável pela capela");
+  if (input.personTaxpayerId) await validateTaxpayer(db, input.personTaxpayerId, "A pessoa vinculada à capela");
+  return db.cemeteryChapel.create({ data: { cemeteryId: input.cemeteryId, name: input.name.trim(), address: input.address?.trim() || null, personTaxpayerId: input.personTaxpayerId || null, responsibleTaxpayerId: input.responsibleTaxpayerId } });
+}
+
+export async function createCemeteryOssuary(db: PrismaClient, input: { cemeteryId: string; code: string; address: string; ownerTaxpayerId?: string; capacity?: number }) {
+  const capacity = input.capacity ?? 1;
+  if (!input.code.trim() || !input.address.trim() || !Number.isInteger(capacity) || capacity < 1) throw new TributarioS9Error("Código, endereço e capacidade válida são obrigatórios para o ossuário.");
+  if (input.ownerTaxpayerId) await validateTaxpayer(db, input.ownerTaxpayerId, "O proprietário do ossuário");
+  return db.cemeteryOssuary.create({ data: { cemeteryId: input.cemeteryId, code: input.code.trim().toUpperCase(), address: input.address.trim(), ownerTaxpayerId: input.ownerTaxpayerId || null, capacity } });
+}
+
+export async function createCemeteryIdentificationField(db: PrismaClient, input: { cemeteryId: string; targetType: "LOTE" | "SEPULTURA"; fieldKey: string; label: string; valueType: "DESCRITIVO" | "NUMERICO"; required?: boolean }) {
+  const fieldKey = input.fieldKey.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  if (!fieldKey || !input.label.trim()) throw new TributarioS9Error("Chave e rótulo do campo são obrigatórios.");
+  return db.cemeteryIdentificationField.create({ data: { cemeteryId: input.cemeteryId, targetType: input.targetType, fieldKey, label: input.label.trim(), valueType: input.valueType, required: input.required ?? false } });
+}
+
+export async function createCemeteryLot(db: PrismaClient, actor: Actor, input: { cemeteryId: string; identifier: string; ownerTaxpayerId: string; graveLimit: number; additionalData?: Record<string, unknown> }) {
+  if (!input.identifier.trim() || !Number.isInteger(input.graveLimit) || input.graveLimit < 1) throw new TributarioS9Error("Identificador e limite de sepulturas válido são obrigatórios.");
+  return db.$transaction(async (tx) => {
+    await validateTaxpayer(tx, input.ownerTaxpayerId, "O proprietário do lote");
+    const additionalData = await validateCemeteryAdditionalData(tx, input.cemeteryId, "LOTE", input.additionalData);
+    const lot = await tx.cemeteryLot.create({ data: { cemeteryId: input.cemeteryId, identifier: input.identifier.trim().toUpperCase(), ownerTaxpayerId: input.ownerTaxpayerId, graveLimit: input.graveLimit, additionalData } });
+    await cemeteryHistory(tx, actor, "LOTE", lot.id, "*", null, { identifier: lot.identifier, ownerTaxpayerId: lot.ownerTaxpayerId, graveLimit: lot.graveLimit });
+    return lot;
+  });
+}
+
+export async function setCemeteryEntityActive(db: PrismaClient, actor: Actor, input: { targetType: "LOTE" | "SEPULTURA"; targetId: string; active: boolean }) {
+  return db.$transaction(async (tx) => {
+    if (input.targetType === "LOTE") {
+      const current = await tx.cemeteryLot.findUnique({ where: { id: input.targetId } });
+      if (!current) throw new TributarioS9Error("Lote não encontrado.");
+      const updated = await tx.cemeteryLot.update({ where: { id: current.id }, data: { active: input.active } });
+      await cemeteryHistory(tx, actor, "LOTE", current.id, "active", current.active, updated.active);
+      return updated;
+    }
+    const current = await tx.taxGrave.findUnique({ where: { id: input.targetId } });
+    if (!current) throw new TributarioS9Error("Sepultura não encontrada.");
+    if (!input.active && current.occupantCount > 0) throw new TributarioS9Error("Não é possível desativar uma sepultura ocupada.");
+    const updated = await tx.taxGrave.update({ where: { id: current.id }, data: { active: input.active } });
+    await cemeteryHistory(tx, actor, "SEPULTURA", current.id, "active", current.active, updated.active);
+    return updated;
+  });
 }
 
 const DEATH_GROUPS = ["falecido", "nascimento", "documentos", "endereco", "obito", "local", "medico", "causas", "funeraria", "sepultamento", "observacoes"];
 
+async function declarantDebtSnapshot(tx: Prisma.TransactionClient, taxpayerId: string) {
+  const [assessments, activeDebts] = await Promise.all([
+    tx.taxAssessment.findMany({ where: { taxpayerId, status: { in: ["Lançado", "Emitido", "Parcial", "Dívida Ativa"] } }, select: { id: true, assessmentNumber: true, status: true }, take: 100 }),
+    tx.activeDebt.findMany({ where: { taxpayerId, status: { notIn: ["PAGA", "Paga", "CANCELADA", "Cancelada", "BAIXADA", "BAIXADA_PRESCRICAO"] } }, select: { id: true, cdaNumber: true, status: true }, take: 100 }),
+  ]);
+  return { checkedAt: new Date().toISOString(), hasDebt: assessments.length + activeDebts.length > 0, assessments, activeDebts };
+}
+
+async function applyDeceasedRegistryUpdate(tx: Prisma.TransactionClient, deceased: { deceasedTaxpayerId: string | null; deathDate: Date }) {
+  if (!deceased.deceasedTaxpayerId) return;
+  const taxpayer = await tx.taxpayer.findUnique({ where: { id: deceased.deceasedTaxpayerId }, include: { person: true } });
+  if (!taxpayer?.person) throw new TributarioS9Error("O cadastro único do falecido deve corresponder a uma pessoa física.");
+  const fullName = /esp[oó]lio/i.test(taxpayer.person.fullName) ? taxpayer.person.fullName : `${taxpayer.person.fullName} - ESPÓLIO`;
+  await tx.person.update({ where: { id: taxpayer.person.id }, data: { fullName, deathDate: deceased.deathDate, estateApplied: true } });
+}
+
 export async function registerDeceased(db: PrismaClient, actor: Actor, input: {
   fullName: string; birthDate?: Date; deathDate: Date; deathTime?: string; gender?: string; document?: string; maritalStatus?: string; fatherName?: string; motherName?: string; address?: string;
   cemeteryId: string; graveId: string; funeralHomeId?: string; funeralHomeName?: string; causeId?: string; causeText?: string;
-  doctorName: string; doctorCrm: string; groups?: Record<string, unknown>; taxpayerId?: string;
+  doctorName: string; doctorCrm: string; groups?: Record<string, unknown>; taxpayerId?: string; deceasedTaxpayerId?: string; declarantTaxpayerId?: string; unidentified?: boolean;
+  scheduledAt?: Date; burialType?: "MEMBRO" | "NORMAL" | "NAO_RECLAMADO"; chapelId?: string; finalizeNow?: boolean;
 }) {
   if (!input.fullName.trim()) throw new TributarioS9Error("Nome do falecido é obrigatório.");
   if (!input.doctorName.trim() || !input.doctorCrm.trim()) throw new TributarioS9Error("Médico declarante com CRM é obrigatório.");
   return db.$transaction(async (tx) => {
     const grave = await tx.taxGrave.findUnique({ where: { id: input.graveId } });
     if (!grave || grave.cemeteryId !== input.cemeteryId) throw new TributarioS9Error("Sepultura fora do cemitério informado.");
-    if (!graveHasVacancy(grave)) throw new TributarioS9Error("Sepultura sem vaga: ocupada, cheia ou interditada.");
+    if (!grave.active || !graveHasVacancy(grave)) throw new TributarioS9Error("Sepultura sem vaga: inativa, ocupada, cheia ou interditada.");
+    const declarantTaxpayerId = input.declarantTaxpayerId || input.taxpayerId;
+    if (!declarantTaxpayerId) throw new TributarioS9Error("O declarante responsável do Cadastro Único é obrigatório.");
+    await validateTaxpayer(tx, declarantTaxpayerId, "O declarante responsável");
+    if (input.deceasedTaxpayerId) await validateTaxpayer(tx, input.deceasedTaxpayerId, "O falecido");
+    const debtSnapshot = await declarantDebtSnapshot(tx, declarantTaxpayerId);
+    const finalizeNow = input.finalizeNow ?? true;
     const groups = { ...(input.groups ?? {}) };
     for (const group of DEATH_GROUPS) if (groups[group] === undefined) groups[group] = null;
     const deceased = await tx.taxDeceased.create({
@@ -472,36 +597,120 @@ export async function registerDeceased(db: PrismaClient, actor: Actor, input: {
         maritalStatus: input.maritalStatus || null, fatherName: input.fatherName || null, motherName: input.motherName || null, address: input.address || null,
         cemeteryId: input.cemeteryId, graveId: grave.id, funeralHomeId: input.funeralHomeId || null, funeralHomeName: input.funeralHomeName || null,
         causeId: input.causeId || null, causeText: input.causeText || null, doctorName: input.doctorName.trim(), doctorCrm: input.doctorCrm.trim(),
-        groups: json({ ...groups, _version: "OBITO_11_GRUPOS_V1" }), taxpayerId: input.taxpayerId || null, createdByUsuarioId: actor.usuarioId,
+        groups: json({ ...groups, _version: "OBITO_11_GRUPOS_V1" }), taxpayerId: input.taxpayerId || declarantTaxpayerId, deceasedTaxpayerId: input.deceasedTaxpayerId || null, declarantTaxpayerId, unidentified: input.unidentified ?? false, status: finalizeNow ? "SEPULTADO" : "AGENDADO", createdByUsuarioId: actor.usuarioId,
       },
     });
-    const occupantCount = grave.occupantCount + 1;
-    await tx.taxGrave.update({ where: { id: grave.id }, data: { occupantCount, status: occupantCount >= grave.capacity ? "OCUPADA" : grave.status } });
-    await tx.taxBurialMovement.create({ data: { deceasedId: deceased.id, graveId: grave.id, toGraveId: grave.id, movementType: "SEPULTAMENTO", movementDate: input.deathDate, notes: "Sepultamento registrado com vaga controlada.", createdByUsuarioId: actor.usuarioId } });
+    const scheduledAt = input.scheduledAt ?? new Date();
+    await tx.cemeteryProcess.create({ data: { receiptCode: code("AG-CEM"), processType: "SEPULTAMENTO", status: finalizeNow ? "SEPULTADO" : "AGENDADO", burialType: input.burialType ?? (input.unidentified ? "NAO_RECLAMADO" : "NORMAL"), deceasedId: deceased.id, cemeteryId: input.cemeteryId, graveId: grave.id, chapelId: input.chapelId || null, funeralHomeId: input.funeralHomeId || null, declarantTaxpayerId, declarantDebtSnapshot: json(debtSnapshot), scheduledAt, performedAt: finalizeNow ? scheduledAt : null, createdByUsuarioId: actor.usuarioId } });
+    if (finalizeNow) {
+      const occupantCount = grave.occupantCount + 1;
+      await tx.taxGrave.update({ where: { id: grave.id }, data: { occupantCount, status: occupantCount >= grave.capacity ? "OCUPADA" : grave.status } });
+      await cemeteryHistory(tx, actor, "SEPULTURA", grave.id, "occupantCount", grave.occupantCount, occupantCount);
+      if (occupantCount >= grave.capacity && grave.status !== "OCUPADA") await cemeteryHistory(tx, actor, "SEPULTURA", grave.id, "status", grave.status, "OCUPADA");
+      await refreshCemeteryLotStatus(tx, actor, grave.lotId);
+      await tx.taxBurialMovement.create({ data: { deceasedId: deceased.id, graveId: grave.id, toGraveId: grave.id, movementType: "SEPULTAMENTO", movementDate: scheduledAt, notes: "Sepultamento finalizado com vaga controlada.", createdByUsuarioId: actor.usuarioId } });
+      await applyDeceasedRegistryUpdate(tx, deceased);
+    }
     return deceased;
   });
 }
 
-export async function registerMovement(db: PrismaClient, actor: Actor, input: { deceasedId?: string; graveId: string; toGraveId?: string; movementType: "EXUMACAO" | "REMOCAO" | "TRASLADO"; notes?: string }) {
+export async function registerMovement(db: PrismaClient, actor: Actor, input: { deceasedId: string; graveId: string; toGraveId?: string; ossuaryId?: string; movementType: "OUTRO_LOTE" | "OSSUARIO" | "EXUMACAO" | "MUDANCA_CIDADE" | "MUDANCA_CEMITERIO" | "DESAPROPRIACAO" | "CREMACAO" | "OUTRO"; destinationDescription?: string; notes?: string }) {
   return db.$transaction(async (tx) => {
     const grave = await tx.taxGrave.findUnique({ where: { id: input.graveId } });
     if (!grave) throw new TributarioS9Error("Sepultura de origem não encontrada.");
+    const deceased = await tx.taxDeceased.findUnique({ where: { id: input.deceasedId } });
+    if (!deceased) throw new TributarioS9Error("Falecido não encontrado.");
+    assertCemeteryTransferAllowed({ deceasedStatus: deceased.status, currentGraveId: deceased.graveId, originGraveId: grave.id });
     if (input.movementType === "EXUMACAO") {
       const occupantCount = Math.max(0, grave.occupantCount - 1);
       await tx.taxGrave.update({ where: { id: grave.id }, data: { occupantCount, status: occupantCount === 0 && grave.status === "OCUPADA" ? "LIVRE" : grave.status } });
-      if (input.deceasedId) await tx.taxDeceased.update({ where: { id: input.deceasedId }, data: { status: "EXUMADO", graveId: null } });
-      return tx.taxBurialMovement.create({ data: { deceasedId: input.deceasedId || null, graveId: grave.id, fromGraveId: grave.id, movementType: "EXUMACAO", notes: input.notes?.trim() || null, createdByUsuarioId: actor.usuarioId } });
+      await cemeteryHistory(tx, actor, "SEPULTURA", grave.id, "occupantCount", grave.occupantCount, occupantCount);
+      await refreshCemeteryLotStatus(tx, actor, grave.lotId);
+      await tx.taxDeceased.update({ where: { id: input.deceasedId }, data: { status: "EXUMADO", graveId: null } });
+      await tx.cemeteryProcess.updateMany({ where: { deceasedId: input.deceasedId, processType: "SEPULTAMENTO", status: "SEPULTADO" }, data: { status: "EXUMADO" } });
+      return tx.taxBurialMovement.create({ data: { deceasedId: input.deceasedId, graveId: grave.id, fromGraveId: grave.id, movementType: "EXUMACAO", destinationType: "EXUMACAO", destinationDescription: input.destinationDescription?.trim() || null, notes: input.notes?.trim() || null, createdByUsuarioId: actor.usuarioId } });
     }
-    if (!input.toGraveId) throw new TributarioS9Error("Destino é obrigatório para remoção/traslado.");
-    const destination = await tx.taxGrave.findUnique({ where: { id: input.toGraveId } });
-    if (!destination || destination.cemeteryId !== grave.cemeteryId) throw new TributarioS9Error("Destino fora do cemitério de origem.");
-    if (!graveHasVacancy(destination)) throw new TributarioS9Error("Sepultura de destino sem vaga.");
-    await tx.taxGrave.update({ where: { id: grave.id }, data: { occupantCount: Math.max(0, grave.occupantCount - 1) } });
-    const occupantCount = destination.occupantCount + 1;
-    await tx.taxGrave.update({ where: { id: destination.id }, data: { occupantCount, status: occupantCount >= destination.capacity ? "OCUPADA" : destination.status } });
-    if (input.deceasedId) await tx.taxDeceased.update({ where: { id: input.deceasedId }, data: { status: "REMOVIDO", graveId: destination.id } });
-    return tx.taxBurialMovement.create({ data: { deceasedId: input.deceasedId || null, graveId: destination.id, fromGraveId: grave.id, toGraveId: destination.id, movementType: input.movementType, notes: input.notes?.trim() || null, createdByUsuarioId: actor.usuarioId } });
+    const requiresInternalGrave = input.movementType === "OUTRO_LOTE";
+    if (requiresInternalGrave && !input.toGraveId) throw new TributarioS9Error("A transferência para outro lote exige uma sepultura de destino.");
+    const destination = input.toGraveId ? await tx.taxGrave.findUnique({ where: { id: input.toGraveId } }) : null;
+    const ossuary = input.ossuaryId ? await tx.cemeteryOssuary.findUnique({ where: { id: input.ossuaryId } }) : null;
+    if (input.toGraveId && (!destination || !destination.active || !graveHasVacancy(destination))) throw new TributarioS9Error("Sepultura de destino inexistente, inativa ou sem vaga.");
+    if (input.movementType === "OSSUARIO" && (!ossuary || !ossuary.active || ossuary.occupantCount >= ossuary.capacity)) throw new TributarioS9Error("Selecione um ossuário ativo com vaga.");
+    if (!destination && !ossuary && !input.destinationDescription?.trim()) throw new TributarioS9Error("Descreva o destino da transferência.");
+    const originCount = Math.max(0, grave.occupantCount - 1);
+    await tx.taxGrave.update({ where: { id: grave.id }, data: { occupantCount: originCount, status: originCount === 0 && grave.status === "OCUPADA" ? "LIVRE" : grave.status } });
+    await cemeteryHistory(tx, actor, "SEPULTURA", grave.id, "occupantCount", grave.occupantCount, originCount);
+    if (destination) {
+      const occupantCount = destination.occupantCount + 1;
+      await tx.taxGrave.update({ where: { id: destination.id }, data: { occupantCount, status: occupantCount >= destination.capacity ? "OCUPADA" : destination.status } });
+      await cemeteryHistory(tx, actor, "SEPULTURA", destination.id, "occupantCount", destination.occupantCount, occupantCount);
+    }
+    if (ossuary) await tx.cemeteryOssuary.update({ where: { id: ossuary.id }, data: { occupantCount: { increment: 1 } } });
+    await refreshCemeteryLotStatus(tx, actor, grave.lotId);
+    await refreshCemeteryLotStatus(tx, actor, destination?.lotId);
+    const nextStatus = input.movementType === "CREMACAO" ? "CREMADO" : input.movementType === "DESAPROPRIACAO" ? "DESAPROPRIADO" : "TRANSFERIDO";
+    await tx.taxDeceased.update({ where: { id: input.deceasedId }, data: { status: nextStatus, cemeteryId: destination?.cemeteryId ?? deceased.cemeteryId, graveId: destination?.id ?? null } });
+    await tx.cemeteryProcess.updateMany({ where: { deceasedId: input.deceasedId, processType: "SEPULTAMENTO", status: "SEPULTADO" }, data: { status: nextStatus } });
+    return tx.taxBurialMovement.create({ data: { deceasedId: input.deceasedId, graveId: destination?.id ?? grave.id, fromGraveId: grave.id, toGraveId: destination?.id ?? null, toOssuaryId: ossuary?.id ?? null, movementType: input.movementType, destinationType: input.movementType, destinationDescription: input.destinationDescription?.trim() || (ossuary ? `Ossuário ${ossuary.code}` : null), notes: input.notes?.trim() || null, createdByUsuarioId: actor.usuarioId } });
   });
+}
+
+export async function createCemeteryProcess(db: PrismaClient, actor: Actor, input: { processType: "VELORIO" | "CREMACAO"; deceasedId: string; cemeteryId?: string; chapelId?: string; funeralHomeId?: string; declarantTaxpayerId: string; scheduledAt: Date; notes?: string }) {
+  return db.$transaction(async (tx) => {
+    const deceased = await tx.taxDeceased.findUnique({ where: { id: input.deceasedId } });
+    if (!deceased) throw new TributarioS9Error("Falecido não encontrado.");
+    await validateTaxpayer(tx, input.declarantTaxpayerId, "O declarante responsável");
+    const debtSnapshot = await declarantDebtSnapshot(tx, input.declarantTaxpayerId);
+    return tx.cemeteryProcess.create({ data: { receiptCode: code(input.processType === "VELORIO" ? "VEL" : "CRE"), processType: input.processType, status: "AGENDADO", deceasedId: deceased.id, cemeteryId: input.cemeteryId || deceased.cemeteryId, chapelId: input.chapelId || null, funeralHomeId: input.funeralHomeId || deceased.funeralHomeId, declarantTaxpayerId: input.declarantTaxpayerId, declarantDebtSnapshot: json(debtSnapshot), scheduledAt: input.scheduledAt, notes: input.notes?.trim() || null, createdByUsuarioId: actor.usuarioId } });
+  });
+}
+
+export async function advanceCemeteryProcess(db: PrismaClient, actor: Actor, input: { processId: string; status: "EM_REALIZACAO" | "SEPULTADO" | "CREMADO" | "CANCELADO" }) {
+  return db.$transaction(async (tx) => {
+    const process = await tx.cemeteryProcess.findUnique({ where: { id: input.processId }, include: { deceased: true, grave: true } });
+    if (!process) throw new TributarioS9Error("Processo funerário não encontrado.");
+    if (!["AGENDADO", "EM_REALIZACAO"].includes(process.status)) throw new TributarioS9Error("O processo não está disponível para esta transição.");
+    if (input.status === "SEPULTADO") {
+      if (process.processType !== "SEPULTAMENTO" || !process.grave || !process.grave.active || !graveHasVacancy(process.grave)) throw new TributarioS9Error("O sepultamento não possui uma sepultura ativa com vaga.");
+      const occupantCount = process.grave.occupantCount + 1;
+      await tx.taxGrave.update({ where: { id: process.grave.id }, data: { occupantCount, status: occupantCount >= process.grave.capacity ? "OCUPADA" : process.grave.status } });
+      await cemeteryHistory(tx, actor, "SEPULTURA", process.grave.id, "occupantCount", process.grave.occupantCount, occupantCount);
+      await refreshCemeteryLotStatus(tx, actor, process.grave.lotId);
+      await tx.taxDeceased.update({ where: { id: process.deceasedId }, data: { status: "SEPULTADO", graveId: process.grave.id } });
+      await tx.taxBurialMovement.create({ data: { deceasedId: process.deceasedId, graveId: process.grave.id, toGraveId: process.grave.id, movementType: "SEPULTAMENTO", movementDate: new Date(), notes: `Finalização do agendamento ${process.receiptCode}.`, createdByUsuarioId: actor.usuarioId } });
+      await applyDeceasedRegistryUpdate(tx, process.deceased);
+    }
+    if (input.status === "CREMADO") {
+      if (process.processType !== "CREMACAO") throw new TributarioS9Error("Somente processos de cremação podem ser finalizados como cremados.");
+      if (process.deceased.graveId) {
+        const origin = await tx.taxGrave.findUnique({ where: { id: process.deceased.graveId } });
+        if (origin) {
+          const occupantCount = Math.max(0, origin.occupantCount - 1);
+          await tx.taxGrave.update({ where: { id: origin.id }, data: { occupantCount, status: occupantCount === 0 && origin.status === "OCUPADA" ? "LIVRE" : origin.status } });
+          await cemeteryHistory(tx, actor, "SEPULTURA", origin.id, "occupantCount", origin.occupantCount, occupantCount);
+          await refreshCemeteryLotStatus(tx, actor, origin.lotId);
+          await tx.taxBurialMovement.create({ data: { deceasedId: process.deceasedId, graveId: origin.id, fromGraveId: origin.id, movementType: "CREMACAO", destinationType: "CREMACAO", notes: `Cremação finalizada no processo ${process.receiptCode}.`, createdByUsuarioId: actor.usuarioId } });
+        }
+      }
+      await tx.taxDeceased.update({ where: { id: process.deceasedId }, data: { status: "CREMADO", graveId: null } });
+    }
+    return tx.cemeteryProcess.update({ where: { id: process.id }, data: { status: input.status, performedAt: ["SEPULTADO", "CREMADO"].includes(input.status) ? new Date() : undefined } });
+  });
+}
+
+export async function attachCemeteryDocument(db: PrismaClient, actor: Actor, input: { targetType: "LOTE" | "SEPULTURA" | "SEPULTAMENTO" | "VELORIO" | "CREMACAO"; targetId: string; documentId: string }) {
+  const document = await db.document.findUnique({ where: { id: input.documentId }, select: { id: true } });
+  if (!document) throw new TributarioS9Error("Documento GED não encontrado.");
+  const exists = input.targetType === "LOTE" ? await db.cemeteryLot.count({ where: { id: input.targetId } }) : input.targetType === "SEPULTURA" ? await db.taxGrave.count({ where: { id: input.targetId } }) : await db.cemeteryProcess.count({ where: { id: input.targetId, processType: input.targetType } });
+  if (!exists) throw new TributarioS9Error("Registro de destino do anexo não encontrado.");
+  return db.cemeteryAttachment.create({ data: { targetType: input.targetType, targetId: input.targetId, documentId: input.documentId, createdByUsuarioId: actor.usuarioId } });
+}
+
+export async function createCemeteryFeeRule(db: PrismaClient, input: { cemeteryId?: string; eventType: string; label: string; formula: "VALOR_FIXO" | "BASE_X_QUANTIDADE"; baseAmount: number; validFrom?: Date }) {
+  const baseAmount = money(input.baseAmount);
+  if (!input.eventType.trim() || !input.label.trim() || baseAmount.lessThanOrEqualTo(0)) throw new TributarioS9Error("Evento, descrição e valor-base positivo são obrigatórios.");
+  return db.cemeteryFeeRule.create({ data: { cemeteryId: input.cemeteryId || null, eventType: input.eventType.trim().toUpperCase(), label: input.label.trim(), formula: input.formula, baseAmount, validFrom: input.validFrom ?? new Date() } });
 }
 
 export async function grantConcession(db: PrismaClient, actor: Actor, input: { graveId: string; holderName: string; taxpayerId?: string; concessionType: "TEMPORARIA" | "INDETERMINADA"; endsAt?: Date }) {
@@ -511,8 +720,11 @@ export async function grantConcession(db: PrismaClient, actor: Actor, input: { g
 }
 
 // Guia da taxa de sepultamento/exumação/movimentação pelo motor tributário (TRI-426/427/430).
-export async function issueCemeteryFee(db: PrismaClient, actor: Actor, input: { taxpayerId: string; amount: number; dueDate: Date; movementId?: string; concessionId?: string; label?: string }) {
-  const fee = money(input.amount);
+export async function issueCemeteryFee(db: PrismaClient, actor: Actor, input: { taxpayerId: string; amount?: number; dueDate: Date; movementId?: string; concessionId?: string; feeRuleId?: string; quantity?: number; label?: string }) {
+  const rule = input.feeRuleId ? await db.cemeteryFeeRule.findUnique({ where: { id: input.feeRuleId } }) : null;
+  if (input.feeRuleId && (!rule || !rule.active || rule.validFrom > new Date() || (rule.validUntil && rule.validUntil < new Date()))) throw new TributarioS9Error("A fórmula de taxa selecionada não está vigente.");
+  if (!rule && input.amount === undefined) throw new TributarioS9Error("Informe o valor ou selecione uma fórmula de taxa.");
+  const fee = rule ? cemeteryFeeAmount({ formula: rule.formula as "VALOR_FIXO" | "BASE_X_QUANTIDADE", baseAmount: rule.baseAmount, quantity: input.quantity }) : money(input.amount!);
   if (fee.lessThanOrEqualTo(0)) throw new TributarioS9Error("Valor da taxa inválido.");
   const tax = await db.tax.findFirst({ where: { name: "Taxa de Sepultamento", isActive: true } });
   if (!tax) throw new TributarioS9Error("Cadastre a Taxa de Sepultamento antes de emitir a guia.");

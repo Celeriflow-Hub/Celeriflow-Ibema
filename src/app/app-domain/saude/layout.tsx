@@ -11,6 +11,14 @@ const navigation: ModuleNavGroup[] = [
     ],
   },
   {
+    title: "Áreas estratégicas",
+    items: [
+      { title: "Atenção Primária", href: "/saude/territorio", icon: "mapPin" },
+      { title: "Assistência Farmacêutica", href: "/saude/farmacia", icon: "pill" },
+      { title: "Central de Regulação", href: "/saude/regulacao", icon: "clipboardList" },
+    ],
+  },
+  {
     title: "Atendimento",
     items: [
       { title: "Agenda", href: "/saude/agenda", icon: "calendar" },
@@ -23,25 +31,22 @@ const navigation: ModuleNavGroup[] = [
   {
     title: "Assistência",
     items: [
-      { title: "Farmácia", href: "/saude/farmacia", icon: "pill" },
       { title: "Vacinação", href: "/saude/vacinacao", icon: "syringe" },
       { title: "Laboratório", href: "/saude/laboratorio", icon: "flaskConical" },
       { title: "Centro Especializado", href: "/saude/centro-especializado", icon: "accessibility" },
     ],
   },
   {
-    title: "Regulação e apoio",
+    title: "Apoio e produção",
     items: [
-      { title: "Regulação", href: "/saude/regulacao", icon: "clipboardList" },
       { title: "Prestador", href: "/saude/prestador", icon: "handshake" },
       { title: "TFD", href: "/saude/tfd", icon: "bus" },
       { title: "Faturamento da Saúde", href: "/saude/producao", icon: "factory" },
     ],
   },
   {
-    title: "Atenção básica",
+    title: "Sistemas da Atenção Primária",
     items: [
-      { title: "Território", href: "/saude/territorio", icon: "mapPin" },
       { title: "SISAB / e-SUS", href: "/saude/sisab", icon: "send" },
       { title: "Integração e-SUS", href: "/saude/esus", icon: "activity" },
     ],

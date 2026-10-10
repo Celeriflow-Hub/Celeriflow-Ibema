@@ -9,7 +9,7 @@ import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence"
 const MODULE_CODES = new Set([
   "ADMINISTRACAO", "CADASTROS", "PROCESSOS", "DOCUMENTOS", "ATENDIMENTO", "TRANSPARENCIA", "TRIBUTACAO", "FINANCEIRO", "COMPRAS", "RH",
   "PORTAL_SERVIDOR", "PATRIMONIO", "EDUCACAO", "SAUDE", "SOCIAL", "MEIO_AMBIENTE", "SANEAMENTO", "OBRAS", "FROTAS", "CULTURA", "CAMARA",
-  "SEGURANCA", "CONFIGURACOES",
+  "SEGURANCA", "CONFIGURACOES", "CEMITERIOS", "AUDITORIA", "SUPORTE_TECNICO",
 ]);
 
 function normalizePermissions(value: string | undefined) {

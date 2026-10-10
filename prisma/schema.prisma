@@ -353,6 +353,8 @@ model Person {
   motherName     String?
   fatherName     String?
   status         String    @default("Ativo") // Ativo, Inativo
+  deathDate      DateTime?
+  estateApplied  Boolean   @default(false)
 
   // Contatos
   phonePrimary   String?
@@ -761,6 +763,7 @@ model Document {
   healthRegulationRequests    HealthRegulationRequest[]
   healthVigilanceLicenses     HealthVigilanceLicense[]
   healthRegulationAttachments HealthRegulationAttachment[]
+  cemeteryAttachments         CemeteryAttachment[]
 }
 
 // Versoes finalizadas sao snapshots imutaveis do arquivo usado em uma assinatura.
@@ -777,7 +780,9 @@ model DocumentVersion {
   publicValidationCode String?   @unique
   createdAt            DateTime  @default(now())
 
-  signatures DocumentSignature[]
+  signatures           DocumentSignature[]
+  icpEvidence          DocumentIcpEvidence?
+  certificateUseAudits CertificateUseAudit[]
 
   @@unique([documentId, versionNumber])
   @@index([documentId, status])
@@ -822,6 +827,75 @@ model DocumentSignature {
   @@unique([documentVersionId, signerUsuarioId])
   @@index([documentId, status])
   @@index([signerUsuarioId, createdAt])
+}
+
+model DigitalCertificate {
+  id                  String                @id @default(cuid())
+  alias               String                @unique
+  ownerName           String
+  provider            String                @default("ENV_REFERENCE")
+  credentialReference String
+  certificatePem      String                @db.Text
+  intermediatePems    Json                  @default("[]")
+  trustedRootPem      String                @db.Text
+  subject             String
+  issuer              String
+  serialNumber        String
+  fingerprint256      String                @unique
+  validFrom           DateTime
+  validTo             DateTime
+  status              String                @default("ACTIVE") // ACTIVE, SUSPENDED, REVOKED, EXPIRED
+  purposes            Json                  @default("[]")
+  createdByUsuarioId  String
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  evidence            DocumentIcpEvidence[]
+  useAudits           CertificateUseAudit[]
+
+  @@index([status, validTo])
+}
+
+model DocumentIcpEvidence {
+  id                       String             @id @default(cuid())
+  documentVersionId        String             @unique
+  documentVersion          DocumentVersion    @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
+  documentSignatureId      String             @unique
+  certificateId            String
+  certificate              DigitalCertificate @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  documentHash             String
+  canonicalPayload         String             @db.Text
+  signatureBase64          String             @db.Text
+  algorithm                String
+  certificateSubject       String
+  certificateIssuer        String
+  certificateSerial        String
+  certificateFingerprint   String
+  certificatePemSnapshot   String             @db.Text
+  intermediatePemsSnapshot Json
+  trustedRootPemSnapshot   String             @db.Text
+  signedAt                 DateTime
+  validationStatus         String             @default("VALID_AT_SIGNING")
+  createdByUsuarioId       String
+  createdAt                DateTime           @default(now())
+}
+
+model CertificateUseAudit {
+  id                String              @id @default(cuid())
+  certificateId     String?
+  certificate       DigitalCertificate? @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  documentVersionId String?
+  documentVersion   DocumentVersion?    @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
+  actorUsuarioId    String
+  purpose           String
+  documentHash      String?
+  correlationId     String
+  outcome           String // SUCCESS, FAILURE
+  errorCode         String?
+  createdAt         DateTime            @default(now())
+
+  @@index([certificateId, createdAt])
+  @@index([documentVersionId, createdAt])
+  @@index([outcome, createdAt])
 }
 
 // --- MÃ³dulo 3: Protocolos e Processos ---
@@ -1757,29 +1831,29 @@ model ActiveDebt {
 
 // TRIB-S9 — Histórico de estágios da dívida ativa (TRI-358) e escrituração de movimentos (TRI-366)
 model TaxActiveDebtEvent {
-  id               String   @id @default(cuid())
-  activeDebtId     String
-  eventType        String // INSCRICAO, VALIDACAO, CDA_EMITIDA, CDA_VERSIONADA, CDA_ANOTADA, CARTEIRA, GUIA_EMITIDA, SUSPENSAO, SUSPENSAO_ENCERRADA, PAGAMENTO, BAIXA_MANUAL, BAIXA_PRESCRICAO, DEVOLUCAO_ORIGEM, PROTESTO, EXECUCAO, OBSERVACAO
-  description      String
-  payload          Json?
-  actorUsuarioId   String?
-  createdAt        DateTime @default(now())
+  id             String   @id @default(cuid())
+  activeDebtId   String
+  eventType      String // INSCRICAO, VALIDACAO, CDA_EMITIDA, CDA_VERSIONADA, CDA_ANOTADA, CARTEIRA, GUIA_EMITIDA, SUSPENSAO, SUSPENSAO_ENCERRADA, PAGAMENTO, BAIXA_MANUAL, BAIXA_PRESCRICAO, DEVOLUCAO_ORIGEM, PROTESTO, EXECUCAO, OBSERVACAO
+  description    String
+  payload        Json?
+  actorUsuarioId String?
+  createdAt      DateTime @default(now())
 
   @@index([activeDebtId, createdAt])
 }
 
 // TRIB-S9 — Versões da CDA com anotações e assinatura interna (TRI-347/348/382/383/384/385)
 model TaxCdaVersion {
-  id                  String    @id @default(cuid())
-  activeDebtId        String
-  versionNumber       Int
-  cdaNumber           String
-  contentSnapshot     Json
-  annotation          String?
-  signatureStatus     String    @default("NAO_ASSINADA") // NAO_ASSINADA, ASSINATURA_INTERNA — sem certificação ICP-Brasil configurada
-  signedByUsuarioId   String?
-  signedAt            DateTime?
-  createdAt           DateTime  @default(now())
+  id                String    @id @default(cuid())
+  activeDebtId      String
+  versionNumber     Int
+  cdaNumber         String
+  contentSnapshot   Json
+  annotation        String?
+  signatureStatus   String    @default("NAO_ASSINADA") // NAO_ASSINADA, ASSINATURA_INTERNA — sem certificação ICP-Brasil configurada
+  signedByUsuarioId String?
+  signedAt          DateTime?
+  createdAt         DateTime  @default(now())
 
   @@unique([activeDebtId, versionNumber])
   @@index([cdaNumber])
@@ -1802,23 +1876,23 @@ model TaxDebtSuspension {
 
 // TRIB-S9 — Carteiras de dívida ativa (TRI-342/343)
 model TaxDaPortfolio {
-  id                 String   @id @default(cuid())
+  id                 String               @id @default(cuid())
   name               String
   criteria           Json
-  status             String   @default("ATIVA")
+  status             String               @default("ATIVA")
   createdByUsuarioId String
   items              TaxDaPortfolioItem[]
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
 }
 
 model TaxDaPortfolioItem {
-  id                 String   @id @default(cuid())
+  id                 String         @id @default(cuid())
   portfolioId        String
   portfolio          TaxDaPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
   activeDebtId       String
-  outstandingDecimal Decimal  @db.Decimal(18, 2)
-  addedAt            DateTime @default(now())
+  outstandingDecimal Decimal        @db.Decimal(18, 2)
+  addedAt            DateTime       @default(now())
 
   @@unique([portfolioId, activeDebtId])
   @@index([activeDebtId])
@@ -1826,28 +1900,28 @@ model TaxDaPortfolioItem {
 
 // TRIB-S9 — Protesto em cartório com remessa/retorno controlados (TRI-373..380/386/403/405/406)
 model TaxProtestBatch {
-  id                 String   @id @default(cuid())
-  batchNumber        String   @unique
-  status             String   @default("PREPARADA") // PREPARADA, REMESSA_GERADA, RETORNO_PARCIAL, RETORNO_TOTAL, ENCERRADA
+  id                 String           @id @default(cuid())
+  batchNumber        String           @unique
+  status             String           @default("PREPARADA") // PREPARADA, REMESSA_GERADA, RETORNO_PARCIAL, RETORNO_TOTAL, ENCERRADA
   fileContent        Json // Remessa interna controlada — sem convênio real, sem protesto efetivado presumido
   createdByUsuarioId String
   items              TaxProtestItem[]
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 }
 
 model TaxProtestItem {
-  id              String   @id @default(cuid())
+  id              String          @id @default(cuid())
   batchId         String
   batch           TaxProtestBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
   activeDebtId    String
-  status          String   @default("SELECIONADA") // SELECIONADA, REMESSA_PREPARADA, EM_ACOMPANHAMENTO, BAIXADA_PAGAMENTO, CANCELADA, ANUIDA
+  status          String          @default("SELECIONADA") // SELECIONADA, REMESSA_PREPARADA, EM_ACOMPANHAMENTO, BAIXADA_PAGAMENTO, CANCELADA, ANUIDA
   returnCode      String?
   returnMessage   String?
   consentIssuedAt DateTime?
   resolvedAt      DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   @@unique([batchId, activeDebtId])
   @@index([activeDebtId, status])
@@ -1855,184 +1929,207 @@ model TaxProtestItem {
 
 // TRIB-S9 — Execução fiscal e Procuradoria com protocolo interno (TRI-346/388..398/404/437)
 model TaxExecutionBatch {
-  id                 String   @id @default(cuid())
-  batchNumber        String   @unique
-  internalProtocol   String   @unique // Protocolo interno — sem número judicial oficial
-  status             String   @default("MONTADO") // MONTADO, NA_PROCURADORIA, RETORNADO, ENCERRADO
+  id                 String             @id @default(cuid())
+  batchNumber        String             @unique
+  internalProtocol   String             @unique // Protocolo interno — sem número judicial oficial
+  status             String             @default("MONTADO") // MONTADO, NA_PROCURADORIA, RETORNADO, ENCERRADO
   prosecutor         String?
   createdByUsuarioId String
   cases              TaxExecutionCase[]
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 }
 
 model TaxExecutionCase {
-  id                  String   @id @default(cuid())
-  batchId             String?
-  batch               TaxExecutionBatch? @relation(fields: [batchId], references: [id])
-  activeDebtId        String
-  internalProtocol    String   @unique // Protocolo interno — sem processo judicial oficial presumido
-  status              String   @default("EM_PREPARO") // EM_PREPARO, NA_PROCURADORIA, PROTOCOLADO_INTERNO, MNI_REGISTRO_INTERNO, EM_ACOMPANHAMENTO, RETORNADO, ENCERRADO
-  prosecutor          String?
-  attorneyReference   String? // Referência da procuração juntada — texto livre, sem documento oficial presumido
-  mniStatus           String   @default("NAO_ENVIADO") // NAO_ENVIADO, MNI_REGISTRO_INTERNO — adaptador interno, sem credencial TJES
-  attachments         Json     @default("[]")
-  caseSnapshot        Json
-  nextHearingAt       DateTime?
-  hearingNotes        String?
-  createdByUsuarioId  String
-  events              TaxExecutionEvent[]
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                 String              @id @default(cuid())
+  batchId            String?
+  batch              TaxExecutionBatch?  @relation(fields: [batchId], references: [id])
+  activeDebtId       String
+  internalProtocol   String              @unique // Protocolo interno — sem processo judicial oficial presumido
+  status             String              @default("EM_PREPARO") // EM_PREPARO, NA_PROCURADORIA, PROTOCOLADO_INTERNO, MNI_REGISTRO_INTERNO, EM_ACOMPANHAMENTO, RETORNADO, ENCERRADO
+  prosecutor         String?
+  attorneyReference  String? // Referência da procuração juntada — texto livre, sem documento oficial presumido
+  mniStatus          String              @default("NAO_ENVIADO") // NAO_ENVIADO, MNI_REGISTRO_INTERNO — adaptador interno, sem credencial TJES
+  attachments        Json                @default("[]")
+  caseSnapshot       Json
+  nextHearingAt      DateTime?
+  hearingNotes       String?
+  createdByUsuarioId String
+  events             TaxExecutionEvent[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@index([activeDebtId, status])
 }
 
 model TaxExecutionEvent {
-  id             String   @id @default(cuid())
+  id             String           @id @default(cuid())
   caseId         String
   executionCase  TaxExecutionCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
   eventType      String // ABERTURA, ENVIO_PROCURADORIA, PROTOCOLO, MNI, RETORNO, AUDIENCIA, ANDAMENTO, ENCERRAMENTO
   description    String
   payload        Json?
   actorUsuarioId String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime         @default(now())
 
   @@index([caseId, createdAt])
 }
 
 // TRIB-S9 — Cemitérios municipais (TRI-408..436)
 model TaxCemetery {
-  id        String   @id @default(cuid())
-  code      String   @unique
-  name      String
-  address   String?
-  phone     String?
-  wakePlace String? // Local do velório (TRI-410)
-  active    Boolean  @default(true)
-  sectors   TaxCemeterySector[]
-  graves    TaxGrave[]
-  employees TaxCemeteryEmployee[]
-  deceased  TaxDeceased[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                   String                        @id @default(cuid())
+  code                 String                        @unique
+  name                 String
+  address              String?
+  phone                String?
+  wakePlace            String? // Compatibilidade com o cadastro legado; capelas usam entidade própria.
+  observations         String?
+  active               Boolean                       @default(true)
+  sectors              TaxCemeterySector[]
+  graves               TaxGrave[]
+  employees            TaxCemeteryEmployee[]
+  deceased             TaxDeceased[]
+  chapels              CemeteryChapel[]
+  ossuaries            CemeteryOssuary[]
+  lots                 CemeteryLot[]
+  identificationFields CemeteryIdentificationField[]
+  processes            CemeteryProcess[]
+  feeRules             CemeteryFeeRule[]
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
 }
 
 model TaxCemeterySector {
-  id         String   @id @default(cuid())
+  id         String              @id @default(cuid())
   cemeteryId String
-  cemetery   TaxCemetery @relation(fields: [cemeteryId], references: [id], onDelete: Cascade)
+  cemetery   TaxCemetery         @relation(fields: [cemeteryId], references: [id], onDelete: Cascade)
   parentId   String?
   parent     TaxCemeterySector?  @relation("SectorHierarchy", fields: [parentId], references: [id])
   children   TaxCemeterySector[] @relation("SectorHierarchy")
   code       String
   name       String
-  sortOrder  Int      @default(0)
+  sortOrder  Int                 @default(0)
   graves     TaxGrave[]
 
   @@unique([cemeteryId, code])
 }
 
 model TaxGrave {
-  id            String   @id @default(cuid())
-  cemeteryId    String
-  cemetery      TaxCemetery @relation(fields: [cemeteryId], references: [id], onDelete: Cascade)
-  sectorId      String?
-  sector        TaxCemeterySector? @relation(fields: [sectorId], references: [id])
-  code          String // Identificação da sepultura na quadra/setor (TRI-415)
-  graveType     String   // Tipo de sepultura (TRI-414): COVA, CARNEIRA, GAVETA, JAZIGO, OSSARIO
-  capacity      Int      @default(1)
-  occupantCount Int      @default(0)
-  status        String   @default("LIVRE") // LIVRE, OCUPADA, RESERVADA, INTERDITADA
-  notes         String?
-  deceased      TaxDeceased[]
-  movements     TaxBurialMovement[]
-  concessions   TaxGraveConcession[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id              String               @id @default(cuid())
+  cemeteryId      String
+  cemetery        TaxCemetery          @relation(fields: [cemeteryId], references: [id], onDelete: Cascade)
+  sectorId        String?
+  sector          TaxCemeterySector?   @relation(fields: [sectorId], references: [id])
+  lotId           String?
+  lot             CemeteryLot?         @relation(fields: [lotId], references: [id], onDelete: Restrict)
+  code            String // Identificação da sepultura na quadra/setor (TRI-415)
+  graveType       String // Tipo de sepultura (TRI-414): COVA, CARNEIRA, GAVETA, JAZIGO, OSSARIO
+  capacity        Int                  @default(1)
+  occupantCount   Int                  @default(0)
+  status          String               @default("LIVRE") // LIVRE, OCUPADA, RESERVADA, INTERDITADA
+  active          Boolean              @default(true)
+  ownerTaxpayerId String?
+  additionalData  Json                 @default("{}")
+  notes           String?
+  deceased        TaxDeceased[]
+  movements       TaxBurialMovement[]
+  concessions     TaxGraveConcession[]
+  processes       CemeteryProcess[]
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
   @@unique([cemeteryId, code])
   @@index([sectorId, status])
+  @@index([lotId, active])
 }
 
 model TaxCemeteryEmployee {
-  id         String   @id @default(cuid())
+  id         String      @id @default(cuid())
   cemeteryId String
   cemetery   TaxCemetery @relation(fields: [cemeteryId], references: [id], onDelete: Cascade)
   name       String
   role       String
   phone      String?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime    @default(now())
 }
 
 model TaxFuneralHome {
-  id        String   @id @default(cuid())
-  name      String
-  cnpj      String?
-  phone     String?
-  active    Boolean  @default(true)
-  deceased  TaxDeceased[]
-  createdAt DateTime @default(now())
+  id            String        @id @default(cuid())
+  name          String
+  cnpj          String?
+  phone         String?
+  ownershipType String        @default("PRIVADA") // PUBLICA, PRIVADA
+  active        Boolean       @default(true)
+  deceased      TaxDeceased[]
+  createdAt     DateTime      @default(now())
 }
 
 model TaxDeathCause {
-  id          String   @id @default(cuid())
-  code        String   @unique
+  id          String        @id @default(cuid())
+  code        String        @unique
   description String
   deceased    TaxDeceased[]
-  createdAt   DateTime @default(now())
+  createdAt   DateTime      @default(now())
 }
 
 model TaxDeceased {
-  id                 String    @id @default(cuid())
-  fullName           String
-  birthDate          DateTime?
-  deathDate          DateTime
-  deathTime          String?
-  gender             String?
-  document           String?
-  maritalStatus      String?
-  fatherName         String?
-  motherName         String?
-  address            String?
-  cemeteryId         String
-  cemetery           TaxCemetery @relation(fields: [cemeteryId], references: [id])
-  graveId            String?
-  grave              TaxGrave?   @relation(fields: [graveId], references: [id])
-  funeralHomeId      String?
-  funeralHome        TaxFuneralHome? @relation(fields: [funeralHomeId], references: [id])
-  funeralHomeName    String?
-  causeId            String?
-  cause              TaxDeathCause? @relation(fields: [causeId], references: [id])
-  causeText          String?
-  doctorName         String // Médico declarante (TRI-418)
-  doctorCrm          String
-  groups             Json // Onze grupos de dados do óbito (TRI-419)
-  status             String    @default("SEPULTADO") // SEPULTADO, EXUMADO, REMOVIDO
-  taxpayerId         String? // Responsável financeiro pela guia/taxa
-  createdByUsuarioId String
-  movements          TaxBurialMovement[]
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id                  String              @id @default(cuid())
+  fullName            String
+  birthDate           DateTime?
+  deathDate           DateTime
+  deathTime           String?
+  gender              String?
+  document            String?
+  maritalStatus       String?
+  fatherName          String?
+  motherName          String?
+  address             String?
+  cemeteryId          String
+  cemetery            TaxCemetery         @relation(fields: [cemeteryId], references: [id])
+  graveId             String?
+  grave               TaxGrave?           @relation(fields: [graveId], references: [id])
+  funeralHomeId       String?
+  funeralHome         TaxFuneralHome?     @relation(fields: [funeralHomeId], references: [id])
+  funeralHomeName     String?
+  causeId             String?
+  cause               TaxDeathCause?      @relation(fields: [causeId], references: [id])
+  causeText           String?
+  doctorName          String // Médico declarante (TRI-418)
+  doctorCrm           String
+  groups              Json // Onze grupos de dados do óbito (TRI-419)
+  status              String              @default("SEPULTADO") // SEPULTADO, EXUMADO, REMOVIDO
+  taxpayerId          String? // Responsável financeiro pela guia/taxa
+  deceasedTaxpayerId  String? // Cadastro único da pessoa falecida
+  declarantTaxpayerId String?
+  unidentified        Boolean             @default(false)
+  createdByUsuarioId  String
+  movements           TaxBurialMovement[]
+  processes           CemeteryProcess[]
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 
   @@index([cemeteryId, deathDate])
   @@index([graveId])
 }
 
 model TaxBurialMovement {
-  id                 String    @id @default(cuid())
-  deceasedId         String?
-  deceased           TaxDeceased? @relation(fields: [deceasedId], references: [id])
-  graveId            String
-  grave              TaxGrave @relation(fields: [graveId], references: [id])
-  fromGraveId        String?
-  toGraveId          String?
-  movementType       String // SEPULTAMENTO, EXUMACAO, REMOCAO, TRASLADO
-  movementDate       DateTime  @default(now())
-  feeAssessmentId    String? // Lançamento da taxa pelo motor tributário (TRI-426/427)
-  notes              String?
-  createdByUsuarioId String
-  createdAt          DateTime  @default(now())
+  id                     String           @id @default(cuid())
+  deceasedId             String?
+  deceased               TaxDeceased?     @relation(fields: [deceasedId], references: [id], onDelete: Restrict)
+  graveId                String
+  grave                  TaxGrave         @relation(fields: [graveId], references: [id])
+  fromGraveId            String?
+  toGraveId              String?
+  toOssuaryId            String?
+  toOssuary              CemeteryOssuary? @relation(fields: [toOssuaryId], references: [id], onDelete: Restrict)
+  movementType           String // SEPULTAMENTO, OUTRO_LOTE, OSSUARIO, EXUMACAO, MUDANCA_CIDADE, MUDANCA_CEMITERIO, DESAPROPRIACAO, CREMACAO, OUTRO
+  destinationType        String?
+  destinationDescription String?
+  movementDate           DateTime         @default(now())
+  feeAssessmentId        String? // Lançamento da taxa pelo motor tributário (TRI-426/427)
+  notes                  String?
+  createdByUsuarioId     String
+  createdAt              DateTime         @default(now())
 
   @@index([graveId, movementType])
 }
@@ -2040,7 +2137,7 @@ model TaxBurialMovement {
 model TaxGraveConcession {
   id                 String    @id @default(cuid())
   graveId            String
-  grave              TaxGrave @relation(fields: [graveId], references: [id], onDelete: Cascade)
+  grave              TaxGrave  @relation(fields: [graveId], references: [id], onDelete: Cascade)
   holderName         String
   taxpayerId         String?
   concessionType     String // TEMPORARIA, INDETERMINADA (TRI-428)
@@ -2054,92 +2151,232 @@ model TaxGraveConcession {
   @@index([graveId, status])
 }
 
+model CemeteryChapel {
+  id                    String            @id @default(cuid())
+  cemeteryId            String
+  cemetery              TaxCemetery       @relation(fields: [cemeteryId], references: [id], onDelete: Cascade)
+  name                  String
+  address               String?
+  personTaxpayerId      String?
+  responsibleTaxpayerId String
+  active                Boolean           @default(true)
+  processes             CemeteryProcess[]
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@unique([cemeteryId, name])
+}
+
+model CemeteryOssuary {
+  id              String              @id @default(cuid())
+  cemeteryId      String
+  cemetery        TaxCemetery         @relation(fields: [cemeteryId], references: [id], onDelete: Cascade)
+  code            String
+  address         String
+  ownerTaxpayerId String?
+  capacity        Int                 @default(1)
+  occupantCount   Int                 @default(0)
+  active          Boolean             @default(true)
+  movements       TaxBurialMovement[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([cemeteryId, code])
+}
+
+model CemeteryLot {
+  id              String      @id @default(cuid())
+  cemeteryId      String
+  cemetery        TaxCemetery @relation(fields: [cemeteryId], references: [id], onDelete: Cascade)
+  identifier      String
+  ownerTaxpayerId String
+  graveLimit      Int
+  status          String      @default("LIVRE") // LIVRE, OCUPADO
+  active          Boolean     @default(true)
+  additionalData  Json        @default("{}")
+  graves          TaxGrave[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([cemeteryId, identifier])
+  @@index([cemeteryId, active, status])
+}
+
+model CemeteryIdentificationField {
+  id         String      @id @default(cuid())
+  cemeteryId String
+  cemetery   TaxCemetery @relation(fields: [cemeteryId], references: [id], onDelete: Cascade)
+  targetType String // LOTE, SEPULTURA
+  fieldKey   String
+  label      String
+  valueType  String // DESCRITIVO, NUMERICO
+  required   Boolean     @default(false)
+  active     Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@unique([cemeteryId, targetType, fieldKey])
+}
+
+model CemeteryProcess {
+  id                    String          @id @default(cuid())
+  receiptCode           String          @unique
+  processType           String // SEPULTAMENTO, VELORIO, CREMACAO
+  status                String // AGENDADO, EM_REALIZACAO, SEPULTADO, CREMADO, DESAPROPRIADO, EXUMADO, TRANSFERIDO, CANCELADO
+  burialType            String? // MEMBRO, NORMAL, NAO_RECLAMADO
+  deceasedId            String
+  deceased              TaxDeceased     @relation(fields: [deceasedId], references: [id], onDelete: Restrict)
+  cemeteryId            String?
+  cemetery              TaxCemetery?    @relation(fields: [cemeteryId], references: [id], onDelete: Restrict)
+  graveId               String?
+  grave                 TaxGrave?       @relation(fields: [graveId], references: [id], onDelete: Restrict)
+  chapelId              String?
+  chapel                CemeteryChapel? @relation(fields: [chapelId], references: [id], onDelete: Restrict)
+  funeralHomeId         String?
+  declarantTaxpayerId   String
+  declarantDebtSnapshot Json
+  scheduledAt           DateTime
+  performedAt           DateTime?
+  notes                 String?
+  createdByUsuarioId    String
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@index([processType, status, scheduledAt])
+  @@index([deceasedId, createdAt])
+  @@index([cemeteryId, scheduledAt])
+  @@index([funeralHomeId, scheduledAt])
+}
+
+model CemeteryAttachment {
+  id                 String   @id @default(cuid())
+  targetType         String // LOTE, SEPULTURA, SEPULTAMENTO, VELORIO, CREMACAO
+  targetId           String
+  documentId         String
+  document           Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  createdByUsuarioId String
+  createdAt          DateTime @default(now())
+
+  @@unique([targetType, targetId, documentId])
+  @@index([targetType, targetId])
+}
+
+model CemeteryChangeHistory {
+  id             String   @id @default(cuid())
+  targetType     String // LOTE, SEPULTURA
+  targetId       String
+  fieldName      String
+  previousValue  Json?
+  newValue       Json?
+  actorUsuarioId String
+  createdAt      DateTime @default(now())
+
+  @@index([targetType, targetId, createdAt])
+}
+
+model CemeteryFeeRule {
+  id         String       @id @default(cuid())
+  cemeteryId String?
+  cemetery   TaxCemetery? @relation(fields: [cemeteryId], references: [id], onDelete: Cascade)
+  eventType  String
+  label      String
+  formula    String // VALOR_FIXO, BASE_X_QUANTIDADE
+  baseAmount Decimal      @db.Decimal(18, 2)
+  active     Boolean      @default(true)
+  validFrom  DateTime     @default(now())
+  validUntil DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([eventType, active, validFrom])
+}
+
 // VAF — Valor Adicionado Fiscal (TRIB-S10 / VAF-001..057)
 
 model VafExercise {
-  id             String   @id @default(cuid())
-  year           Int      @unique
-  label          String?
-  active         Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id        String   @id @default(cuid())
+  year      Int      @unique
+  label     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  rules          VafRule[]
-  efdImports     VafEfdImport[]
-  giaImports     VafGiaImport[]
+  rules            VafRule[]
+  efdImports       VafEfdImport[]
+  giaImports       VafGiaImport[]
   monthlySummaries VafMonthlySummary[]
-  results        VafResult[]
-  companyIndices VafCompanyIndex[]
-  indices        VafMunicipalIndex[]
-  repasses       VafRepasse[]
-  protocols      VafProtocol[]
-  notifications  VafNotification[]
-  activities     VafActivity[]
-  estimates      VafEstimate[]
-  crossChecks    VafCrossCheck[]
-  cfopEntries    VafCfopEntry[]
+  results          VafResult[]
+  companyIndices   VafCompanyIndex[]
+  indices          VafMunicipalIndex[]
+  repasses         VafRepasse[]
+  protocols        VafProtocol[]
+  notifications    VafNotification[]
+  activities       VafActivity[]
+  estimates        VafEstimate[]
+  crossChecks      VafCrossCheck[]
+  cfopEntries      VafCfopEntry[]
 }
 
 model VafRule {
-  id                String   @id @default(cuid())
+  id                String      @id @default(cuid())
   exerciseId        String
   exercise          VafExercise @relation(fields: [exerciseId], references: [id])
   cfop              String
   cfopDescription   String?
-  composesVaf       Boolean  @default(true)
+  composesVaf       Boolean     @default(true)
   formula           String
-  formulaVersion    String   @default("1")
+  formulaVersion    String      @default("1")
   contrapartidaCfop String?
   contrapartidaRule String?
   effectiveFrom     DateTime
   effectiveUntil    DateTime?
-  situation         String   @default("VIGENTE")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  situation         String      @default("VIGENTE")
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
   @@index([exerciseId, cfop])
   @@index([effectiveFrom, effectiveUntil])
 }
 
 model VafCompany {
-  id              String   @id @default(cuid())
-  cnpj            String   @unique
-  corporateName   String
-  tradeName       String?
-  stateInsc       String?
-  address         String?
-  phone           String?
-  email           String?
-  cnae            String?
-  taxRegime       String?
-  accountantId    String?
-  active          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  efdImports          VafEfdImport[]
-  giaImports          VafGiaImport[]
-  vafResults          VafResult[]
-  indices             VafCompanyIndex[]
-  monthlySummaries    VafMonthlySummary[]
-  activities          VafActivity[]
-  crossChecks         VafCrossCheck[]
-  cfopEntries         VafCfopEntry[]
-  estimates           VafEstimate[]
-  accountant          VafAccountant? @relation(fields: [accountantId], references: [id])
-  notifications       VafNotification[]
-  protocols           VafProtocol[]
-}
-
-model VafAccountant {
   id            String   @id @default(cuid())
-  cpfCnpj       String   @unique
-  name          String
-  email         String?
+  cnpj          String   @unique
+  corporateName String
+  tradeName     String?
+  stateInsc     String?
+  address       String?
   phone         String?
+  email         String?
+  cnae          String?
+  taxRegime     String?
+  accountantId  String?
   active        Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  efdImports       VafEfdImport[]
+  giaImports       VafGiaImport[]
+  vafResults       VafResult[]
+  indices          VafCompanyIndex[]
+  monthlySummaries VafMonthlySummary[]
+  activities       VafActivity[]
+  crossChecks      VafCrossCheck[]
+  cfopEntries      VafCfopEntry[]
+  estimates        VafEstimate[]
+  accountant       VafAccountant?      @relation(fields: [accountantId], references: [id])
+  notifications    VafNotification[]
+  protocols        VafProtocol[]
+}
+
+model VafAccountant {
+  id        String   @id @default(cuid())
+  cpfCnpj   String   @unique
+  name      String
+  email     String?
+  phone     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   companies     VafCompany[]
   protocols     VafProtocol[]
@@ -2147,71 +2384,73 @@ model VafAccountant {
 }
 
 model VafEfdImport {
-  id              String   @id @default(cuid())
-  companyId       String
-  company         VafCompany @relation(fields: [companyId], references: [id])
-  exerciseId      String
-  exercise        VafExercise @relation(fields: [exerciseId], references: [id])
-  competency      String
-  version         String   @default("1")
-  fileName        String
-  fileHash        String
-  rawData         Json
-  parsedData      Json?
-  status          String   @default("IMPORTADO")
-  importedBy      String
-  importedAt      DateTime @default(now())
-  processedAt     DateTime?
-  parentImportId  String?
-  parentImport    VafEfdImport? @relation("EfdSubstitution", fields: [parentImportId], references: [id])
-  substitutions   VafEfdImport[] @relation("EfdSubstitution")
+  id             String         @id @default(cuid())
+  companyId      String
+  company        VafCompany     @relation(fields: [companyId], references: [id])
+  exerciseId     String
+  exercise       VafExercise    @relation(fields: [exerciseId], references: [id])
+  competency     String
+  version        String         @default("1")
+  fileName       String
+  fileHash       String
+  rawData        Json
+  parsedData     Json?
+  status         String         @default("IMPORTADO")
+  importedBy     String
+  importedAt     DateTime       @default(now())
+  processedAt    DateTime?
+  parentImportId String?
+  parentImport   VafEfdImport?  @relation("EfdSubstitution", fields: [parentImportId], references: [id])
+  substitutions  VafEfdImport[] @relation("EfdSubstitution")
+
   @@unique([companyId, exerciseId, competency, version])
   @@index([exerciseId, competency])
 }
 
 model VafGiaImport {
-  id              String   @id @default(cuid())
-  companyId       String
-  company         VafCompany @relation(fields: [companyId], references: [id])
-  exerciseId      String
-  exercise        VafExercise @relation(fields: [exerciseId], references: [id])
-  competency      String
-  version         String   @default("1")
-  fileName        String
-  fileHash        String
-  rawData         Json
-  parsedData      Json?
-  status          String   @default("IMPORTADO")
-  importedBy      String
-  importedAt      DateTime @default(now())
-  processedAt     DateTime?
-  parentImportId  String?
-  parentImport    VafGiaImport? @relation("GiaSubstitution", fields: [parentImportId], references: [id])
-  substitutions   VafGiaImport[] @relation("GiaSubstitution")
+  id             String         @id @default(cuid())
+  companyId      String
+  company        VafCompany     @relation(fields: [companyId], references: [id])
+  exerciseId     String
+  exercise       VafExercise    @relation(fields: [exerciseId], references: [id])
+  competency     String
+  version        String         @default("1")
+  fileName       String
+  fileHash       String
+  rawData        Json
+  parsedData     Json?
+  status         String         @default("IMPORTADO")
+  importedBy     String
+  importedAt     DateTime       @default(now())
+  processedAt    DateTime?
+  parentImportId String?
+  parentImport   VafGiaImport?  @relation("GiaSubstitution", fields: [parentImportId], references: [id])
+  substitutions  VafGiaImport[] @relation("GiaSubstitution")
+
   @@unique([companyId, exerciseId, competency, version])
   @@index([exerciseId, competency])
 }
 
 model VafMonthlySummary {
-  id              String   @id @default(cuid())
+  id              String      @id @default(cuid())
   exerciseId      String
   exercise        VafExercise @relation(fields: [exerciseId], references: [id])
   companyId       String
-  company         VafCompany @relation(fields: [companyId], references: [id])
+  company         VafCompany  @relation(fields: [companyId], references: [id])
   competency      String
   cfop            String
   cfopDescription String?
-  efdSaida        Decimal  @default(0) @db.Decimal(18,2)
-  efdEntrada      Decimal  @default(0) @db.Decimal(18,2)
-  giaSaida        Decimal  @default(0) @db.Decimal(18,2)
-  giaEntrada      Decimal  @default(0) @db.Decimal(18,2)
-  composesVaf     Boolean  @default(true)
-  vafCalculated   Decimal  @default(0) @db.Decimal(18,2)
+  efdSaida        Decimal     @default(0) @db.Decimal(18, 2)
+  efdEntrada      Decimal     @default(0) @db.Decimal(18, 2)
+  giaSaida        Decimal     @default(0) @db.Decimal(18, 2)
+  giaEntrada      Decimal     @default(0) @db.Decimal(18, 2)
+  composesVaf     Boolean     @default(true)
+  vafCalculated   Decimal     @default(0) @db.Decimal(18, 2)
   formulaApplied  String?
   divergences     Json?
-  sourcePriority  String   @default("EFD")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  sourcePriority  String      @default("EFD")
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   @@unique([exerciseId, companyId, competency, cfop])
   @@index([exerciseId, competency])
@@ -2219,22 +2458,22 @@ model VafMonthlySummary {
 }
 
 model VafResult {
-  id              String   @id @default(cuid())
+  id              String      @id @default(cuid())
   exerciseId      String
   exercise        VafExercise @relation(fields: [exerciseId], references: [id])
   companyId       String
-  company         VafCompany @relation(fields: [companyId], references: [id])
+  company         VafCompany  @relation(fields: [companyId], references: [id])
   competency      String
   sourceType      String
-  saidaElegivel   Decimal  @default(0) @db.Decimal(18,2)
-  entradaElegivel Decimal  @default(0) @db.Decimal(18,2)
-  vafValue        Decimal  @default(0) @db.Decimal(18,2)
-  participation   Decimal  @default(0) @db.Decimal(9,6)
+  saidaElegivel   Decimal     @default(0) @db.Decimal(18, 2)
+  entradaElegivel Decimal     @default(0) @db.Decimal(18, 2)
+  vafValue        Decimal     @default(0) @db.Decimal(18, 2)
+  participation   Decimal     @default(0) @db.Decimal(9, 6)
   rank            Int?
-  isSimples       Boolean  @default(false)
+  isSimples       Boolean     @default(false)
   simplesData     Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   @@unique([exerciseId, companyId, competency, sourceType])
   @@index([exerciseId, competency])
@@ -2242,178 +2481,184 @@ model VafResult {
 }
 
 model VafCompanyIndex {
-  id              String   @id @default(cuid())
+  id              String      @id @default(cuid())
   exerciseId      String
   exercise        VafExercise @relation(fields: [exerciseId], references: [id])
   companyId       String
-  company         VafCompany @relation(fields: [companyId], references: [id])
+  company         VafCompany  @relation(fields: [companyId], references: [id])
   competency      String
-  indexProvisorio Decimal? @db.Decimal(9,6)
-  indexDefinitivo Decimal? @db.Decimal(9,6)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  indexProvisorio Decimal?    @db.Decimal(9, 6)
+  indexDefinitivo Decimal?    @db.Decimal(9, 6)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   @@unique([exerciseId, companyId, competency])
   @@index([exerciseId, competency])
 }
 
 model VafMunicipalIndex {
-  id              String   @id @default(cuid())
-  exerciseId      String
-  exercise        VafExercise @relation(fields: [exerciseId], references: [id])
-  competency      String
-  indexProvisorio Decimal? @db.Decimal(9,6)
-  indexDefinitivo Decimal? @db.Decimal(9,6)
-  totalVafProvisorio  Decimal? @db.Decimal(18,2)
-  totalVafDefinitivo  Decimal? @db.Decimal(18,2)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                 String      @id @default(cuid())
+  exerciseId         String
+  exercise           VafExercise @relation(fields: [exerciseId], references: [id])
+  competency         String
+  indexProvisorio    Decimal?    @db.Decimal(9, 6)
+  indexDefinitivo    Decimal?    @db.Decimal(9, 6)
+  totalVafProvisorio Decimal?    @db.Decimal(18, 2)
+  totalVafDefinitivo Decimal?    @db.Decimal(18, 2)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 
   @@unique([exerciseId, competency])
   @@index([exerciseId, competency])
 }
 
 model VafRepasse {
-  id               String   @id @default(cuid())
-  exerciseId       String
-  exercise         VafExercise @relation(fields: [exerciseId], references: [id])
-  competency       String
-  weekNumber       Int?
-  municipalValue   Decimal  @db.Decimal(18,2)
-  stateTotalValue  Decimal  @db.Decimal(18,2)
-  sourceFile       String?
-  importedAt       DateTime @default(now())
-  version          String   @default("1")
-  parentRepasseId  String?
-  parentRepasse    VafRepasse? @relation("RepasseCorrection", fields: [parentRepasseId], references: [id])
-  corrections      VafRepasse[] @relation("RepasseCorrection")
+  id              String       @id @default(cuid())
+  exerciseId      String
+  exercise        VafExercise  @relation(fields: [exerciseId], references: [id])
+  competency      String
+  weekNumber      Int?
+  municipalValue  Decimal      @db.Decimal(18, 2)
+  stateTotalValue Decimal      @db.Decimal(18, 2)
+  sourceFile      String?
+  importedAt      DateTime     @default(now())
+  version         String       @default("1")
+  parentRepasseId String?
+  parentRepasse   VafRepasse?  @relation("RepasseCorrection", fields: [parentRepasseId], references: [id])
+  corrections     VafRepasse[] @relation("RepasseCorrection")
 
   @@unique([exerciseId, competency, weekNumber, version])
   @@index([exerciseId, competency])
 }
 
 model VafProtocol {
-  id              String   @id @default(cuid())
-  protocolNumber  String   @unique
-  companyId       String?
-  company         VafCompany? @relation(fields: [companyId], references: [id])
-  accountantId    String?
-  accountant      VafAccountant? @relation(fields: [accountantId], references: [id])
-  documentType    String
-  competency      String
-  exerciseId      String
-  exercise        VafExercise @relation(fields: [exerciseId], references: [id])
-  status          String   @default("RECEBIDO")
-  receivedAt      DateTime @default(now())
-  processedAt     DateTime?
-  metadata        Json?
+  id             String         @id @default(cuid())
+  protocolNumber String         @unique
+  companyId      String?
+  company        VafCompany?    @relation(fields: [companyId], references: [id])
+  accountantId   String?
+  accountant     VafAccountant? @relation(fields: [accountantId], references: [id])
+  documentType   String
+  competency     String
+  exerciseId     String
+  exercise       VafExercise    @relation(fields: [exerciseId], references: [id])
+  status         String         @default("RECEBIDO")
+  receivedAt     DateTime       @default(now())
+  processedAt    DateTime?
+  metadata       Json?
+
   @@index([companyId, competency])
   @@index([accountantId, competency])
   @@index([exerciseId, competency])
 }
 
 model VafNotification {
-  id              String   @id @default(cuid())
-  companyId       String?
-  company         VafCompany? @relation(fields: [companyId], references: [id])
-  accountantId    String?
-  accountant      VafAccountant? @relation(fields: [accountantId], references: [id])
-  type            String
-  title           String
-  content         String
-  competency      String?
-  exerciseId      String?
-  exercise        VafExercise? @relation(fields: [exerciseId], references: [id])
-  status          String   @default("ENVIADA")
-  sentAt          DateTime @default(now())
-  readAt          DateTime?
-  emailSent       Boolean  @default(false)
-  emailSentAt     DateTime?
-  metadata        Json?
+  id           String         @id @default(cuid())
+  companyId    String?
+  company      VafCompany?    @relation(fields: [companyId], references: [id])
+  accountantId String?
+  accountant   VafAccountant? @relation(fields: [accountantId], references: [id])
+  type         String
+  title        String
+  content      String
+  competency   String?
+  exerciseId   String?
+  exercise     VafExercise?   @relation(fields: [exerciseId], references: [id])
+  status       String         @default("ENVIADA")
+  sentAt       DateTime       @default(now())
+  readAt       DateTime?
+  emailSent    Boolean        @default(false)
+  emailSentAt  DateTime?
+  metadata     Json?
+
   @@index([companyId, status])
   @@index([accountantId, status])
   @@index([exerciseId, competency])
 }
 
 model VafActivity {
-  id              String   @id @default(cuid())
-  exerciseId      String
-  exercise        VafExercise @relation(fields: [exerciseId], references: [id])
-  companyId       String
-  company         VafCompany @relation(fields: [companyId], references: [id])
-  competency      String
-  activityType    String
-  title           String
-  description     String?
-  status          String   @default("ABERTA")
-  assignedTo      String?
-  openedAt        DateTime @default(now())
-  forwardedAt     DateTime?
-  readAt          DateTime?
-  analyzedAt      DateTime?
-  closedAt        DateTime?
-  metadata        Json?
+  id           String      @id @default(cuid())
+  exerciseId   String
+  exercise     VafExercise @relation(fields: [exerciseId], references: [id])
+  companyId    String
+  company      VafCompany  @relation(fields: [companyId], references: [id])
+  competency   String
+  activityType String
+  title        String
+  description  String?
+  status       String      @default("ABERTA")
+  assignedTo   String?
+  openedAt     DateTime    @default(now())
+  forwardedAt  DateTime?
+  readAt       DateTime?
+  analyzedAt   DateTime?
+  closedAt     DateTime?
+  metadata     Json?
+
   @@index([exerciseId, competency, status])
   @@index([assignedTo, status])
 }
 
 model VafEstimate {
-  id              String   @id @default(cuid())
-  exerciseId      String
-  exercise        VafExercise @relation(fields: [exerciseId], references: [id])
-  companyId       String?
-  company         VafCompany? @relation(fields: [companyId], references: [id])
-  competency      String
-  method          String
-  realizedMonths  Int
-  realizedValue   Decimal  @db.Decimal(18,2)
-  estimatedValue  Decimal  @db.Decimal(18,2)
-  hypothesis      String?
-  createdBy       String
-  createdAt       DateTime @default(now())
+  id             String      @id @default(cuid())
+  exerciseId     String
+  exercise       VafExercise @relation(fields: [exerciseId], references: [id])
+  companyId      String?
+  company        VafCompany? @relation(fields: [companyId], references: [id])
+  competency     String
+  method         String
+  realizedMonths Int
+  realizedValue  Decimal     @db.Decimal(18, 2)
+  estimatedValue Decimal     @db.Decimal(18, 2)
+  hypothesis     String?
+  createdBy      String
+  createdAt      DateTime    @default(now())
+
   @@index([exerciseId, competency])
 }
 
 model VafCrossCheck {
-  id              String   @id @default(cuid())
-  exerciseId      String
-  exercise        VafExercise @relation(fields: [exerciseId], references: [id])
-  companyId       String
-  company         VafCompany @relation(fields: [companyId], references: [id])
-  competency      String
-  cfop            String
-  checkType       String
-  description     String
-  severity        String   @default("ALERTA")
-  efdValue        Decimal? @db.Decimal(18,2)
-  giaValue        Decimal? @db.Decimal(18,2)
-  expectedValue   Decimal? @db.Decimal(18,2)
-  difference      Decimal? @db.Decimal(18,2)
-  status          String   @default("ABERTA")
-  resolvedAt      DateTime?
-  resolvedBy      String?
-  createdAt       DateTime @default(now())
+  id            String      @id @default(cuid())
+  exerciseId    String
+  exercise      VafExercise @relation(fields: [exerciseId], references: [id])
+  companyId     String
+  company       VafCompany  @relation(fields: [companyId], references: [id])
+  competency    String
+  cfop          String
+  checkType     String
+  description   String
+  severity      String      @default("ALERTA")
+  efdValue      Decimal?    @db.Decimal(18, 2)
+  giaValue      Decimal?    @db.Decimal(18, 2)
+  expectedValue Decimal?    @db.Decimal(18, 2)
+  difference    Decimal?    @db.Decimal(18, 2)
+  status        String      @default("ABERTA")
+  resolvedAt    DateTime?
+  resolvedBy    String?
+  createdAt     DateTime    @default(now())
+
   @@index([exerciseId, competency, status])
   @@index([companyId, competency])
 }
 
 model VafCfopEntry {
-  id              String   @id @default(cuid())
+  id              String      @id @default(cuid())
   exerciseId      String
   exercise        VafExercise @relation(fields: [exerciseId], references: [id])
   companyId       String
-  company         VafCompany @relation(fields: [companyId], references: [id])
+  company         VafCompany  @relation(fields: [companyId], references: [id])
   competency      String
   cfop            String
   cfopDescription String?
   operationType   String
-  efdValue        Decimal  @default(0) @db.Decimal(18,2)
-  giaValue        Decimal  @default(0) @db.Decimal(18,2)
-  composesVaf     Boolean  @default(true)
-  onlyContabil    Boolean  @default(false)
+  efdValue        Decimal     @default(0) @db.Decimal(18, 2)
+  giaValue        Decimal     @default(0) @db.Decimal(18, 2)
+  composesVaf     Boolean     @default(true)
+  onlyContabil    Boolean     @default(false)
   divergence      Json?
   formulaDetail   String?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime    @default(now())
+
   @@index([exerciseId, companyId, competency, cfop])
 }
 

@@ -5,7 +5,8 @@ import {
   ShieldCheck, Plus, Search, X, Pencil, CheckCircle2, SlidersHorizontal, 
   Building2, Users, FileText, HeadphonesIcon, ShoppingCart, DollarSign,
   Package, Receipt, Stethoscope, GraduationCap, HeartHandshake, HardHat, 
-  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, Lock, CheckSquare, Square, Trash2, Truck, BadgeCheck
+  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, Lock, CheckSquare, Square, Trash2, Truck, BadgeCheck,
+  Church, ClipboardCheck, Headset
 } from "lucide-react";
 import { deletePerfil, upsertPerfil, togglePerfilStatus } from "./actions";
 import { PageFrame } from "@/components/app-ui/PageFrame";
@@ -31,9 +32,11 @@ const MODULES_LIST = [
   { code: "PATRIMONIO", label: "Almoxarifado e Patrimônio", icon: Package, color: "text-amber-500" },
   { code: "SOCIAL", label: "Assistência Social", icon: HeartHandshake, color: "text-pink-500" },
   { code: "ATENDIMENTO", label: "Atendimento ao Cidadão", icon: HeadphonesIcon, color: "text-orange-500" },
+  { code: "AUDITORIA", label: "Auditoria", icon: ClipboardCheck, color: "text-violet-600" },
   { code: "SANEAMENTO", label: "Água e Saneamento", icon: Droplets, color: "text-blue-600" },
   { code: "CADASTROS", label: "Cadastros", icon: FileText, color: "text-purple-500" },
   { code: "CAMARA", label: "Câmara Municipal & Legislação", icon: Landmark, color: "text-violet-500" },
+  { code: "CEMITERIOS", label: "Cemitérios", icon: Church, color: "text-stone-600" },
   { code: "COMPRAS", label: "Compras e Contratos", icon: ShoppingCart, color: "text-emerald-500" },
   { code: "CONFIGURACOES", label: "Configurações e Integrações", icon: Settings, color: "text-slate-600" },
   { code: "CULTURA", label: "Cultura e Lazer", icon: Palette, color: "text-fuchsia-500" },
@@ -49,6 +52,7 @@ const MODULES_LIST = [
   { code: "RH", label: "RH e Folha", icon: Users, color: "text-indigo-500" },
   { code: "SAUDE", label: "Saúde", icon: Stethoscope, color: "text-rose-500" },
   { code: "SEGURANCA", label: "Segurança e Mobilidade", icon: Shield, color: "text-slate-500" },
+  { code: "SUPORTE_TECNICO", label: "Suporte Técnico Robonuvem", icon: Headset, color: "text-sky-700" },
   { code: "TRIBUTACAO", label: "Tributário", icon: Receipt, color: "text-orange-500" },
 ];
 

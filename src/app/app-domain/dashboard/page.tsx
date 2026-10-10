@@ -23,7 +23,10 @@ import {
   Lock,
   Truck,
   ArrowUpRight,
-  BadgeCheck
+  BadgeCheck,
+  Church,
+  ClipboardCheck,
+  Headset
 } from "lucide-react";
 import { canShowDashboardCard, canViewModule, getOptionalTenantContext, isModuleBlockedForUser } from "@/lib/platform/tenant-context";
 import { PageFrame } from "@/components/app-ui/PageFrame";
@@ -64,8 +67,11 @@ const menuItems: MenuItem[] = [
   { code: "OBRAS", name: "Obras e Serviços Públicos", description: "Obras, infraestrutura e serviços urbanos", href: "/obras", icon: HardHat, color: "text-[#B45309]", bg: "bg-[#FEF3C7]", solid: "bg-[#B45309]" },
   { code: "FROTAS", name: "Frotas", description: "Veículos, máquinas e manutenção", href: "/frotas", icon: Truck, color: "text-[#0F766E]", bg: "bg-[#CCFBF1]", solid: "bg-[#0F766E]" },
   { code: "CULTURA", name: "Cultura e Lazer", description: "Cultura e esporte", href: "/cultura", icon: Palette, color: "text-[#E11D48]", bg: "bg-[#FFE4E6]", solid: "bg-[#E11D48]" },
+  { code: "CEMITERIOS", name: "Cemitérios", description: "Gestão cemiterial", href: "/cemiterios", icon: Church, color: "text-[#57534E]", bg: "bg-[#E7E5E4]", solid: "bg-[#57534E]" },
   { code: "CAMARA", name: "Câmara Municipal", description: "Gestão Legislativa", href: "/camara", icon: Landmark, color: "text-[#9333EA]", bg: "bg-[#F3E8FF]", solid: "bg-[#9333EA]" },
   { code: "SEGURANCA", name: "Segurança e Mobilidade", description: "Guarda e trânsito", href: "/seguranca", icon: Shield, color: "text-[#0F766E]", bg: "bg-[#CCFBF1]", solid: "bg-[#0F766E]" },
+  { code: "AUDITORIA", name: "Auditoria", description: "Controle e conformidade", href: "/auditoria", icon: ClipboardCheck, color: "text-[#7C3AED]", bg: "bg-[#EDE9FE]", solid: "bg-[#7C3AED]" },
+  { code: "SUPORTE_TECNICO", name: "Suporte Técnico Robonuvem", description: "Atendimento técnico especializado", href: "/suporte-tecnico", icon: Headset, color: "text-[#0369A1]", bg: "bg-[#E0F2FE]", solid: "bg-[#0369A1]" },
   { code: "CONFIGURACOES", name: "Configurações e Integrações", description: "Gestão do sistema", href: "/configuracoes", icon: Settings, color: "text-[#475569]", bg: "bg-[#E2E8F0]", solid: "bg-[#475569]" },
 ];
 

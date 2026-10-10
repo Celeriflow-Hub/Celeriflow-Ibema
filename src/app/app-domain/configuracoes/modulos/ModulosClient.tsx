@@ -5,7 +5,8 @@ import {
   Blocks, Search, CheckCircle2, Lock, Unlock, 
   Building2, Users, FileText, ShoppingCart, DollarSign, 
   Package, Receipt, Stethoscope, GraduationCap, HeartHandshake, HardHat, 
-  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, AlertCircle, RefreshCw, Truck, BadgeCheck
+  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, AlertCircle, RefreshCw, Truck, BadgeCheck,
+  Church, ClipboardCheck, Headset
 } from "lucide-react";
 import { toggleModulo } from "../actions";
 import { PageFrame } from "@/components/app-ui/PageFrame";
@@ -43,6 +44,9 @@ const MODULE_ICONS: Record<string, { icon: React.ElementType; color: string; bg:
   CULTURA: { icon: Palette, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-950/50" },
   CAMARA: { icon: Landmark, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950/50" },
   SEGURANCA: { icon: Shield, color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-50 dark:bg-teal-950/50" },
+  CEMITERIOS: { icon: Church, color: "text-stone-700 dark:text-stone-300", bg: "bg-stone-100 dark:bg-stone-900" },
+  AUDITORIA: { icon: ClipboardCheck, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950/50" },
+  SUPORTE_TECNICO: { icon: Headset, color: "text-sky-700 dark:text-sky-300", bg: "bg-sky-50 dark:bg-sky-950/50" },
   CONFIGURACOES: { icon: Settings, color: "text-slate-700 dark:text-slate-300", bg: "bg-slate-100 dark:bg-slate-800" },
 };
 

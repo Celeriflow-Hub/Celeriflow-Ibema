@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { collectionRate, concessionSituation, executionNext, formatCdaNumber, graveHasVacancy, internalProtocol, nextCdaVersion, occupancyStats, protestNext, sumBy, trendByMonth, validateEnrollmentEligibility } from "../s9-engine";
+import { assertCemeteryTransferAllowed, assertLotCanReceiveGrave, cemeteryFeeAmount, collectionRate, concessionSituation, executionNext, formatCdaNumber, graveHasVacancy, internalProtocol, nextCdaVersion, occupancyStats, protestNext, sumBy, trendByMonth, validateEnrollmentEligibility } from "../s9-engine";
 
 test("bloqueia inscrição duplicada, suspensa ou sem endereço (TRI-340/341)", () => {
   const base = { taxpayerActive: true, hasIdentification: true, hasAddress: true, debtStatus: "Lançado", debtValue: 600, alreadyEnrolled: false, suspended: false };
@@ -42,6 +42,23 @@ test("concessão temporária vence pelo prazo; indeterminada segue vigente (TRI-
   assert.equal(concessionSituation({ concessionType: "TEMPORARIA", status: "VIGENTE", endsAt: new Date("2020-01-01T00:00:00.000Z") }, new Date("2026-01-01T00:00:00.000Z")), "VENCIDA");
   assert.equal(concessionSituation({ concessionType: "INDETERMINADA", status: "VIGENTE", endsAt: null }), "VIGENTE");
   assert.equal(concessionSituation({ concessionType: "TEMPORARIA", status: "CANCELADA", endsAt: null }), "CANCELADA");
+});
+
+test("lote impede sepulturas acima do limite configurado (1.1673)", () => {
+  assert.doesNotThrow(() => assertLotCanReceiveGrave(2, 3));
+  assert.throws(() => assertLotCanReceiveGrave(3, 3), /limite/);
+});
+
+test("transferência exige falecido sepultado na origem (1.1682)", () => {
+  assert.doesNotThrow(() => assertCemeteryTransferAllowed({ deceasedStatus: "SEPULTADO", currentGraveId: "grave-a", originGraveId: "grave-a" }));
+  assert.throws(() => assertCemeteryTransferAllowed({ deceasedStatus: "EXUMADO", currentGraveId: null, originGraveId: "grave-a" }), /atualmente sepultado/);
+  assert.throws(() => assertCemeteryTransferAllowed({ deceasedStatus: "SEPULTADO", currentGraveId: "grave-b", originGraveId: "grave-a" }), /origem/);
+});
+
+test("fórmula de taxa calcula valor fixo e base por quantidade (1.1671)", () => {
+  assert.equal(cemeteryFeeAmount({ formula: "VALOR_FIXO", baseAmount: 125, quantity: 3 }).toString(), "125");
+  assert.equal(cemeteryFeeAmount({ formula: "BASE_X_QUANTIDADE", baseAmount: 42.5, quantity: 3 }).toString(), "127.5");
+  assert.throws(() => cemeteryFeeAmount({ formula: "BASE_X_QUANTIDADE", baseAmount: 10, quantity: 0 }), /Quantidade/);
 });
 
 test("BI agrega linhas reais por grupo e mês, com taxa previsto x realizado (TRI-437..444)", () => {

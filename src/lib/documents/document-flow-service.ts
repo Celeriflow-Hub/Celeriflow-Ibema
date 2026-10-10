@@ -6,6 +6,7 @@ import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence"
 import type { AppContext } from "@/lib/platform/tenant-context";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { notifyProtocolUsers } from "@/lib/protocols/notifications";
+import { verifyDocumentHashICPBrasil, type DocumentHashSignatureResult } from "@/lib/security/icp-brasil";
 import {
   assertInternalSigningAllowed,
   createPublicValidationCode,
@@ -389,12 +390,19 @@ export async function findPublicDocumentValidation(db: PrismaClient, code: strin
       hashSha256: true,
       status: true,
       document: { select: { publicLabel: true } },
+      icpEvidence: true,
     },
   });
-  return version ? toPublicValidationResponse({
+  if (!version) return null;
+  const base = toPublicValidationResponse({
     publicLabel: version.document.publicLabel,
     versionNumber: version.versionNumber,
     hashSha256: version.hashSha256,
     status: version.status,
-  }) : null;
+  });
+  if (!version.icpEvidence) return { ...base, signature: { kind: version.status === "SIGNED" ? "INTERNAL" : "UNSIGNED", valid: version.status === "SIGNED" } };
+  const intermediateCertificatePems = Array.isArray(version.icpEvidence.intermediatePemsSnapshot) ? version.icpEvidence.intermediatePemsSnapshot.filter((value): value is string => typeof value === "string") : [];
+  const result: DocumentHashSignatureResult = { documentVersionId: version.icpEvidence.documentVersionId, documentHash: version.icpEvidence.documentHash, canonicalPayload: version.icpEvidence.canonicalPayload, signatureBase64: version.icpEvidence.signatureBase64, algorithm: "SHA256", signedAt: version.icpEvidence.signedAt, certificateSubject: version.icpEvidence.certificateSubject, certificateIssuer: version.icpEvidence.certificateIssuer, certificateSerialNumber: version.icpEvidence.certificateSerial, certificateFingerprint256: version.icpEvidence.certificateFingerprint, certificatePem: version.icpEvidence.certificatePemSnapshot };
+  const valid = version.hashSha256 === version.icpEvidence.documentHash && verifyDocumentHashICPBrasil(result, { intermediateCertificatePems, trustedRootCertificatePem: version.icpEvidence.trustedRootPemSnapshot });
+  return { ...base, signature: { kind: valid ? "ICP_A1_VALID" : "ICP_A1_INVALID", valid, signedAt: version.icpEvidence.signedAt.toISOString(), subject: version.icpEvidence.certificateSubject, issuer: version.icpEvidence.certificateIssuer, serialNumber: version.icpEvidence.certificateSerial, fingerprint256: version.icpEvidence.certificateFingerprint } };
 }

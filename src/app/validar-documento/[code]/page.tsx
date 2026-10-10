@@ -19,6 +19,11 @@ export default async function PublicDocumentValidationPage({ params }: { params:
           <div><dt className="font-semibold">Versão</dt><dd>{validation.version}</dd></div>
           <div><dt className="font-semibold">Hash SHA-256</dt><dd className="break-all font-mono text-xs">{validation.hashSha256}</dd></div>
           <div><dt className="font-semibold">Status</dt><dd>{validation.status}</dd></div>
+          <div><dt className="font-semibold">Assinatura</dt><dd>{validation.signature.kind === "ICP_A1_VALID" ? "ICP-Brasil A1 válida" : validation.signature.kind === "ICP_A1_INVALID" ? "ICP-Brasil A1 inválida" : validation.signature.kind === "INTERNAL" ? "Manifestação eletrônica interna" : "Documento ainda não assinado"}</dd></div>
+          {validation.signature.signedAt && <div><dt className="font-semibold">Data da assinatura</dt><dd>{new Date(validation.signature.signedAt).toLocaleString("pt-BR")}</dd></div>}
+          {validation.signature.subject && <div><dt className="font-semibold">Titular do certificado</dt><dd className="break-all">{validation.signature.subject}</dd></div>}
+          {validation.signature.issuer && <div><dt className="font-semibold">Emissor</dt><dd className="break-all">{validation.signature.issuer}</dd></div>}
+          {validation.signature.fingerprint256 && <div><dt className="font-semibold">Impressão digital</dt><dd className="break-all font-mono text-xs">{validation.signature.fingerprint256}</dd></div>}
         </dl>
       </section>
     </main>

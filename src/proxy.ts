@@ -63,10 +63,15 @@ export default function proxy(req: NextRequest) {
     const internalPath = url.pathname === "/" ? "/login" : url.pathname;
     const newPath = `/app-domain${internalPath}`;
 
-    // Redireciona para /login se não há sessão e não está já na página de login
+    // Public sign-in routes only perform the Firebase-to-local-session exchange.
     const hasSession = req.cookies.has(SESSION_COOKIE_NAME);
-    if (!hasSession && internalPath !== "/login" && !internalPath.startsWith("/login")) {
-      const loginUrl = new URL("/login", req.url);
+    const isAdministrativeLogin = internalPath === "/login" || internalPath.startsWith("/login/");
+    const isEmployeeLogin = internalPath === "/portal-servidor/entrar";
+    if (!hasSession && !isAdministrativeLogin && !isEmployeeLogin) {
+      const loginPath = internalPath === "/portal-servidor" || internalPath.startsWith("/portal-servidor/")
+        ? "/portal-servidor/entrar"
+        : "/login";
+      const loginUrl = new URL(loginPath, req.url);
       // The destination is always built from the original internal path, never
       // accepted as an absolute URL, so the login flow cannot become an open redirect.
       loginUrl.searchParams.set("returnTo", internalPath + url.search);

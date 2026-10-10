@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PortalBreadcrumb } from "@/components/portal-institucional/PortalShell";
+import { MUNICIPALITY_INSTITUTION_NAME } from "@/lib/municipality-identity";
 
 export const metadata: Metadata = {
-  title: "Mapa do Site | Prefeitura de Divino de São Lourenço",
-  description: "Mapa do site do portal oficial da Prefeitura Municipal de Divino de São Lourenço.",
+  title: `Mapa do Site | ${MUNICIPALITY_INSTITUTION_NAME}`,
+  description: `Mapa do site do portal oficial de ${MUNICIPALITY_INSTITUTION_NAME}.`,
 };
 
 const SECTIONS: { title: string; links: { label: string; href: string }[] }[] = [
@@ -52,7 +53,7 @@ export default function MapaDoSitePage() {
     <main className="mx-auto max-w-5xl px-4 py-9 sm:px-6">
       <PortalBreadcrumb current="Mapa do Site" />
       <h1 className="mt-5 text-3xl font-bold tracking-tight text-slate-900">Mapa do Site</h1>
-      <p className="mt-2 text-sm leading-6 text-slate-600">Todas as seções do portal oficial da Prefeitura Municipal de Divino de São Lourenço.</p>
+      <p className="mt-2 text-sm leading-6 text-slate-600">Todas as seções do portal oficial de {MUNICIPALITY_INSTITUTION_NAME}.</p>
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         {SECTIONS.map((section) => (
           <section key={section.title} className="rounded-lg border border-slate-200 bg-white p-5">

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PortalBreadcrumb } from "@/components/portal-institucional/PortalShell";
+import { MUNICIPALITY_INSTITUTION_NAME } from "@/lib/municipality-identity";
 
 export const metadata: Metadata = {
-  title: "Perguntas Frequentes | Prefeitura de Divino de São Lourenço",
-  description: "Perguntas frequentes sobre serviços e canais da Prefeitura Municipal de Divino de São Lourenço.",
+  title: `Perguntas Frequentes | ${MUNICIPALITY_INSTITUTION_NAME}`,
+  description: `Perguntas frequentes sobre serviços e canais de ${MUNICIPALITY_INSTITUTION_NAME}.`,
 };
 
 const FAQS = [

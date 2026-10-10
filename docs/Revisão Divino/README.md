@@ -66,7 +66,7 @@ servicos. Recortar apenas algumas tabelas deixaria fluxos quebrados.
 - Cultura
 - Camara
 - Seguranca e mobilidade
-- Configuracoes, auditoria e integracoes/SIAFIC
+- Configuracoes, auditoria e integracoes
 
 ## Aplicacao no Neon
 
@@ -122,10 +122,9 @@ Variaveis adicionais devem ser configuradas somente para os recursos usados:
 - Compras: `PRICE_RESEARCH_PORTAL_SECRET`.
 - Notificacoes: `CRON_SECRET` ou `PROTOCOLS_CRON_SECRET`.
 - ICP-Brasil: `ICP_BRASIL_A1_*` e `ICP_BRASIL_TRUSTED_ROOT_CERT_PEM`.
-- SIAFIC: `SIAFIC_*` e `APP_ENV`.
 
-Nao habilite em producao as variaveis `NEXT_PUBLIC_POC_MODE`,
-`CELERIFLOW_POC_RESET_ENABLED` ou `SIAFIC_DEMO_FIXTURES_ENABLED`.
+Nao habilite em producao as variaveis `NEXT_PUBLIC_POC_MODE` ou
+`CELERIFLOW_POC_RESET_ENABLED`.
 
 ## Bootstrap
 

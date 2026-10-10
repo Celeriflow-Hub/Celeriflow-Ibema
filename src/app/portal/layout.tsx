@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import { PortalShell } from "@/components/portal-institucional/PortalShell";
+import { MUNICIPALITY_INSTITUTION_NAME } from "@/lib/municipality-identity";
+import { getInstitutionalContact } from "@/lib/portal-institucional/public-content";
 
 export const metadata: Metadata = {
-  title: "Portal Oficial | Prefeitura Municipal de Divino de São Lourenço",
-  description: "Portal oficial da Prefeitura Municipal de Divino de São Lourenço — informações institucionais, serviços, notícias e transparência.",
+  title: `Portal Oficial | ${MUNICIPALITY_INSTITUTION_NAME}`,
+  description: `Portal oficial de ${MUNICIPALITY_INSTITUTION_NAME} — informações institucionais, serviços, notícias e transparência.`,
 };
 
-export default function InstitutionalPortalLayout({ children }: { children: React.ReactNode }) {
-  return <PortalShell>{children}</PortalShell>;
+export default async function InstitutionalPortalLayout({ children }: { children: React.ReactNode }) {
+  const institution = await getInstitutionalContact();
+  return <PortalShell institution={institution}>{children}</PortalShell>;
 }

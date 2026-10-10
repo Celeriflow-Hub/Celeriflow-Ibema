@@ -3,10 +3,11 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getPublicBiddings, getPublicContracts } from "@/lib/transparencia/portal-public";
 import { PortalBreadcrumb } from "@/components/portal-institucional/PortalShell";
+import { MUNICIPALITY_INSTITUTION_NAME } from "@/lib/municipality-identity";
 
 export const metadata: Metadata = {
-  title: "Licitações e Contratos | Prefeitura de Divino de São Lourenço",
-  description: "Licitações e contratos publicados pela Prefeitura Municipal de Divino de São Lourenço.",
+  title: `Licitações e Contratos | ${MUNICIPALITY_INSTITUTION_NAME}`,
+  description: `Licitações e contratos publicados por ${MUNICIPALITY_INSTITUTION_NAME}.`,
 };
 
 export const dynamic = "force-dynamic";

@@ -191,38 +191,6 @@ export async function seedConstitutionalRulesAction(): Promise<ActionResult> {
         else await prisma.classificationRule.create({ data });
       }
 
-      // Inserir itens de teste na Fila de Exceções para demonstração na POC
-      const existingExceptions = await prisma.exceptionQueueItem.count();
-      if (existingExceptions === 0) {
-        await prisma.exceptionQueueItem.createMany({
-          data: [
-            {
-              descricao: "STN TR COMPENSA-MUN LC 176 ADO-2020 V1",
-              valorDecimal: new Prisma.Decimal(42500.0),
-              dataMovimento: new Date(),
-              banco: pocVirtualBank.name,
-              contaNumero: "98765-4",
-              sinal: "CREDITO",
-              scoreConfianca: 0.65,
-              sugestaoTipo: "ADO — LC nº 176/2020",
-              motivoExcecao: "Descrição contém sufixo variante V1 não coberto por correspondência exata.",
-              status: "PENDENTE",
-            },
-            {
-              descricao: "COT PARTE ROYALTIES ANP D-2026/08",
-              valorDecimal: new Prisma.Decimal(89400.0),
-              dataMovimento: new Date(),
-              banco: pocVirtualBank.name,
-              contaNumero: "12345-6",
-              sinal: "CREDITO",
-              scoreConfianca: 0.58,
-              sugestaoTipo: "Royalties do Petróleo",
-              motivoExcecao: "Sigla 'ANP' necessita confirmação de prioridade e deducao.",
-              status: "PENDENTE",
-            },
-          ],
-        });
-      }
     }
 
     const missingRules = [

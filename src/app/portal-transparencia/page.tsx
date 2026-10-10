@@ -8,6 +8,7 @@ import {
 } from "@/lib/transparencia/portal-fiscal";
 import { getPublicBiddings, getPublicContracts, getPublicFinancialReportSnapshots } from "@/lib/transparencia/portal-public";
 import { getPublicNotices } from "@/lib/transparencia/public-notices";
+import { getInstitutionalContact } from "@/lib/portal-institucional/public-content";
 
 export const dynamic = "force-dynamic";
 
@@ -86,7 +87,7 @@ export default async function PortalTransparenciaPage({ searchParams }: { search
     getPublicContracts(prisma),
     getPublicBiddings(prisma),
     getPublicNotices(prisma),
-    prisma.institution.findFirst({ select: { name: true, phone: true, email: true, address: true, city: true, state: true, website: true } }),
+    getInstitutionalContact(),
   ]);
 
   return (
@@ -96,7 +97,7 @@ export default async function PortalTransparenciaPage({ searchParams }: { search
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-300">Dados abertos</p>
             <h1 className="mt-1 text-2xl font-bold">Portal da Transparência</h1>
-            <p className="mt-1 text-sm text-slate-300">Execução orçamentária e financeira de {institution?.name ?? "Prefeitura Municipal de Divino de São Lourenço"}</p>
+            <p className="mt-1 text-sm text-slate-300">Execução orçamentária e financeira de {institution.name}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Link className="rounded-md border border-slate-600 px-4 py-2 text-sm font-semibold hover:border-white hover:bg-slate-800" href="/portal">Portal Institucional</Link>

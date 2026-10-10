@@ -49,7 +49,7 @@ export default async function InstitutionalPortalHome() {
         <div className="mx-auto grid max-w-7xl gap-9 px-5 py-12 sm:px-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,.8fr)] lg:items-center lg:py-16">
           <div>
             <p className="inline-flex items-center gap-2 rounded-full border border-[#bdd7e8] bg-white px-3 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-[#07517f]"><ShieldCheck className="size-3.5 text-emerald-700" aria-hidden="true" /> Portal Oficial da Prefeitura</p>
-            <h1 className="mt-5 max-w-3xl text-4xl font-bold tracking-tight text-[#073b64] sm:text-5xl">Prefeitura de Divino de São Lourenço</h1>
+            <h1 className="mt-5 max-w-3xl text-4xl font-bold tracking-tight text-[#073b64] sm:text-5xl">{institution.name}</h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">Informações institucionais, serviços, notícias e transparência em um portal simples de consultar.</p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link href="/portal-transparencia" className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">Acessar transparência <ArrowRight className="size-4" aria-hidden="true" /></Link>

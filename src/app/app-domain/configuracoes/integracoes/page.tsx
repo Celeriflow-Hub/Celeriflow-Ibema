@@ -9,20 +9,6 @@ export default async function IntegrationConnectionsPage() {
   const connections = await prisma.integrationConnection.findMany({
     include: {
       runs: { orderBy: { createdAt: "desc" }, take: 3 },
-      siaficOutboxEvents: {
-        orderBy: { createdAt: "desc" },
-        take: 8,
-        select: {
-          id: true,
-          entityType: true,
-          entityId: true,
-          entityVersion: true,
-          eventType: true,
-          operation: true,
-          createdAt: true,
-          delivery: { select: { status: true, attemptCount: true, nextAttemptAt: true, lastError: true, receiptId: true } },
-        },
-      },
     },
     orderBy: { category: "asc" },
   });

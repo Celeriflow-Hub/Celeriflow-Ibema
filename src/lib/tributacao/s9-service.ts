@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { concessionSituation, executionNext, formatCdaNumber, graveHasVacancy, internalProtocol, nextCdaVersion, occupancyStats, protestNext, sumBy, trendByMonth, validateEnrollmentEligibility, TributarioS9Error } from "./s9-engine";
 import { confirmTaxPayment, createTaxAssessment, enrollAssessmentInActiveDebt, generateTaxGuide } from "./index";
+import { MUNICIPALITY_LABEL, MUNICIPALITY_NAME } from "@/lib/municipality-identity";
 
 type Actor = { usuarioId: string; employeeId?: string | null };
 const fullActor = (actor: Actor) => ({ usuarioId: actor.usuarioId, employeeId: actor.employeeId ?? null });
@@ -33,12 +34,12 @@ function taxpayerDocument(taxpayer: { person?: { cpf?: string | null } | null; c
 // Defaults demonstrativos controlados: tributo de sepultamento, estrutura mínima de cemitério, causas e funerária.
 export async function ensureS9Defaults(db: PrismaClient, actor: Actor) {
   const tax = await db.tax.upsert({ where: { id: "tax-sepultamento-s9" }, update: {}, create: { id: "tax-sepultamento-s9", name: "Taxa de Sepultamento", taxType: "Taxa", isActive: true } });
-  const cemetery = await db.taxCemetery.upsert({ where: { code: "CEM-MUNICIPAL" }, update: {}, create: { code: "CEM-MUNICIPAL", name: "Cemitério Municipal São Lourenço", address: "Alto do Cemitério, Divino de São Lourenço/ES", wakePlace: "Capela municipal" } });
+  const cemetery = await db.taxCemetery.upsert({ where: { code: "CEM-MUNICIPAL" }, update: {}, create: { code: "CEM-MUNICIPAL", name: `Cemitério Municipal de ${MUNICIPALITY_NAME}`, address: MUNICIPALITY_LABEL, wakePlace: "Capela municipal" } });
   const sector = await db.taxCemeterySector.upsert({ where: { cemeteryId_code: { cemeteryId: cemetery.id, code: "QUADRA-A" } }, update: {}, create: { cemeteryId: cemetery.id, code: "QUADRA-A", name: "Quadra A" } });
   for (const [code, description] of [["NATURAL", "Causa natural"], ["ACIDENTE", "Acidente"], ["VIOLENTA", "Causa violenta"], ["INFANTIL", "Óbito infantil"], ["FETAL", "Óbito fetal"], ["IGNORADA", "Causa ignorada"]] as [string, string][]) {
     await db.taxDeathCause.upsert({ where: { code }, update: {}, create: { code, description } });
   }
-  await db.taxFuneralHome.upsert({ where: { id: "funeraria-s9" }, update: {}, create: { id: "funeraria-s9", name: "Funerária Paz Eterna", phone: "(27) 90000-0000" } });
+  await db.taxFuneralHome.upsert({ where: { id: "funeraria-s9" }, update: {}, create: { id: "funeraria-s9", name: "Funerária Paz Eterna", phone: "Não informado" } });
   await db.taxCemeteryEmployee.upsert({ where: { id: "coveiro-s9" }, update: {}, create: { id: "coveiro-s9", cemeteryId: cemetery.id, name: "Zelador do cemitério", role: "Coveiro" } });
   return { tax, cemetery, sector };
 }

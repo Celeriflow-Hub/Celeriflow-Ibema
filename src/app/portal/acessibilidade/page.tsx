@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PortalBreadcrumb } from "@/components/portal-institucional/PortalShell";
+import { MUNICIPALITY_INSTITUTION_NAME } from "@/lib/municipality-identity";
 
 export const metadata: Metadata = {
-  title: "Acessibilidade | Prefeitura de Divino de São Lourenço",
-  description: "Recursos de acessibilidade do portal oficial da Prefeitura Municipal de Divino de São Lourenço.",
+  title: `Acessibilidade | ${MUNICIPALITY_INSTITUTION_NAME}`,
+  description: `Recursos de acessibilidade do portal oficial de ${MUNICIPALITY_INSTITUTION_NAME}.`,
 };
 
 export default function AcessibilidadePage() {
@@ -13,7 +14,7 @@ export default function AcessibilidadePage() {
       <PortalBreadcrumb current="Acessibilidade" />
       <h1 className="mt-5 text-3xl font-bold tracking-tight text-slate-900">Acessibilidade</h1>
       <p className="mt-3 text-sm leading-7 text-slate-700">
-        O portal oficial da Prefeitura Municipal de Divino de São Lourenço adota recursos de acessibilidade para ampliar
+        O portal oficial de {MUNICIPALITY_INSTITUTION_NAME} adota recursos de acessibilidade para ampliar
         o acesso às informações públicas por todas as pessoas.
       </p>
       <div className="mt-6 space-y-4 rounded-xl border border-slate-200 bg-white p-6 text-sm leading-7 text-slate-700">

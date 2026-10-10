@@ -24,7 +24,7 @@ export function GovernmentAI() {
       status: "100% Homologado",
     },
     {
-      title: "SIAFIC & Matriz de Saldos Contábeis (MSC)",
+      title: "Contabilidade & Matriz de Saldos Contábeis (MSC)",
       norma: "Decreto Federal nº 10.540/2020",
       icon: Scale,
       color: "from-emerald-500 to-teal-600",

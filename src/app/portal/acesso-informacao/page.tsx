@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { FileText } from "lucide-react";
 import { PortalBreadcrumb } from "@/components/portal-institucional/PortalShell";
+import { MUNICIPALITY_INSTITUTION_NAME } from "@/lib/municipality-identity";
 
 export const metadata: Metadata = {
-  title: "Acesso à Informação | Prefeitura de Divino de São Lourenço",
-  description: "Serviço de Informação ao Cidadão (e-SIC) da Prefeitura Municipal de Divino de São Lourenço.",
+  title: `Acesso à Informação | ${MUNICIPALITY_INSTITUTION_NAME}`,
+  description: `Serviço de Informação ao Cidadão (e-SIC) de ${MUNICIPALITY_INSTITUTION_NAME}.`,
 };
 
 export default function AcessoInformacaoPage() {
@@ -16,7 +17,7 @@ export default function AcessoInformacaoPage() {
       <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">Acesso à Informação (e-SIC)</h1>
       <p className="mt-3 text-sm leading-7 text-slate-700">
         O Serviço de Informação ao Cidadão recebe pedidos de acesso a informações públicas produzidas ou custodiadas
-        pela Prefeitura Municipal de Divino de São Lourenço, nos termos da Lei de Acesso à Informação.
+        por {MUNICIPALITY_INSTITUTION_NAME}, nos termos da Lei de Acesso à Informação.
       </p>
       <div className="mt-6 grid gap-3">
         <article className="rounded-lg border border-slate-200 bg-white p-5">

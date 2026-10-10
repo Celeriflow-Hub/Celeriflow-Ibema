@@ -5,6 +5,18 @@ import { checkRateLimit } from "@/lib/platform/rate-limit";
 // ATENÇÃO: O middleware roda no Edge Runtime — NÃO importar módulos Node.js aqui.
 const SESSION_COOKIE_NAME = "celeriflow_session";
 
+function configuredSystemHostname() {
+  const configuredUrl = process.env.CELERIFLOW_PUBLIC_BASE_URL;
+  if (!configuredUrl) return null;
+
+  try {
+    const url = new URL(/^https?:\/\//i.test(configuredUrl) ? configuredUrl : `https://${configuredUrl}`);
+    return url.hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 export const config = {
   matcher: [
     /*
@@ -37,10 +49,8 @@ export default function proxy(req: NextRequest) {
   }
   const hostname = (req.headers.get("host") || "").toLowerCase().split(":")[0];
 
-  // Domínio que deve apontar direto para o sistema interno (dashboard)
-  const systemDomain = "divinosaolourenco.celeriflow.com.br";
-
-  const isSystemDomain = hostname === systemDomain || hostname === "app.localhost" || hostname.includes("vercel.app");
+  const systemDomain = configuredSystemHostname();
+  const isSystemDomain = hostname === systemDomain || hostname === "app.localhost" || hostname.endsWith(".vercel.app");
 
   // Se o usuário tentar acessar a pasta interna via URL, reescreve ou redireciona
   if (url.pathname.startsWith("/app-domain")) {

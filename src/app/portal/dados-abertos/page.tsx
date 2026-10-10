@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Database, Download } from "lucide-react";
 import { PortalBreadcrumb } from "@/components/portal-institucional/PortalShell";
+import { MUNICIPALITY_INSTITUTION_NAME } from "@/lib/municipality-identity";
 
 export const metadata: Metadata = {
-  title: "Dados Abertos | Prefeitura de Divino de São Lourenço",
-  description: "Dados abertos do Portal da Transparência da Prefeitura Municipal de Divino de São Lourenço, com exportação em CSV.",
+  title: `Dados Abertos | ${MUNICIPALITY_INSTITUTION_NAME}`,
+  description: `Dados abertos do Portal da Transparência de ${MUNICIPALITY_INSTITUTION_NAME}, com exportação em CSV.`,
 };
 
 const DATASETS = [
@@ -23,7 +24,7 @@ export default function DadosAbertosPage() {
       <p className="mt-5 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[#0e4c7e]"><Database className="size-4" aria-hidden="true" /> Transparência e controle social</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">Dados Abertos</h1>
       <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-        Conjuntos de dados publicados pelo Portal da Transparência da Prefeitura Municipal de Divino de São Lourenço.
+        Conjuntos de dados publicados pelo Portal da Transparência de {MUNICIPALITY_INSTITUTION_NAME}.
         Os arquivos utilizam o formato CSV e refletem os mesmos filtros da consulta pública, sem exposição de dados pessoais.
       </p>
       <div className="mt-6 grid gap-3">

@@ -1,5 +1,11 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import {
+  LEGACY_MUNICIPALITY_PATTERN,
+  MUNICIPALITY_INSTITUTION_NAME,
+  MUNICIPALITY_NAME,
+  MUNICIPALITY_STATE,
+} from "@/lib/municipality-identity";
 
 export type InstitutionalContact = {
   name: string;
@@ -28,14 +34,22 @@ export type PublicPortalPage = {
 type PortalNewsRecord = Omit<PublicPortalNews, "publishedAt"> & { publishedAt: Date | null };
 
 const demonstrationInstitution: InstitutionalContact = {
-  name: "Prefeitura Municipal de Divino São Lourenço",
+  name: MUNICIPALITY_INSTITUTION_NAME,
   address: null,
-  city: "Divino São Lourenço",
-  state: "ES",
+  city: MUNICIPALITY_NAME,
+  state: MUNICIPALITY_STATE,
   phone: null,
   email: null,
   website: null,
 };
+
+function publicInstitutionOrFallback(institution: InstitutionalContact | null) {
+  if (!institution) return demonstrationInstitution;
+  const searchableValues = Object.values(institution).filter((value): value is string => typeof value === "string");
+  return searchableValues.some((value) => LEGACY_MUNICIPALITY_PATTERN.test(value))
+    ? demonstrationInstitution
+    : institution;
+}
 
 function isUnavailablePortalSchema(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && ["P2021", "P2022"].includes(error.code);
@@ -105,10 +119,29 @@ export async function getInstitutionalPortalHome() {
   ]);
 
   return {
-    institution: institution ?? demonstrationInstitution,
+    institution: publicInstitutionOrFallback(institution),
     latestNews,
     pages,
   };
+}
+
+export async function getInstitutionalContact(): Promise<InstitutionalContact> {
+  try {
+    const institution = await prisma.institution.findFirst({
+      select: {
+        name: true,
+        address: true,
+        city: true,
+        state: true,
+        phone: true,
+        email: true,
+        website: true,
+      },
+    });
+    return publicInstitutionOrFallback(institution);
+  } catch {
+    return demonstrationInstitution;
+  }
 }
 
 export async function getPublishedNewsPage(requestedPage: number, pageSize = 12) {

@@ -5,7 +5,7 @@ export function Stats() {
     {
       value: "24+",
       label: "Domínios Mapeados",
-      description: "Finanças, SIAFIC, Pix, PNCP, Saúde e Educação integrados.",
+      description: "Finanças, Pix, PNCP, Saúde e Educação integrados.",
       icon: Layers,
       color: "text-blue-400",
       borderColor: "hover:border-blue-500/50",

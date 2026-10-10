@@ -65,10 +65,6 @@ test("defines authentication, protected-operation, and usage-monitoring event ty
     "ASSET_ACQUIRED_FROM_RECEIPT",
     "INTERNAL_CONTROL_FINDING_REGISTERED",
     "FLEET_OPERATION_REGISTERED",
-    "SIAFIC_OUTBOX_QUEUED",
-    "SIAFIC_DELIVERY_CONFIRMED",
-    "SIAFIC_DELIVERY_FAILED",
-    "SIAFIC_DELIVERY_RETRY_REQUESTED",
   ]);
 });
 

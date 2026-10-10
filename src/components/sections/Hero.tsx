@@ -34,7 +34,7 @@ export function Hero() {
           <Sparkles className="h-4 w-4 text-emerald-400" />
           <span className="font-semibold text-slate-100">CeleriFlow Gov 2026</span>
           <span className="h-3 w-px bg-slate-700 mx-1" />
-          <span className="text-slate-300 font-normal">SIAFIC, PNCP & Pix Dinâmico Nativos</span>
+          <span className="text-slate-300 font-normal">Finanças, PNCP & Pix Dinâmico Nativos</span>
         </div>
         
         {/* Main Headline */}
@@ -83,7 +83,7 @@ export function Hero() {
           </div>
           <div className="flex items-center justify-center gap-2 p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-sm text-slate-300">
             <ShieldCheck className="h-4 w-4 text-blue-400 shrink-0" />
-            <span>SIAFIC Dec. 10.540/20</span>
+            <span>Gestão Fiscal Integrada</span>
           </div>
           <div className="flex items-center justify-center gap-2 p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-sm text-slate-300">
             <QrCode className="h-4 w-4 text-teal-400 shrink-0" />
@@ -141,7 +141,7 @@ export function Hero() {
                 <span>Empenhos & Liquidações</span>
                 <Lock className="h-4 w-4 text-teal-400" />
               </div>
-              <div className="text-xl sm:text-2xl font-bold text-slate-100 font-mono">100% SIAFIC</div>
+              <div className="text-xl sm:text-2xl font-bold text-slate-100 font-mono">100% Digital</div>
               <div className="text-[11px] text-teal-400 mt-1">Conformidade STN Auditada</div>
             </div>
           </div>

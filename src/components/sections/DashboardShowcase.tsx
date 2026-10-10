@@ -118,7 +118,7 @@ export function DashboardShowcase() {
                 </div>
                 <div className="text-2xl font-bold font-mono text-slate-100">84,2%</div>
                 <div className="mt-2 text-[11px] text-teal-300 font-mono">
-                  Conformidade SIAFIC STN
+                  Conformidade Fiscal STN
                 </div>
               </div>
 

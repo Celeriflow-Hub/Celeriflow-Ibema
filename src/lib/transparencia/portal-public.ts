@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { MUNICIPALITY_INSTITUTION_NAME, MUNICIPALITY_LABEL } from "@/lib/municipality-identity";
 import type { PrismaClient } from "@prisma/client";
 
 type Db = PrismaClient;
@@ -218,7 +219,7 @@ export async function publishApprovedSnapshot(
 export function getPublicHelpFaqAndContactInfo() {
   return {
     portalInfo: {
-      title: "Portal da Transparência Pública — Município de Lagoa Seca / PB",
+      title: `Portal da Transparência Pública — ${MUNICIPALITY_INSTITUTION_NAME}`,
       lawRef: "Lei Complementar nº 131/2009 & Lei nº 12.527/2011 (Lei de Acesso à Informação - LAI)",
       description: "Garantia de acesso amplo, simultâneo e em tempo real a todas as informações financeiras, orçamentárias, patrimoniais, licitações e contratos públicos.",
     },
@@ -242,10 +243,10 @@ export function getPublicHelpFaqAndContactInfo() {
     ],
     contact: {
       ombudsmanName: "Ouvidoria Geral e Serviço de Informação ao Cidadão (e-SIC)",
-      address: "Rua Cicero Faustino da Silva, 647 - Centro, Lagoa Seca - PB, CEP 58117-000",
-      email: "transparencia@lagoaseca.pb.gov.br",
-      phone: "(83) 3366-1020",
-      openingHours: "Segunda a Sexta-feira, das 07h00 às 13h00",
+      address: MUNICIPALITY_LABEL,
+      email: "Não informado",
+      phone: "Não informado",
+      openingHours: "Consulte os canais institucionais",
     },
   };
 }

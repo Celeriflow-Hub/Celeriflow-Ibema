@@ -2,14 +2,15 @@ import Link from "next/link";
 import { Search } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { PortalBreadcrumb } from "@/components/portal-institucional/PortalShell";
+import { MUNICIPALITY_INSTITUTION_NAME } from "@/lib/municipality-identity";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q } = await searchParams;
   return {
-    title: q ? `Busca por “${q}” | Prefeitura de Divino de São Lourenço` : "Busca | Prefeitura de Divino de São Lourenço",
-    description: "Pesquisa institucional no portal oficial da Prefeitura Municipal de Divino de São Lourenço.",
+    title: q ? `Busca por “${q}” | ${MUNICIPALITY_INSTITUTION_NAME}` : `Busca | ${MUNICIPALITY_INSTITUTION_NAME}`,
+    description: `Pesquisa institucional no portal oficial de ${MUNICIPALITY_INSTITUTION_NAME}.`,
   };
 }
 

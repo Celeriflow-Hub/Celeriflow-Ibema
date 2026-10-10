@@ -31,11 +31,11 @@ export function EcosystemMatrix() {
     {
       id: "financeiro",
       title: "Finanças & Orçamento",
-      subtitle: "Execução SIAFIC & Arrecadação Pix",
+      subtitle: "Execução Financeira & Arrecadação Pix",
       icon: Landmark,
       color: "from-blue-600 to-indigo-600",
       accentBg: "border-blue-500/30 bg-blue-950/40 text-blue-300",
-      badge: "SIAFIC 100% Conforme",
+      badge: "Gestão Fiscal Integrada",
       domains: [
         {
           name: "Financeiro & Tesouraria",

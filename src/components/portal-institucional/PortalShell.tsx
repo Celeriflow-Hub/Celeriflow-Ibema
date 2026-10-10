@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import type { InstitutionalContact } from "@/lib/portal-institucional/public-content";
 
 type SubItem = { label: string; href: string; external?: boolean };
 type MenuItem = { label: string; href: string; home?: boolean; children?: SubItem[] };
@@ -42,8 +43,8 @@ const MAIN_MENU: MenuItem[] = [
       { label: "Ouvidoria (e-Ouv)", href: "/portal/ouvidoria" },
       { label: "Acesso à Informação (e-SIC)", href: "/portal/acesso-informacao" },
       { label: "Perguntas Frequentes", href: "/portal/perguntas-frequentes" },
-      { label: "Nota Fiscal Eletrônica", href: "https://es-divinodesaolourenco-pm-nfs.cloud.el.com.br//paginas/sistema/login.jsf", external: true },
-      { label: "Diário Oficial", href: "https://ioes.dio.es.gov.br/buscanova/#/p=1&q=Divino%20de%20S%C3%A3o%20Louren%C3%A7o", external: true },
+      { label: "Serviços tributários", href: "/portal/tributario" },
+      { label: "Notícias oficiais", href: "/portal/noticias" },
     ],
   },
   {
@@ -104,7 +105,7 @@ const MAIN_MENU: MenuItem[] = [
     label: "Leis Municipais",
     href: "/portal/leis-municipais",
     children: [
-      { label: "Leis e atos compilados (SPL)", href: "https://divinodesaolourenco.legonline.com.br", external: true },
+      { label: "Leis e atos municipais", href: "/portal/leis-municipais" },
       { label: "Decretos e portarias", href: "/portal/leis-municipais#decretos" },
       { label: "Lei Orgânica", href: "/portal/leis-municipais#lei-organica" },
     ],
@@ -169,17 +170,17 @@ function TopAccessibilityBar({
   );
 }
 
-function InstitutionalBrand() {
+function InstitutionalBrand({ institutionName }: { institutionName: string }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
 
   return (
     <div className="bg-white">
       <div className="mx-auto grid max-w-7xl items-center gap-6 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1.25fr)_auto_minmax(280px,0.9fr)] lg:gap-8">
-        <Link href="/portal" className="flex items-center gap-4 rounded-md focus-visible:outline-2 focus-visible:outline-[#0e4c7e] focus-visible:outline-offset-4" aria-label="Página inicial — Prefeitura de Divino de São Lourenço">
+        <Link href="/portal" className="flex items-center gap-4 rounded-md focus-visible:outline-2 focus-visible:outline-[#0e4c7e] focus-visible:outline-offset-4" aria-label={`Página inicial — ${institutionName}`}>
           <Image
             src="/brasao-divino.png"
-            alt="Brasão oficial da Prefeitura Municipal de Divino de São Lourenço"
+            alt={`Identidade visual de ${institutionName}`}
             width={420}
             height={120}
             priority
@@ -187,51 +188,7 @@ function InstitutionalBrand() {
           />
         </Link>
 
-        <div className="flex items-center justify-start gap-2.5 lg:justify-center" aria-label="Redes sociais e canais oficiais">
-          <a
-            href="https://www.facebook.com/profile.php?id=100068793926806"
-            target="_blank"
-            rel="noreferrer"
-            aria-label="Facebook oficial da Prefeitura"
-            title="Facebook oficial"
-            className="flex size-10 items-center justify-center rounded-full bg-[#0e4c7e] text-white transition hover:bg-[#0a3a5f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e4c7e]"
-          >
-            <svg
-              className="size-5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
-            </svg>
-          </a>
-          <a
-            href="https://www.instagram.com/prefdivinosaolourenco/"
-            target="_blank"
-            rel="noreferrer"
-            aria-label="Instagram oficial da Prefeitura"
-            title="Instagram oficial"
-            className="flex size-10 items-center justify-center rounded-full bg-[#0e4c7e] text-white transition hover:bg-[#0a3a5f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e4c7e]"
-          >
-            <svg
-              className="size-5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
-              <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-              <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
-            </svg>
-          </a>
+        <div className="flex items-center justify-start gap-2.5 lg:justify-center" aria-label="Canais oficiais">
           <Link
             href="/portal/ouvidoria"
             aria-label="Ouvidoria municipal"
@@ -275,16 +232,14 @@ function InstitutionalBrand() {
               <span className="hidden sm:inline">Buscar</span>
             </button>
           </form>
-          <a
-            href="https://divinodesaolourenco.legonline.com.br"
-            target="_blank"
-            rel="noreferrer"
+          <Link
+            href="/portal/leis-municipais"
             title="Sistema de Processos Legislativos (SPL) — legislação compilada"
             className="mt-2.5 inline-flex w-full items-center justify-center gap-2 rounded-md border border-[#0e4c7e]/25 bg-[#eef4f9] px-3 py-2 text-[13px] font-bold text-[#0e4c7e] transition hover:bg-[#0e4c7e] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e4c7e]"
           >
             <Scale className="size-4" aria-hidden="true" />
             Sistema de Processos Legislativos (SPL)
-          </a>
+          </Link>
         </div>
       </div>
     </div>
@@ -456,7 +411,7 @@ function MainMenu() {
   );
 }
 
-export function PortalShell({ children }: { children: React.ReactNode }) {
+export function PortalShell({ children, institution }: { children: React.ReactNode; institution: InstitutionalContact }) {
   const [fontStep, setFontStep] = useState(1);
   const [highContrast, setHighContrast] = useState(false);
 
@@ -480,6 +435,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   }, [fontStep, highContrast]);
 
   const fontScale = FONT_STEPS[fontStep] ?? 1;
+  const location = [institution.address, [institution.city, institution.state].filter(Boolean).join("/")].filter(Boolean).join(" · ");
 
   return (
     <div
@@ -505,7 +461,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
       />
 
       <header>
-        <InstitutionalBrand />
+        <InstitutionalBrand institutionName={institution.name} />
         <MainMenu />
         <div className="h-[6px] bg-[#00843d]" aria-hidden="true" />
         <nav aria-label="Acesso rápido institucional" className="bg-white shadow-sm">
@@ -529,9 +485,9 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
       <footer className="mt-14 bg-[#0a3a5c] text-slate-100">
         <div className="mx-auto grid max-w-7xl gap-10 px-4 py-10 sm:px-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
           <div>
-            <Image src="/brasao-divino-claro.png" alt="Prefeitura Municipal de Divino de São Lourenço" width={320} height={96} className="h-14 w-auto" />
+            <Image src="/brasao-divino-claro.png" alt={`Identidade visual de ${institution.name}`} width={320} height={96} className="h-14 w-auto" />
             <p className="mt-4 text-sm leading-6 text-slate-200">
-              Portal oficial da Prefeitura Municipal de Divino de São Lourenço, Espírito Santo. Acesso público às informações institucionais, serviços e transparência.
+              Portal oficial de {institution.name}. Acesso público às informações institucionais, serviços e transparência.
             </p>
           </div>
           <nav aria-label="Menu geral do rodapé">
@@ -555,11 +511,11 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
               <li><Link href="/portal/dados-abertos" className="hover:text-white hover:underline">Dados Abertos</Link></li>
               <li><Link href="/portal/acessibilidade" className="hover:text-white hover:underline">Acessibilidade</Link></li>
             </ul>
-            <p className="mt-5 text-[13px] leading-5 text-slate-300">Praça Dez de Agosto, 10 — Centro<br />Divino de São Lourenço/ES — CEP 29590-000</p>
+            {location && <p className="mt-5 text-[13px] leading-5 text-slate-300">{location}</p>}
           </div>
         </div>
         <div className="border-t border-white/15 px-4 py-4 text-center text-xs text-slate-300">
-          Prefeitura Municipal de Divino de São Lourenço — Poder Executivo Municipal. Conteúdo institucional publicado e dados públicos autorizados.
+          {institution.name} — Poder Executivo Municipal. Conteúdo institucional publicado e dados públicos autorizados.
         </div>
       </footer>
     </div>

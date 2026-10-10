@@ -8,11 +8,15 @@ export async function saveSocialCatalogEntry(input: unknown) {
   try {
     const data = catalogEntrySchema.parse(input);
     const { prisma } = await getTenantContextForModuleOperation("SOCIAL", data.id ? "update" : "create");
+    if (data.id) {
+      const current = await prisma.socialCatalogEntry.findUnique({ where: { id: data.id }, select: { kind: true } });
+      if (!current || current.kind !== data.kind) return { error: "Um cadastro existente não pode mudar de catálogo." };
+    }
     const duplicate = await prisma.socialCatalogEntry.findFirst({
       where: { kind: data.kind, name: { equals: data.name, mode: "insensitive" }, ...(data.id ? { id: { not: data.id } } : {}) },
     });
     if (duplicate) return { error: "Já existe um registro com esse nome neste catálogo." };
-    const values = { kind: data.kind, name: data.name, description: data.description || null, isActive: data.isActive };
+    const values = { kind: data.kind, name: data.name, description: data.description || null, isActive: data.isActive, allowedUnitTypes: data.allowedUnitTypes };
     if (data.id) {
       await prisma.socialCatalogEntry.update({ where: { id: data.id }, data: values });
     } else {

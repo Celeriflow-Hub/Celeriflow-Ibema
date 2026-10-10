@@ -4,17 +4,21 @@ import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
 import { NewAttendanceSheet } from "../components/NewAttendanceSheet";
 import { AtendimentosClient } from "./AtendimentosClient";
+import { resolveSocialAccess, socialAttendanceWhere } from "@/lib/social/access-policy";
 
 export default async function SocialAtendimentosPage() {
-  const { prisma } = await getTenantContextForModule("SOCIAL");
+  const context = await getTenantContextForModule("SOCIAL");
+  const { prisma } = context;
+  const access = await resolveSocialAccess(context);
   const [attendances, families, units, professionals] = await Promise.all([
     prisma.socialAttendance.findMany({
+      where: socialAttendanceWhere(access),
       include: { family: { include: { representative: true } }, person: true, unit: true, professional: { include: { person: true } } },
       orderBy: { date: "desc" },
     }),
-    prisma.socialFamily.findMany({ include: { representative: { select: { fullName: true } } }, orderBy: { representative: { fullName: "asc" } } }),
-    prisma.socialUnit.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.employee.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.socialFamily.findMany({ where: !access.administrator && !access.links.length ? { id: { in: [] } } : {}, select: { id: true, representative: { select: { fullName: true } } }, orderBy: { representative: { fullName: "asc" } } }),
+    prisma.socialUnit.findMany({ where: { isActive: true, ...(access.administrator ? {} : { id: { in: access.links.map((link) => link.unitId) } }) }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.employee.findMany({ where: { isActive: true, ...(access.administrator ? {} : { id: access.employeeId || "" }) }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
 
   const rows = attendances.map((attendance) => ({

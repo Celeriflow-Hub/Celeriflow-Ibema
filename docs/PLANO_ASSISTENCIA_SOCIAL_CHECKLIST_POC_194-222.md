@@ -4,6 +4,16 @@
 
 ## 1. Objetivo e escopo
 
+### Continuidade — identificação de equipamentos
+
+- Cadastro/edição de unidades ampliado com código único de identificação, data de implantação, endereço completo, município/UF e latitude/longitude.
+- Tipos de equipamento ampliados na interface: Secretaria, Centro DIA, Saúde, Judiciário e Outros, além dos tipos existentes.
+- Validação no servidor de nome/tipo, e-mail, data real e coordenadas em par e dentro dos limites geográficos; campos omitidos pelos consumidores anteriores são preservados.
+- Formulário de unidades permanece aberto em erro e bloqueia nova submissão durante a gravação.
+- Migration aditiva `20261010060000_social_unit_identification`, com unicidade do código e restrição das coordenadas. Ainda precisa ser aplicada ao ambiente de destino.
+- Prisma validate, ESLint, dois testes de validação e build completo de produção aprovados. Não houve validação visual no navegador nesta entrega.
+- Itens 1–2 avançaram parcialmente: permanecem pendentes equipamentos de referência e consulta/cartografia em mapa; sigilo, equipe e vínculos profissionais seguem na próxima etapa.
+
 ### Registro de execução — primeira entrega técnica
 
 - Implementado `/social/configuracoes` com 15 catálogos: renda, despesa, vulnerabilidade, potencialidade, motivo de atendimento, acesso, desligamento, público prioritário, atividade social, atividade de gestão, medida socioeducativa, ato infracional, motivo de denúncia, motivo de encaminhamento e tipo de órgão da rede.

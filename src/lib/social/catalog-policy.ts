@@ -24,6 +24,7 @@ export const catalogEntrySchema = z.object({
   name: z.string().trim().min(2, "Informe um nome com pelo menos dois caracteres.").max(160),
   description: z.string().trim().max(2000).default(""),
   isActive: z.boolean(),
+  allowedUnitTypes: z.array(z.string().trim().min(1).max(80)).optional(),
 });
 
 export const minimumWageSchema = z.object({

@@ -12,6 +12,13 @@ const PAGE_SIZE = 20;
 
 type SocialUnit = {
   id: string;
+  isConfidential: boolean;
+  identificationCode: string | null;
+  implementationDate: Date | null;
+  streetAddress: string | null;
+  municipality: string | null;
+  latitude: number | null;
+  longitude: number | null;
   name: string;
   type: string;
   phone: string | null;
@@ -24,7 +31,8 @@ type SocialUnit = {
 };
 type RealEstate = { id: string; streetName: string | null; number: string | null; propertyType: string | null };
 type Employee = { id: string; name: string };
-type SocialUnitFormData = { name: string; type: string; phone: string; email: string; realEstateId: string; managerId: string };
+type SocialUnitFormData = { name: string; type: string; phone: string; email: string; realEstateId: string; managerId: string; identificationCode: string; implementationDate: string; streetAddress: string; municipality: string; latitude: string; longitude: string; isConfidential: boolean };
+const emptyDetails = { identificationCode: "", implementationDate: "", streetAddress: "", municipality: "", latitude: "", longitude: "", isConfidential: false };
 
 export default function UnidadesClient({ unidadesInicial, realEstates, employees }: {
   unidadesInicial: SocialUnit[];
@@ -37,8 +45,10 @@ export default function UnidadesClient({ unidadesInicial, realEstates, employees
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUnidade, setEditingUnidade] = useState<SocialUnit | null>(null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<SocialUnitFormData>({
-    name: "", type: "CRAS", phone: "", email: "", realEstateId: "", managerId: ""
+    name: "", type: "CRAS", phone: "", email: "", realEstateId: "", managerId: "", ...emptyDetails
   });
 
   const filtered = unidades.filter((u) =>
@@ -49,6 +59,7 @@ export default function UnidadesClient({ unidadesInicial, realEstates, employees
   const visibleUnits = filtered.slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE);
 
   const handleOpenModal = (unidade?: SocialUnit) => {
+    setError("");
     if (unidade) {
       setEditingUnidade(unidade);
       setFormData({
@@ -57,29 +68,41 @@ export default function UnidadesClient({ unidadesInicial, realEstates, employees
         phone: unidade.phone || "",
         email: unidade.email || "",
         realEstateId: unidade.realEstateId || "",
-        managerId: unidade.managerId || ""
+        managerId: unidade.managerId || "",
+        identificationCode: unidade.identificationCode || "",
+        isConfidential: unidade.isConfidential,
+        implementationDate: unidade.implementationDate ? new Date(unidade.implementationDate).toISOString().slice(0, 10) : "",
+        streetAddress: unidade.streetAddress || "", municipality: unidade.municipality || "",
+        latitude: unidade.latitude?.toString() ?? "", longitude: unidade.longitude?.toString() ?? ""
       });
     } else {
       setEditingUnidade(null);
-      setFormData({ name: "", type: "CRAS", phone: "", email: "", realEstateId: "", managerId: "" });
+      setFormData({ name: "", type: "CRAS", phone: "", email: "", realEstateId: "", managerId: "", ...emptyDetails });
     }
     setIsModalOpen(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
     if (editingUnidade) {
       const res = await updateSocialUnit(editingUnidade.id, formData);
+      if (!res.success) { setError(res.error || "Falha ao salvar unidade."); return; }
       if (res.success && res.data) {
         setUnidades(unidades.map((u) => u.id === editingUnidade.id ? res.data : u));
       }
     } else {
       const res = await createSocialUnit(formData);
+      if (!res.success) { setError(res.error || "Falha ao salvar unidade."); return; }
       if (res.success && res.data) {
         setUnidades([...unidades, res.data]);
       }
     }
     setIsModalOpen(false);
+    } catch { setError("Não foi possível salvar a unidade. Tente novamente."); }
+    finally { setSaving(false); }
   };
 
   const handleToggleStatus = async (id: string, currentStatus: boolean) => {
@@ -195,6 +218,7 @@ export default function UnidadesClient({ unidadesInicial, realEstates, employees
             
             <form onSubmit={handleSave} className="p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={formData.isConfidential} onChange={(event) => setFormData({ ...formData, isConfidential: event.target.checked })} />Equipamento sigiloso (configuração administrativa)</label>
                 <div className="space-y-1">
                   <label className="text-sm font-medium text-slate-700">Nome da Unidade</label>
                   <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
@@ -202,6 +226,11 @@ export default function UnidadesClient({ unidadesInicial, realEstates, employees
                 <div className="space-y-1">
                   <label className="text-sm font-medium text-slate-700">Tipo</label>
                   <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm">
+                    <option value="Secretaria">Secretaria</option>
+                    <option value="Centro DIA">Centro DIA</option>
+                    <option value="Saúde">Saúde</option>
+                    <option value="Judiciário">Judiciário</option>
+                    <option value="Outros">Outros</option>
                     <option value="CRAS">CRAS</option>
                     <option value="CREAS">CREAS</option>
                     <option value="Centro POP">Centro POP</option>
@@ -212,6 +241,14 @@ export default function UnidadesClient({ unidadesInicial, realEstates, employees
                   <label className="text-sm font-medium text-slate-700">Telefone</label>
                   <input type="text" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
                 </div>
+                {([
+                  ["identificationCode", "Código de identificação", "text"],
+                  ["implementationDate", "Data de implantação", "date"],
+                  ["streetAddress", "Endereço completo", "text"],
+                  ["municipality", "Município / UF", "text"],
+                  ["latitude", "Latitude (-90 a 90)", "number"],
+                  ["longitude", "Longitude (-180 a 180)", "number"],
+                ] as const).map(([key, label, type]) => <label key={key} className="flex flex-col gap-1 text-sm font-medium text-slate-700">{label}<input type={type} step={type === "number" ? "any" : undefined} value={formData[key]} onChange={(event) => setFormData({ ...formData, [key]: event.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" /></label>)}
                 <div className="space-y-1">
                   <label className="text-sm font-medium text-slate-700">Email</label>
                   <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" />
@@ -237,8 +274,9 @@ export default function UnidadesClient({ unidadesInicial, realEstates, employees
               </div>
 
               <div className="pt-4 flex justify-end gap-3 border-t">
+                {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium">Cancelar</button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+                <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50">
                   {editingUnidade ? "Salvar Alterações" : "Criar Unidade"}
                 </button>
               </div>

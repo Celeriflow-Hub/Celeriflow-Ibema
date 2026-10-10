@@ -2,20 +2,24 @@
 
 import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
+import { parseSocialUnitInput, type SocialUnitInput } from "@/lib/social/unit-input";
+import { ZodError } from "zod";
+import { assertSocialUnitAccess, resolveSocialAccess, socialAttendanceWhere } from "@/lib/social/access-policy";
+import { SYSTEM_ADMIN_PROFILE_CODE } from "@/lib/administration/c3-policy";
 
 async function getTenantPrisma(operation: ModuleOperation) {
   return (await getTenantContextForModuleOperation("SOCIAL", operation)).prisma;
 }
 
-export async function createSocialUnit(data: { name: string; type: string; phone?: string; email?: string; addressId?: string; realEstateId?: string; managerId?: string }) {
-  const prisma = await getTenantPrisma("create");
+export async function createSocialUnit(data: SocialUnitInput) {
   try {
+    const context = await getTenantContextForModuleOperation("SOCIAL", "create");
+    const { prisma } = context;
+    const values = parseSocialUnitInput(data);
+    if (values.isConfidential && context.user.profileCode !== SYSTEM_ADMIN_PROFILE_CODE) throw new Error("Somente o administrador configura sigilo de equipamento.");
     const unit = await prisma.socialUnit.create({
       data: {
-        name: data.name,
-        type: data.type,
-        phone: data.phone,
-        email: data.email,
+        ...values,
         addressId: data.addressId,
         realEstateId: data.realEstateId || null,
         managerId: data.managerId || null,
@@ -25,21 +29,25 @@ export async function createSocialUnit(data: { name: string; type: string; phone
     revalidatePath("/social/unidades");
     return { success: true, data: unit };
   } catch (error) {
+    if (error instanceof ZodError) return { success: false, error: error.issues[0].message };
     console.error("Error creating social unit:", error);
     return { success: false, error: "Falha ao criar unidade socioassistencial." };
   }
 }
 
-export async function updateSocialUnit(id: string, data: { name: string; type: string; phone?: string; email?: string; realEstateId?: string; managerId?: string }) {
-  const prisma = await getTenantPrisma("update");
+export async function updateSocialUnit(id: string, data: SocialUnitInput) {
   try {
+    const context = await getTenantContextForModuleOperation("SOCIAL", "update");
+    const { prisma } = context;
+    const values = parseSocialUnitInput(data);
+    if (values.isConfidential !== undefined && context.user.profileCode !== SYSTEM_ADMIN_PROFILE_CODE) {
+      const current = await prisma.socialUnit.findUnique({ where: { id }, select: { isConfidential: true } });
+      if (!current || current.isConfidential !== values.isConfidential) throw new Error("Somente o administrador configura sigilo de equipamento.");
+    }
     const unit = await prisma.socialUnit.update({
       where: { id },
       data: {
-        name: data.name,
-        type: data.type,
-        phone: data.phone,
-        email: data.email,
+        ...values,
         realEstateId: data.realEstateId || null,
         managerId: data.managerId || null,
       },
@@ -48,6 +56,7 @@ export async function updateSocialUnit(id: string, data: { name: string; type: s
     revalidatePath("/social/unidades");
     return { success: true, data: unit };
   } catch (error) {
+    if (error instanceof ZodError) return { success: false, error: error.issues[0].message };
     console.error("Error updating social unit:", error);
     return { success: false, error: "Falha ao atualizar unidade socioassistencial." };
   }
@@ -183,8 +192,16 @@ export async function toggleFamilyStatus(id: string, status: string) {
 }
 
 export async function createAttendance(data: { familyId: string; unitId: string; professionalId: string; type: string; description: string; secrecyLevel?: string; personId?: string }) {
-  const prisma = await getTenantPrisma("create");
   try {
+    const context = await getTenantContextForModuleOperation("SOCIAL", "create");
+    const { prisma } = context;
+    const access = await resolveSocialAccess(context);
+    assertSocialUnitAccess(access, data.unitId);
+    if (!access.administrator && data.professionalId !== access.employeeId) throw new Error("Profissional inválido para o usuário autenticado.");
+    if (!data.type.trim() || !data.description.trim()) throw new Error("Tipo e relato são obrigatórios.");
+    if (!["Normal", "Restrito", "CREAS"].includes(data.secrecyLevel || "Normal")) throw new Error("Nível de sigilo inválido.");
+    if (!await prisma.socialUnit.findFirst({ where: { id: data.unitId, isActive: true } })) throw new Error("Equipamento inativo ou inexistente.");
+    if (!await prisma.employee.findFirst({ where: { id: data.professionalId, isActive: true } })) throw new Error("Profissional inativo ou inexistente.");
     const attendance = await prisma.socialAttendance.create({
       data: {
         familyId: data.familyId,
@@ -193,12 +210,13 @@ export async function createAttendance(data: { familyId: string; unitId: string;
         type: data.type,
         description: data.description,
         secrecyLevel: data.secrecyLevel || "Normal",
-        personId: data.personId,
+        personId: data.personId || null,
         isActive: true,
       },
       include: { family: true, person: true, professional: true, unit: true }
     });
     revalidatePath("/social/prontuario");
+    revalidatePath("/social/atendimentos");
     return { success: true, data: attendance };
   } catch (error) {
     console.error("Error creating attendance:", error);
@@ -207,8 +225,17 @@ export async function createAttendance(data: { familyId: string; unitId: string;
 }
 
 export async function updateAttendance(id: string, data: { familyId: string; unitId: string; professionalId: string; type: string; description: string; secrecyLevel?: string; personId?: string }) {
-  const prisma = await getTenantPrisma("update");
   try {
+    const context = await getTenantContextForModuleOperation("SOCIAL", "update");
+    const { prisma } = context;
+    const access = await resolveSocialAccess(context);
+    const current = await prisma.socialAttendance.findFirst({ where: { AND: [{ id }, socialAttendanceWhere(access)] } });
+    if (!current) throw new Error("Atendimento não encontrado ou fora do seu acesso.");
+    assertSocialUnitAccess(access, current.unitId);
+    assertSocialUnitAccess(access, data.unitId);
+    if (!access.administrator && (current.professionalId !== access.employeeId || data.professionalId !== access.employeeId)) throw new Error("Somente o profissional responsável pode alterar este atendimento.");
+    if (!data.type.trim() || !data.description.trim()) throw new Error("Tipo e relato são obrigatórios.");
+    if (!["Normal", "Restrito", "CREAS"].includes(data.secrecyLevel || "Normal")) throw new Error("Nível de sigilo inválido.");
     const attendance = await prisma.socialAttendance.update({
       where: { id },
       data: {
@@ -218,11 +245,12 @@ export async function updateAttendance(id: string, data: { familyId: string; uni
         type: data.type,
         description: data.description,
         secrecyLevel: data.secrecyLevel || "Normal",
-        personId: data.personId,
+        personId: data.personId || null,
       },
       include: { family: true, person: true, professional: true, unit: true }
     });
     revalidatePath("/social/prontuario");
+    revalidatePath("/social/atendimentos");
     return { success: true, data: attendance };
   } catch (error) {
     console.error("Error updating attendance:", error);
@@ -284,8 +312,14 @@ export async function createSocialProgram(data: { name: string; sphere: string; 
   }
 }
 export async function toggleAttendanceStatus(id: string, isActive: boolean) {
-  const prisma = await getTenantPrisma("update");
   try {
+    const context = await getTenantContextForModuleOperation("SOCIAL", "update");
+    const { prisma } = context;
+    const access = await resolveSocialAccess(context);
+    const current = await prisma.socialAttendance.findFirst({ where: { AND: [{ id }, socialAttendanceWhere(access)] } });
+    if (!current) throw new Error("Atendimento não encontrado ou fora do seu acesso.");
+    assertSocialUnitAccess(access, current.unitId);
+    if (!access.administrator && current.professionalId !== access.employeeId) throw new Error("Somente o profissional responsável pode inativar este atendimento.");
     const attendance = await prisma.socialAttendance.update({
       where: { id },
       data: { isActive },
@@ -300,20 +334,10 @@ export async function toggleAttendanceStatus(id: string, isActive: boolean) {
 }
 
 export async function createBenefitConcession(data: { benefitId: string; familyId: string; professionalId: string; quantity?: number; value?: number; personId?: string }) {
-  const prisma = await getTenantPrisma("create");
   try {
-    const concession = await prisma.socialBenefitConcession.create({
-      data: {
-        benefitId: data.benefitId,
-        familyId: data.familyId,
-        professionalId: data.professionalId,
-        quantity: data.quantity || 1,
-        value: data.value,
-        personId: data.personId,
-      },
-    });
-    revalidatePath("/social/beneficios");
-    return { success: true, data: concession };
+    await getTenantContextForModuleOperation("SOCIAL", "create");
+    if (!data.benefitId || !data.familyId) return { success: false, error: "Selecione o benefício e a família." };
+    return { success: false, error: "Registre a concessão em Requisições e Dispensação para aplicar autorização, estoque, cotas e comprovantes." };
   } catch (error) {
     console.error("Error creating benefit concession:", error);
     return { success: false, error: "Falha ao registrar concessão de benefício." };

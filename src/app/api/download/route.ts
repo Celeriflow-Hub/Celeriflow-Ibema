@@ -4,6 +4,7 @@ import { downloadFilename, getFile } from "@/lib/platform/blob";
 import { getAttendanceContext, getOmbudsmanReadContext, ombudsmanScope, ticketScope } from "@/lib/attendance/access";
 import { getProtocolContext, protocolScope } from "@/lib/protocols/access";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
+import { assertSstClinicalAccess } from "@/lib/sst/access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,11 +19,21 @@ export async function GET(request: NextRequest) {
 
   try {
     const context = await getCurrentTenantContext();
+    // Check occupational ownership independently of generic copies of the same file URL.
+    const occupational = await context.prisma.sstCertificateDocument.findFirst({
+      where: { document: { fileUrl: url } },
+      select: { certificate: { select: { budgetUnitId: true } } },
+    });
+    if (occupational) {
+      const sst = await getTenantContextForModule("SST");
+      await assertSstClinicalAccess(sst, occupational.certificate.budgetUnitId);
+    }
     let auditTarget: { type: string; id: string } | null = null;
     const document = await context.prisma.document.findFirst({
       where: { fileUrl: url },
       select: {
         id: true,
+        sstCertificateDocument: { select: { certificate: { select: { budgetUnitId: true } } } },
         ticketLinks: { select: { ticketId: true } },
         ombudsmanLinks: { select: { ombudsmanId: true } },
         processDocuments: { select: { processId: true } },
@@ -30,7 +41,10 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    if (document && (document.ticketLinks.length || document.ombudsmanLinks.length)) {
+    if (document?.sstCertificateDocument) {
+      const sst = await getTenantContextForModule("SST");
+      await assertSstClinicalAccess(sst, document.sstCertificateDocument.certificate.budgetUnitId);
+    } else if (document && (document.ticketLinks.length || document.ombudsmanLinks.length)) {
       let hasLinkedAccess = false;
       if (document.ombudsmanLinks.length) {
         const ombudsmanContext = await getOmbudsmanReadContext();

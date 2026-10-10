@@ -298,6 +298,7 @@ model Employee {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   healthTfdTrips HealthTfdTrip[]
+  sstCertificates SstMedicalCertificate[]
 }
 
 // Demandas Administrativas Internas
@@ -345,6 +346,8 @@ model Person {
   socialFinancialEntries SocialFinancialEntry[]
   socialProfile SocialPersonProfile?
   id             String    @id @default(cuid())
+  sstIssuedCertificates SstMedicalCertificate[] @relation("SstCertificateIssuer")
+  sstAssessments SstMedicalAssessment[] @relation("SstAssessmentExaminer")
   fullName       String
   socialName     String?
   cpf            String    @unique
@@ -991,6 +994,7 @@ model DocumentClass {
 
 model Document {
   id              String         @id @default(cuid())
+  sstCertificateDocument SstCertificateDocument?
   title           String
   documentType    String // RG, CPF, CNPJ, Contrato, Comprovante
   fileUrl         String
@@ -1234,6 +1238,7 @@ model Subject {
 
 // Processo / Protocolo Principal
 model Process {
+  sstCertificates SstMedicalCertificate[]
   id             String  @id @default(cuid())
   protocolNumber String  @unique // ex: 2026/00001
   status         String  @default("Aberto") // Aberto, Em AnÃ¡lise, ConcluÃ­do, Arquivado
@@ -3557,6 +3562,9 @@ model BudgetUnit {
   usuarios        UsuarioUnidadeGestora[]
   bankAccounts    BankAccount[]
   sourceContracts Contract[]              @relation("ContractSourceBudgetUnit")
+  sstReasons SstCertificateReason[]
+  sstCertificates SstMedicalCertificate[]
+  sstAccessGrants SstAccessGrant[]
 }
 
 model ResourceSource {
@@ -5383,6 +5391,106 @@ model Leave {
   status     String   @default("Ativa")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  sstCertificate SstMedicalCertificate?
+}
+
+// Occupational information is isolated from SUS clinical records.
+model SstAccessGrant {
+  id String @id @default(cuid())
+  usuarioId String
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  canReadClinical Boolean @default(false)
+  canAssess Boolean @default(false)
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([usuarioId, budgetUnitId])
+}
+
+model SstCertificateReason {
+  id String @id @default(cuid())
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  code String
+  name String
+  dependentPolicy String @default("DISABLED")
+  restrictedRoleIds String[] @default([])
+  autoProtocol Boolean @default(true)
+  autoPresentedAt Boolean @default(true)
+  printReceipt Boolean @default(false)
+  suggestLeave Boolean @default(false)
+  createLeaveOnApproval Boolean @default(false)
+  leaveType String @default("Licença médica")
+  isActive Boolean @default(true)
+  certificates SstMedicalCertificate[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([budgetUnitId, code])
+}
+
+model SstMedicalCertificate {
+  id String @id @default(cuid())
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  employeeId String
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  reasonId String
+  reason SstCertificateReason @relation(fields: [reasonId], references: [id], onDelete: Restrict)
+  issuerPersonId String
+  issuer Person @relation("SstCertificateIssuer", fields: [issuerPersonId], references: [id], onDelete: Restrict)
+  issuerCouncil String
+  dependentId String?
+  dependent Dependent? @relation(fields: [dependentId], references: [id], onDelete: Restrict)
+  relationship String?
+  startsAt DateTime
+  endsAt DateTime
+  presentedAt DateTime
+  protocolNumber String
+  processId String?
+  process Process? @relation(fields: [processId], references: [id], onDelete: Restrict)
+  status String @default("RECEIVED")
+  cidCodes String[] @default([])
+  leaveId String? @unique
+  leave Leave? @relation(fields: [leaveId], references: [id], onDelete: Restrict)
+  // Immutable functional identifiers at the time of registration.
+  roleIdSnapshot String?
+  departmentIdSnapshot String?
+  createdById String
+  assessments SstMedicalAssessment[]
+  documents SstCertificateDocument[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([budgetUnitId, protocolNumber])
+  @@index([budgetUnitId, employeeId, startsAt])
+  @@index([budgetUnitId, status, presentedAt])
+}
+
+model SstMedicalAssessment {
+  id String @id @default(cuid())
+  certificateId String
+  certificate SstMedicalCertificate @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  examinerPersonId String
+  examiner Person @relation("SstAssessmentExaminer", fields: [examinerPersonId], references: [id], onDelete: Restrict)
+  examinerCouncil String
+  decision String
+  opinion String
+  assessedAt DateTime
+  createdById String
+  createdAt DateTime @default(now())
+  @@index([certificateId, assessedAt])
+}
+
+model SstCertificateDocument {
+  id String @id @default(cuid())
+  certificateId String
+  certificate SstMedicalCertificate @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  documentId String @unique
+  document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  createdById String
+  createdAt DateTime @default(now())
+  @@index([certificateId])
 }
 
 model AttendanceRecord {
@@ -5402,6 +5510,7 @@ model AttendanceRecord {
 }
 
 model Dependent {
+  sstCertificates SstMedicalCertificate[]
   id            String    @id @default(cuid())
   employeeId    String
   employee      Employee  @relation("EmployeeDependent", fields: [employeeId], references: [id])
@@ -11328,6 +11437,7 @@ model ConfiguracaoPerfil {
 }
 
 model Usuario {
+  sstAccessGrants SstAccessGrant[]
   id          String  @id @default(cuid())
   nome        String
   email       String  @unique

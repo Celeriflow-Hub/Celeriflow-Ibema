@@ -40,3 +40,7 @@ Os links de integração só são habilitados quando o perfil possui acesso ao m
 5. Manter controles clínicos e recortes por entidade/UG; o acesso ocupacional não deve liberar prontuários do SUS.
 
 As áreas indicadas nos novos painéis são o escopo de evolução, não funcionalidades ocupacionais já implementadas.
+
+## Plano detalhado de SST
+
+O documento [PLANO_IMPLEMENTACAO_SST.md](PLANO_IMPLEMENTACAO_SST.md) registra os 74 requisitos das páginas 86–96 do checklist, evidências de reaproveitamento, lacunas, etapas, integrações e padrão de listas com 20 registros sem rolagem interna da tabela.

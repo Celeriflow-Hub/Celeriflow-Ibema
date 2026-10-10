@@ -1,0 +1,25 @@
+import Link from "next/link";
+import type { Prisma } from "@prisma/client";
+import { getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
+import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
+
+export default async function SstCertificatesPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string; status?: string; budgetUnitId?: string }> }) {
+  const context = await getTenantContextForModule("SST");
+  const filters = await searchParams;
+  const scope: Prisma.SstMedicalCertificateWhereInput = isSystemAdministrator(context.user) ? {} : { budgetUnitId: { in: context.user.allowedBudgetUnitIds } };
+  const where: Prisma.SstMedicalCertificateWhereInput = { AND: [scope, {
+    ...(filters.q ? { employee: { name: { contains: filters.q, mode: "insensitive" } } } : {}),
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.budgetUnitId ? { budgetUnitId: filters.budgetUnitId } : {}),
+  }] };
+  const total = await context.prisma.sstMedicalCertificate.count({ where });
+  const page = Math.min(Math.max(1, Math.trunc(Number(filters.page)) || 1), Math.max(1, Math.ceil(total / 20)));
+  // No diagnoses, clinical opinions or attachment URLs are serialized into the administrative list.
+  const records = await context.prisma.sstMedicalCertificate.findMany({ where, take: 20, skip: (page - 1) * 20, orderBy: [{ presentedAt: "desc" }, { id: "asc" }], select: { id: true, protocolNumber: true, status: true, startsAt: true, endsAt: true, employee: { select: { name: true, registration: true } }, budgetUnit: { select: { name: true } }, leaveId: true } });
+  const href = (value: number) => `/sst/atestados?${new URLSearchParams({ q: filters.q || "", status: filters.status || "", budgetUnitId: filters.budgetUnitId || "", page: String(value) })}`;
+  return <div className="space-y-4 p-4">
+    <header className="flex flex-wrap items-center justify-between gap-2"><h1 className="text-xl font-semibold">Atestados ocupacionais</h1><Link className="rounded bg-teal-700 px-3 py-2 text-sm text-white" href="/sst/atestados/novo">Registrar atestado</Link></header>
+    <form className="flex flex-wrap gap-2"><input aria-label="Servidor" className="rounded border p-2" name="q" defaultValue={filters.q} placeholder="Buscar servidor"/><select aria-label="Situação" className="rounded border p-2" name="status" defaultValue={filters.status}><option value="">Todas as situações</option><option value="RECEIVED">Recebido</option><option value="APPROVED">Deferido</option><option value="REJECTED">Indeferido</option></select><button className="rounded border px-3">Filtrar</button><Link className="p-2" href="/sst/configuracoes">Motivos e acesso clínico</Link></form>
+    <div className="rounded-lg border bg-white dark:bg-slate-900"><table className="w-full table-fixed text-left text-xs"><colgroup><col className="w-[16%]"/><col className="w-[28%]"/><col className="w-[22%]"/><col className="w-[18%]"/><col className="w-[16%]"/></colgroup><thead><tr className="border-b"><th className="p-2">Protocolo</th><th className="p-2">Servidor</th><th className="p-2">Período</th><th className="p-2">Situação</th><th className="p-2">Ações</th></tr></thead><tbody>{records.map((record) => <tr className="border-b" key={record.id}><td className="break-all p-2">{record.protocolNumber}</td><td className="break-words p-2">{record.employee.name}<div className="text-slate-500">{record.employee.registration} · {record.budgetUnit.name}</div></td><td className="p-2">{record.startsAt.toLocaleString("pt-BR")}<br/>{record.endsAt.toLocaleString("pt-BR")}</td><td className="p-2">{({ RECEIVED: "Recebido", APPROVED: "Deferido", REJECTED: "Indeferido" } as Record<string, string>)[record.status] || record.status}{record.leaveId && <div>Afastamento vinculado</div>}</td><td className="p-2"><Link className="text-teal-700 underline" href={`/sst/atestados/${record.id}`}>Detalhes</Link></td></tr>)}{!records.length && <tr><td className="p-6 text-center" colSpan={5}>Nenhum atestado encontrado.</td></tr>}</tbody></table><div className="p-3"><ErpPagination page={page} total={total} pageSize={20} previousHref={href(page - 1)} nextHref={href(page + 1)}/></div></div>
+  </div>;
+}

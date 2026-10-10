@@ -32,6 +32,8 @@ export async function saveLicenca(formData: FormData) {
     };
 
     if (id) {
+      const occupational = await prisma.sstMedicalCertificate.findUnique({ where: { leaveId: id }, select: { id: true } });
+      if (occupational) return { success: false, error: "Este afastamento possui origem em uma perícia SST. A alteração deve preservar a decisão ocupacional e seu vínculo." };
       await prisma.leave.update({
         where: { id },
         data,
@@ -55,6 +57,8 @@ export async function saveLicenca(formData: FormData) {
 export async function deleteLicenca(id: string) {
   const prisma = await getTenantPrisma("delete");
   try {
+    const occupational = await prisma.sstMedicalCertificate.findUnique({ where: { leaveId: id }, select: { id: true } });
+    if (occupational) return { success: false, error: "Afastamentos vinculados a uma perícia SST não podem ser excluídos pelo RH." };
     await prisma.leave.delete({
       where: { id },
     });

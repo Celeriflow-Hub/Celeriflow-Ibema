@@ -13,6 +13,7 @@ export default async function SstDashboardPage() {
     icon={<HardHat className="size-4 text-teal-700" />}
     description="Módulo de segurança e saúde ocupacional dos servidores, com acesso próprio. Os cadastros funcionais existentes no RH serão a referência para os vínculos ocupacionais."
     links={[
+      { title: "Atestados e perícias", description: "Entrega de atestados, anexos GED, decisão pericial e afastamento vinculado ao RH.", href: "/sst/atestados", available: true, source: "SST" },
       { title: "Servidores e vínculos", description: "Cadastro funcional canônico, lotação e vínculo de trabalho.", href: "/rh/servidores", available, source: "RH e Folha" },
       { title: "Licenças e afastamentos", description: "Registros funcionais existentes para futura integração com os eventos ocupacionais.", href: "/rh/licencas", available, source: "RH e Folha" },
     ]}

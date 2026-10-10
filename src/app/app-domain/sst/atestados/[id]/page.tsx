@@ -1,0 +1,27 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { assertSstClinicalAccess } from "@/lib/sst/access";
+import { assessSstCertificate, attachSstCertificateDocument } from "../../actions";
+import { SstForm } from "../../SstForm";
+import { writeAuditEvent, auditEventTypes } from "@/lib/platform/audit-evidence";
+
+export default async function SstCertificatePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ personQ?: string }> }) {
+  const { id } = await params;
+  const { personQ } = await searchParams;
+  const context = await getTenantContextForModule("SST");
+  const scope = await context.prisma.sstMedicalCertificate.findUnique({ where: { id }, select: { budgetUnitId: true } });
+  if (!scope) notFound();
+  await assertSstClinicalAccess(context, scope.budgetUnitId);
+  const record = await context.prisma.sstMedicalCertificate.findUniqueOrThrow({ where: { id }, include: { employee: { select: { name: true, registration: true } }, issuer: { select: { fullName: true } }, reason: true, budgetUnit: { select: { name: true } }, assessments: { include: { examiner: { select: { fullName: true } } }, orderBy: { assessedAt: "desc" } }, documents: { include: { document: { select: { id: true, fileUrl: true } } } } } });
+  const examiners = personQ && personQ.trim().length >= 3 ? await context.prisma.person.findMany({ where: { fullName: { contains: personQ.trim(), mode: "insensitive" } }, take: 20, orderBy: [{ fullName: "asc" }, { id: "asc" }], select: { id: true, fullName: true } }) : [];
+  await writeAuditEvent(context.prisma, { actorUsuarioId: context.user.id, eventType: auditEventTypes.pageView, targetType: "SST_CLINICAL_CERTIFICATE", targetId: id });
+  return <div className="space-y-4 p-4"><header><h1 className="text-xl font-semibold">Atestado · {record.protocolNumber}</h1><Link href="/sst/atestados">Voltar à consulta</Link></header>
+    <section className="space-y-2 rounded border p-4"><p>{record.employee.name} · Matrícula {record.employee.registration} · {record.budgetUnit.name}</p><p>{record.reason.name} · {record.status}</p><p>Período: {record.startsAt.toLocaleString("pt-BR")} a {record.endsAt.toLocaleString("pt-BR")}</p><p>Entrega: {record.presentedAt.toLocaleString("pt-BR")}</p><p>Emitente: {record.issuer.fullName} · {record.issuerCouncil}</p><p>CIDs: {record.cidCodes.join(", ") || "Não informados"}</p><p>Parentesco: {record.relationship || "Não se aplica"}</p><Link className="text-teal-700 underline" href={`/sst/atestados/${id}/comprovante`}>Comprovante de entrega</Link>{record.leaveId && <p>Afastamento vinculado no RH: {record.leaveId}</p>}</section>
+    {record.processId && <p>Processo digital vinculado: {record.processId}</p>}
+    <section className="rounded border p-4"><h2 className="font-semibold">Anexos no repositório GED</h2>{record.documents.map((item, index) => <p key={item.id}><a className="text-teal-700 underline" href={`/api/download?url=${encodeURIComponent(item.document.fileUrl)}`} target="_blank" rel="noreferrer">Anexo {index + 1}</a></p>)}</section>
+    <SstForm action={attachSstCertificateDocument} label="Anexar documento"><input type="hidden" name="certificateId" value={id}/><label>Anexo (PDF, JPG ou PNG, até 10 MB)<input required name="file" type="file" accept="application/pdf,image/jpeg,image/png" className="block p-2"/></label></SstForm>
+    {record.status === "RECEIVED" && <><h2 className="text-lg font-semibold">Perícia</h2><form className="flex flex-wrap gap-2"><input name="personQ" defaultValue={personQ} placeholder="Pesquisar perito no Cadastro Único" className="rounded border p-2"/><button className="rounded border p-2">Pesquisar</button></form><SstForm action={assessSstCertificate} label="Registrar decisão"><input type="hidden" name="certificateId" value={id}/><label>Perito<select required name="examinerPersonId" className="block w-full rounded border p-2"><option value="">Pesquise o profissional acima</option>{examiners.map((item) => <option key={item.id} value={item.id}>{item.fullName}</option>)}</select></label><label>Registro do conselho<input required name="examinerCouncil" className="block w-full rounded border p-2"/></label><label>Data/hora da perícia<input required type="datetime-local" name="assessedAt" className="block rounded border p-2"/></label><label>Decisão<select name="decision" className="block rounded border p-2"><option value="APPROVED">Deferir</option><option value="REJECTED">Indeferir</option></select></label><label>Parecer<textarea required minLength={10} name="opinion" className="block min-h-24 w-full rounded border p-2"/></label><label><input type="checkbox" name="confirmLeave" className="mr-2"/>Confirmar afastamento no RH quando deferido</label>{record.reason.createLeaveOnApproval && <p>Este motivo gera afastamento automaticamente ao deferir; é necessária permissão de inclusão no RH.</p>}{record.reason.suggestLeave && <p>O motivo sugere confirmar a geração do afastamento.</p>}</SstForm></>}
+    <section className="space-y-3 rounded border p-4"><h2 className="font-semibold">Histórico pericial</h2>{record.assessments.map((item) => <article key={item.id}><p>{item.assessedAt.toLocaleString("pt-BR")} · {item.examiner.fullName} · {item.examinerCouncil} · {item.decision}</p><p className="whitespace-pre-wrap">{item.opinion}</p></article>)}</section>
+  </div>;
+}

@@ -8,13 +8,13 @@ export default async function ContasBancariasPage() {
   const { prisma } = context;
   const accounts = await prisma.bankAccount.findMany({
     where: {
-      bankName: "001 - Banco Virtual Robonuvem",
-      isActive: true,
       ...(isSystemAdministrator(context.user) ? {} : { budgetUnitId: { in: context.user.allowedBudgetUnitIds } }),
     },
     include: {
       resourceSource: true,
       budgetUnit: true,
+      bank: true,
+      bankBranch: true,
     },
     orderBy: {
       bankName: 'asc'
@@ -39,6 +39,11 @@ export default async function ContasBancariasPage() {
     orderBy: { code: "asc" },
     select: { id: true, code: true, name: true },
   });
+  const banks = await prisma.bank.findMany({
+    where: { status: "ATIVO" },
+    include: { branches: { where: { status: "ATIVA" }, orderBy: { code: "asc" } } },
+    orderBy: { compe: "asc" },
+  });
 
   const transferAccountAccess = isSystemAdministrator(context.user) ? {} : { budgetUnitId: { in: context.user.allowedBudgetUnitIds } };
   const transfers = await prisma.treasuryTransfer.findMany({
@@ -58,7 +63,7 @@ export default async function ContasBancariasPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
-      <div className="min-h-0 flex-1"><ContasBancariasClient accounts={displayAccounts} resourceSources={resourceSources} budgetUnits={budgetUnits} accountingPlans={accountingPlans} /></div>
+      <div className="min-h-0 flex-1"><ContasBancariasClient accounts={displayAccounts} resourceSources={resourceSources} budgetUnits={budgetUnits} accountingPlans={accountingPlans} banks={banks} /></div>
       <details className="shrink-0 rounded-md border border-slate-200 bg-white px-2 py-1">
         <summary className="cursor-pointer text-xs font-semibold text-slate-700">Transferências entre contas</summary>
       <div className="max-h-[55vh] overflow-y-auto px-1 pb-2 sm:px-2">

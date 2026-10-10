@@ -49,6 +49,8 @@ const eventLabels: Record<AuditEventType, string> = {
   DOCUMENT_SIGNATURE_REGISTERED: "Registro de assinatura",
   PUBLIC_NOTICE_PUBLISHED: "Publicação de aviso público",
   STOCK_MANUALLY_ADJUSTED: "Ajuste manual de estoque",
+  STOCK_RETURNED: "Devolução de estoque",
+  STOCK_MOVEMENT_REVERSED: "Estorno de movimentação de estoque",
   ASSET_ACQUIRED_FROM_RECEIPT: "Aquisição patrimonial por recebimento",
   INTERNAL_CONTROL_FINDING_REGISTERED: "Registro de apontamento de controle",
   FLEET_OPERATION_REGISTERED: "Registro de operação de frota",

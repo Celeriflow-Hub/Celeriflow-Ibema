@@ -27,8 +27,27 @@ export type StockMovementInput = {
   /** Reserved for the approved inventory-close workflow. */
   inventorySessionId?: string | null;
   /** Stock entries are reserved for a receipt already approved by procurement. */
-  sourceType?: "APPROVED_PURCHASE_RECEIPT" | "MATERIAL_REQUEST_ISSUE" | "ASSET_ACQUISITION" | "HEALTH_RECEIPT" | "STOCK_TRANSFER_RECEIPT";
+  sourceType?: "APPROVED_PURCHASE_RECEIPT" | "MATERIAL_REQUEST_ISSUE" | "ASSET_ACQUISITION" | "HEALTH_RECEIPT" | "STOCK_TRANSFER_RECEIPT" | "STOCK_RETURN" | "STOCK_REVERSAL";
   materialRequestItemId?: string | null;
+  operation?: "REGULAR" | "RETURN" | "REVERSAL";
+  idempotencyKey?: string | null;
+  returnedMovementId?: string | null;
+  reversedMovementId?: string | null;
+  actor: StockActor;
+};
+
+export type ReturnStockMovementInput = {
+  movementId: string;
+  quantity: number;
+  reason: string;
+  idempotencyKey: string;
+  actor: StockActor;
+};
+
+export type ReverseStockMovementInput = {
+  movementId: string;
+  reason: string;
+  idempotencyKey: string;
   actor: StockActor;
 };
 
@@ -54,7 +73,7 @@ export function normalizeStockMovement(input: StockMovementInput): ValidStockMov
   if ((input.kind === "ENTRY" || input.kind === "EXIT") && input.quantity < 0) {
     throw new StockServiceError("Entrada e saída devem informar quantidade positiva.");
   }
-  if (input.kind === "ENTRY" && !["APPROVED_PURCHASE_RECEIPT", "HEALTH_RECEIPT", "STOCK_TRANSFER_RECEIPT"].includes(input.sourceType || "")) {
+  if (input.kind === "ENTRY" && !["APPROVED_PURCHASE_RECEIPT", "HEALTH_RECEIPT", "STOCK_TRANSFER_RECEIPT", "STOCK_RETURN", "STOCK_REVERSAL"].includes(input.sourceType || "")) {
     throw new StockServiceError("Entradas de estoque exigem recebimento aprovado ou aceite de transferência.");
   }
   if (input.sourceType === "MATERIAL_REQUEST_ISSUE" && input.kind !== "EXIT") {
@@ -78,7 +97,24 @@ export function normalizeStockMovement(input: StockMovementInput): ValidStockMov
     }
   }
 
-  return { ...input, warehouseId, materialId, batchNumber, actor: { ...input.actor, usuarioId: actorUsuarioId } };
+  if ((input.operation === "RETURN" || input.sourceType === "STOCK_RETURN") && (input.operation !== "RETURN" || !input.returnedMovementId?.trim() || input.kind !== "ENTRY" || input.sourceType !== "STOCK_RETURN")) {
+    throw new StockServiceError("A devolução deve referenciar uma saída de estoque.");
+  }
+  if ((input.operation === "REVERSAL" || input.sourceType === "STOCK_REVERSAL") && (input.operation !== "REVERSAL" || !input.reversedMovementId?.trim() || input.sourceType !== "STOCK_REVERSAL")) {
+    throw new StockServiceError("O estorno deve referenciar o movimento original.");
+  }
+
+  return {
+    ...input,
+    warehouseId,
+    materialId,
+    batchNumber,
+    operation: input.operation ?? "REGULAR",
+    idempotencyKey: input.idempotencyKey?.trim() || null,
+    returnedMovementId: input.returnedMovementId?.trim() || null,
+    reversedMovementId: input.reversedMovementId?.trim() || null,
+    actor: { ...input.actor, usuarioId: actorUsuarioId },
+  };
 }
 
 function updateMetadata(input: ValidStockMovementInput) {
@@ -97,7 +133,7 @@ async function ensureStockTarget(tx: Prisma.TransactionClient, input: ValidStock
       : null,
   ]);
   if (!warehouse) throw new StockServiceError("Almoxarifado não encontrado ou inativo.");
-  const continuingLifecycle = ["APPROVED_PURCHASE_RECEIPT", "MATERIAL_REQUEST_ISSUE", "ASSET_ACQUISITION", "HEALTH_RECEIPT", "STOCK_TRANSFER_RECEIPT"].includes(input.sourceType || "")
+  const continuingLifecycle = ["APPROVED_PURCHASE_RECEIPT", "MATERIAL_REQUEST_ISSUE", "ASSET_ACQUISITION", "HEALTH_RECEIPT", "STOCK_TRANSFER_RECEIPT", "STOCK_RETURN", "STOCK_REVERSAL"].includes(input.sourceType || "")
     || (input.kind === "ADJUSTMENT" && Boolean(input.inventorySessionId?.trim()));
   if (!material || (material.isActive === false && !continuingLifecycle)) throw new StockServiceError("Material não encontrado ou inativo.");
   if (input.settlementId?.trim() && !settlement) throw new StockServiceError("Liquidação não encontrada ou não está ativa.");
@@ -189,6 +225,10 @@ export async function applyStockMovement(tx: Prisma.TransactionClient, rawInput:
       settlementId: input.settlementId?.trim() || null,
       inventorySessionId: input.inventorySessionId?.trim() || null,
       materialRequestItemId: input.materialRequestItemId?.trim() || null,
+      operation: input.operation,
+      idempotencyKey: input.idempotencyKey,
+      returnedMovementId: input.returnedMovementId,
+      reversedMovementId: input.reversedMovementId,
       actorUsuarioId: input.actor.usuarioId,
       actorEmployeeId: input.actor.employeeId ?? null,
     },
@@ -208,5 +248,111 @@ export async function recordStockMovement(db: PrismaClient, input: StockMovement
       });
     }
     return result;
+  });
+}
+
+export async function returnStockMovement(db: PrismaClient, rawInput: ReturnStockMovementInput) {
+  const movementId = required(rawInput.movementId, "Movimento de saída");
+  const reason = required(rawInput.reason, "Motivo da devolução");
+  const idempotencyKey = required(rawInput.idempotencyKey, "Chave de idempotência");
+  if (!Number.isFinite(rawInput.quantity) || rawInput.quantity <= 0) {
+    throw new StockServiceError("A quantidade devolvida deve ser maior que zero.");
+  }
+
+  return db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`MATERIAL_MOVEMENT:${movementId}`}))`;
+    const existing = await tx.materialMovement.findUnique({ where: { idempotencyKey } });
+    if (existing) return existing;
+
+    const original = await tx.materialMovement.findUnique({
+      where: { id: movementId },
+      include: { stock: { select: { batchNumber: true } }, reversalMovement: { select: { id: true } } },
+    });
+    if (!original || original.type !== "Saída" || original.operation !== "REGULAR") {
+      throw new StockServiceError("Somente uma saída regular pode receber devolução.");
+    }
+    if (!original.stock) throw new StockServiceError("A saída não possui posição de estoque vinculada.");
+    if (original.reversalMovement) throw new StockServiceError("Não é possível devolver uma saída já estornada.");
+
+    const returned = await tx.materialMovement.aggregate({
+      where: { returnedMovementId: original.id, operation: "RETURN" },
+      _sum: { quantity: true },
+    });
+    if ((returned._sum.quantity ?? 0) + rawInput.quantity > original.quantity) {
+      throw new StockServiceError("A devolução excede a quantidade da saída original.");
+    }
+
+    const result = await applyStockMovement(tx, {
+      kind: "ENTRY",
+      sourceType: "STOCK_RETURN",
+      operation: "RETURN",
+      idempotencyKey,
+      returnedMovementId: original.id,
+      warehouseId: original.warehouseId,
+      materialId: original.materialId,
+      batchNumber: original.stock.batchNumber,
+      quantity: rawInput.quantity,
+      unitCost: original.unitValue,
+      departmentId: original.departmentId,
+      reason,
+      actor: rawInput.actor,
+    });
+    await writeAuditEvent(tx, {
+      actorUsuarioId: rawInput.actor.usuarioId,
+      eventType: auditEventTypes.stockReturned,
+      targetType: "MATERIAL_MOVEMENT",
+      targetId: result.movement.id,
+    });
+    return result.movement;
+  });
+}
+
+export async function reverseStockMovement(db: PrismaClient, rawInput: ReverseStockMovementInput) {
+  const movementId = required(rawInput.movementId, "Movimento original");
+  const reason = required(rawInput.reason, "Motivo do estorno");
+  const idempotencyKey = required(rawInput.idempotencyKey, "Chave de idempotência");
+
+  return db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`MATERIAL_MOVEMENT:${movementId}`}))`;
+    const existing = await tx.materialMovement.findUnique({ where: { idempotencyKey } });
+    if (existing) return existing;
+
+    const original = await tx.materialMovement.findUnique({
+      where: { id: movementId },
+      include: {
+        stock: { select: { batchNumber: true } },
+        reversalMovement: { select: { id: true } },
+        returnMovements: { where: { operation: "RETURN" }, select: { id: true }, take: 1 },
+      },
+    });
+    if (!original || !["Entrada", "Saída"].includes(original.type) || original.operation !== "REGULAR") {
+      throw new StockServiceError("Somente uma entrada ou saída regular pode ser estornada.");
+    }
+    if (!original.stock) throw new StockServiceError("O movimento não possui posição de estoque vinculada.");
+    if (original.reversalMovement) throw new StockServiceError("O movimento já foi estornado.");
+    if (original.returnMovements.length) throw new StockServiceError("Uma saída com devolução não pode ser estornada integralmente.");
+
+    const result = await applyStockMovement(tx, {
+      kind: original.type === "Entrada" ? "EXIT" : "ENTRY",
+      sourceType: "STOCK_REVERSAL",
+      operation: "REVERSAL",
+      idempotencyKey,
+      reversedMovementId: original.id,
+      warehouseId: original.warehouseId,
+      materialId: original.materialId,
+      batchNumber: original.stock.batchNumber,
+      quantity: Math.abs(original.quantity),
+      unitCost: original.unitValue,
+      departmentId: original.departmentId,
+      reason,
+      actor: rawInput.actor,
+    });
+    await writeAuditEvent(tx, {
+      actorUsuarioId: rawInput.actor.usuarioId,
+      eventType: auditEventTypes.stockMovementReversed,
+      targetType: "MATERIAL_MOVEMENT",
+      targetId: result.movement.id,
+    });
+    return result.movement;
   });
 }

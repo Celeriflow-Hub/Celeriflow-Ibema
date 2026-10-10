@@ -24,6 +24,8 @@ export const auditEventTypes = {
   documentSignatureRegistered: "DOCUMENT_SIGNATURE_REGISTERED",
   publicNoticePublished: "PUBLIC_NOTICE_PUBLISHED",
   stockManuallyAdjusted: "STOCK_MANUALLY_ADJUSTED",
+  stockReturned: "STOCK_RETURNED",
+  stockMovementReversed: "STOCK_MOVEMENT_REVERSED",
   assetAcquiredFromReceipt: "ASSET_ACQUIRED_FROM_RECEIPT",
   internalControlFindingRegistered: "INTERNAL_CONTROL_FINDING_REGISTERED",
   fleetOperationRegistered: "FLEET_OPERATION_REGISTERED",

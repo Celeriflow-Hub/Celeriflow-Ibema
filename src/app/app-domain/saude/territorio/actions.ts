@@ -4,7 +4,10 @@ import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-contex
 import { addFamilyMember, addVisitParticipant, createVisit, saveArea, saveFamily, saveHousehold, saveMicroarea } from "@/lib/saude/territory-service";
 
 const text = (data: FormData, name: string) => String(data.get(name) || "").trim();
-const refresh = () => revalidatePath("/saude/territorio");
+const refresh = () => {
+  revalidatePath("/app-domain/saude/territorio");
+  revalidatePath("/app-domain/cadastros/familias");
+};
 
 export async function saveAreaAction(data: FormData): Promise<void> {
   const context = await getTenantContextForModuleOperation("SAUDE", "create");

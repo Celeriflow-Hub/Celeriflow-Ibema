@@ -87,6 +87,7 @@ model Secretariat {
   purchaseProcesses  PurchaseProcess[] @relation("SecretariatPurchaseProcesses")
   contracts          Contract[]        @relation("SecretariatContracts")
   camaraLegislaturas CamLegislatura[]  @relation("CamaraLegislatureSecretariat")
+  costCenters        CostCenter[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -135,6 +136,7 @@ model Department {
   materialRequests MaterialRequest[]  @relation("MaterialRequestDepartment")
   obrasServices    ObrasServico[]     @relation("ObrasServicoDepartment")
   obrasTeams       ObrasEquipe[]
+  costCenters      CostCenter[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -143,17 +145,18 @@ model Department {
 
 // Unidades Administrativas (Escolas, UBS, CRAS, Almoxarifados)
 model AdministrativeUnit {
-  id            String      @id @default(cuid())
+  id            String       @id @default(cuid())
   name          String
   type          String // e.g., 'Escola', 'UBS', 'CRAS', 'Almoxarifado'
   address       String?
   managerName   String?
   secretariatId String
-  secretariat   Secretariat @relation(fields: [secretariatId], references: [id], onDelete: Cascade)
+  secretariat   Secretariat  @relation(fields: [secretariatId], references: [id], onDelete: Cascade)
   employees     Employee[]
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  isActive      Boolean     @default(true)
+  costCenters   CostCenter[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  isActive      Boolean      @default(true)
 }
 
 // Cargos e FunÃ§Ãµes
@@ -289,6 +292,7 @@ model Employee {
   socialAttendances  SocialAttendance[]        @relation("SocialAttendanceProfessional")
   socialVisits       SocialVisit[]             @relation("SocialVisitProfessional")
   socialConcessions  SocialBenefitConcession[] @relation("SocialConcessionProfessional")
+  legalReportSigners LegalReportSigner[]
 
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
@@ -372,6 +376,9 @@ model Person {
   representedBy           LegalRepresentative[] @relation("RepresentativePerson")
   documents               Document[]
   camaraCouncilorProfiles CamVereador[]         @relation("CamaraCouncilorPerson")
+  familyMemberships       FamilyMember[]
+  representedFamilies     Family[]              @relation("FamilyResponsiblePerson")
+  legalReportSigners      LegalReportSigner[]
 
   // Mod 3
   processes Process[]
@@ -457,6 +464,7 @@ model Company {
   culturaAgents       CulturaAgente[]   @relation("CulturaAgentCompany")
   culturaReservations CulturaReserva[]  @relation("CulturaReservationCompany")
   instrumentParties   InstrumentParty[] @relation("InstrumentPartyCompany")
+  governmentEntity    GovernmentEntity?
 
   createdAt                     DateTime                       @default(now())
   updatedAt                     DateTime                       @updatedAt
@@ -571,6 +579,258 @@ model LegalRepresentative {
   updatedAt DateTime @updatedAt
 }
 
+model Family {
+  id                  String   @id @default(cuid())
+  code                String?  @unique
+  responsiblePersonId String?
+  responsiblePerson   Person?  @relation("FamilyResponsiblePerson", fields: [responsiblePersonId], references: [id], onDelete: Restrict)
+  status              String   @default("ATIVA")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  members       FamilyMember[]
+  socialProfile SocialFamily?
+  healthProfile HealthFamily?
+
+  @@index([responsiblePersonId, status])
+}
+
+model FamilyMember {
+  id               String    @id @default(cuid())
+  familyId         String
+  family           Family    @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  personId         String
+  person           Person    @relation(fields: [personId], references: [id], onDelete: Restrict)
+  kinship          String?
+  isRepresentative Boolean   @default(false)
+  joinedAt         DateTime?
+  leftAt           DateTime?
+  status           String    @default("ATIVO")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([familyId, personId])
+  @@index([personId, status])
+}
+
+model GovernmentEntity {
+  id        String             @id @default(cuid())
+  code      String             @unique
+  name      String
+  type      String
+  cnpj      String?            @unique
+  companyId String?            @unique
+  company   Company?           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  parentId  String?
+  parent    GovernmentEntity?  @relation("GovernmentEntityHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children  GovernmentEntity[] @relation("GovernmentEntityHierarchy")
+  status    String             @default("ATIVA")
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  costCenters        CostCenter[]
+  legalTexts         LegalText[]
+  legalReportSigners LegalReportSigner[]
+
+  @@index([parentId, status])
+  @@index([type, status])
+}
+
+model LegalText {
+  id                 String            @id @default(cuid())
+  type               String
+  number             String
+  summary            String
+  governmentLevel    String
+  issuingBody        String
+  publicationDate    DateTime?
+  effectiveFrom      DateTime?
+  effectiveUntil     DateTime?
+  status             String            @default("VIGENTE")
+  governmentEntityId String?
+  governmentEntity   GovernmentEntity? @relation(fields: [governmentEntityId], references: [id], onDelete: Restrict)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  versions        LegalTextVersion[]
+  sourceRelations LegalTextRelation[] @relation("LegalTextRelationSource")
+  targetRelations LegalTextRelation[] @relation("LegalTextRelationTarget")
+  camaraLaw       CamLei?
+
+  @@unique([type, number, governmentLevel, issuingBody])
+  @@index([status, effectiveFrom, effectiveUntil])
+  @@index([governmentEntityId])
+}
+
+model LegalTextVersion {
+  id              String    @id @default(cuid())
+  legalTextId     String
+  legalText       LegalText @relation(fields: [legalTextId], references: [id], onDelete: Cascade)
+  versionNumber   Int
+  content         String
+  summary         String?
+  publicationDate DateTime?
+  effectiveFrom   DateTime?
+  effectiveUntil  DateTime?
+  status          String    @default("VIGENTE")
+  documentId      String?   @unique
+  document        Document? @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([legalTextId, versionNumber])
+  @@index([legalTextId, status])
+}
+
+model LegalTextRelation {
+  id                String    @id @default(cuid())
+  sourceLegalTextId String
+  sourceLegalText   LegalText @relation("LegalTextRelationSource", fields: [sourceLegalTextId], references: [id], onDelete: Cascade)
+  targetLegalTextId String
+  targetLegalText   LegalText @relation("LegalTextRelationTarget", fields: [targetLegalTextId], references: [id], onDelete: Restrict)
+  relationType      String
+  effectiveFrom     DateTime?
+  notes             String?
+  createdAt         DateTime  @default(now())
+
+  @@unique([sourceLegalTextId, targetLegalTextId, relationType])
+  @@index([targetLegalTextId, relationType])
+}
+
+model LegalReportSigner {
+  id                 String            @id @default(cuid())
+  personId           String?
+  person             Person?           @relation(fields: [personId], references: [id], onDelete: Restrict)
+  employeeId         String?
+  employee           Employee?         @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  governmentEntityId String?
+  governmentEntity   GovernmentEntity? @relation(fields: [governmentEntityId], references: [id], onDelete: Restrict)
+  signingRole        String
+  reportTypes        String[]          @default([])
+  signatureOrder     Int               @default(1)
+  effectiveFrom      DateTime
+  effectiveUntil     DateTime?
+  status             String            @default("ATIVO")
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([governmentEntityId, status, effectiveFrom, effectiveUntil])
+  @@index([personId])
+  @@index([employeeId])
+}
+
+model Bank {
+  id        String   @id @default(cuid())
+  compe     String   @unique
+  ispb      String   @unique
+  name      String
+  shortName String
+  status    String   @default("ATIVO")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches BankBranch[]
+  accounts BankAccount[]
+}
+
+model BankBranch {
+  id        String   @id @default(cuid())
+  bankId    String
+  bank      Bank     @relation(fields: [bankId], references: [id], onDelete: Restrict)
+  code      String
+  name      String
+  cnpj      String?
+  cityId    String?
+  city      City?    @relation(fields: [cityId], references: [id], onDelete: Restrict)
+  status    String   @default("ATIVA")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts BankAccount[]
+
+  @@unique([bankId, code])
+  @@index([cityId, status])
+}
+
+model Currency {
+  id            String   @id @default(cuid())
+  isoCode       String   @unique
+  name          String
+  symbol        String
+  decimalPlaces Int      @default(2)
+  status        String   @default("ATIVA")
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model State {
+  id        String   @id @default(cuid())
+  uf        String   @unique
+  ibgeCode  String   @unique
+  name      String
+  status    String   @default("ATIVO")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cities City[]
+}
+
+model City {
+  id        String   @id @default(cuid())
+  stateId   String
+  state     State    @relation(fields: [stateId], references: [id], onDelete: Restrict)
+  ibgeCode  String   @unique
+  name      String
+  status    String   @default("ATIVA")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  neighborhoods Neighborhood[]
+  streets       Street[]
+  bankBranches  BankBranch[]
+  warehouses    Warehouse[]
+
+  @@unique([stateId, name])
+  @@index([stateId, status])
+}
+
+model MasterDataConsistencyRun {
+  id          String    @id @default(cuid())
+  area        String
+  runType     String
+  status      String    @default("EM_EXECUCAO")
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  issues MasterDataConsistencyIssue[]
+
+  @@index([area, runType, startedAt])
+  @@index([status, startedAt])
+}
+
+model MasterDataConsistencyIssue {
+  id          String                   @id @default(cuid())
+  runId       String
+  run         MasterDataConsistencyRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  area        String
+  issueType   String
+  recordType  String
+  recordId    String
+  severity    String
+  description String
+  status      String                   @default("ABERTA")
+  detectedAt  DateTime                 @default(now())
+  resolvedAt  DateTime?
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  @@index([runId, status, severity])
+  @@index([area, recordType, recordId])
+}
+
 // EndereÃ§os
 model Address {
   id             String  @id @default(cuid())
@@ -586,6 +846,9 @@ model Address {
 
   neighborhoodId String?
   neighborhood   Neighborhood? @relation(fields: [neighborhoodId], references: [id])
+
+  streetId String?
+  street   Street? @relation(fields: [streetId], references: [id], onDelete: Restrict)
 
   canonicalAddressId String?
   canonicalAddress   Address?  @relation("CanonicalAddress", fields: [canonicalAddressId], references: [id], onDelete: Restrict)
@@ -624,13 +887,20 @@ model Neighborhood {
   state       String
   adminRegion String?
   notes       String?
+  status      String  @default("Ativo")
+
+  cityId  String?
+  cityRef City?   @relation(fields: [cityId], references: [id], onDelete: Restrict)
 
   addresses   Address[]
   streets     Street[]
   realEstates RealEstate[]
+  warehouses  Warehouse[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([cityId, name])
 }
 
 // Logradouros
@@ -643,11 +913,20 @@ model Street {
   state   String
   status  String  @default("Ativo")
 
+  cityId  String?
+  cityRef City?   @relation(fields: [cityId], references: [id], onDelete: Restrict)
+
   neighborhoodId String?
   neighborhood   Neighborhood? @relation(fields: [neighborhoodId], references: [id])
 
+  addresses   Address[]
+  realEstates RealEstate[]
+  warehouses  Warehouse[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([cityId, name])
 }
 
 // ImÃ³veis
@@ -672,6 +951,9 @@ model RealEstate {
 
   neighborhoodId String?
   neighborhood   Neighborhood? @relation(fields: [neighborhoodId], references: [id])
+
+  streetId String?
+  street   Street? @relation(fields: [streetId], references: [id], onDelete: Restrict)
 
   taxpayerId String?
   taxpayer   Taxpayer? @relation(fields: [taxpayerId], references: [id])
@@ -756,6 +1038,7 @@ model Document {
   healthClinicalDocument         HealthClinicalDocument?
   healthLabReport                HealthLabReport?
   healthStockReceipt             HealthStockReceipt?
+  legalTextVersion               LegalTextVersion?
 
   createdAt                   DateTime                     @default(now())
   updatedAt                   DateTime                     @updatedAt
@@ -1660,10 +1943,16 @@ model EconomicRegistration {
 
 // Tabela de ParametrizaÃ§Ã£o de Tributos (Ex: IPTU, ISS, Taxa de AlvarÃ¡)
 model Tax {
-  id       String  @id @default(cuid())
-  name     String // IPTU, ITBI, ISS, Taxa de Coleta de Lixo
-  taxType  String // Imposto, Taxa, ContribuiÃ§Ã£o
-  isActive Boolean @default(true)
+  id              String    @id @default(cuid())
+  name            String // IPTU, ITBI, ISS, Taxa de Coleta de Lixo
+  taxType         String // Imposto, Taxa, ContribuiÃ§Ã£o
+  isActive        Boolean   @default(true)
+  code            String?   @unique
+  governmentLevel String?
+  revenueNature   String?
+  effectiveFrom   DateTime?
+  effectiveUntil  DateTime?
+  description     String?
 
   assessments       TaxAssessment[]
   financialMapping  TaxFinancialMapping?
@@ -3751,6 +4040,10 @@ model BankAccount {
   id                        String          @id @default(cuid())
   bankName                  String
   agency                    String
+  bankId                    String?
+  bank                      Bank?           @relation(fields: [bankId], references: [id], onDelete: Restrict)
+  bankBranchId              String?
+  bankBranch                BankBranch?     @relation(fields: [bankBranchId], references: [id], onDelete: Restrict)
   accountNumber             String
   accountType               String          @default("Movimento")
   currentBalance            Float           @default(0)
@@ -3785,6 +4078,9 @@ model BankAccount {
   investmentAllocationsAsOrigin     InvestmentAllocation[]      @relation("InvestmentAllocationOrigin")
   investmentAllocationsAsInvestment InvestmentAllocation[]      @relation("InvestmentAllocationInvestment")
   educationFinancialAccounts        EducationFinancialAccount[]
+
+  @@index([bankId])
+  @@index([bankBranchId])
 }
 
 model TreasuryMovement {
@@ -4199,6 +4495,9 @@ model CatalogItem {
   category       String?
   estimatedValue Float?
   isActive       Boolean @default(true)
+  productKind    String  @default("MATERIAL")
+  specification  String?
+  externalCode   String?
 
   // Mod 11
   materials Material[]
@@ -5610,17 +5909,23 @@ model AssetIntegrationPendingConfiguration {
 
 // Almoxarifado
 model Warehouse {
-  id           String  @id @default(cuid())
-  name         String
-  type         String  @default("Central") // Central, Setorial
-  address      String?
-  zipCode      String?
-  streetName   String?
-  number       String?
-  neighborhood String?
-  city         String?
-  state        String?
-  isActive     Boolean @default(true)
+  id              String        @id @default(cuid())
+  name            String
+  type            String        @default("Central") // Central, Setorial
+  address         String?
+  zipCode         String?
+  streetName      String?
+  number          String?
+  neighborhood    String?
+  city            String?
+  state           String?
+  cityId          String?
+  cityRef         City?         @relation(fields: [cityId], references: [id], onDelete: Restrict)
+  neighborhoodId  String?
+  neighborhoodRef Neighborhood? @relation(fields: [neighborhoodId], references: [id], onDelete: Restrict)
+  streetId        String?
+  streetRef       Street?       @relation(fields: [streetId], references: [id], onDelete: Restrict)
+  isActive        Boolean       @default(true)
 
   managerId String?
   manager   Employee? @relation("WarehouseManager", fields: [managerId], references: [id])
@@ -5653,6 +5958,9 @@ model Warehouse {
 
   @@index([costCenterId])
   @@index([healthUnitId, isActive])
+  @@index([cityId])
+  @@index([neighborhoodId])
+  @@index([streetId])
 }
 
 model CostCenter {
@@ -5664,7 +5972,25 @@ model CostCenter {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  governmentEntityId   String?
+  governmentEntity     GovernmentEntity?   @relation(fields: [governmentEntityId], references: [id], onDelete: Restrict)
+  parentId             String?
+  parent               CostCenter?         @relation("CostCenterHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children             CostCenter[]        @relation("CostCenterHierarchy")
+  secretariatId        String?
+  secretariat          Secretariat?        @relation(fields: [secretariatId], references: [id], onDelete: Restrict)
+  departmentId         String?
+  department           Department?         @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  administrativeUnitId String?
+  administrativeUnit   AdministrativeUnit? @relation(fields: [administrativeUnitId], references: [id], onDelete: Restrict)
+
   warehouses Warehouse[]
+
+  @@index([governmentEntityId])
+  @@index([parentId])
+  @@index([secretariatId])
+  @@index([departmentId])
+  @@index([administrativeUnitId])
 }
 
 model MaterialCategory {
@@ -5718,6 +6044,8 @@ model Material {
   specializedQuotas        SpecializedQuota[]
   specializedDistributions SpecializedDistribution[]
   healthLabExamMaterials   HealthLabExamMaterial[]
+
+  @@index([catalogItemId])
 }
 
 model MaterialStock {
@@ -5752,6 +6080,8 @@ model MaterialStock {
 model MaterialMovement {
   id               String            @id @default(cuid())
   type             String // Entrada, SaÃ­da, Ajuste
+  operation        String            @default("REGULAR") // REGULAR, RETURN, REVERSAL
+  idempotencyKey   String?           @unique
   quantity         Float
   unitValue        Float?
   date             DateTime          @default(now())
@@ -5785,6 +6115,14 @@ model MaterialMovement {
   materialRequestItemId String?
   materialRequestItem   MaterialRequestItem? @relation("MaterialRequestItemMovements", fields: [materialRequestItemId], references: [id], onDelete: Restrict)
 
+  returnedMovementId String?
+  returnedMovement   MaterialMovement?  @relation("MaterialMovementReturns", fields: [returnedMovementId], references: [id], onDelete: Restrict)
+  returnMovements    MaterialMovement[] @relation("MaterialMovementReturns")
+
+  reversedMovementId String?           @unique
+  reversedMovement   MaterialMovement? @relation("MaterialMovementReversal", fields: [reversedMovementId], references: [id], onDelete: Restrict)
+  reversalMovement   MaterialMovement? @relation("MaterialMovementReversal")
+
   actorUsuarioId  String?
   actorUsuario    Usuario?  @relation("MaterialMovementActorUsuario", fields: [actorUsuarioId], references: [id])
   actorEmployeeId String?
@@ -5809,6 +6147,7 @@ model MaterialMovement {
   @@index([inventorySessionId])
   @@index([settlementId])
   @@index([materialRequestItemId])
+  @@index([returnedMovementId])
 }
 
 model InventorySession {
@@ -7033,16 +7372,18 @@ model Patient {
 }
 
 model HealthProfessional {
-  id                          String    @id @default(cuid())
+  id                          String     @id @default(cuid())
   cbo                         String?
+  cboId                       String?
+  cboRef                      HealthCbo? @relation(fields: [cboId], references: [id], onDelete: Restrict)
   cns                         String?
   councilName                 String? // CRM, COREN, CRO
   councilNumber               String?
   specialty                   String?
   treatment                   String?
-  isAuditor                   Boolean   @default(false)
+  isAuditor                   Boolean    @default(false)
   consultationIntervalMinutes Int?
-  isActive                    Boolean   @default(true)
+  isActive                    Boolean    @default(true)
   inactivatedAt               DateTime?
   inactivationReason          String?
 
@@ -7083,6 +7424,7 @@ model HealthProfessional {
   healthVigilanceInspections HealthVigilanceInspection[]
   healthCareSchedules        HealthCareSchedule[]
 
+  @@index([cboId])
   @@index([cns])
 }
 
@@ -7595,6 +7937,8 @@ model HealthCbo {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  professionals HealthProfessional[]
 
   @@index([isActive, description])
 }
@@ -9022,6 +9366,8 @@ model HealthFamily {
   household           HealthHousehold? @relation(fields: [householdId], references: [id], onDelete: Restrict)
   responsiblePersonId String?
   responsiblePerson   Person?          @relation(fields: [responsiblePersonId], references: [id], onDelete: Restrict)
+  masterFamilyId      String?          @unique
+  masterFamily        Family?          @relation(fields: [masterFamilyId], references: [id], onDelete: Restrict)
   isActive            Boolean          @default(true)
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
@@ -9343,6 +9689,8 @@ model SocialFamily {
   perCapitaIncome Float?
   vulnerabilities String? // Principais vulnerabilidades identificadas
   status          String  @default("Ativo") // Ativo, Inativo
+  masterFamilyId  String? @unique
+  masterFamily    Family? @relation(fields: [masterFamilyId], references: [id], onDelete: Restrict)
 
   representativeId String @unique
   representative   Person @relation("FamilyRepresentative", fields: [representativeId], references: [id])
@@ -9990,14 +10338,16 @@ model CamAta {
 }
 
 model CamLei {
-  id             String    @id @default(cuid())
-  numero         String    @unique
+  id             String     @id @default(cuid())
+  numero         String     @unique
   tipo           String // Lei OrdinÃ¡ria, Lei Complementar, Decreto Legislativo, ResoluÃ§Ã£o
   ementa         String
   texto          String?
   dataPublicacao DateTime?
   dataVigor      DateTime?
-  status         String    @default("Vigente") // Vigente, Revogada, Suspensa, Vetada
+  status         String     @default("Vigente") // Vigente, Revogada, Suspensa, Vetada
+  legalTextId    String?    @unique
+  legalText      LegalText? @relation(fields: [legalTextId], references: [id], onDelete: Restrict)
 
   proposicaoId String?                   @unique
   proposicao   CamProposicao?            @relation(fields: [proposicaoId], references: [id], onDelete: SetNull)

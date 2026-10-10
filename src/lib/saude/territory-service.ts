@@ -50,22 +50,55 @@ export async function saveHousehold(context: AppContext, input: { householdCode?
 export async function saveFamily(context: AppContext, input: { familyCode?: string | null; householdId?: string | null; responsiblePersonId?: string | null }) {
   if (input.householdId && !await context.prisma.healthHousehold.findUnique({ where: { id: input.householdId }, select: { id: true } })) throw new TerritoryError("Domicílio não encontrado.");
   if (input.responsiblePersonId && !await context.prisma.person.findUnique({ where: { id: input.responsiblePersonId }, select: { id: true } })) throw new TerritoryError("Responsável não encontrado.");
-  return context.prisma.healthFamily.create({
-    data: { familyCode: input.familyCode?.trim() || null, householdId: input.householdId || null, responsiblePersonId: input.responsiblePersonId || null },
-    select: { id: true },
+  const familyCode = input.familyCode?.trim() || null;
+  return context.prisma.$transaction(async (tx) => {
+    const [codeCandidate, socialCandidate] = await Promise.all([
+      familyCode ? tx.family.findUnique({ where: { code: familyCode }, include: { healthProfile: { select: { id: true } } } }) : null,
+      input.responsiblePersonId ? tx.socialFamily.findUnique({ where: { representativeId: input.responsiblePersonId }, select: { masterFamilyId: true } }) : null,
+    ]);
+    if (codeCandidate?.healthProfile) throw new TerritoryError("O código familiar já está vinculado a outra família da Saúde.");
+    if (codeCandidate && socialCandidate?.masterFamilyId && codeCandidate.id !== socialCandidate.masterFamilyId) throw new TerritoryError("Código familiar e responsável apontam para famílias diferentes.");
+    const masterFamilyId = codeCandidate?.id || socialCandidate?.masterFamilyId || null;
+    const masterFamily = masterFamilyId
+      ? await tx.family.update({ where: { id: masterFamilyId }, data: { code: familyCode || undefined, responsiblePersonId: input.responsiblePersonId || undefined, status: "ATIVA" } })
+      : await tx.family.create({ data: { code: familyCode, responsiblePersonId: input.responsiblePersonId || null } });
+    if (input.responsiblePersonId) {
+      await tx.familyMember.upsert({
+        where: { familyId_personId: { familyId: masterFamily.id, personId: input.responsiblePersonId } },
+        update: { isRepresentative: true, status: "ATIVO", leftAt: null },
+        create: { familyId: masterFamily.id, personId: input.responsiblePersonId, kinship: "RESPONSAVEL", isRepresentative: true },
+      });
+    }
+    return tx.healthFamily.create({
+      data: { familyCode, householdId: input.householdId || null, responsiblePersonId: input.responsiblePersonId || null, masterFamilyId: masterFamily.id },
+      select: { id: true },
+    });
   });
 }
 
 export async function addFamilyMember(context: AppContext, input: { familyId: string; personId: string; kinship?: string | null }) {
-  const family = await context.prisma.healthFamily.findUnique({ where: { id: input.familyId }, select: { id: true } });
+  const family = await context.prisma.healthFamily.findUnique({ where: { id: input.familyId }, select: { id: true, masterFamilyId: true } });
   if (!family) throw new TerritoryError("Família não encontrada.");
   if (!await context.prisma.person.findUnique({ where: { id: input.personId }, select: { id: true } })) throw new TerritoryError("Pessoa não encontrada.");
   const existing = await context.prisma.healthFamilyMember.findUnique({ where: { personId: input.personId }, select: { id: true, familyId: true } });
   if (existing) {
     if (existing.familyId !== input.familyId) throw new TerritoryError("Pessoa já vinculada a outra família.");
+    if (family.masterFamilyId) await context.prisma.familyMember.upsert({
+      where: { familyId_personId: { familyId: family.masterFamilyId, personId: input.personId } },
+      update: { kinship: input.kinship?.trim() || null, status: "ATIVO", leftAt: null },
+      create: { familyId: family.masterFamilyId, personId: input.personId, kinship: input.kinship?.trim() || null },
+    });
     return existing;
   }
-  return context.prisma.healthFamilyMember.create({ data: { familyId: input.familyId, personId: input.personId, kinship: input.kinship?.trim() || null }, select: { id: true } });
+  return context.prisma.$transaction(async (tx) => {
+    const member = await tx.healthFamilyMember.create({ data: { familyId: input.familyId, personId: input.personId, kinship: input.kinship?.trim() || null }, select: { id: true } });
+    if (family.masterFamilyId) await tx.familyMember.upsert({
+      where: { familyId_personId: { familyId: family.masterFamilyId, personId: input.personId } },
+      update: { kinship: input.kinship?.trim() || null, status: "ATIVO", leftAt: null },
+      create: { familyId: family.masterFamilyId, personId: input.personId, kinship: input.kinship?.trim() || null },
+    });
+    return member;
+  });
 }
 
 const visitSchema = z.object({

@@ -380,7 +380,7 @@ export function ModuleShell({
           </button>
         </div>
 
-        <nav className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden pr-1" aria-label={"Navegação de " + moduleTitle}>
+        <nav className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1" aria-label={"Navegação de " + moduleTitle}>
           {navigation.map((group) => (
             <section key={group.title} className={cn("border-b pb-1.5 last:border-0", isLightSidebar ? "border-slate-200" : "border-slate-800")}>
               <p className={cn("px-2 pb-0.5 text-[9px] font-bold uppercase tracking-[0.14em]", isLightSidebar ? "text-slate-500" : "text-slate-500", isCollapsed && "lg:sr-only")}>{group.title}</p>

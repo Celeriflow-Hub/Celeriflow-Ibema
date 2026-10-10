@@ -72,18 +72,36 @@ export async function toggleSocialUnitStatus(id: string, isActive: boolean) {
 export async function createFamily(data: { representativeId: string; nis?: string; familyCode?: string; income?: number; perCapitaIncome?: number; vulnerabilities?: string }) {
   const prisma = await getTenantPrisma("create");
   try {
-    const family = await prisma.socialFamily.create({
-      data: {
-        representativeId: data.representativeId,
-        nis: data.nis,
-        familyCode: data.familyCode,
-        income: data.income ? Number(data.income) : null,
-        perCapitaIncome: data.perCapitaIncome ? Number(data.perCapitaIncome) : null,
-        vulnerabilities: data.vulnerabilities,
-      },
-      include: { representative: true, members: true }
+    const familyCode = data.familyCode?.trim() || null;
+    const family = await prisma.$transaction(async (tx) => {
+      const person = await tx.person.findFirst({ where: { id: data.representativeId, status: { not: "Inativo" } }, select: { id: true } });
+      if (!person) throw new Error("Responsável não encontrado ou inativo.");
+      const existingMaster = familyCode ? await tx.family.findUnique({ where: { code: familyCode }, include: { socialProfile: { select: { id: true } } } }) : null;
+      if (existingMaster?.socialProfile) throw new Error("O código familiar já está vinculado a outro cadastro social.");
+      if (existingMaster?.responsiblePersonId && existingMaster.responsiblePersonId !== data.representativeId) throw new Error("O código familiar pertence a outro responsável.");
+      const masterFamily = existingMaster
+        ? await tx.family.update({ where: { id: existingMaster.id }, data: { responsiblePersonId: data.representativeId, status: "ATIVA" } })
+        : await tx.family.create({ data: { code: familyCode, responsiblePersonId: data.representativeId } });
+      await tx.familyMember.upsert({
+        where: { familyId_personId: { familyId: masterFamily.id, personId: data.representativeId } },
+        update: { isRepresentative: true, status: "ATIVO", leftAt: null },
+        create: { familyId: masterFamily.id, personId: data.representativeId, kinship: "RESPONSAVEL", isRepresentative: true },
+      });
+      return tx.socialFamily.create({
+        data: {
+          representativeId: data.representativeId,
+          masterFamilyId: masterFamily.id,
+          nis: data.nis,
+          familyCode,
+          income: data.income ? Number(data.income) : null,
+          perCapitaIncome: data.perCapitaIncome ? Number(data.perCapitaIncome) : null,
+          vulnerabilities: data.vulnerabilities,
+        },
+        include: { representative: true, members: true },
+      });
     });
-    revalidatePath("/social/familias");
+    revalidatePath("/app-domain/social/familias");
+    revalidatePath("/app-domain/cadastros/familias");
     return { success: true, data: family };
   } catch (error) {
     console.error("Error creating family:", error);
@@ -94,19 +112,43 @@ export async function createFamily(data: { representativeId: string; nis?: strin
 export async function updateFamily(id: string, data: { representativeId: string; nis?: string; familyCode?: string; income?: number; perCapitaIncome?: number; vulnerabilities?: string }) {
   const prisma = await getTenantPrisma("update");
   try {
-    const family = await prisma.socialFamily.update({
-      where: { id },
-      data: {
-        representativeId: data.representativeId,
-        nis: data.nis,
-        familyCode: data.familyCode,
-        income: data.income ? Number(data.income) : null,
-        perCapitaIncome: data.perCapitaIncome ? Number(data.perCapitaIncome) : null,
-        vulnerabilities: data.vulnerabilities,
-      },
-      include: { representative: true, members: true }
+    const familyCode = data.familyCode?.trim() || null;
+    const family = await prisma.$transaction(async (tx) => {
+      const current = await tx.socialFamily.findUnique({ where: { id }, select: { masterFamilyId: true } });
+      if (!current) throw new Error("Família não encontrada.");
+      const person = await tx.person.findFirst({ where: { id: data.representativeId, status: { not: "Inativo" } }, select: { id: true } });
+      if (!person) throw new Error("Responsável não encontrado ou inativo.");
+      let masterFamilyId = current.masterFamilyId;
+      if (!masterFamilyId && familyCode) {
+        const candidate = await tx.family.findUnique({ where: { code: familyCode }, include: { socialProfile: { select: { id: true } } } });
+        if (candidate?.socialProfile && candidate.socialProfile.id !== id) throw new Error("O código familiar já está vinculado a outro cadastro social.");
+        masterFamilyId = candidate?.id || null;
+      }
+      const masterFamily = masterFamilyId
+        ? await tx.family.update({ where: { id: masterFamilyId }, data: { code: familyCode, responsiblePersonId: data.representativeId, status: "ATIVA" } })
+        : await tx.family.create({ data: { code: familyCode, responsiblePersonId: data.representativeId } });
+      await tx.familyMember.updateMany({ where: { familyId: masterFamily.id, isRepresentative: true, personId: { not: data.representativeId } }, data: { isRepresentative: false } });
+      await tx.familyMember.upsert({
+        where: { familyId_personId: { familyId: masterFamily.id, personId: data.representativeId } },
+        update: { isRepresentative: true, status: "ATIVO", leftAt: null },
+        create: { familyId: masterFamily.id, personId: data.representativeId, kinship: "RESPONSAVEL", isRepresentative: true },
+      });
+      return tx.socialFamily.update({
+        where: { id },
+        data: {
+          representativeId: data.representativeId,
+          masterFamilyId: masterFamily.id,
+          nis: data.nis,
+          familyCode,
+          income: data.income ? Number(data.income) : null,
+          perCapitaIncome: data.perCapitaIncome ? Number(data.perCapitaIncome) : null,
+          vulnerabilities: data.vulnerabilities,
+        },
+        include: { representative: true, members: true },
+      });
     });
-    revalidatePath("/social/familias");
+    revalidatePath("/app-domain/social/familias");
+    revalidatePath("/app-domain/cadastros/familias");
     return { success: true, data: family };
   } catch (error) {
     console.error("Error updating family:", error);
@@ -117,12 +159,21 @@ export async function updateFamily(id: string, data: { representativeId: string;
 export async function toggleFamilyStatus(id: string, status: string) {
   const prisma = await getTenantPrisma("update");
   try {
-    const family = await prisma.socialFamily.update({
-      where: { id },
-      data: { status },
-      include: { representative: true, members: true }
+    if (!["Ativo", "Inativo"].includes(status)) throw new Error("Status familiar inválido.");
+    const family = await prisma.$transaction(async (tx) => {
+      const updated = await tx.socialFamily.update({
+        where: { id },
+        data: { status },
+        include: { representative: true, members: true, masterFamily: { select: { id: true, healthProfile: { select: { isActive: true } } } } },
+      });
+      if (updated.masterFamily) {
+        const keepActive = status === "Ativo" || updated.masterFamily.healthProfile?.isActive === true;
+        await tx.family.update({ where: { id: updated.masterFamily.id }, data: { status: keepActive ? "ATIVA" : "INATIVA" } });
+      }
+      return updated;
     });
-    revalidatePath("/social/familias");
+    revalidatePath("/app-domain/social/familias");
+    revalidatePath("/app-domain/cadastros/familias");
     return { success: true, data: family };
   } catch (error) {
     console.error("Error toggling family status:", error);

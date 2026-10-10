@@ -13,6 +13,12 @@ const navigation: ModuleNavGroup[] = [{
     { title: "Documentos", href: "/obras/documentos", icon: "fileText" },
     { title: "Relatórios", href: "/obras/relatorios", icon: "barChart3" },
   ],
+}, {
+  title: "Construção civil",
+  items: [
+    { title: "Solicitações Urbanísticas", href: "/obras/construcao-civil", icon: "building2", exact: true },
+    { title: "Configurações Urbanísticas", href: "/obras/construcao-civil/configuracoes", icon: "settings" },
+  ],
 }];
 
 export default function ObrasLayout({ children }: { children: React.ReactNode }) {

@@ -96,6 +96,7 @@ model Secretariat {
 
 // Departamentos / Setores
 model Department {
+  constructionStaff ConstructionStaffRole[]
   id            String           @id @default(cuid())
   name          String
   description   String?
@@ -174,6 +175,8 @@ model Role {
 
 // Servidores BÃ¡sicos (Base para RH e vinculaÃ§Ã£o de responsÃ¡veis)
 model Employee {
+  constructionStaff ConstructionStaffRole[]
+  assignedConstructionCases ConstructionCase[]
   socialLinks SocialProfessionalLink[]
   id              String  @id @default(cuid())
   name            String
@@ -938,6 +941,7 @@ model Street {
 
 // ImÃ³veis
 model RealEstate {
+  constructionCases ConstructionCaseProperty[]
   id            String  @id @default(cuid())
   municipalInsc String? @unique
   registration  String? // MatrÃ­cula
@@ -1238,6 +1242,7 @@ model Subject {
 
 // Processo / Protocolo Principal
 model Process {
+  constructionCase ConstructionCase?
   sstCertificates SstMedicalCertificate[]
   id             String  @id @default(cuid())
   protocolNumber String  @unique // ex: 2026/00001
@@ -10819,6 +10824,83 @@ model CamDocumentoLegislativo {
 // -----------------------------------------------------------------------------
 // MODULO 18 - OBRAS E INFRAESTRUTURA
 // -----------------------------------------------------------------------------
+
+model ConstructionCatalogEntry {
+  id String @id @default(cuid())
+  kind String
+  name String
+  description String?
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([kind, name])
+  @@index([kind, isActive, name])
+}
+
+model ConstructionConfigVersion {
+  id String @id @default(cuid())
+  version Int @unique
+  freeRevisions Int
+  correctionDays Int
+  checkPropertyDebts Boolean
+  subjectIds String[]
+  areaWeights Json
+  instructions String
+  publishedBy String
+  publishedAt DateTime @default(now())
+  cases ConstructionCase[]
+}
+
+model ConstructionStaffRole {
+  id String @id @default(cuid())
+  employeeId String
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  departmentId String
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  role String
+  startsAt DateTime @db.Date
+  endsAt DateTime? @db.Date
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([employeeId, departmentId, role, startsAt])
+  @@index([employeeId, isActive, startsAt, endsAt])
+}
+
+model ConstructionCase {
+  id String @id @default(cuid())
+  requestKey String @unique
+  processId String @unique
+  process Process @relation(fields: [processId], references: [id], onDelete: Restrict)
+  configurationId String
+  configuration ConstructionConfigVersion @relation(fields: [configurationId], references: [id], onDelete: Restrict)
+  category String
+  locationType String
+  regularization Boolean @default(false)
+  catalogSnapshot Json
+  existingArea Decimal @db.Decimal(14, 4)
+  expandedArea Decimal @db.Decimal(14, 4)
+  irregularArea Decimal @db.Decimal(14, 4)
+  renovationArea Decimal @db.Decimal(14, 4)
+  demolitionArea Decimal @db.Decimal(14, 4)
+  totalArea Decimal @db.Decimal(14, 4)
+  calculationSnapshot Json
+  assignedEmployeeId String?
+  assignedEmployee Employee? @relation(fields: [assignedEmployeeId], references: [id], onDelete: Restrict)
+  createdBy String
+  createdAt DateTime @default(now())
+  properties ConstructionCaseProperty[]
+}
+
+model ConstructionCaseProperty {
+  id String @id @default(cuid())
+  caseId String
+  case ConstructionCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  realEstateId String
+  realEstate RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Restrict)
+  cadastralSnapshot Json
+  @@unique([caseId, realEstateId])
+}
 
 model ObrasObra {
   id            String  @id @default(cuid())

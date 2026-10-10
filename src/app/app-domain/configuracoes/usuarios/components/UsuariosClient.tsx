@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { UserCog, Plus, Search, Shield, Trash2, X } from "lucide-react";
 import { deleteUsuario, upsertUsuario, toggleUsuarioStatus } from "../actions";
-import { Card, CardContent } from "@/components/ui/card";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
 import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
@@ -12,8 +11,6 @@ import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
 const PAGE_SIZE = 20;
 
 type Perfil = { id: string; nome: string; codigo: string };
-type Modulo = { id: string; nome: string; codigo: string };
-type UsuarioModulo = { moduloId: string; canView: boolean; canEdit: boolean };
 type Usuario = {
   id: string;
   nome: string;
@@ -23,7 +20,6 @@ type Usuario = {
   perfil: { nome: string };
   employeeId: string | null;
   employee?: { department: { name: string } | null; secretariat: { name: string } | null } | null;
-  permissoesModulo: UsuarioModulo[];
 };
 type Servidor = {
   id: string;
@@ -35,12 +31,10 @@ type Servidor = {
 export default function UsuariosClient({
   usuarios,
   perfis,
-  modulos,
   servidores
 }: {
   usuarios: Usuario[];
   perfis: Perfil[];
-  modulos: Modulo[];
   servidores: Servidor[];
 }) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -56,14 +50,12 @@ export default function UsuariosClient({
     perfilId: string;
     employeeId: string;
     ativo: boolean;
-    permissoes: Record<string, { canView: boolean; canEdit: boolean }>;
   }>({
     nome: "",
     email: "",
     perfilId: perfis[0]?.id || "",
     employeeId: "",
     ativo: true,
-    permissoes: {}
   });
 
   const filteredUsuarios = usuarios.filter(u => 
@@ -73,9 +65,6 @@ export default function UsuariosClient({
   const activePage = Math.min(page, Math.max(1, Math.ceil(filteredUsuarios.length / PAGE_SIZE)));
   const pageUsuarios = filteredUsuarios.slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE);
 
-  const selectedPerfil = perfis.find(p => p.id === formData.perfilId);
-  const isAdmin = selectedPerfil?.codigo === "SYSTEM_ADMINISTRATOR";
-
   function openNewModal() {
     setFormData({
       nome: "",
@@ -83,25 +72,18 @@ export default function UsuariosClient({
       perfilId: perfis[0]?.id || "",
       employeeId: "",
       ativo: true,
-      permissoes: {}
     });
     setIsModalOpen(true);
   }
 
   function openEditModal(usuario: Usuario) {
-    const permMap: Record<string, { canView: boolean; canEdit: boolean }> = {};
-    usuario.permissoesModulo.forEach(p => {
-      permMap[p.moduloId] = { canView: p.canView, canEdit: p.canEdit };
-    });
-
     setFormData({
       id: usuario.id,
       nome: usuario.nome,
       email: usuario.email,
       perfilId: usuario.perfilId,
       employeeId: usuario.employeeId || "",
-      ativo: usuario.ativo,
-      permissoes: permMap
+      ativo: usuario.ativo
     });
     setIsModalOpen(true);
   }
@@ -110,20 +92,13 @@ export default function UsuariosClient({
     e.preventDefault();
     setIsSubmitting(true);
 
-    const permissoesArray = Object.entries(formData.permissoes).map(([moduloId, perms]) => ({
-      moduloId,
-      canView: perms.canView,
-      canEdit: perms.canEdit
-    }));
-
     const result = await upsertUsuario({
       id: formData.id,
       nome: formData.nome,
       email: formData.email,
       perfilId: formData.perfilId,
       employeeId: formData.employeeId || undefined,
-      ativo: formData.ativo,
-      permissoes: permissoesArray
+      ativo: formData.ativo
     });
 
     if (result.error) {
@@ -153,7 +128,7 @@ export default function UsuariosClient({
       <PageHeader
         title="Gestão de Usuários"
         icon={<UserCog className="size-4 shrink-0 text-slate-700 dark:text-slate-300" />}
-        action={<button onClick={openNewModal} className="flex h-8 items-center gap-2 rounded-md bg-slate-900 px-3 text-sm font-medium text-white transition-colors hover:bg-slate-800 dark:bg-white dark:text-slate-900"><Plus className="h-4 w-4" />Novo Usuário</button>}
+        action={<button onClick={openNewModal} disabled={!perfis.length} className="flex h-8 items-center gap-2 rounded-md bg-slate-900 px-3 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900"><Plus className="h-4 w-4" />Novo Usuário</button>}
         className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white"
       />
       <ErpListFrame toolbar={
@@ -269,11 +244,13 @@ export default function UsuariosClient({
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Perfil de Acesso</label>
                   <select
+                    required
                     value={formData.perfilId}
-                    onChange={e => setFormData({...formData, perfilId: e.target.value, permissoes: {}})}
+                    onChange={e => setFormData({...formData, perfilId: e.target.value})}
                     className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-gray-900 outline-none"
                   >
-                    {perfis.map(p => (
+                    {!perfis.length && <option value="">Crie um perfil antes de cadastrar usuários</option>}
+                    {perfis.filter(p => p.codigo !== "SYSTEM_ADMINISTRATOR").map(p => (
                       <option key={p.id} value={p.id}>{p.nome}</option>
                     ))}
                   </select>
@@ -307,79 +284,9 @@ export default function UsuariosClient({
                 </div>
               </div>
 
-              {!isAdmin && (
-                <div>
-                  <h3 className="mb-3 border-b border-slate-200 pb-2 text-base font-semibold text-slate-900 dark:border-slate-700 dark:text-white">Permissões por Módulo</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {modulos.map(modulo => {
-                      const perm = formData.permissoes[modulo.id] || { canView: false, canEdit: false };
-                      return (
-                        <Card key={modulo.id} className="shadow-sm">
-                          <CardContent className="p-4">
-                            <h4 className="font-bold text-sm text-gray-900 mb-3 truncate" title={modulo.nome}>
-                              {modulo.nome}
-                            </h4>
-                            <div className="space-y-2">
-                              <label className="flex items-center justify-between text-sm text-gray-600 cursor-pointer">
-                                <span>Pode Ver</span>
-                                <input 
-                                  type="checkbox"
-                                  checked={perm.canView || perm.canEdit}
-                                  onChange={e => {
-                                    const checked = e.target.checked;
-                                    setFormData(prev => ({
-                                      ...prev,
-                                      permissoes: {
-                                        ...prev.permissoes,
-                                        [modulo.id]: { 
-                                          canView: checked, 
-                                          canEdit: checked ? perm.canEdit : false 
-                                        }
-                                      }
-                                    }));
-                                  }}
-                                  className="w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
-                                />
-                              </label>
-                              <label className="flex items-center justify-between text-sm text-gray-600 cursor-pointer">
-                                <span>Pode Editar</span>
-                                <input 
-                                  type="checkbox"
-                                  checked={perm.canEdit}
-                                  onChange={e => {
-                                    const checked = e.target.checked;
-                                    setFormData(prev => ({
-                                      ...prev,
-                                      permissoes: {
-                                        ...prev.permissoes,
-                                        [modulo.id]: { 
-                                          canView: checked ? true : perm.canView, 
-                                          canEdit: checked 
-                                        }
-                                      }
-                                    }));
-                                  }}
-                                  className="w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
-                                />
-                              </label>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {isAdmin && (
-                <div className="bg-blue-50 text-blue-800 p-4 rounded-lg flex items-start gap-3">
-                  <Shield className="h-5 w-5 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-semibold">Acesso Total</h4>
-                    <p className="text-sm mt-1">Este perfil de Administrador possui acesso irrestrito de visualização e edição em todos os módulos do sistema. Não é necessário configurar permissões individuais.</p>
-                  </div>
-                </div>
-              )}
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                Os acessos a módulos e operações são definidos exclusivamente pelas permissões do perfil selecionado.
+              </div>
             </form>
 
             <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">

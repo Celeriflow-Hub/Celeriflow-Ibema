@@ -4,7 +4,7 @@ import UsuariosClient from "./components/UsuariosClient";
 
 export default async function UsuariosPage() {
   const { prisma } = await getTenantContextForSystemAdministration();
-  const [usuarios, perfis, modulos, servidores] = await Promise.all([
+  const [usuarios, perfis, servidores] = await Promise.all([
     prisma.usuario.findMany({
       where: {
         email: { not: getSystemAdministratorEmail() },
@@ -12,16 +12,12 @@ export default async function UsuariosPage() {
       },
       include: {
         perfil: true,
-        permissoesModulo: true,
         employee: { include: { department: true, secretariat: true } }
       },
       orderBy: { nome: 'asc' }
     }),
     prisma.configuracaoPerfil.findMany({
-      orderBy: { nome: 'asc' }
-    }),
-    prisma.configuracaoModulo.findMany({
-      where: { ativo: true },
+      where: { ativo: true, codigo: { not: SYSTEM_ADMIN_PROFILE_CODE } },
       orderBy: { nome: 'asc' }
     }),
     prisma.employee.findMany({
@@ -31,5 +27,5 @@ export default async function UsuariosPage() {
     })
   ]);
 
-  return <UsuariosClient usuarios={usuarios} perfis={perfis} modulos={modulos} servidores={servidores} />;
+  return <UsuariosClient usuarios={usuarios} perfis={perfis} servidores={servidores} />;
 }

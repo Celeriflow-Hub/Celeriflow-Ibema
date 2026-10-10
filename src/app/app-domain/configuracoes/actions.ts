@@ -104,7 +104,7 @@ export async function ensureDefaultModulos() {
     { codigo: "PROCESSOS", nome: "Processos e Protocolo" },
     { codigo: "DOCUMENTOS", nome: "Documentos / GED" },
     { codigo: "ATENDIMENTO", nome: "Atendimento ao Cidadão" },
-    { codigo: "TRANSPARENCIA", nome: "Portal e Transparência" },
+    { codigo: "TRANSPARENCIA", nome: "Portal Transparência" },
     { codigo: "TRIBUTACAO", nome: "Tributário" },
     { codigo: "FINANCEIRO", nome: "Financeiro e Contábil" },
     { codigo: "COMPRAS", nome: "Compras e Contratos" },
@@ -121,7 +121,10 @@ export async function ensureDefaultModulos() {
     { codigo: "CULTURA", nome: "Cultura e Lazer" },
     { codigo: "CAMARA", nome: "Câmara Municipal" },
     { codigo: "SEGURANCA", nome: "Segurança e Mobilidade" },
-    { codigo: "CONFIGURACOES", nome: "Configurações e Integrações" },
+    { codigo: "CEMITERIOS", nome: "Cemitérios" },
+    { codigo: "AUDITORIA", nome: "Auditoria" },
+    { codigo: "SUPORTE_TECNICO", nome: "Suporte Técnico" },
+    { codigo: "CONFIGURACOES", nome: "Configurações" },
   ];
 
   for (const mod of defaultModules) {
@@ -135,6 +138,13 @@ export async function ensureDefaultModulos() {
         },
       });
     }
+  }
+
+  for (const mod of defaultModules) {
+    await prisma.configuracaoModulo.updateMany({
+      where: { codigo: mod.codigo, nome: { not: mod.nome } },
+      data: { nome: mod.nome },
+    });
   }
 
   await prisma.configuracaoModulo.updateMany({

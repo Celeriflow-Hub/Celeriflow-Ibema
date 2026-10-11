@@ -1,6 +1,8 @@
 "use server";
 import { contractCustomFieldsPolicySchema } from "@/lib/rh/contract-custom-fields";
 import { positionPlanSchema } from "@/lib/rh/position-plan";
+import { timeBankTransferPolicySchema } from "@/lib/rh/time-bank-transfer";
+import { timeBankPaymentPolicySchema } from "@/lib/rh/time-bank-payment";
 
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
@@ -258,6 +260,17 @@ export async function saveHrPayrollRule(
       if (input.code === "CAMPOS_CONTRATO") {
         if (input.valueType !== "JSON") throw new Error("Campos configuráveis exigem regra JSON.");
         contractCustomFieldsPolicySchema.parse(value);
+      }
+      if (input.code === "BANCO_HORAS_PAGAMENTO") {
+        if (input.valueType !== "JSON") throw new Error("Conversão de horas exige regra JSON.");
+        const policy = timeBankPaymentPolicySchema.parse(value);
+        if (!await tx.hrPayrollRubric.findFirst({ where: { ruleSetId: input.ruleSetId, code: policy.rubricCode, isActive: true, type: "PROVENTO", calculationMethod: "MANUAL" }, select: { id: true } })) throw new Error("Conversão exige rubrica MANUAL de provento ativa no conjunto.");
+      }
+      if (input.code === "BANCO_HORAS_TRANSFERENCIA") {
+        if (input.valueType !== "JSON") throw new Error("Transferência de horas exige regra JSON.");
+        const policy = timeBankTransferPolicySchema.parse(value);
+        const regimeIds = [...new Set(policy.allowedRegimePairs.flatMap(pair => [pair.sourceRegimeId, pair.targetRegimeId]))];
+        if (await tx.hrEmploymentRegime.count({ where: { id: { in: regimeIds }, isActive: true } }) !== regimeIds.length) throw new Error("Transferência referencia regime inexistente/inativo.");
       }
       if (input.code === "QUADRO_CARGOS") {
         if (input.valueType !== "JSON") throw new Error("Quadro de cargos exige regra JSON.");

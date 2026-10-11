@@ -285,6 +285,55 @@ O filtro de contratos aceita código e valor exato. Número/data/opção são ar
 
 Esses campos são extensões cadastrais do contrato; sua definição não cria rubricas, incidências, cargos, designações ou regras fiscais automaticamente. Extensões próprias de funções/designações continuam no planejamento de F1.
 
+## Transferência de banco de horas entre vínculos
+
+Regra JSON `BANCO_HORAS_TRANSFERENCIA`, exemplo **sintético**:
+
+```json
+{
+  "origin": "BANCO_HORAS_TRANSFERENCIA",
+  "conversion": "HORA_POR_HORA",
+  "maxTransferHours": "8.0000",
+  "allowedRegimePairs": [
+    {"sourceRegimeId":"ID_REGIME_ORIGEM","targetRegimeId":"ID_REGIME_DESTINO"}
+  ],
+  "legalReference": "Ato ou norma que autoriza a transferência de horas"
+}
+```
+
+Operações > Direitos > Transferir horas: informe chave estável, contrato origem/destino, política de transferência, política `BANCO_HORAS_PONTO` de cada vínculo, data civil e horas positivas com até quatro casas decimais, mais fundamento/ato. Os vínculos devem ser distintos e pertencer à mesma identidade funcional do Cadastro Único, ativos na data segundo suas revisões. Políticas dos bancos correspondem ao regime de cada vínculo e ao escopo da transferência. Produção exige parâmetros oficiais aprovados.
+
+O par é direcional: para autorizar o caminho contrário, cadastre também o par inverso. `HORA_POR_HORA` conserva horas, não valor monetário. Não há transferência entre titulares ou entre escopos, nem conversão automática de salário/jornada. Débito e crédito, memória de políticas/versões e auditoria são uma transação única. Limites de saldo vêm das políticas dos bancos; `maxTransferHours` é o limite por operação e não altera os limites diários do reconhecimento do ponto.
+
+O saldo é validado em toda a linha temporal. Não se pode consumir crédito futuro nem retirar saldo necessário a débitos já programados. O destino não pode exceder seu limite de saldo em datas posteriores. Não há reset de ponto nem duplicação da origem de frequência. Transferências ainda não representam lotes de crédito com prazo de expiração preservado; expiração será uma política própria.
+
+Estorno exige a origem completa `BANCO_HORAS:TRANSFERENCIA:<chave>` e fundamento. As duas entradas inversas têm a data original. Se o destino já consumiu as horas, a operação pode ser bloqueada e deve ser conciliada antes; o estorno não toma crédito futuro para financiar a devolução. Originais permanecem no extrato, e replay retorna as entradas anteriores. Nova transferência após estorno exige nova chave.
+
+## Conversão de banco de horas em movimento de folha
+
+Regra JSON `BANCO_HORAS_PAGAMENTO`, exemplo **sintético**:
+
+```json
+{
+  "origin": "BANCO_HORAS_PAGAMENTO",
+  "calculation": "SALARIO_JORNADA",
+  "multiplier": "1.5000",
+  "maxHoursPerCompetence": "20.0000",
+  "rubricCode": "BANCO_PAGO",
+  "legalReference": "Norma ou ato autorizador do pagamento das horas"
+}
+```
+
+Antes, cadastre a rubrica `BANCO_PAGO` MANUAL de PROVENTO no conjunto, com incidências e mapeamento legado próprios para o fechamento. Não são inferidas normas ou incidências pelo nome da rubrica. Os parâmetros do exemplo não são regra municipal oficial.
+
+Em Operações > Direitos > Converter banco: informe chave estável, vínculo, folha Mensal aberta, regra de pagamento, política do banco, quantidade positiva de horas (até quatro casas) e fundamento. O vínculo e as políticas precisam cobrir a competência integral. Produção exige conjunto aprovado/não demonstrativo. Alterações intramês continuam sujeitas ao bloqueio de rateio temporal do motor.
+
+Valor bruto = salário da revisão vigente na competência / jornada mensal daquela revisão × horas × multiplicador. O serviço usa Decimal e arredonda somente o valor monetário final a duas casas com HALF_UP. Valor arredondado zero é rejeitado. `maxHoursPerCompetence` soma todas as conversões e seus estornos no contrato/escopo durante a competência; dividir o pedido em origens distintas não supera o limite.
+
+A baixa de horas ocorre no fim da competência, com conferência de toda a cronologia do saldo. Baixa, movimento de provento e memória da origem são gravados juntos; qualquer falha reverte todos. A origem aparece no banco como PAGAMENTO; o movimento entra no cálculo mensal e em suas incidências configuradas. Isto gera provento, não confirma depósito bancário.
+
+Estorno usa origem completa `BANCO_HORAS:PAGAMENTO:<chave>`, gera movimento compensatório negativo e devolve horas na data original. É permitido somente em folha Mensal aberta sem fechamento oficial da competência do titular, respeitando limite cronológico do banco. Competência fechada/paga exige conciliação própria. Depois da conversão ou estorno, recalcule a folha para atualizar os movimentos; cálculos anteriores preservam seus snapshots.
+
 ## Quadro temporal de cargos, vagas e níveis
 
 Cadastre regra JSON `QUADRO_CARGOS` (categoria GERAL) no conjunto compartilhado pelos regimes do quadro. Os cargos são IDs de `Role` do cadastro central; não se cria cargo paralelo em RH. Exemplo sintético:

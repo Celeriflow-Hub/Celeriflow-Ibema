@@ -17,15 +17,36 @@ import { reserveConsignmentAgreement, postConsignmentInstallment, cancelConsignm
 import { assertPayrollBudgetScope } from "@/lib/rh/payroll-access";
 import { generateAttendanceTimeBank, reverseAttendanceTimeBank } from "@/lib/rh/time-bank";
 import { registerFunctionalOccurrence, cancelFunctionalOccurrence } from "@/lib/rh/functional-occurrences";
+import { transferTimeBank, reverseTimeBankTransfer } from "@/lib/rh/time-bank-transfer";
+import { convertTimeBankToPayroll, reverseTimeBankPayment } from "@/lib/rh/time-bank-payment";
 import { decideEmployeeCreditRequest } from "@/lib/rh/credit-requests";
 
 export async function executeWorkforceOperation(command: string, values: Record<string, string>) {
   const allowed = ["contrato", "movimento", "direito", "calcular", "fechar", "cancelar", "publicar", "vincular", "aquisitivos", "reservar-ferias", "importar", "beneficio", "decidir-solicitacao", "reajustar", "cancelar-ferias", "ponto-horas-extras", "decidir-recadastramento", "financeiro", "simular-especial", "consignacao-reservar", "consignacao-lancar", "consignacao-cancelar", "contratos-coletivos", "ponto-banco-horas", "estornar-banco-horas"];
-  if (![...allowed, "ocorrencia", "cancelar-ocorrencia", "decidir-credito"].includes(command)) return { error: "Operação inválida." };
-  const context = await getTenantContextForModuleOperation("RH", ["contrato", "movimento", "direito", "aquisitivos", "reservar-ferias", "importar", "beneficio", "ponto-horas-extras", "ponto-banco-horas", "consignacao-reservar", "ocorrencia"].includes(command) && !values.id ? "create" : "update");
+  if (![...allowed, "ocorrencia", "cancelar-ocorrencia", "decidir-credito", "transferir-banco-horas", "estornar-transferencia-horas", "pagar-banco-horas", "estornar-pagamento-horas"].includes(command)) return { error: "Operação inválida." };
+  const context = await getTenantContextForModuleOperation("RH", ["contrato", "movimento", "direito", "aquisitivos", "reservar-ferias", "importar", "beneficio", "ponto-horas-extras", "ponto-banco-horas", "consignacao-reservar", "ocorrencia", "transferir-banco-horas", "pagar-banco-horas"].includes(command) && !values.id ? "create" : "update");
   try {
     let id = "";
     let message = "Operação registrada.";
+    if (command === "pagar-banco-horas" || command === "estornar-pagamento-horas") {
+      const payrollId = command === "pagar-banco-horas" ? values.payrollId : z.object({ input: z.object({ payrollId: z.string() }) }).parse((await context.prisma.hrIntegrationEvent.findUniqueOrThrow({ where: { sourceKey: values.conversionSourceKey } })).payload).input.payrollId;
+      await assertPayrollBudgetScope(context, payrollId);
+      const result = command === "pagar-banco-horas" ? await convertTimeBankToPayroll(context.prisma, context.user.id, values) : await reverseTimeBankPayment(context.prisma, context.user.id, values);
+      id = `${result.entryId}, ${result.movementId}`;
+      message = "Banco de horas e movimento de folha conciliados na mesma transação. Recalcule a folha antes do fechamento.";
+      revalidatePath("/portal-servidor/banco-horas");
+    }
+    if (command === "transferir-banco-horas") {
+      const result = await transferTimeBank(context.prisma, context.user.id, values);
+      id = `${result.sourceEntryId}, ${result.targetEntryId}`;
+      message = "Transferência de horas registrada nos dois vínculos, sem pagamento financeiro.";
+      revalidatePath("/portal-servidor/banco-horas");
+    }
+    if (command === "estornar-transferencia-horas") {
+      id = (await reverseTimeBankTransfer(context.prisma, context.user.id, values)).entryIds.join(", ");
+      message = "Transferência estornada com preservação do histórico dos dois vínculos.";
+      revalidatePath("/portal-servidor/banco-horas");
+    }
     if (command === "decidir-credito") {
       const request = await context.prisma.hrPortalRequest.findUniqueOrThrow({ where: { id: values.requestId } });
       const sourceRunId = z.object({ input: z.object({ sourceRunId: z.string() }) }).parse(request.payload).input.sourceRunId;

@@ -5,6 +5,7 @@ import { resolveContractRevision } from "./contract-timeline";
 import { enqueueHrIntegration } from "./workforce-service";
 
 const policySchema = z.object({ origin: z.literal("BANCO_HORAS_PONTO"), maxBalanceHours: z.string().regex(/^\d+(?:\.\d{1,4})?$/), maxCreditPerDayHours: z.string().regex(/^\d+(?:\.\d{1,4})?$/), maxDebitPerDayHours: z.string().regex(/^\d+(?:\.\d{1,4})?$/), allowedStatuses: z.array(z.string().min(1)).min(1), forbidPaidOvertimeForCredit: z.boolean(), legalReference: z.string().trim().min(3) }).strict();
+export const timeBankPolicySchema = policySchema;
 
 /** Grouping by civil day allows distinct origins on the same approved day,
  * while a later credit can never finance a deficit on an earlier day. */

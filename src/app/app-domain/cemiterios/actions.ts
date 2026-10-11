@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { advanceCemeteryProcess, attachCemeteryDocument, createCemetery, createCemeteryChapel, createCemeteryFeeRule, createCemeteryIdentificationField, createCemeteryLot, createCemeteryOssuary, createCemeteryProcess, createDeathCause, createGrave, createSector, enrollCemeteryFeeInDebt, grantConcession, issueCemeteryFee, registerDeceased, registerEmployee, registerFuneralHome, registerMovement, setCemeteryEntityActive } from "@/lib/tributacao/s9-service";
 const path = "/cemiterios";
 const done = (error?: unknown) => ({ error: error instanceof Error ? error.message : error ? "Não foi possível concluir a operação." : undefined });
@@ -24,5 +24,5 @@ export async function createDeathCauseAction(input: Parameters<typeof createDeat
 export async function setEntityActiveAction(input: Parameters<typeof setCemeteryEntityActive>[2]) { try { const c = await ctx("update"); await setCemeteryEntityActive(c.prisma, actor(c), input); revalidatePath(path); return done(); } catch (e) { return done(e); } }
 export async function createProcessAction(input: Omit<Parameters<typeof createCemeteryProcess>[2], "scheduledAt"> & { scheduledAt: string }) { try { const c = await ctx("create"); await createCemeteryProcess(c.prisma, actor(c), { ...input, scheduledAt: new Date(input.scheduledAt) }); revalidatePath(path); return done(); } catch (e) { return done(e); } }
 export async function advanceProcessAction(input: Parameters<typeof advanceCemeteryProcess>[2]) { try { const c = await ctx("update"); await advanceCemeteryProcess(c.prisma, actor(c), input); revalidatePath(path); return done(); } catch (e) { return done(e); } }
-export async function attachDocumentAction(input: Parameters<typeof attachCemeteryDocument>[2]) { try { const c = await ctx("create"); await attachCemeteryDocument(c.prisma, actor(c), input); revalidatePath(path); return done(); } catch (e) { return done(e); } }
+export async function attachDocumentAction(input: Parameters<typeof attachCemeteryDocument>[2]) { try { const c = await ctx("create"); await getTenantContextForModule("DOCUMENTOS"); await attachCemeteryDocument(c.prisma, actor(c), input); revalidatePath(path); return done(); } catch (e) { return done(e); } }
 export async function createFeeRuleAction(input: Parameters<typeof createCemeteryFeeRule>[1]) { try { const c = await ctx("create"); await createCemeteryFeeRule(c.prisma, input); revalidatePath(path); return done(); } catch (e) { return done(e); } }

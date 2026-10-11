@@ -2570,6 +2570,7 @@ model CemeteryProcess {
   @@index([deceasedId, createdAt])
   @@index([cemeteryId, scheduledAt])
   @@index([funeralHomeId, scheduledAt])
+  @@index([performedAt, id])
 }
 
 model CemeteryAttachment {
@@ -2613,6 +2614,55 @@ model CemeteryFeeRule {
   updatedAt  DateTime     @updatedAt
 
   @@index([eventType, active, validFrom])
+}
+
+// Immutable publication and factual event ledger reuse central Taxation IDs.
+model CemeteryFeeRuleVersion {
+  id            String   @id
+  ruleId        String   @unique
+  scopeKey      String
+  cemeteryId    String?
+  eventType     String
+  version       Int
+  label         String
+  formula       String
+  baseAmount    Decimal  @db.Decimal(18, 2)
+  dueDays       Int
+  taxId         String
+  validFrom     DateTime
+  validUntil    DateTime?
+  legalBasis    String
+  publishedBy   String
+  createdAt     DateTime @default(now())
+
+  @@unique([scopeKey, eventType, version])
+  @@index([eventType, cemeteryId, validFrom])
+}
+
+model CemeteryFeeEvent {
+  id                  String   @id
+  eventKey            String   @unique
+  eventType           String
+  sourceType          String
+  sourceId            String
+  cemeteryId          String?
+  taxpayerId          String?
+  occurredAt          DateTime
+  quantity            Decimal  @db.Decimal(18, 4)
+  ruleVersionId       String?
+  calculationSnapshot Json?
+  amount              Decimal? @db.Decimal(18, 2)
+  dueDate             DateTime?
+  assessmentId        String?  @unique
+  guideId             String?  @unique
+  status              String   @default("AGUARDANDO_CONFIGURACAO")
+  lastError           String?
+  createdAt           DateTime @default(now())
+  chargedAt           DateTime?
+
+  @@unique([eventType, sourceType, sourceId])
+  @@index([status, occurredAt])
+  @@index([cemeteryId, occurredAt])
 }
 
 // VAF — Valor Adicionado Fiscal (TRIB-S10 / VAF-001..057)

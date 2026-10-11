@@ -33,3 +33,10 @@ node --conditions=react-server --import tsx --test tests/construction-documents*
 `construction-documents.test.ts` valida PDFs reais, conteúdo extraído com PDF.js, desenhos serializados, preservação do original, limites geométricos, modelos e gates de assinatura.
 
 `construction-documents-service.test.ts` aplica migrations municipais em PGlite, usa PostgreSQL wire protocol e Prisma reais, sem mocks de CRUD, e exercita emissão/GED/assinaturas/publicação, assinatura parcial, integridade física, correção e renovação com ciclos separados, gates do habite-se, revisão PDF e cópia carimbada com assinatura própria e bloqueios do helper de download usado pelo portal de complementos.
+
+## Fechamento possível enquanto chegam os documentos oficiais
+
+- Após integração remota, a bateria completa foi repetida: **67/67 testes aprovados**, incluindo leitura e integridade dos backups físicos nos fluxos documentais reais em banco isolado.
+- Auditoria operacional somente de leitura: `npx tsx scripts/audit-construction-backups.ts`. Percorre emissões em lotes de 100, lê o backup físico e compara SHA-256 ao ledger, sem alterar banco/arquivos nem expor caminhos ou credenciais.
+- Execução no ambiente configurado: **nenhuma emissão encontrada** (`NO_ISSUED_DOCUMENTS`). Portanto não há evidência de recuperação de documentos operacionais desse banco; a auditoria deve ser repetida após a primeira emissão legítima.
+- Navegador novamente consultado: desconectado. Percurso autenticado, aparência e impressão permanecem pendentes. Parâmetros municipais, formulários oficiais e integrações continuam conforme os limites acima.

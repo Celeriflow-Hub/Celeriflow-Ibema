@@ -60,7 +60,7 @@
 
 **Rotas:** preferir `?area=...` com `ModuleShell` como em Frotas ou subrotas em `/cemiterios/*` se a navegação existente se ajustar melhor. Manter URLs atuais e redirecionamento `/tributacao/cemiterios`; preservar `comprovante/[code]`. Seleção global de cemitério fica nos filtros/URL (persistência ao navegar), **não** em `useState` com primeiro cemitério como default silencioso. Pessoa/declarante é campo do respectivo formulário/ficha, não seletor global que altera vários cadastros acidentalmente.
 
-**Composição de cada área:** título + ação primária contextual “Novo”; toolbar com busca, cemitério e filtros pertinentes (estado, tipo, funerária, causa, períodos); resumo do total do **mesmo filtro**; `ErpListFrame` com colunas de largura controlada, alinhamento para datas/números, linha clicável/botão Abrir; `ErpPagination` com página, total, tamanho 20 ou 25 e salto de página; ações secundárias na ficha (Editar, Anexos, Histórico, Emitir, Ativar/Desativar, Transferir), visíveis conforme permissão/estado. Formulários em modal ou rota de detalhe com rótulos permanentes, obrigatoriedade e erros por campo; confirmação apenas em transições irreversíveis e mensagem de resultado clara. Mobile com rolagem horizontal da tabela e ficha utilizável.
+**Composição de cada área:** título + ação primária contextual “Novo”; toolbar com busca, cemitério e filtros pertinentes (estado, tipo, funerária, causa, períodos); resumo do total do **mesmo filtro**; `ErpListFrame` com colunas de largura controlada, alinhamento para datas/números, linha clicável/botão Abrir; `ErpPagination` com página, total, tamanho fixo de **20 registros** e salto de página; ações secundárias na ficha (Editar, Anexos, Histórico, Emitir, Ativar/Desativar, Transferir), visíveis conforme permissão/estado. Formulários em modal ou rota de detalhe com rótulos permanentes, obrigatoriedade e erros por campo; confirmação apenas em transições irreversíveis e mensagem de resultado clara. Mobile com rolagem horizontal da tabela e ficha utilizável, sem rolagem vertical interna da listagem.
 
 **Consultas:** Zod no servidor para filtros, datas e página; `count` + `findMany` com `where` Prisma, `skip/take`, ordenação estável por data + ID; lookup assíncrono paginado para contribuinte/falecido/sepultura/GED (evitar `take: 500` em `<select>`). Normalizar fuso horário para data civil do óbito e data/hora local da cerimônia; período inclusivo com limite superior exclusivo. Reutilizar componentes e identidade do ERP, mas centralizar regras nos serviços server-side: a interface não é a fonte da validação.
 
@@ -102,6 +102,28 @@
 - Consulta dos três tipos com estados esperados do edital: agendado, sepultado, cremado, desapropriado, exumado, transferido (e estados internos em realização/cancelado quando aplicáveis). Filtros explícitos por falecido, cemitério, funerária, causa, data de óbito e **data efetiva** de sepultamento, além de status/tipo; total, ordenação e exportação concordam exatamente com o recorte filtrado.
 - Testes integrados com banco isolado e UI/API para criação → reabertura → edição → histórico, concorrência limite de lote/sepultura, taxas automáticas sem duplicidade, registro/regularidade de declarante, finalização e espólio, oito transferências, anexos/controle de acesso, paginação (>500) e relatório completo. Aproveitar testes de `s9-engine.test.ts`, complementando com persistência transacional real.
 - Montar roteiro de POC **01–26**: dados demonstrativos identificados e não reclamados, abrir ficha, executar, recarregar, consultar, filtrar, imprimir e demonstrar cada bloqueio/automação. Registrar evidências e só marcar **ATENDE** quando o item for reproduzível ponta a ponta. Rodar testes pertinentes, lint e `npm run build` antes de eventual commit/push.
+
+## Revisão do plano contra a fonte e início da execução
+
+O PDF original foi conferido diretamente nas páginas 192–194: o plano mapeia **todos os 26 requisitos**, sem item omitido. Isso valida a cobertura planejada, não o atendimento do software. A execução foi autorizada pelo usuário após a conclusão das verificações possíveis de Civil.
+
+- Item 17: testar separadamente **normal de pessoa**, **membro** e **não reclamado/não identificado**. Sepultamento de membro não pode declarar automaticamente o óbito da pessoa viva a quem pertence; a regra de espólio aplica-se ao falecido efetivo identificado.
+- Itens 19/23: velório tem encerramento próprio, sem converter seu processo em sepultamento/cremação nem alterar ocupação indevidamente.
+- Itens 11/25: taxa automática exige vínculo único ao fato gerador; consulta de débitos distingue cobrança original de dívida ativa para não contar duas vezes o mesmo débito.
+- Item 26: finalização e atualização do cadastro único são atômicas; exceções identificadas e legados não podem ser silenciosamente aceitos como atendimento integral.
+- A matriz C/P acima permanece o diagnóstico inicial. Os resultados de execução e evidências serão registrados separadamente e só substituirão a classificação após validação.
+
+### Progresso de execução
+
+- Diagnóstico e consumidores de serviços/actions existentes revisados; plano conferido com os 26 itens do PDF.
+- Entregas integradas: estrutura/ocupação com fichas editáveis e histórico por campo; jornada e oito movimentações; taxas automáticas versionadas; consultas/relatório, lookup e anexos GED.
+- **18 testes aprovados** em PostgreSQL/PGlite e regras puras; incluem 521 registros, concorrência de vagas, espólio, membro de pessoa viva, jornadas independentes, filtros, GED, PDF completo, replay e taxas/DAMs centrais. ESLint dos arquivos alterados aprovado.
+- **Duas migrations novas aplicadas** ao banco configurado: `20261011010000_cemetery_integrity` e `20261011020000_cemetery_automatic_fees`. Baseline completo exercitado nos testes; registros legados preservados.
+- Seed demonstrativo explícito aplicado: dois cemitérios, duas pessoas/contribuintes sintéticos, quatro lotes/quatro sepulturas, capelas, ossuários, equipe, funerária e causa. Nenhum óbito, usuário/permissão operacional ou taxa foi criado pelo seed.
+- A abertura da página não gera mais defaults. Rota principal direciona às áreas ERP, listagens paginam em 20 e relatórios completos usam o conjunto real filtrado.
+- Roteiro de demonstração dos 26 itens e comandos: `CEMITERIOS_AMBIENTE_E_HOMOLOGACAO.md`.
+- **Build integrado aprovado (`npm run build`, código 0)**: geração Prisma, compilação Next.js, TypeScript, geração de páginas e otimização concluídas, incluindo todas as novas rotas de Cemitérios. O erro de tipo do helper de bloqueio identificado no primeiro build foi corrigido e a execução completa repetida com sucesso.
+- Homologação autenticada/visual e impressão pendentes por navegador desconectado; fórmulas e fundamento legal oficiais precisam de validação municipal.
 
 ## Riscos de regressão a verificar em cada entrega
 

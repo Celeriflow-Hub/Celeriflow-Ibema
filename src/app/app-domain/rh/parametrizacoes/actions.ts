@@ -8,7 +8,6 @@ import { timeBankPaymentPolicySchema } from "@/lib/rh/time-bank-payment";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
-import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 import {
   auditEventTypes,
   writeAuditEvent,

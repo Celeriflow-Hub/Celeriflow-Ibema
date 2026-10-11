@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { UserCog, Plus, Search, Shield, Trash2, X } from "lucide-react";
 import { deleteUsuario, upsertUsuario, toggleUsuarioStatus } from "../actions";
-import { Card, CardContent } from "@/components/ui/card";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
 import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
@@ -12,8 +11,6 @@ import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
 const PAGE_SIZE = 20;
 
 type Perfil = { id: string; nome: string; codigo: string };
-type Modulo = { id: string; nome: string; codigo: string };
-type UsuarioModulo = { moduloId: string; canView: boolean; canEdit: boolean };
 type Usuario = {
   id: string;
   nome: string;
@@ -34,12 +31,10 @@ type Servidor = {
 export default function UsuariosClient({
   usuarios,
   perfis,
-  modulos,
   servidores
 }: {
   usuarios: Usuario[];
   perfis: Perfil[];
-  modulos: Modulo[];
   servidores: Servidor[];
 }) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -55,14 +50,12 @@ export default function UsuariosClient({
     perfilId: string;
     employeeId: string;
     ativo: boolean;
-    permissoes: Record<string, { canView: boolean; canEdit: boolean }>;
   }>({
     nome: "",
     email: "",
     perfilId: perfis[0]?.id || "",
     employeeId: "",
     ativo: true,
-    permissoes: {}
   });
 
   const filteredUsuarios = usuarios.filter(u => 
@@ -72,9 +65,6 @@ export default function UsuariosClient({
   const activePage = Math.min(page, Math.max(1, Math.ceil(filteredUsuarios.length / PAGE_SIZE)));
   const pageUsuarios = filteredUsuarios.slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE);
 
-  const selectedPerfil = perfis.find(p => p.id === formData.perfilId);
-  const isAdmin = selectedPerfil?.codigo === "SYSTEM_ADMINISTRATOR";
-
   function openNewModal() {
     setFormData({
       nome: "",
@@ -82,17 +72,11 @@ export default function UsuariosClient({
       perfilId: perfis[0]?.id || "",
       employeeId: "",
       ativo: true,
-      permissoes: {}
     });
     setIsModalOpen(true);
   }
 
   function openEditModal(usuario: Usuario) {
-    const permMap: Record<string, { canView: boolean; canEdit: boolean }> = {};
-    usuario.permissoesModulo.forEach(p => {
-      permMap[p.moduloId] = { canView: p.canView, canEdit: p.canEdit };
-    });
-
     setFormData({
       id: usuario.id,
       nome: usuario.nome,
@@ -107,12 +91,6 @@ export default function UsuariosClient({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setIsSubmitting(true);
-
-    const permissoesArray = Object.entries(formData.permissoes).map(([moduloId, perms]) => ({
-      moduloId,
-      canView: perms.canView,
-      canEdit: perms.canEdit
-    }));
 
     const result = await upsertUsuario({
       id: formData.id,

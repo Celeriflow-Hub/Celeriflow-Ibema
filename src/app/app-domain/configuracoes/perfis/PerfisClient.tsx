@@ -58,8 +58,6 @@ const MODULES_LIST = [
   { code: "TRIBUTACAO", label: "Tributário", icon: Receipt, color: "text-orange-500" },
 ];
 
-const HIDDEN_DASHBOARD_CARDS = new Set(["ATENDIMENTO"]);
-
 type ModulePermission = {
   showDashboardCard: boolean;
   blocked: boolean;
@@ -157,7 +155,6 @@ export default function PerfisClient({ perfis, capabilities }: { perfis: Perfil[
       const allowedModules = Array.isArray(parsed.modulosPermitidos) ? parsed.modulosPermitidos : null;
       for (const moduleItem of MODULES_LIST) {
         const legacyActions = Array.isArray(parsed[moduleItem.code]) ? parsed[moduleItem.code] as string[] : [];
-        const blocked = blockedModules.includes(moduleItem.code);
         const allowed = allowedModules
           ? allowedModules.includes(moduleItem.code)
           : legacyActions.length > 0 || legacyModuleCodes.includes(moduleItem.code);
@@ -245,7 +242,6 @@ export default function PerfisClient({ perfis, capabilities }: { perfis: Perfil[
   const applyPreset = (preset: "FULL" | "READ_ONLY" | "CLEAR") => {
     const newMap: Record<string, ModulePermission> = {};
     MODULES_LIST.forEach((m) => {
-      const isHiddenCard = HIDDEN_DASHBOARD_CARDS.has(m.code);
       if (preset === "FULL") {
         newMap[m.code] = { showDashboardCard: true, blocked: false, create: true, update: true, delete: true, issueReports: true };
       } else if (preset === "READ_ONLY") {

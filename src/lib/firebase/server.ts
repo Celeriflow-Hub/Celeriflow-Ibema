@@ -15,10 +15,3 @@ const app = getApps()[0] ?? initializeApp(
 
 export const adminAuth = getAuth(app);
 
-export const adminAuth = new Proxy({} as Auth, {
-  get(_target, property) {
-    const auth = getAdminAuth();
-    const value = Reflect.get(auth, property, auth);
-    return typeof value === "function" ? value.bind(auth) : value;
-  },
-});

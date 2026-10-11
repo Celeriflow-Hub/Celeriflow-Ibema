@@ -35,8 +35,6 @@ import {
   cancelInstrumentMeasurementLiquidationAuthorization,
   recordInstrumentMeasurementLiquidationAuthorization,
 } from "@/lib/compras/procurement-finance-bridge";
-import { dispatchSiaficEvents } from "@/lib/siafic/dispatcher";
-import { queueCovenantSnapshot } from "@/lib/siafic/source";
 
 export type InstrumentActionResult = { success: true } | { success: false; error: string };
 
@@ -209,15 +207,6 @@ function revalidateInstrumentPaths(reference: InstrumentReference) {
   revalidatePath(`${basePath}/${reference.id}/relatorio`);
 }
 
-async function queueCovenantSnapshotAfterInstrumentMutation(
-  tx: Transaction,
-  actorUsuarioId: string,
-  reference: InstrumentReference,
-) {
-  if (reference.kind !== "COVENANT") return [];
-  return queueCovenantSnapshot(tx, { usuarioId: actorUsuarioId }, reference.id, "UPDATE");
-}
-
 async function lockInstrumentExecution(tx: Transaction, instrument: AuthorizedInstrument) {
   const now = new Date();
   const updated = instrument.kind === "CONTRACT"
@@ -326,10 +315,8 @@ export async function saveInstrumentResponsibilityGroup(formData: FormData): Pro
 
       const created = await tx.instrumentResponsibilityGroup.create({ data: { ...parent, name, description, status } });
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_RESPONSIBILITY_GROUP_CREATED", entityType: "INSTRUMENT_RESPONSIBILITY_GROUP", entityId: created.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -362,10 +349,8 @@ export async function deleteInstrumentResponsibilityGroup(formData: FormData): P
       });
       if (deleted.count !== 1) throw new ContractLifecycleError("O grupo foi alterado por outra operação. Atualize e tente novamente.");
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_RESPONSIBILITY_GROUP_DELETED", entityType: "INSTRUMENT_RESPONSIBILITY_GROUP", entityId: group.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -417,10 +402,8 @@ export async function saveInstrumentParty(formData: FormData): Promise<Instrumen
 
       const created = await tx.instrumentParty.create({ data: { ...parent, ...data } });
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_PARTY_CREATED", entityType: "INSTRUMENT_PARTY", entityId: created.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -452,10 +435,8 @@ export async function deleteInstrumentParty(formData: FormData): Promise<Instrum
       });
       if (deleted.count !== 1) throw new ContractLifecycleError("A parte foi alterada por outra operação. Atualize e tente novamente.");
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_PARTY_DELETED", entityType: "INSTRUMENT_PARTY", entityId: party.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -662,7 +643,6 @@ export async function saveInstrumentMeasurement(formData: FormData): Promise<Ins
       await assertMeasurementAggregateWithinInstrumentValue(tx, reference, instrument, null, data);
       const created = await tx.instrumentMeasurement.create({ data: { ...parent, ...data } });
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_MEASUREMENT_CREATED", entityType: "INSTRUMENT_MEASUREMENT", entityId: created.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
     // A repeated request also retries the append-only AL candidate after a prior transient failure.
@@ -682,7 +662,6 @@ export async function saveInstrumentMeasurement(formData: FormData): Promise<Ins
       }
     }
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -716,10 +695,8 @@ export async function deleteInstrumentMeasurement(formData: FormData): Promise<I
       });
       if (deleted.count !== 1) throw new ContractLifecycleError("A medição foi alterada por outra operação. Atualize e tente novamente.");
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_MEASUREMENT_DELETED", entityType: "INSTRUMENT_MEASUREMENT", entityId: measurement.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -787,10 +764,8 @@ export async function saveInstrumentMeasurementItem(formData: FormData): Promise
 
       const created = await tx.instrumentMeasurementItem.create({ data: { measurementId, ...data, purchaseProcessItemId } });
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_MEASUREMENT_ITEM_CREATED", entityType: "INSTRUMENT_MEASUREMENT_ITEM", entityId: created.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -823,10 +798,8 @@ export async function deleteInstrumentMeasurementItem(formData: FormData): Promi
       });
       if (deleted.count !== 1) throw new ContractLifecycleError("O item foi alterado por outra operação. Atualize e tente novamente.");
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_MEASUREMENT_ITEM_DELETED", entityType: "INSTRUMENT_MEASUREMENT_ITEM", entityId: item.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -921,10 +894,8 @@ export async function saveInstrumentInstallment(formData: FormData): Promise<Ins
       await assertInstallmentAggregateWithinInstrumentValue(tx, reference, instrument, null, data);
       const created = await tx.instrumentInstallment.create({ data: { ...parent, ...data } });
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_INSTALLMENT_CREATED", entityType: "INSTRUMENT_INSTALLMENT", entityId: created.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -957,10 +928,8 @@ export async function deleteInstrumentInstallment(formData: FormData): Promise<I
       });
       if (deleted.count !== 1) throw new ContractLifecycleError("A parcela foi alterada por outra operação. Atualize e tente novamente.");
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_INSTALLMENT_DELETED", entityType: "INSTRUMENT_INSTALLMENT", entityId: installment.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {

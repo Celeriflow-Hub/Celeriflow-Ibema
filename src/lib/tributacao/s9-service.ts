@@ -897,7 +897,6 @@ export async function issueCemeteryFee(db: PrismaClient, actor: Actor, input: { 
     if (input.concessionId) await tx.taxGraveConcession.update({ where: { id: input.concessionId }, data: { feeAssessmentId: assessment.id } });
     return { assessment, guide };
   });
-  return { assessment, guide };
 }
 
 // Taxa de cemitério não paga segue para dívida ativa (TRI-436).

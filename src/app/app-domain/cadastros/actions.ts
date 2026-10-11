@@ -2,8 +2,6 @@
 
 import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { requireValidCnpj, requireValidCpf } from "@/lib/identifiers/brazilian-identifiers";
-import { dispatchSiaficEvents } from "@/lib/siafic/dispatcher";
-import { createSupplierWithSiaficEvent, queueSupplierSnapshot, setSupplierStatusWithSiaficEvent, type SupplierUpdateInput } from "@/lib/siafic/source";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { formText, optionalSupplierText, parseSupplierCnaes, parseSupplierDate, parseSupplierIdentity, validateSubmittedSupplierDocument, validateSupplierIdentityDocument } from "./fornecedores/supplier-form";
@@ -270,7 +268,6 @@ export async function createSupplier(formData: FormData): Promise<void> {
       status: "Ativo",
     },
   });
-  await dispatchSiaficEvents(context.prisma, result.eventIds);
   revalidatePath("/cadastros/fornecedores");
   redirect("/cadastros/fornecedores");
 }
@@ -303,7 +300,6 @@ export async function updateSupplier(id: string, data: SupplierUpdateData): Prom
 
       await tx.supplier.update({ where: { id }, data: update });
     });
-    await dispatchSiaficEvents(context.prisma, result.eventIds);
     revalidatePath("/cadastros/fornecedores");
     return {};
   } catch (error) {

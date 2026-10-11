@@ -4,9 +4,6 @@ import { Prisma } from "@prisma/client";
 import { assertIntegrationEnvironmentPolicy, getIntegrationDefinition } from "@/lib/integrations/registry";
 import { getProcurementExportConfigurationStatus } from "@/lib/integrations/procurement-export-contract";
 import { executeConfiguredHealthCheck } from "@/lib/integrations/runtime";
-import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
-import { assertSiaficConnectionMatchesRuntime, parseSiaficConnectionConfiguration } from "@/lib/siafic/config";
-import { testSiaficDemoConnection } from "@/lib/siafic/dispatcher";
 import { getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -37,7 +34,6 @@ function assertNoSecretValues(value: unknown) {
     assertNoSecretValues(nestedValue);
   }
 }
-
 function parsePublicJson(value: string | undefined, field: string): Prisma.InputJsonValue | undefined {
   if (!value?.trim()) return undefined;
   try {
@@ -60,12 +56,6 @@ function validateConnectionInput(input: z.infer<typeof connectionSchema>) {
     } catch {
       throw new Error("A URL base da integração é inválida.");
     }
-  }
-
-  if (definition.code === "SIAFIC_DEMO") {
-    if (!input.baseUrl) throw new Error("Informe a URL do receptor SIAFIC DEMO.");
-    assertSiaficConnectionMatchesRuntime(input.baseUrl);
-    parseSiaficConnectionConfiguration(configuration);
   }
 
   if (input.credentialReference && !/^(env:|vault:|secret:\/\/)/.test(input.credentialReference)) {
@@ -154,39 +144,5 @@ export async function testIntegrationConnection(connectionId: string): Promise<A
     return { data: { id: connection.id, message: result.message } };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Não foi possível testar a conexão." };
-  }
-}
-
-export async function retrySiaficDelivery(eventId: string): Promise<ActionResult> {
-  try {
-    const context = await getTenantContextForSystemAdministration();
-    const delivery = await context.prisma.siaficDelivery.findUnique({
-      where: { eventId: z.string().uuid().parse(eventId) },
-      include: { event: { select: { connection: { select: { code: true, environment: true } } } } },
-    });
-    if (!delivery || delivery.event.connection.code !== "SIAFIC_DEMO" || delivery.event.connection.environment !== "DEMO") {
-      throw new Error("Entrega SIAFIC DEMO nao encontrada.");
-    }
-    if (delivery.status === "PROCESSED") throw new Error("Esta entrega ja possui recibo confirmado.");
-    if (delivery.status === "SENDING" && delivery.leaseExpiresAt && delivery.leaseExpiresAt > new Date()) {
-      throw new Error("A entrega esta em processamento por outro worker.");
-    }
-    await context.prisma.$transaction(async (tx) => {
-      await tx.siaficDelivery.update({
-        where: { eventId: delivery.eventId },
-        data: { status: "PENDING", nextAttemptAt: new Date(), leaseToken: null, leaseExpiresAt: null },
-      });
-      await writeAuditEvent(tx, {
-        actorUsuarioId: context.user.id,
-        eventType: auditEventTypes.siaficDeliveryRetryRequested,
-        targetType: "SiaficOutboxEvent",
-        targetId: delivery.eventId,
-      });
-    });
-    revalidatePath("/configuracoes/integracoes");
-    revalidatePath("/configuracoes");
-    return { data: { id: delivery.eventId, message: "Entrega recolocada na fila. O worker validara o recibo antes de reenviar quando houver tentativa anterior." } };
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : "Nao foi possivel reenfileirar a entrega SIAFIC." };
   }
 }

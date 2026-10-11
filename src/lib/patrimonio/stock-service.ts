@@ -27,7 +27,7 @@ export type StockMovementInput = {
   /** Reserved for the approved inventory-close workflow. */
   inventorySessionId?: string | null;
   /** Stock entries are reserved for a receipt already approved by procurement. */
-  sourceType?: "APPROVED_PURCHASE_RECEIPT" | "MATERIAL_REQUEST_ISSUE" | "ASSET_ACQUISITION" | "HEALTH_RECEIPT" | "STOCK_TRANSFER_RECEIPT";
+  sourceType?: "APPROVED_PURCHASE_RECEIPT" | "MATERIAL_REQUEST_ISSUE" | "ASSET_ACQUISITION" | "HEALTH_RECEIPT" | "STOCK_TRANSFER_RECEIPT" | "STOCK_RETURN" | "STOCK_REVERSAL";
   materialRequestItemId?: string | null;
   operation?: "REGULAR" | "RETURN" | "REVERSAL";
   idempotencyKey?: string | null;
@@ -73,7 +73,7 @@ export function normalizeStockMovement(input: StockMovementInput): ValidStockMov
   if ((input.kind === "ENTRY" || input.kind === "EXIT") && input.quantity < 0) {
     throw new StockServiceError("Entrada e saída devem informar quantidade positiva.");
   }
-  if (input.kind === "ENTRY" && !["APPROVED_PURCHASE_RECEIPT", "HEALTH_RECEIPT", "STOCK_TRANSFER_RECEIPT"].includes(input.sourceType || "")) {
+  if (input.kind === "ENTRY" && !["APPROVED_PURCHASE_RECEIPT", "HEALTH_RECEIPT", "STOCK_TRANSFER_RECEIPT", "STOCK_RETURN", "STOCK_REVERSAL"].includes(input.sourceType || "")) {
     throw new StockServiceError("Entradas de estoque exigem recebimento aprovado ou aceite de transferência.");
   }
   if (input.sourceType === "MATERIAL_REQUEST_ISSUE" && input.kind !== "EXIT") {
@@ -97,7 +97,24 @@ export function normalizeStockMovement(input: StockMovementInput): ValidStockMov
     }
   }
 
-  return { ...input, warehouseId, materialId, batchNumber, actor: { ...input.actor, usuarioId: actorUsuarioId } };
+  if ((input.operation === "RETURN" || input.sourceType === "STOCK_RETURN") && (input.operation !== "RETURN" || !input.returnedMovementId?.trim() || input.kind !== "ENTRY" || input.sourceType !== "STOCK_RETURN")) {
+    throw new StockServiceError("A devolução deve referenciar uma saída de estoque.");
+  }
+  if ((input.operation === "REVERSAL" || input.sourceType === "STOCK_REVERSAL") && (input.operation !== "REVERSAL" || !input.reversedMovementId?.trim() || input.sourceType !== "STOCK_REVERSAL")) {
+    throw new StockServiceError("O estorno deve referenciar o movimento original.");
+  }
+
+  return {
+    ...input,
+    warehouseId,
+    materialId,
+    batchNumber,
+    operation: input.operation ?? "REGULAR",
+    idempotencyKey: input.idempotencyKey?.trim() || null,
+    returnedMovementId: input.returnedMovementId?.trim() || null,
+    reversedMovementId: input.reversedMovementId?.trim() || null,
+    actor: { ...input.actor, usuarioId: actorUsuarioId },
+  };
 }
 
 function updateMetadata(input: ValidStockMovementInput) {
@@ -116,7 +133,7 @@ async function ensureStockTarget(tx: Prisma.TransactionClient, input: ValidStock
       : null,
   ]);
   if (!warehouse) throw new StockServiceError("Almoxarifado não encontrado ou inativo.");
-  const continuingLifecycle = ["APPROVED_PURCHASE_RECEIPT", "MATERIAL_REQUEST_ISSUE", "ASSET_ACQUISITION", "HEALTH_RECEIPT", "STOCK_TRANSFER_RECEIPT"].includes(input.sourceType || "")
+  const continuingLifecycle = ["APPROVED_PURCHASE_RECEIPT", "MATERIAL_REQUEST_ISSUE", "ASSET_ACQUISITION", "HEALTH_RECEIPT", "STOCK_TRANSFER_RECEIPT", "STOCK_RETURN", "STOCK_REVERSAL"].includes(input.sourceType || "")
     || (input.kind === "ADJUSTMENT" && Boolean(input.inventorySessionId?.trim()));
   if (!material || (material.isActive === false && !continuingLifecycle)) throw new StockServiceError("Material não encontrado ou inativo.");
   if (input.settlementId?.trim() && !settlement) throw new StockServiceError("Liquidação não encontrada ou não está ativa.");

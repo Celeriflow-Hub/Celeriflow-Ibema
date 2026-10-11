@@ -20,10 +20,6 @@ export default async function UsuariosPage() {
       where: { ativo: true, codigo: { not: SYSTEM_ADMIN_PROFILE_CODE } },
       orderBy: { nome: 'asc' }
     }),
-    prisma.configuracaoModulo.findMany({
-      where: { ativo: true },
-      orderBy: { nome: 'asc' }
-    }),
     prisma.employee.findMany({
       where: { isActive: true },
       include: { department: true, secretariat: true },

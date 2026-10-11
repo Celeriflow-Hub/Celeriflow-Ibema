@@ -46,19 +46,10 @@ type MenuItem = {
   solid: string;
 };
 
-const hiddenDashboardModuleCodes = new Set([
-  "CULTURA",
-  "DOCUMENTOS",
-  "OBRAS",
-  "SANEAMENTO",
-  "SEGURANCA",
-]);
-
 const menuItems: MenuItem[] = [
   { code: "ADMINISTRACAO", name: "Administração", description: "Gestão interna e controle", href: "/administracao", icon: Building2, color: "text-[#2563EB]", bg: "bg-[#DBEAFE]", solid: "bg-[#2563EB]" },
   { code: "CADASTROS", name: "Cadastros", description: "Pessoas, empresas e locais", href: "/cadastros", icon: Database, color: "text-[#64748B]", bg: "bg-[#E2E8F0]", solid: "bg-[#64748B]" },
   { code: "PROCESSOS", name: "Processos e Protocolo", description: "Gestão de trâmites", href: "/protocolos", icon: Files, color: "text-[#0EA5E9]", bg: "bg-[#E0F2FE]", solid: "bg-[#0EA5E9]" },
-  { code: "DOCUMENTOS", name: "Documentos / GED", description: "Arquivos e emissões", href: "/documentos", icon: FileText, color: "text-[#F59E0B]", bg: "bg-[#FEF3C7]", solid: "bg-[#F59E0B]" },
   { code: "ATENDIMENTO", name: "Atendimento ao Cidadão", description: "Ouvidoria e chamados", href: "/atendimento", icon: HeadphonesIcon, color: "text-[#F97316]", bg: "bg-[#FFEDD5]", solid: "bg-[#F97316]" },
   { code: "TRANSPARENCIA", name: "Portal Transparência", description: "Acesso à informação", href: "/transparencia", icon: Eye, color: "text-[#06B6D4]", bg: "bg-[#CFFAFE]", solid: "bg-[#06B6D4]" },
   { code: "TRIBUTACAO", name: "Tributário", description: "Impostos e taxas", href: "/tributacao", icon: Landmark, color: "text-[#059669]", bg: "bg-[#D1FAE5]", solid: "bg-[#059669]" },
@@ -124,9 +115,7 @@ export default async function PainelPage() {
       <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7">
         {visibleMenuItems.map((item) => {
           const accessCode = item.accessCode ?? item.code;
-          const isConfig = item.code === "CONFIGURACOES";
           const isProfileBlocked = !context || isModuleBlockedForUser(context.user, accessCode) || !canViewModule(context.user, accessCode);
-          const isLocked = isProfileBlocked || (!isConfig && moduleActivationByCode.get(accessCode) === false && !canUseInactiveModule(context.user));
 
           if (isProfileBlocked) {
             return (

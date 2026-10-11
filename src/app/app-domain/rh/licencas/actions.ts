@@ -2,6 +2,7 @@
 
 import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
+import { assertRhAbsenceDoesNotOverlap } from "@/lib/rh/absence-conflicts";
 
 async function getTenantPrisma(operation: "create" | "update" | "delete") {
   return (await getTenantContextForModuleOperation("RH", operation)).prisma;
@@ -31,18 +32,19 @@ export async function saveLicenca(formData: FormData) {
       status: status || "Ativa",
     };
 
-    if (id) {
-      const occupational = await prisma.sstMedicalCertificate.findUnique({ where: { leaveId: id }, select: { id: true } });
-      if (occupational) return { success: false, error: "Este afastamento possui origem em uma perícia SST. A alteração deve preservar a decisão ocupacional e seu vínculo." };
-      await prisma.leave.update({
-        where: { id },
-        data,
-      });
-    } else {
-      await prisma.leave.create({
-        data,
-      });
-    }
+    await prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:employee:${employeeId}`}))`;
+      if (id) {
+        await tx.$queryRaw`SELECT id FROM "Leave" WHERE id=${id} FOR UPDATE`;
+        const previous = await tx.leave.findUniqueOrThrow({ where: { id } });
+        if (previous.employeeId !== employeeId) throw new Error("Não é permitido trocar o titular do afastamento.");
+        const occupational = await tx.sstMedicalCertificate.findUnique({ where: { leaveId: id }, select: { id: true } });
+        if (occupational) throw new Error("Este afastamento possui origem em uma perícia SST. A decisão ocupacional e seu vínculo são preservados.");
+      }
+      if (data.status === "Ativa") await assertRhAbsenceDoesNotOverlap(tx, { employeeId, startsAt: data.startDate, endsAt: data.endDate, kind: "LICENCA", excludeId: id || undefined });
+      if (id) await tx.leave.update({ where: { id }, data });
+      else await tx.leave.create({ data });
+    });
 
     revalidatePath("/rh/licencas");
     revalidatePath("/portal-servidor");
@@ -50,7 +52,7 @@ export async function saveLicenca(formData: FormData) {
     return { success: true };
   } catch (error) {
     console.error("Erro ao salvar licença:", error);
-    return { success: false, error: "Falha ao salvar a licença." };
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao salvar a licença." };
   }
 }
 

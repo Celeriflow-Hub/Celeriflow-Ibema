@@ -269,6 +269,7 @@ model Employee {
   sstElectionElectors SstElectionElector[]
   sstElectionCandidates SstElectionCandidate[]
   sstCats SstCat[]
+  hrContracts HrEmploymentContract[]
   sstAsos SstAso[]
   constructionStaff ConstructionStaffRole[]
   assignedConstructionCases ConstructionCase[]
@@ -5526,6 +5527,7 @@ model Payroll {
   sstLeaveOrigins SstLeavePayrollOrigin[]
   sstBenefitScope SstBenefitPayrollScope?
   totalValueDecimal Decimal? @db.Decimal(24, 2)
+  hrRuns HrPayrollRun[]
   id         String   @id @default(cuid())
   competence String // "07/2026"
   type       String   @default("Mensal") // Mensal, FÃ©rias, 13Âº, RescisÃ£o
@@ -5553,6 +5555,7 @@ model PayrollEvent {
 }
 
 model PayrollItem {
+  hrOrigin HrPayrollItemOrigin?
   sstLeaveOrigin SstLeavePayrollOrigin?
   valueDecimal Decimal? @db.Decimal(18, 2)
   sstBenefitOrigin SstBenefitPayrollOrigin?
@@ -6651,6 +6654,164 @@ model HrPayrollConfigurationChange {
   @@index([ruleSetId, createdAt])
   @@index([entityType, entityId, createdAt])
   @@index([actorUsuarioId, createdAt])
+}
+
+model HrEmploymentContract {
+  id String @id @default(cuid())
+  employeeId String
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  registration String @unique
+  regimeId String
+  roleId String
+  departmentId String?
+  costCenterId String?
+  workLocation String
+  salaryLevel String?
+  admittedAt DateTime
+  appointedAt DateTime?
+  swornAt DateTime?
+  endsAt DateTime?
+  monthlyHours Int @default(220)
+  salary Decimal @db.Decimal(18,2)
+  status String @default("ATIVO")
+  version Int @default(1)
+  details Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  revisions HrEmploymentRevision[]
+  movements HrMovement[]
+  statements HrPayrollStatement[]
+  rights HrRightEntry[]
+  @@index([employeeId, status, admittedAt])
+}
+
+model HrEmploymentRevision {
+  id String @id @default(cuid())
+  contractId String
+  contract HrEmploymentContract @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  version Int
+  snapshot Json
+  actorId String
+  reason String
+  createdAt DateTime @default(now())
+  @@unique([contractId, version])
+}
+
+model HrMovement {
+  id String @id @default(cuid())
+  contractId String
+  contract HrEmploymentContract @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  sourceKey String @unique
+  rubricCode String
+  startsAt DateTime
+  endsAt DateTime?
+  amount Decimal @db.Decimal(18,2)
+  reference String?
+  notes String
+  actorId String
+  createdAt DateTime @default(now())
+  @@index([contractId, startsAt, endsAt])
+}
+
+model HrPayrollRun {
+  id String @id @default(cuid())
+  payrollId String
+  payroll Payroll @relation(fields: [payrollId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  mode String
+  scope String
+  status String @default("CALCULADA")
+  ruleSetId String
+  snapshot Json
+  gross Decimal @db.Decimal(18,2)
+  deductions Decimal @db.Decimal(18,2)
+  net Decimal @db.Decimal(18,2)
+  employer Decimal @db.Decimal(18,2)
+  actorId String
+  createdAt DateTime @default(now())
+  approvedAt DateTime?
+  cancelledAt DateTime?
+  statements HrPayrollStatement[]
+  @@index([payrollId, mode, status, createdAt])
+}
+
+model HrPayrollStatement {
+  id String @id @default(cuid())
+  runId String
+  run HrPayrollRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+  contractId String
+  contract HrEmploymentContract @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  snapshot Json
+  gross Decimal @db.Decimal(18,2)
+  deductions Decimal @db.Decimal(18,2)
+  net Decimal @db.Decimal(18,2)
+  employer Decimal @db.Decimal(18,2)
+  releaseAt DateTime?
+  revokedAt DateTime?
+  @@unique([runId, contractId])
+  @@index([contractId, releaseAt])
+}
+
+model HrRightEntry {
+  id String @id @default(cuid())
+  contractId String
+  contract HrEmploymentContract @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  sourceKey String @unique
+  kind String
+  periodStart DateTime
+  periodEnd DateTime
+  quantity Decimal @db.Decimal(12,4)
+  amount Decimal @db.Decimal(18,2)
+  details Json
+  actorId String
+  createdAt DateTime @default(now())
+  @@index([contractId, kind, periodStart])
+}
+
+model HrIntegrationEvent {
+  id String @id @default(cuid())
+  sourceKey String @unique
+  domain String
+  environment String
+  eventType String
+  status String @default("AGUARDANDO_CONFIGURACAO")
+  payload Json
+  payloadHash String
+  externalId String?
+  result Json?
+  attempts Int @default(0)
+  nextAttemptAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([domain, environment, status, nextAttemptAt])
+}
+
+model HrPortalRequest {
+  id String @id @default(cuid())
+  employeeId String
+  requestKey String @unique
+  kind String
+  status String @default("EM_ANALISE")
+  payload Json
+  decision String?
+  actorId String
+  decidedBy String?
+  createdAt DateTime @default(now())
+  decidedAt DateTime?
+  @@index([employeeId, kind, status])
+}
+
+model HrPayrollItemOrigin {
+  id String @id @default(cuid())
+  payrollItemId String @unique
+  payrollItem PayrollItem @relation(fields: [payrollItemId], references: [id], onDelete: Restrict)
+  runId String
+  statementId String
+  rubricCode String
+  snapshot Json
+  createdAt DateTime @default(now())
+  @@unique([statementId, rubricCode])
+  @@index([runId])
 }
 
 // --- MÃ³dulo 11: PatrimÃ´nio e Almoxarifado ---

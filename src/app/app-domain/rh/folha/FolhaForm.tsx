@@ -15,11 +15,13 @@ import type { Payroll } from "@prisma/client";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { ErpPageTitle as PageHeader } from "@/components/app-ui/erp/ErpPageTitle";
 
+const PAYROLL_TYPES = ["Mensal", "Complementar", "Rescisão", "RRA", "Férias", "1ª parcela 13º", "13º", "Diferença 13º", "Adiantamento salarial"];
+
 export function FolhaForm({ data }: { data?: Payroll }) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const [type, setType] = useState<string>(data?.type || "Mensal");
-  const [status, setStatus] = useState<string>(data?.status || "Aberta");
+  const status = data?.status || "Aberta";
 
   async function handleSubmit(formData: FormData) {
     setIsSaving(true);
@@ -65,10 +67,7 @@ export function FolhaForm({ data }: { data?: Payroll }) {
                     <span className="flex-1 text-left line-clamp-1">{type}</span>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Mensal">Mensal</SelectItem>
-                    <SelectItem value="Férias">Férias</SelectItem>
-                    <SelectItem value="13º">13º Salário</SelectItem>
-                    <SelectItem value="Rescisão">Rescisão</SelectItem>
+                    {PAYROLL_TYPES.map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -77,18 +76,7 @@ export function FolhaForm({ data }: { data?: Payroll }) {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="status">Status</Label>
-                <Select name="status" value={status} onValueChange={(v) => setStatus(v || "Aberta")}>
-                  <SelectTrigger>
-                    <span className="flex-1 text-left line-clamp-1">
-                      {status === "Aberta" ? "Aberta (Em Elaboração)" : status === "Fechada" ? "Fechada (Consolidada)" : "Paga"}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Aberta">Aberta (Em Elaboração)</SelectItem>
-                    <SelectItem value="Fechada">Fechada (Consolidada)</SelectItem>
-                    <SelectItem value="Paga">Paga</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Input id="status" value={status} readOnly />
               </div>
               {data && (
                 <div className="space-y-2">

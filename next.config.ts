@@ -41,6 +41,9 @@ const nextConfig: NextConfig = {
     "/api/financeiro/relatorios": ["./node_modules/pdfkit/js/data/**/*"],
     "/api/frotas/relatorios": ["./node_modules/pdfkit/js/data/**/*"],
     "/api/saude/relatorios": ["./node_modules/pdfkit/js/data/**/*"],
+    "/api/rh/demonstrativos/*": ["./node_modules/pdfkit/js/data/**/*"],
+    "/api/rh/relatorios": ["./node_modules/pdfkit/js/data/**/*"],
+    "/api/portal-servidor/demonstrativos/*": ["./node_modules/pdfkit/js/data/**/*"],
   },
   async headers() {
     return [{

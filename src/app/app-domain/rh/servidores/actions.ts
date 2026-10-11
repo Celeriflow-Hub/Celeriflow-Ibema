@@ -4,6 +4,7 @@ import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-contex
 import { revalidatePath } from "next/cache";
 import { validateEmployeeRelations } from "@/lib/administration/employee-lifecycle";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
+import { resolveEmployeePerson } from "@/lib/rh/employee-person";
 
 async function getTenantPrisma(operation: "create" | "update" | "delete") {
   return getTenantContextForModuleOperation("RH", operation);
@@ -16,6 +17,7 @@ export async function saveServidor(formData: FormData) {
   try {
     const name = formData.get("name") as string;
     const cpf = formData.get("cpf") as string;
+    const personId = String(formData.get("personId") || "");
     const registration = formData.get("registration") as string;
     const email = formData.get("email") as string;
     const phone = formData.get("phone") as string;
@@ -26,7 +28,7 @@ export async function saveServidor(formData: FormData) {
     const salaryBase = parseFloat(formData.get("salaryBase") as string) || 0;
     const contractedHours = parseInt(formData.get("contractedHours") as string, 10) || 220;
 
-    if (!name) {
+    if (!name && !personId && !cpf) {
       return { success: false, error: "Nome é obrigatório." };
     }
 
@@ -46,9 +48,12 @@ export async function saveServidor(formData: FormData) {
     };
 
     await prisma.$transaction(async (tx) => {
+      if (id) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:employee:${id}`}))`;
+      const previous = id ? await tx.employee.findUniqueOrThrow({ where: { id } }) : null;
+      const canonical = await resolveEmployeePerson(tx, { personId, cpf, existingPersonId: previous?.personId });
       const employee = id
-        ? await tx.employee.update({ where: { id }, data })
-        : await tx.employee.create({ data });
+        ? await tx.employee.update({ where: { id }, data: { ...data, ...canonical } })
+        : await tx.employee.create({ data: { ...data, ...canonical } });
       await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "EMPLOYEE", targetId: employee.id });
     });
 
@@ -56,7 +61,7 @@ export async function saveServidor(formData: FormData) {
     return { success: true };
   } catch (error) {
     console.error("Erro ao salvar servidor:", error);
-    return { success: false, error: "Falha ao salvar o servidor. Verifique se o CPF já está cadastrado." };
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao salvar o servidor. Verifique se o CPF já está cadastrado." };
   }
 }
 

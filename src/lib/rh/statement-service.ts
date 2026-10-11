@@ -1,0 +1,43 @@
+import type { PrismaClient } from "@prisma/client";
+import { z } from "zod";
+import PDFDocument from "pdfkit";
+
+const snapshotSchema = z.object({
+  contract: z.object({ registration: z.string(), workLocation: z.string(), salary: z.string(), employee: z.object({ name: z.string() }) }),
+  days: z.number(),
+  items: z.array(z.object({ code: z.string(), name: z.string(), type: z.string(), value: z.string(), method: z.string(), formula: z.string().nullable(), base: z.string().nullable(), rate: z.string().nullable(), movement: z.string() })),
+  bases: z.record(z.string(), z.string()),
+});
+
+export async function getPayrollStatement(db: PrismaClient, id: string, employeeId?: string) {
+  const statement = await db.hrPayrollStatement.findFirst({ where: { id, ...(employeeId ? { contract: { employeeId }, releaseAt: { lte: new Date() }, revokedAt: null, run: { mode: "OFICIAL", status: "FECHADA" } } : {}) }, include: { run: { include: { payroll: true } } } });
+  if (!statement) throw new Error("Demonstrativo indisponível.");
+  return { id: statement.id, ...snapshotSchema.parse(statement.snapshot), competence: statement.run.payroll.competence, payrollType: statement.run.payroll.type, scope: statement.run.scope, mode: statement.run.mode, createdAt: statement.run.createdAt, gross: statement.gross.toFixed(2), deductions: statement.deductions.toFixed(2), net: statement.net.toFixed(2), employer: statement.employer.toFixed(2) };
+}
+
+export async function renderPayrollStatementPdf(statement: Awaited<ReturnType<typeof getPayrollStatement>>) {
+  const pdf = new PDFDocument({ size: "A4", margin: 42, bufferPages: true });
+  const chunks: Buffer[] = [];
+  const result = new Promise<Buffer>((resolve, reject) => { pdf.on("data", chunk => chunks.push(Buffer.from(chunk))); pdf.on("end", () => resolve(Buffer.concat(chunks))); pdf.on("error", reject); });
+  pdf.fontSize(16).text("Demonstrativo de pagamento");
+  pdf.fontSize(10).text(`${statement.competence} · ${statement.payrollType} · ${statement.scope} · ${statement.mode}`);
+  pdf.text(`${statement.contract.employee.name} · matrícula ${statement.contract.registration}`);
+  pdf.text(`Local: ${statement.contract.workLocation} · referência: ${statement.days} dias`);
+  pdf.moveDown();
+  for (const item of statement.items) {
+    pdf.fontSize(10).text(`${item.code} · ${item.name} · ${item.type} · R$ ${item.value}`);
+    pdf.fontSize(8).fillColor("#555555").text(`Método: ${item.method} · fórmula: ${item.formula || "—"} · base: ${item.base || "—"} · movimento: ${item.movement}`).fillColor("#000000");
+    pdf.moveDown(0.4);
+  }
+  pdf.moveDown().fontSize(11).text(`Bruto: R$ ${statement.gross} · descontos: R$ ${statement.deductions} · líquido: R$ ${statement.net}`);
+  pdf.fontSize(9).text(`Bases: ${Object.entries(statement.bases).map(([key, value]) => `${key}: ${value}`).join(" · ")}`);
+  pdf.text(`Versão do demonstrativo: ${statement.id}`);
+  pdf.text("O demonstrativo não comprova quitação bancária.");
+  const pages = pdf.bufferedPageRange();
+  for (let page = 0; page < pages.count; page++) {
+    pdf.switchToPage(page);
+    pdf.text(`${page + 1}/${pages.count}`, 42, pdf.page.height - 35, { lineBreak: false });
+  }
+  pdf.end();
+  return result;
+}

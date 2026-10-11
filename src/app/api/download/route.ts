@@ -5,6 +5,7 @@ import { getAttendanceContext, getOmbudsmanReadContext, ombudsmanScope, ticketSc
 import { getProtocolContext, protocolScope } from "@/lib/protocols/access";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 import { assertSstClinicalAccess } from "@/lib/sst/access";
+import { asoDocumentOwners } from "@/lib/sst/aso-flow-access";
 import { assertConstructionGedSignature } from "@/lib/obras/construction-documents-service";
 import { readConstructionPdf } from "@/lib/obras/construction-document-storage";
 import { assertConstructionProjectStampDownload, findConstructionProjectStampByFile } from "@/lib/obras/construction-project-stamp";
@@ -32,6 +33,11 @@ export async function GET(request: NextRequest) {
       await assertConstructionGedSignature(context.prisma, constructionArtifact.documentVersionId);
     }
     // Check occupational ownership independently of generic copies of the same file URL.
+    const asoOwners = await asoDocumentOwners(context.prisma, url);
+    if (asoOwners.length) {
+      const sst = await getTenantContextForModule("SST");
+      for (const owner of asoOwners) await assertSstClinicalAccess(sst, owner.budgetUnitId);
+    }
     const occupational = await context.prisma.sstCertificateDocument.findFirst({
       where: { document: { fileUrl: url } },
       select: { certificate: { select: { budgetUnitId: true } } },
@@ -59,7 +65,9 @@ export async function GET(request: NextRequest) {
       if (!await civilContext.prisma.constructionCase.findFirst({ where: { AND: [{ id: { in: civilCaseIds } }, constructionCaseWhere(civilAccess)] }, select: { id: true } })) throw new AccessError("Sem habilitação urbanística no setor responsável pelo documento.", 403);
     }
 
-    if (document?.sstCertificateDocument) {
+    if (asoOwners.length && document) {
+      auditTarget = { type: "SST_ASO_DOCUMENT", id: document.id };
+    } else if (document?.sstCertificateDocument) {
       const sst = await getTenantContextForModule("SST");
       await assertSstClinicalAccess(sst, document.sstCertificateDocument.certificate.budgetUnitId);
     } else if (document && (document.ticketLinks.length || document.ombudsmanLinks.length)) {
@@ -151,6 +159,7 @@ export async function GET(request: NextRequest) {
       headers: {
         "Content-Type": contentType,
         "Content-Disposition": `inline; filename="${filename}"`,
+        "Cache-Control": "private, no-store",
       },
     });
   } catch (error) {

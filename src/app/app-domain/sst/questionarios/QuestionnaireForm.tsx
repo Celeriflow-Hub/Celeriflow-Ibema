@@ -4,12 +4,14 @@ import { useState } from "react";
 import { SstForm } from "../SstForm";
 import { saveSstQuestionnaire } from "./actions";
 import { questionKinds, type Question } from "@/lib/sst/questionnaire-policy";
+import type { ClinicalDiscipline } from "@/lib/sst/clinical-policy";
 
 const field = "w-full min-w-0 rounded border p-2";
-export function QuestionnaireForm({ budgetUnitId }: { budgetUnitId: string }) {
+export function QuestionnaireForm({ budgetUnitId, discipline = "MEDICINE" }: { budgetUnitId: string; discipline?: ClinicalDiscipline }) {
   const [questions, setQuestions] = useState<Question[]>([{ key: "queixa", label: "Queixa principal", section: "História clínica", kind: "TEXT", required: true, choices: [] }]);
   const update = (index: number, patch: Partial<Question>) => setQuestions((current) => current.map((question, i) => i === index ? { ...question, ...patch } : question));
   return <SstForm action={saveSstQuestionnaire} redirectBase="/sst/questionarios" label="Registrar versão do questionário">
+    <input type="hidden" name="discipline" value={discipline}/>
     <input type="hidden" name="budgetUnitId" value={budgetUnitId}/><input type="hidden" name="questions" value={JSON.stringify(questions.map((question) => ({ ...question, choices: question.choices.map((choice) => choice.trim()).filter(Boolean) })))}/>
     <label>Código (reutilizar cria nova versão)<input name="code" required maxLength={40} className={field}/></label>
     <label>Título<input name="title" required minLength={2} maxLength={200} className={field}/></label>

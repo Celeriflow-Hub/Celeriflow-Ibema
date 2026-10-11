@@ -6,6 +6,7 @@ import { assertSstClinicalAccess } from "./access";
 import { z } from "zod";
 import { getProtocolContext, protocolScope } from "@/lib/protocols/access";
 import { SstValidationError } from "./errors";
+import { certificateFunctionalSource, assertCertificateHistoricalSource, appendReasonRegimePolicy } from "./functional-certificate-service";
 
 export async function registerCertificate(context: AppContext, raw: unknown) {
   const input = certificateInput.parse(raw);
@@ -16,15 +17,16 @@ export async function registerCertificate(context: AppContext, raw: unknown) {
     if (!process) throw new SstValidationError("Processo não encontrado ou sem acesso ao seu setor.");
   }
   return context.prisma.$transaction(async (tx) => {
+    // Same lock/order as reason editing: reason settings and regime policy form one snapshot.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`SST_REGIME_POLICY:${input.reasonId}`}))`;
     const [unit, employee, reason, issuer] = await Promise.all([
       tx.budgetUnit.findUnique({ where: { id: input.budgetUnitId } }),
       tx.employee.findUnique({ where: { id: input.employeeId } }),
       tx.sstCertificateReason.findUnique({ where: { id: input.reasonId } }),
       tx.person.findUnique({ where: { id: input.issuerPersonId }, select: { id: true } }),
     ]);
-    if (!unit || !employee?.isActive || employee.secretariatId !== unit.secretariatId) throw new SstValidationError("A lotação do servidor não é compatível com a unidade gestora selecionada.");
+    if (!unit || !employee?.isActive) throw new SstValidationError("Servidor ou unidade gestora inválidos.");
     if (!issuer || !reason?.isActive || reason.budgetUnitId !== unit.id) throw new SstValidationError("Emitente ou motivo inválido.");
-    assertCertificateReason(reason, employee.roleId, input.dependentId);
     const dependent = input.dependentId ? await tx.dependent.findFirst({ where: { id: input.dependentId, employeeId: employee.id } }) : null;
     if (input.dependentId && !dependent) throw new SstValidationError("O dependente não pertence ao servidor.");
     const presentedAt = reason.autoPresentedAt ? new Date() : new Date(input.presentedAt);
@@ -38,16 +40,25 @@ export async function registerCertificate(context: AppContext, raw: unknown) {
       const settings = z.object({ printReceipt: z.boolean().default(false), suggestLeave: z.boolean().default(false) }).parse(existing.reasonSnapshot ?? reason);
       return { id: existing.id, printReceipt: settings.printReceipt, suggestLeave: settings.suggestLeave };
     }
+    const source = await certificateFunctionalSource(tx, input);
+    assertCertificateReason(reason, source.period.roleId, input.dependentId);
+    const codes = [...new Set(input.cidCodes.map((code) => code.replaceAll(".", "")))];
+    if (codes.length) {
+      const references = await tx.healthSusReference.findMany({ where: { kind: "CID", isActive: true, isCurrent: true, code: { in: [...new Set(input.cidCodes.flatMap((code) => [code, code.replaceAll(".", ""), code.length > 3 && !code.includes(".") ? `${code.slice(0, 3)}.${code.slice(3)}` : code]))] } }, select: { code: true } });
+      const canonical = new Set(references.map((reference) => reference.code.replaceAll(".", "")));
+      if (codes.some((code) => !canonical.has(code))) throw new SstValidationError("CID não encontrado no catálogo oficial ativo. Atualize o catálogo canônico de Saúde.");
+    }
     const record = await tx.sstMedicalCertificate.create({ data: {
       budgetUnitId: unit.id, employeeId: employee.id, reasonId: reason.id,
       issuerPersonId: issuer.id, issuerCouncil: input.issuerCouncil,
       dependentId: dependent?.id, relationship: dependent?.relationship,
       startsAt: input.startsAt, endsAt: input.endsAt, presentedAt, protocolNumber,
       processId: input.processId || null,
-      cidCodes: [...new Set(input.cidCodes)], roleIdSnapshot: employee.roleId,
-      departmentIdSnapshot: employee.departmentId, createdById: context.user.id,
+      cidCodes: [...new Set(input.cidCodes)], roleIdSnapshot: source.period.roleId,
+      departmentIdSnapshot: source.period.departmentId, createdById: context.user.id,
       reasonSnapshot: { name: reason.name, createLeaveOnApproval: reason.createLeaveOnApproval, leaveType: reason.leaveType, suggestLeave: reason.suggestLeave, printReceipt: reason.printReceipt },
     } });
+    await tx.$executeRaw`INSERT INTO "SstCertificateFunctionalSource" ("certificateId","functionalPeriodId","regimePolicyId",snapshot) VALUES (${record.id},${source.period.id},${source.policyId},${JSON.stringify(source.period)}::jsonb)`;
     await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "SST_CERTIFICATE", targetId: record.id });
     return { id: record.id, printReceipt: reason.printReceipt, suggestLeave: reason.suggestLeave };
   });
@@ -61,7 +72,9 @@ export async function registerCertificateReason(context: AppContext, raw: unknow
     if (!unit) throw new SstValidationError("Unidade gestora não encontrada.");
     const roleIds = [...new Set(input.restrictedRoleIds)];
     if (roleIds.length && await tx.role.count({ where: { id: { in: roleIds } } }) !== roleIds.length) throw new SstValidationError("Um dos cargos selecionados não existe no cadastro funcional.");
-    const record = await tx.sstCertificateReason.create({ data: input });
+    const { restrictedRegimeIds, ...reasonData } = input;
+    const record = await tx.sstCertificateReason.create({ data: reasonData });
+    await appendReasonRegimePolicy(tx, record.id, restrictedRegimeIds, context.user.id, "Configuração administrativa inicial do motivo.");
     await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "SST_REASON", targetId: record.id });
     return record.id;
   });
@@ -94,11 +107,13 @@ export async function assessCertificate(context: AppContext, raw: unknown) {
       const board = await tx.sstMedicalBoard.findUnique({ where: { id: input.boardId }, include: { members: true } });
       if (!board?.isActive || board.budgetUnitId !== certificate.budgetUnitId || input.assessedAt < board.startsAt || input.assessedAt > board.endsAt || !board.members.some((member) => member.personId === examiner.id)) throw new SstValidationError("Junta fora da vigência, de outra UG ou sem o perito informado.");
     }
-    const generateLeave = input.decision === "APPROVED" && (policy.createLeaveOnApproval || input.confirmLeave);
+    const [confirmation] = await tx.$queryRaw<{ confirmed: boolean }[]>`SELECT confirmed FROM "SstCertificateLeaveConfirmation" WHERE "certificateId"=${certificate.id}`;
+    const generateLeave = input.decision === "APPROVED" && (policy.createLeaveOnApproval || input.confirmLeave || confirmation?.confirmed);
     if (generateLeave) {
       if (!canPerformModuleOperation(context.user, "RH", "create")) throw new SstValidationError("A integração exige permissão de inclusão no RH.");
       const activeRh = await tx.configuracaoModulo.findUnique({ where: { codigo: "RH" } });
       if (activeRh?.ativo === false) throw new SstValidationError("O módulo RH está desativado.");
+      await assertCertificateHistoricalSource(tx, certificate);
       const conflict = await tx.leave.findFirst({ where: { employeeId: certificate.employeeId, status: "Ativa", startDate: { lte: certificate.endsAt }, endDate: { gte: certificate.startsAt } }, select: { id: true } });
       if (conflict) throw new SstValidationError("Já existe afastamento ativo neste período. Revise o vínculo antes de deferir.");
       const leave = await tx.leave.create({ data: { employeeId: certificate.employeeId, type: policy.leaveType, startDate: certificate.startsAt, endDate: certificate.endsAt, reason: `Atestado ocupacional ${certificate.protocolNumber}`, status: "Ativa" } });
@@ -114,11 +129,14 @@ export async function updateCertificateReason(context: AppContext, id: string, r
   const input = reasonInput.parse(raw);
   assertBudgetUnitAccess(context.user, input.budgetUnitId);
   return context.prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`SST_REGIME_POLICY:${id}`}))`;
     const reason = await tx.sstCertificateReason.findUnique({ where: { id } });
     if (!reason || reason.budgetUnitId !== input.budgetUnitId) throw new SstValidationError("Motivo não encontrado nesta unidade gestora.");
     const roles = [...new Set(input.restrictedRoleIds)];
     if (await tx.role.count({ where: { id: { in: roles } } }) !== roles.length) throw new SstValidationError("Cargo não encontrado.");
-    await tx.sstCertificateReason.update({ where: { id }, data: input });
+    const { restrictedRegimeIds, ...reasonData } = input;
+    await tx.sstCertificateReason.update({ where: { id }, data: reasonData });
+    await appendReasonRegimePolicy(tx, id, restrictedRegimeIds, context.user.id, "Retificação administrativa da configuração do motivo.");
     await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "SST_REASON_UPDATED", targetId: id });
     return id;
   });

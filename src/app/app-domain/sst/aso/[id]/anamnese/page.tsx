@@ -14,8 +14,8 @@ export default async function SstAsoAnamnesis({ params, searchParams }: { params
   const scope = await context.prisma.sstAso.findUnique({ where: { id }, select: { budgetUnitId: true } });
   if (!scope) notFound();
   await assertSstClinicalAccess(context, scope.budgetUnitId);
-  const versions = await context.prisma.sstQuestionnaireVersion.findMany({ where: { budgetUnitId: scope.budgetUnitId, ...(search.q?.trim() ? { title: { contains: search.q.trim().slice(0, 200), mode: "insensitive" } } : {}) }, take: 20, orderBy: [{ createdAt: "desc" }, { id: "asc" }], select: { id: true, code: true, title: true, version: true } });
-  const selected = search.questionnaireVersionId ? await context.prisma.sstQuestionnaireVersion.findFirst({ where: { id: search.questionnaireVersionId, budgetUnitId: scope.budgetUnitId } }) : null;
+  const versions = await context.prisma.sstQuestionnaireVersion.findMany({ where: { discipline: "MEDICINE", budgetUnitId: scope.budgetUnitId, ...(search.q?.trim() ? { title: { contains: search.q.trim().slice(0, 200), mode: "insensitive" } } : {}) }, take: 20, orderBy: [{ createdAt: "desc" }, { id: "asc" }], select: { id: true, code: true, title: true, version: true } });
+  const selected = search.questionnaireVersionId ? await context.prisma.sstQuestionnaireVersion.findFirst({ where: { discipline: "MEDICINE", id: search.questionnaireVersionId, budgetUnitId: scope.budgetUnitId } }) : null;
   const total = await context.prisma.sstAnamnesis.count({ where: { asoId: id } });
   const requestedPage = Number(search.page);
   const page = Math.min(Number.isFinite(requestedPage) ? Math.max(1, Math.trunc(requestedPage)) : 1, Math.max(1, Math.ceil(total / 20)));

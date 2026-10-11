@@ -2,7 +2,7 @@
 
 ## Estado em 10/10/2026
 
-O plano de 74 requisitos **ainda não está concluído**. Os incrementos implementam atestados/perícias, agenda, jornadas/relatórios, GHE, versões de programas e a primeira jornada de exames/ASO, com acesso clínico por UG. A matriz de `PLANO_IMPLEMENTACAO_SST.md` permanece referência de escopo; não marcar 74/74 nem mínimo POC atingido.
+O plano de 74 requisitos **ainda não está concluído**. Os incrementos implementam atestados/perícias, agenda, jornadas/relatórios, GHE, versões de programas, a primeira jornada de exames/ASO e anamnese médica versionada, com acesso clínico por UG. A matriz de `PLANO_IMPLEMENTACAO_SST.md` permanece referência de escopo; não marcar 74/74 nem mínimo POC atingido.
 
 ### Implementado
 
@@ -43,6 +43,10 @@ O plano de 74 requisitos **ainda não está concluído**. Os incrementos impleme
 Sincronizado por fast-forward com `087010c — Social2` e `34bc19a — obras e civil`, preservando alterações locais SST e os relacionamentos de ambas as áreas em `Employee`. A primeira entrega está no commit `9901539 — SST2`. As migrações SST `20261010150000_add_sst_certificates`, `20261010160000_add_sst_agenda_boards`, `20261010170000_add_sst_exposure_groups` e `20261010180000_add_sst_programs` foram aplicadas pelo `prisma migrate deploy`; não houve reset. A fundação de Construção Civil já estava aplicada no último deploy. As migrações aplicadas devem permanecer imutáveis.
 
 Nesta continuação foram incorporados `70085ee — Civil2` e `250a520 — civil 4`, preservando os vínculos de ambas as áreas em `Person` e as novas relações funcionais. A migração aditiva `20261010190000_add_sst_aso` foi aplicada com sucesso; o deploy encontrou 29 migrações locais e aplicou somente essa migração. Na última conferência havia no banco `20261010200000_construction_portal_participation`, ainda não publicada no remoto consultado: integrar o arquivo do outro notebook quando disponível, sem recriar nem editar a migração aplicada.
+
+Ao encerrar o incremento de anamnese foi integrado `d4a29f6 — civil5`, incorporando os arquivos dessas migrações e preservando a relação SST de laboratórios junto ao perfil de construtora em `Company`. A conferência após integração encontrou 43 migrações e banco atualizado. Dependências foram sincronizadas por `npm ci`, conforme o lockfile recebido. O GED mantém os contratos anteriores e downloads continuam validando propriedade/autorização clínica SST antes de liberar arquivos.
+
+O build da integração identificou ajustes locais necessários em Construção Civil: validação de referência ausente retorna HTTP 400 diretamente, páginas de consulta usam `getTenantContextForModule` (operações CRUD não têm `read`/`view`) e viabilidade automática valida a regra com `zoneSchema`, sem buscar signatários quando o processo não possui setor atual. Cada arquivo foi conferido individualmente; contratos de actions e escopos setoriais foram preservados. Na conferência final o commit `d5a492e — SST3` já incluía os incrementos SST, Perfis e esses ajustes; apenas a atualização final deste registro permanecia local.
 
 ### Exames e ASO — primeiro incremento F3
 
@@ -112,6 +116,7 @@ Nesta continuação foram incorporados `70085ee — Civil2` e `250a520 — civil
 - Nesta continuação, 33 testes direcionados de SST, Perfis/módulos e Construção Civil passaram. Os seis testes ASO cobrem datas, candidato, PCMSO/GHE/exames, autorização clínica, idempotência/snapshot e integridade transacional/imutabilidade em PGlite.
 - Após incorporar `civil 4`, o build passou novamente e os nove testes ASO/Construção Civil passaram após a geração do cliente Prisma. Lint dos novos arquivos ASO, painel e navegação SST passou; Prisma validate/generate passaram. Evitar rodar testes Prisma em paralelo com a geração do cliente, pois podem carregar um cliente anterior aos novos modelos.
 - Incremento de questionários/anamnese: 36 testes direcionados passaram, incluindo seis novos testes de políticas, acesso clínico, idempotência, versionamento/revisão e integridade em PGlite. Prisma validate/generate e lint direcionado passaram. O primeiro build excedeu o timeout do comando após compilar e verificar TypeScript; a execução seguinte com timeout ampliado concluiu com sucesso.
+- Após integrar `civil5`, passaram 29 testes selecionados de SST/documentos/GED/migrações/ciclo de análise e outros 20 testes de viabilidade automática, pedidos externos e ciclo/listas. O teste de serviço GED exige `node --conditions=react-server --import tsx --test tests/construction-documents-service.test.ts`, conforme as evidências de Construção Civil; com essa condição passou. TypeScript com heap 8192 MB e `tsconfig.build.json`, lint dos arquivos ajustados e o build final completo passaram. Não considerar esses testes como homologação visual/contratual dos módulos.
 
 ## Continuação
 

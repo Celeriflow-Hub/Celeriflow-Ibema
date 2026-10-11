@@ -161,6 +161,96 @@ model AdministrativeUnit {
 }
 
 // Cargos e FunÃ§Ãµes
+// Immutable CAT source; SstCatEvidence/ledger are accessed with typed parameterized SQL.
+model SstCat {
+  id String @id
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id])
+  employeeId String
+  employee Employee @relation(fields: [employeeId], references: [id])
+  createdById String
+  createdBy Usuario @relation(fields: [createdById], references: [id])
+  submissionKey String
+  requestHash String
+  occurredAt DateTime
+  kind String
+  source String
+  data Json
+  snapshot Json
+  createdAt DateTime @default(now())
+  @@unique([budgetUnitId, submissionKey])
+  @@index([budgetUnitId, occurredAt, id], map: "SstCat_scope_date")
+}
+
+// F6 SST prevention: validated operational payloads and immutable revisions.
+model SstPreventionRecord {
+  id String @id
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  kind String
+  title String
+  payload Json
+  clinical Boolean @default(false)
+  createdById String
+  createdBy Usuario @relation("SstPreventionAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  submissionKey String
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  revisions SstPreventionRevision[]
+  electors SstElectionElector[]
+  candidates SstElectionCandidate[]
+  ballots SstElectionBallot[]
+  @@unique([createdById, submissionKey])
+  @@index([budgetUnitId, kind, createdAt, id], map: "SstPreventionRecord_scope")
+}
+model SstPreventionRevision {
+  id String @id
+  recordId String
+  record SstPreventionRecord @relation(fields: [recordId], references: [id], onDelete: Restrict)
+  version Int
+  artifact Json
+  actorId String
+  actor Usuario @relation("SstPreventionRevisionAuthor", fields: [actorId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  @@unique([recordId, version])
+}
+model SstElectionElector {
+  electionId String
+  election SstPreventionRecord @relation(fields: [electionId], references: [id], onDelete: Restrict)
+  employeeId String
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  personId String
+  person Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+  candidates SstElectionCandidate[]
+  turnout SstElectionTurnout?
+  @@id([electionId, employeeId])
+}
+model SstElectionCandidate {
+  id String @id
+  electionId String
+  election SstPreventionRecord @relation(fields: [electionId], references: [id], onDelete: Restrict)
+  employeeId String
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  elector SstElectionElector @relation(fields: [electionId, employeeId], references: [electionId, employeeId], onDelete: Restrict)
+  nameSnapshot String
+  ballots SstElectionBallot[]
+  @@unique([electionId, employeeId])
+  @@unique([electionId, id])
+}
+model SstElectionTurnout {
+  electionId String
+  employeeId String
+  elector SstElectionElector @relation(fields: [electionId, employeeId], references: [electionId, employeeId], onDelete: Restrict)
+  @@id([electionId, employeeId])
+}
+model SstElectionBallot {
+  id String @id
+  electionId String
+  election SstPreventionRecord @relation(fields: [electionId], references: [id], onDelete: Restrict)
+  candidateId String?
+  candidate SstElectionCandidate? @relation(fields: [electionId, candidateId], references: [electionId, id], onDelete: Restrict)
+  @@index([electionId, candidateId], map: "SstElectionBallot_count")
+}
+
 model Role {
   id          String     @id @default(cuid())
   name        String
@@ -175,6 +265,10 @@ model Role {
 
 // Servidores BÃ¡sicos (Base para RH e vinculaÃ§Ã£o de responsÃ¡veis)
 model Employee {
+  sstEquipmentItems SstEquipmentDeliveryItem[]
+  sstElectionElectors SstElectionElector[]
+  sstElectionCandidates SstElectionCandidate[]
+  sstCats SstCat[]
   sstAsos SstAso[]
   constructionStaff ConstructionStaffRole[]
   assignedConstructionCases ConstructionCase[]
@@ -348,6 +442,11 @@ model CalendarEvent {
 
 // Pessoas FÃ­sicas
 model Person {
+  sstEquipmentEvents SstEquipmentEvent[]
+  sstElectionElectors SstElectionElector[]
+  sstProfessionalRoles SstProfessionalRole[]
+  sstClinicalRecords SstClinicalRecord[]
+  sstVaccinations SstVaccination[]
   sstAsos SstAso[] @relation("SstAsoSubject")
   sstExaminedAsos SstAso[] @relation("SstAsoExaminer")
   sstPerformedExams SstOccupationalExam[]
@@ -445,6 +544,7 @@ model Person {
 
 // Pessoas JurÃ­dicas
 model Company {
+  sstOperatedHealthPlans SstHealthPlan[]
   constructionProfile ConstructionCompanyProfile?
   sstExamLaboratories SstOccupationalExam[]
   constructionEmployers ConstructionProfessionalEmployer[]
@@ -531,6 +631,8 @@ model Taxpayer {
 
 // Fornecedores
 model Supplier {
+  sstHealthPlans SstHealthPlan[]
+  sstEquipment SstEquipment[]
   id                       String    @id @default(cuid())
   category                 String?
   businessBranch           String?
@@ -3626,6 +3728,16 @@ model CreditRequestItem {
 }
 
 model BudgetUnit {
+  sstEquipment SstEquipment[]
+  sstEquipmentPolicy SstEquipmentPolicy?
+  sstEquipmentDeliveries SstEquipmentDelivery[]
+  sstPreventionRecords SstPreventionRecord[]
+  sstCats SstCat[]
+  sstHealthPlans SstHealthPlan[]
+  sstProfessionalRoles SstProfessionalRole[]
+  sstDisciplineGrants SstDisciplineGrant[]
+  sstClinicalRecords SstClinicalRecord[]
+  sstVaccinations SstVaccination[]
   sstQuestionnaires SstQuestionnaireVersion[]
   sstAsos SstAso[]
   sstPrograms SstOccupationalProgram[]
@@ -5411,6 +5523,9 @@ model InstrumentInstallment {
 // --- MÃ³dulo 10: RH e Folha ---
 
 model Payroll {
+  sstLeaveOrigins SstLeavePayrollOrigin[]
+  sstBenefitScope SstBenefitPayrollScope?
+  totalValueDecimal Decimal? @db.Decimal(24, 2)
   id         String   @id @default(cuid())
   competence String // "07/2026"
   type       String   @default("Mensal") // Mensal, FÃ©rias, 13Âº, RescisÃ£o
@@ -5423,6 +5538,8 @@ model Payroll {
 }
 
 model PayrollEvent {
+  sstMonthlyPlans SstHealthPlan[] @relation("SstMonthlyEvent")
+  sstExtraordinaryPlans SstHealthPlan[] @relation("SstExtraordinaryEvent")
   id        String   @id @default(cuid())
   code      String   @unique
   name      String
@@ -5436,6 +5553,9 @@ model PayrollEvent {
 }
 
 model PayrollItem {
+  sstLeaveOrigin SstLeavePayrollOrigin?
+  valueDecimal Decimal? @db.Decimal(18, 2)
+  sstBenefitOrigin SstBenefitPayrollOrigin?
   id         String       @id @default(cuid())
   payrollId  String
   payroll    Payroll      @relation(fields: [payrollId], references: [id], onDelete: Cascade)
@@ -5464,6 +5584,7 @@ model Vacation {
 }
 
 model Leave {
+  sstPayrollOrigins SstLeavePayrollOrigin[]
   id         String   @id @default(cuid())
   employeeId String
   employee   Employee @relation("EmployeeLeave", fields: [employeeId], references: [id])
@@ -5514,6 +5635,8 @@ model SstCertificateReason {
 }
 
 model SstMedicalCertificate {
+  payrollOrigins SstLeavePayrollOrigin[]
+  payrollScopeEvidence SstLeavePayrollScopeEvidence[]
   reasonSnapshot Json?
   id String @id @default(cuid())
   budgetUnitId String
@@ -5552,6 +5675,7 @@ model SstMedicalCertificate {
 }
 
 model SstMedicalAssessment {
+  payrollOrigins SstLeavePayrollOrigin[]
   boardId String?
   board SstMedicalBoard? @relation(fields: [boardId], references: [id], onDelete: Restrict)
   id String @id @default(cuid())
@@ -5713,6 +5837,7 @@ model SstOccupationalProgram {
 }
 
 model SstProgramExposureGroup {
+  equipmentRequirements SstEquipmentRequirement[]
   asos SstAso[]
   id String @id @default(cuid())
   programId String
@@ -5723,6 +5848,198 @@ model SstProgramExposureGroup {
   risks Json
   exams Json
   @@unique([programId, groupId])
+}
+
+model SstEsocialConfiguration {
+  id String @id
+  budgetUnitId String
+  environment String
+  version Int
+  employerRegistration String
+  credentialReference String
+  providerReference String
+  layout String
+  submissionKey String
+  requestHash String
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([budgetUnitId, environment, version])
+  @@unique([budgetUnitId, submissionKey])
+}
+
+model SstClosureEmission {
+  id String @id
+  budgetUnitId String
+  employeeId String
+  kind String
+  startsAt DateTime @db.Date
+  endsAt DateTime @db.Date
+  snapshot Json
+  contentHash String
+  createdById String
+  createdAt DateTime @default(now())
+  @@index([budgetUnitId, employeeId, createdAt, id])
+}
+
+model SstEsocialEvent {
+  id String @id
+  budgetUnitId String
+  employeeId String?
+  kind String
+  environment String
+  sourceId String
+  sourceVersion String
+  sourceHash String
+  sourceSnapshot Json
+  missingFields Json
+  configurationId String?
+  configurationKey String
+  layout String
+  submissionKey String
+  requestHash String
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([budgetUnitId, submissionKey])
+  @@unique([budgetUnitId, kind, environment, sourceId, sourceHash, configurationKey], map: "SstEsocialEvent_source_config_key")
+  @@index([budgetUnitId, createdAt, id])
+}
+
+model SstEsocialAttempt {
+  id String @id
+  eventId String @unique
+  signedXml String
+  xmlHash String
+  eventXmlId String
+  certificateFingerprint String
+  createdById String
+  createdAt DateTime @default(now())
+}
+
+model SstEsocialEvidence {
+  id String @id
+  eventId String
+  revision Int @default(1)
+  environment String
+  status String
+  signedXml String
+  xmlHash String
+  eventXmlId String
+  certificateFingerprint String
+  responseXml String
+  responseHash String
+  endpoint String
+  correlationId String
+  protocol String
+  receipt String?
+  rejectionCodes Json
+  processedAt DateTime
+  receivedAt DateTime
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([eventId, responseHash])
+  @@unique([eventId, revision])
+  @@index([eventId, receivedAt, id])
+}
+
+model SstEquipment {
+  id String @id
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  materialId String
+  material Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  kind String
+  ca String
+  caValidUntil DateTime? @db.Date
+  validityDays Int
+  reviewDays Int
+  supplierId String?
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  createdById String
+  createdAt DateTime @default(now())
+  submissionKey String @unique
+  requestHash String
+  items SstEquipmentDeliveryItem[]
+  requirements SstEquipmentRequirement[]
+  @@unique([budgetUnitId, materialId])
+  @@index([budgetUnitId, createdAt, id], map: "SstEquipment_unit_created_idx")
+}
+
+model SstEquipmentPolicy {
+  budgetUnitId String @id
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  integrateStock Boolean @default(false)
+  updatedById String
+  updatedAt DateTime @default(now())
+}
+
+model SstEquipmentDelivery {
+  id String @id
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  deliveredAt DateTime
+  integratedStock Boolean
+  location String
+  notes String
+  createdById String
+  createdAt DateTime @default(now())
+  submissionKey String @unique
+  requestHash String
+  biometricStatus String @default("INTEGRATION_PENDING")
+  items SstEquipmentDeliveryItem[]
+  @@index([budgetUnitId, deliveredAt, id], map: "SstEquipmentDelivery_unit_date_idx")
+}
+
+model SstEquipmentDeliveryItem {
+  id String @id
+  deliveryId String
+  delivery SstEquipmentDelivery @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+  equipmentId String
+  equipment SstEquipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  employeeId String
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  quantity Float
+  writtenOffQuantity Float @default(0)
+  expiresAt DateTime
+  nextReviewAt DateTime
+  movementId String? @unique
+  movement MaterialMovement? @relation(fields: [movementId], references: [id], onDelete: Restrict)
+  snapshot Json
+  events SstEquipmentEvent[]
+  @@unique([deliveryId, employeeId, equipmentId])
+  @@index([employeeId, equipmentId], map: "SstEquipmentItem_employee_idx")
+  @@index([nextReviewAt], map: "SstEquipmentItem_review_idx")
+}
+
+model SstEquipmentEvent {
+  id String @id
+  itemId String
+  item SstEquipmentDeliveryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  kind String
+  quantity Float
+  occurredAt DateTime
+  nextReviewAt DateTime?
+  responsiblePersonId String
+  responsible Person @relation(fields: [responsiblePersonId], references: [id], onDelete: Restrict)
+  notes String
+  createdById String
+  createdAt DateTime @default(now())
+  submissionKey String
+  requestHash String
+  @@unique([submissionKey, itemId])
+  @@index([itemId, occurredAt], map: "SstEquipmentEvent_item_date_idx")
+}
+
+model SstEquipmentRequirement {
+  id String @id
+  programGroupId String
+  programGroup SstProgramExposureGroup @relation(fields: [programGroupId], references: [id], onDelete: Restrict)
+  recommendation String
+  equipmentId String
+  equipment SstEquipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  quantity Float
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([programGroupId, recommendation])
 }
 
 model SstAso {
@@ -5758,6 +6075,8 @@ model SstAso {
 }
 
 model SstQuestionnaireVersion {
+  discipline String @default("MEDICINE")
+  clinicalRecords SstClinicalRecord[]
   id String @id @default(cuid())
   budgetUnitId String
   budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
@@ -5791,6 +6110,95 @@ model SstAnamnesis {
   createdAt DateTime @default(now())
   @@unique([asoId, revision])
   @@unique([asoId, submissionKey])
+}
+
+model SstProfessionalRole {
+  id String @id @default(cuid())
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  personId String
+  person Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+  usuarioId String?
+  usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  discipline String
+  council String
+  startsAt DateTime @db.Date
+  endsAt DateTime @db.Date
+  isActive Boolean @default(true)
+  createdById String
+  createdAt DateTime @default(now())
+  records SstClinicalRecord[]
+  vaccinations SstVaccination[]
+  @@unique([budgetUnitId, personId, discipline, startsAt], map: "SstProfessionalRole_person_discipline_start_key")
+  @@index([budgetUnitId, discipline, isActive])
+}
+
+model SstDisciplineGrant {
+  id String @id @default(cuid())
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  usuarioId String
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  discipline String
+  canRead Boolean @default(false)
+  canWrite Boolean @default(false)
+  isActive Boolean @default(true)
+  @@unique([usuarioId, budgetUnitId, discipline])
+}
+
+model SstClinicalRecord {
+  id String @id @default(cuid())
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  personId String
+  person Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+  professionalRoleId String
+  professionalRole SstProfessionalRole @relation(fields: [professionalRoleId], references: [id], onDelete: Restrict)
+  discipline String
+  attendedAt DateTime
+  occupationalContext String
+  narrative String
+  opinion String
+  diagnosis String
+  cidCodes String[] @default([])
+  requests Json
+  questionnaireVersionId String?
+  questionnaireVersion SstQuestionnaireVersion? @relation(fields: [questionnaireVersionId], references: [id], onDelete: Restrict)
+  questionnaireSnapshot Json
+  answers Json
+  snapshot Json
+  submissionKey String
+  requestHash String
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([budgetUnitId, submissionKey])
+  @@index([budgetUnitId, discipline, attendedAt, id])
+  @@index([personId, attendedAt])
+}
+
+model SstVaccination {
+  id String @id @default(cuid())
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  personId String
+  person Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+  professionalRoleId String
+  professionalRole SstProfessionalRole @relation(fields: [professionalRoleId], references: [id], onDelete: Restrict)
+  vaccineId String
+  vaccine Vaccine @relation(fields: [vaccineId], references: [id], onDelete: Restrict)
+  administeredAt DateTime @db.Date
+  doseNumber Int
+  lotNumber String
+  source String
+  occupationalContext String
+  nextDoseAt DateTime? @db.Date
+  snapshot Json
+  submissionKey String
+  requestHash String
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([budgetUnitId, submissionKey])
+  @@index([budgetUnitId, administeredAt, id])
 }
 
 model SstOccupationalExam {
@@ -5830,6 +6238,7 @@ model AttendanceRecord {
 }
 
 model Dependent {
+  sstBenefitBeneficiaries SstBenefitBeneficiary[]
   sstCertificates SstMedicalCertificate[]
   id            String    @id @default(cuid())
   employeeId    String
@@ -5847,6 +6256,7 @@ model Dependent {
 }
 
 model BenefitConfig {
+  sstHealthPlan SstHealthPlan?
   id         String    @id @default(cuid())
   name       String
   type       String // Vale Transporte, Vale AlimentaÃ§Ã£o, Plano de SaÃºde, etc.
@@ -5861,6 +6271,7 @@ model BenefitConfig {
 }
 
 model PayrollBenefit {
+  sstBeneficiaries SstBenefitBeneficiary[]
   id              String        @id @default(cuid())
   employeeId      String
   employee        Employee      @relation("EmployeeBenefit", fields: [employeeId], references: [id])
@@ -5870,6 +6281,137 @@ model PayrollBenefit {
   status          String        @default("Ativo")
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+}
+
+// Health benefits extend RH's canonical benefit and employee assignment.
+model SstHealthPlan {
+  payrollMappings SstBenefitPayrollMapping[]
+  id String @id @default(cuid())
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  benefitConfigId String @unique
+  benefitConfig BenefitConfig @relation(fields: [benefitConfigId], references: [id], onDelete: Restrict)
+  supplierId String
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  operatorCompanyId String
+  operatorCompany Company @relation(fields: [operatorCompanyId], references: [id], onDelete: Restrict)
+  ansPlanNumber String
+  ansOperatorNumber String
+  monthlyRubricId String
+  monthlyRubric HrPayrollRubric @relation("SstMonthlyRubric", fields: [monthlyRubricId], references: [id], onDelete: Restrict)
+  extraordinaryRubricId String
+  extraordinaryRubric HrPayrollRubric @relation("SstExtraordinaryRubric", fields: [extraordinaryRubricId], references: [id], onDelete: Restrict)
+  monthlyEventId String?
+  monthlyEvent PayrollEvent? @relation("SstMonthlyEvent", fields: [monthlyEventId], references: [id], onDelete: Restrict)
+  extraordinaryEventId String?
+  extraordinaryEvent PayrollEvent? @relation("SstExtraordinaryEvent", fields: [extraordinaryEventId], references: [id], onDelete: Restrict)
+  contractReference String
+  snapshot Json
+  createdById String
+  createdAt DateTime @default(now())
+  beneficiaries SstBenefitBeneficiary[]
+  @@index([budgetUnitId, createdAt])
+}
+
+model SstBenefitBeneficiary {
+  id String @id @default(cuid())
+  planId String
+  plan SstHealthPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payrollBenefitId String
+  payrollBenefit PayrollBenefit @relation(fields: [payrollBenefitId], references: [id], onDelete: Restrict)
+  dependentId String?
+  dependent Dependent? @relation(fields: [dependentId], references: [id], onDelete: Restrict)
+  beneficiaryKey String // TITULAR or the canonical Dependent ID, enforced in SQL.
+  admissionDate DateTime @db.Date
+  startsAt DateTime @db.Date
+  endsAt DateTime @db.Date
+  cardNumber String
+  monthlyAmount Decimal @db.Decimal(18, 2)
+  contractReference String
+  snapshot Json
+  createdById String
+  createdAt DateTime @default(now())
+  entries SstBenefitEntry[]
+  @@unique([payrollBenefitId, beneficiaryKey, startsAt])
+  @@index([planId, startsAt, endsAt])
+}
+
+model SstBenefitEntry {
+  payrollOrigin SstBenefitPayrollOrigin?
+  cancellation SstBenefitCancellation? @relation("SstCancelledCharge")
+  compensation SstBenefitCancellation? @relation("SstCompensationEntry")
+  id String @id @default(cuid())
+  beneficiaryId String
+  beneficiary SstBenefitBeneficiary @relation(fields: [beneficiaryId], references: [id], onDelete: Restrict)
+  competence String // Same MM/YYYY convention as Payroll.competence.
+  kind String // MONTHLY, EXTRAORDINARY, REFUND; signed amount, refunds negative.
+  amount Decimal @db.Decimal(18, 2)
+  sourceReference String
+  reason String
+  refundOfId String?
+  refundOf SstBenefitEntry? @relation("SstBenefitRefund", fields: [refundOfId], references: [id], onDelete: Restrict)
+  refunds SstBenefitEntry[] @relation("SstBenefitRefund")
+  requestHash String
+  candidateSnapshot Json // Canonical rubric IDs/configuration and blockers at creation.
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([beneficiaryId, sourceReference])
+  @@index([competence, beneficiaryId])
+}
+
+model SstBenefitPayrollScope {
+  leaveEvidence SstLeavePayrollScopeEvidence[]
+  payrollId String @id
+  payroll Payroll @relation(fields: [payrollId], references: [id], onDelete: Restrict)
+  budgetUnitId String // Canonical FKs and verified entity mapping enforced in SQL.
+  governmentEntityId String
+  competence String
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([budgetUnitId, competence])
+}
+
+model SstBenefitPayrollMapping {
+  id String @id @default(cuid())
+  planId String
+  plan SstHealthPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  startsAt DateTime @db.Date
+  endsAt DateTime @db.Date
+  monthlyRubricId String
+  monthlyEventId String
+  extraordinaryRubricId String
+  extraordinaryEventId String
+  refundRubricId String?
+  refundEventId String?
+  contractReference String
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([planId, startsAt])
+}
+
+model SstBenefitPayrollOrigin {
+  id String @id @default(cuid())
+  entryId String @unique
+  entry SstBenefitEntry @relation(fields: [entryId], references: [id], onDelete: Restrict)
+  payrollItemId String @unique
+  payrollItem PayrollItem @relation(fields: [payrollItemId], references: [id], onDelete: Restrict)
+  functionalPeriodId String // FK to immutable HrEmployeeFunctionalPeriod, owned by RH history migration.
+  mappingId String?
+  rubricId String // Canonical FK enforced by additive SQL migration.
+  snapshot Json
+  createdById String
+  createdAt DateTime @default(now())
+}
+
+model SstBenefitCancellation {
+  id String @id @default(cuid())
+  entryId String @unique
+  entry SstBenefitEntry @relation("SstCancelledCharge", fields: [entryId], references: [id], onDelete: Restrict)
+  compensationEntryId String @unique
+  compensationEntry SstBenefitEntry @relation("SstCompensationEntry", fields: [compensationEntryId], references: [id], onDelete: Restrict)
+  reason String
+  createdById String
+  createdAt DateTime @default(now())
 }
 
 model PersonnelAct {
@@ -5885,6 +6427,7 @@ model PersonnelAct {
 }
 
 model HrPayrollRuleSet {
+  sstLeaveRuleVersions SstLeavePayrollRuleVersion[]
   id                      String                @id @default(cuid())
   configuracaoInstanciaId String
   configuracaoInstancia   ConfiguracaoInstancia @relation(fields: [configuracaoInstanciaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -5915,6 +6458,7 @@ model HrPayrollRuleSet {
 }
 
 model HrPayrollRule {
+  sstLeaveRuleVersions SstLeavePayrollRuleVersion[]
   id             String           @id @default(cuid())
   ruleSetId      String
   ruleSet        HrPayrollRuleSet @relation(fields: [ruleSetId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -5937,6 +6481,8 @@ model HrPayrollRule {
 }
 
 model HrPayrollRubric {
+  sstMonthlyPlans SstHealthPlan[] @relation("SstMonthlyRubric")
+  sstExtraordinaryPlans SstHealthPlan[] @relation("SstExtraordinaryRubric")
   id                  String           @id @default(cuid())
   ruleSetId           String
   ruleSet             HrPayrollRuleSet @relation(fields: [ruleSetId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -6438,6 +6984,7 @@ model MaterialCategory {
 }
 
 model Material {
+  sstEquipment SstEquipment[]
   id            String  @id @default(cuid())
   code          String  @unique
   name          String
@@ -6511,6 +7058,7 @@ model MaterialStock {
 }
 
 model MaterialMovement {
+  sstEquipmentItem SstEquipmentDeliveryItem?
   id               String            @id @default(cuid())
   type             String // Entrada, SaÃ­da, Ajuste
   operation        String            @default("REGULAR") // REGULAR, RETURN, REVERSAL
@@ -8234,6 +8782,7 @@ model MedicineDispensation {
 }
 
 model Vaccine {
+  sstVaccinations SstVaccination[]
   id            String  @id @default(cuid())
   name          String
   disease       String?
@@ -12625,6 +13174,11 @@ model ConfiguracaoPerfil {
 }
 
 model Usuario {
+  sstPreventionRecords SstPreventionRecord[] @relation("SstPreventionAuthor")
+  sstPreventionRevisions SstPreventionRevision[] @relation("SstPreventionRevisionAuthor")
+  sstCats SstCat[]
+  sstProfessionalRoles SstProfessionalRole[]
+  sstDisciplineGrants SstDisciplineGrant[]
   sstAccessGrants SstAccessGrant[]
   id          String  @id @default(cuid())
   nome        String
@@ -15044,4 +15598,65 @@ model TaxPrizeWinner {
 
   @@unique([executionId, position])
   @@unique([executionId, couponId])
+}
+
+model SstLeavePayrollScopeEvidence {
+  id String @id @default(cuid())
+  payrollId String
+  scope SstBenefitPayrollScope @relation(fields: [payrollId], references: [payrollId], onDelete: Restrict)
+  certificateId String
+  certificate SstMedicalCertificate @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  sourceReference String
+  createdById String
+  createdAt DateTime @default(now())
+}
+
+model SstLeavePayrollRuleVersion {
+  id String @id
+  ruleId String
+  rule HrPayrollRule @relation(fields: [ruleId], references: [id], onDelete: Restrict)
+  ruleSetId String
+  ruleSet HrPayrollRuleSet @relation(fields: [ruleSetId], references: [id], onDelete: Restrict)
+  fingerprint String
+  snapshot Json
+  createdById String
+  createdAt DateTime @default(now())
+  origins SstLeavePayrollOrigin[]
+  @@unique([ruleId, fingerprint])
+}
+
+model SstLeavePayrollOrigin {
+  id String @id @default(cuid())
+  sourceKey String @unique
+  kind String
+  certificateId String
+  certificate SstMedicalCertificate @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  assessmentId String?
+  assessment SstMedicalAssessment? @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  decisionRevisionId String? // FK to immutable SQL-owned SstCertificateDecisionRevision.
+  leaveId String
+  leave Leave @relation(fields: [leaveId], references: [id], onDelete: Restrict)
+  functionalPeriodId String // FK to immutable SQL-owned canonical RH history.
+  employeeId String
+  budgetUnitId String
+  governmentEntityId String
+  payrollId String
+  payroll Payroll @relation(fields: [payrollId], references: [id], onDelete: Restrict)
+  payrollItemId String @unique
+  payrollItem PayrollItem @relation(fields: [payrollItemId], references: [id], onDelete: Restrict)
+  competence String
+  ruleVersionId String
+  ruleVersion SstLeavePayrollRuleVersion @relation(fields: [ruleVersionId], references: [id], onDelete: Restrict)
+  rubricId String // Canonical FK enforced by additive SQL migration.
+  reversesId String? @unique
+  reverses SstLeavePayrollOrigin? @relation("SstLeavePayrollCompensation", fields: [reversesId], references: [id], onDelete: Restrict)
+  compensation SstLeavePayrollOrigin? @relation("SstLeavePayrollCompensation")
+  attestedMinutes Decimal @db.Decimal(24, 10)
+  coverage Unsupported("tsmultirange")
+  amountDecimal Decimal @db.Decimal(18, 2)
+  eventType String
+  snapshot Json
+  createdById String
+  createdAt DateTime @default(now())
+  @@index([employeeId, competence, kind], map: "sst_leave_origin_worker_competence")
 }

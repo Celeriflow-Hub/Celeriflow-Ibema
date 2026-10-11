@@ -9,7 +9,7 @@ export default async function SstQuestionnairesPage({ searchParams }: { searchPa
   const params = await searchParams;
   const units = await context.prisma.budgetUnit.findMany({ where: { ...sstUnitWhere(context), ...(isSystemAdministrator(context.user) ? {} : { sstAccessGrants: { some: { usuarioId: context.user.id, isActive: true, canReadClinical: true } } }) }, select: { id: true, name: true }, orderBy: [{ name: "asc" }, { id: "asc" }] });
   const unit = units.find((item) => item.id === params.budgetUnitId);
-  const where = { budgetUnitId: { in: params.budgetUnitId ? unit ? [unit.id] : [] : units.map((item) => item.id) }, ...(params.q?.trim() ? { title: { contains: params.q.trim().slice(0, 200), mode: "insensitive" as const } } : {}) };
+  const where = { discipline: "MEDICINE", budgetUnitId: { in: params.budgetUnitId ? unit ? [unit.id] : [] : units.map((item) => item.id) }, ...(params.q?.trim() ? { title: { contains: params.q.trim().slice(0, 200), mode: "insensitive" as const } } : {}) };
   const total = await context.prisma.sstQuestionnaireVersion.count({ where });
   const pageNumber = Number(params.page);
   const page = Math.min(Number.isFinite(pageNumber) ? Math.max(1, Math.trunc(pageNumber)) : 1, Math.max(1, Math.ceil(total / 20)));

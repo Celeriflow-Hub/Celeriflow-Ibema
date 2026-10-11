@@ -10,6 +10,7 @@ const raw = {
   budgetUnitId: "ug", personId: "candidate", programGroupId: "pg", examinerPersonId: "doctor", examinerCouncil: "CRM PR 123",
   kind: "ADMISSIONAL", result: "APTO", performedAt: "2026-10-01", validUntil: "2027-10-01", candidateReference: "Concurso 01/2026",
   submissionKey: "2d161f17-63ca-4d57-9c87-82c4f74e4d5a",
+  anamnesis: { questionnaireVersionId: "questionnaire", answers: { history: false } },
   exams: [{ name: "Exame clínico", kind: "CLINICO", source: "REALIZADO", performedAt: "2026-10-01", validUntil: "2027-10-01", result: "Avaliação clínica realizada", professionalPersonId: "doctor", professionalCouncil: "CRM PR 123" }],
 };
 const group = { code: "ADM", name: "Administrativo", departmentIds: [], roleIds: [], startsAt: "2026-01-01", endsAt: null };
@@ -54,6 +55,10 @@ function contextFixture(grant = { isActive: true, canReadClinical: true, canAsse
   const writes: Record<string, unknown>[] = [];
   const tx = {
     $executeRaw: async () => 1,
+    $queryRaw: async () => [],
+    sstProfessionalRole: { findMany: async () => [{ id: "role", budgetUnitId: "ug", personId: "doctor", discipline: "MEDICINE", council: "CRM PR 123", startsAt: new Date("2026-01-01"), endsAt: new Date("2027-12-31"), isActive: true }] },
+    sstQuestionnaireVersion: { findUnique: async () => ({ id: "questionnaire", budgetUnitId: "ug", discipline: "MEDICINE", title: "Anamnese", code: "MED", version: 1, questions: [{ key: "history", label: "Histórico", section: "Geral", kind: "BOOLEAN", required: true, choices: [] }] }) },
+    sstAnamnesis: { create: async () => ({ id: "anamnesis" }) },
     sstAso: {
       findUnique: async () => records[0] || null,
       create: async ({ data }: { data: Record<string, unknown> }) => {
@@ -67,7 +72,7 @@ function contextFixture(grant = { isActive: true, canReadClinical: true, canAsse
       findUnique: async ({ where }: { where: { id: string } }) => where.id === "doctor" ? { fullName: "Médico" } : { id: "candidate", fullName: "Candidato", cpf: "00000000000", employee: null },
       findMany: async () => [{ id: "doctor", fullName: "Médico" }],
     },
-    sstProgramExposureGroup: { findUnique: async () => ({ id: "pg", program, groupSnapshot: group, exams: [] }) },
+    sstProgramExposureGroup: { findUnique: async () => ({ id: "pg", program, groupSnapshot: group, exams: [], risks: [] }) },
     auditEvent: { create: async () => ({}) },
   };
   const context = { user: { ...user }, prisma: { sstAccessGrant: { findUnique: async () => grant }, $transaction: async (callback: (db: typeof tx) => Promise<unknown>) => callback(tx) } } as unknown as AppContext;

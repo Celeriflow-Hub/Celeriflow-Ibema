@@ -5,6 +5,7 @@ import { assertSstClinicalAccess } from "./access";
 import { questionnaireInput, questionnaireQuestions, anamnesisInput, validateQuestionnaireAnswers } from "./questionnaire-policy";
 import { asoSnapshot } from "./aso-policy";
 import { SstValidationError } from "./errors";
+import { assertDisciplineAccess } from "./clinical-access";
 
 function assertCreate(context: AppContext) {
   if (!canPerformModuleOperation(context.user, "SST", "create")) throw new AccessError("O perfil não permite incluir registros ocupacionais.", 403);
@@ -15,6 +16,7 @@ export async function registerQuestionnaireVersion(context: AppContext, raw: unk
   assertCreate(context);
   const input = questionnaireInput.parse(raw);
   await assertSstClinicalAccess(context, input.budgetUnitId, true);
+  if (input.discipline !== "MEDICINE") await assertDisciplineAccess(context, input.budgetUnitId, input.discipline, true);
   const requestHash = hash(input);
   return context.prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`SST_QUESTIONNAIRE_SUBMIT:${input.budgetUnitId}:${input.submissionKey}`}))`;
@@ -41,6 +43,7 @@ export async function registerAnamnesis(context: AppContext, raw: unknown) {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`SST_ANAMNESIS:${input.asoId}`}))`;
     const questionnaire = await tx.sstQuestionnaireVersion.findUnique({ where: { id: input.questionnaireVersionId } });
     if (!questionnaire || questionnaire.budgetUnitId !== scope.budgetUnitId) throw new SstValidationError("O questionário não pertence à UG do ASO.");
+    if (questionnaire.discipline && questionnaire.discipline !== "MEDICINE") throw new SstValidationError("Anamnese de ASO exige questionário de Medicina.");
     const questions = questionnaireQuestions.parse(questionnaire.questions);
     const answers = validateQuestionnaireAnswers(questions, input.answers);
     const requestHash = hash({ ...input, answers });

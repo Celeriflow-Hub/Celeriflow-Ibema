@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { sstCivilDate } from "./aso-policy";
 import { SstValidationError } from "./errors";
+import { disciplineInput } from "./clinical-policy";
 
 export const questionKinds = {
   TEXT: "Texto", NUMBER: "Número", BOOLEAN: "Sim/não", SINGLE_CHOICE: "Escolha única",
@@ -19,6 +20,7 @@ export const questionnaireQuestion = z.object({
 });
 export const questionnaireQuestions = z.array(questionnaireQuestion).min(1).max(100).refine((questions) => new Set(questions.map((question) => question.key)).size === questions.length, "As chaves das questões não podem se repetir.");
 export const questionnaireInput = z.object({
+  discipline: disciplineInput.default("MEDICINE"),
   budgetUnitId: z.string().min(1).max(100), code: z.string().trim().toUpperCase().min(1).max(40).regex(/^[A-Z0-9_.-]+$/),
   title: z.string().trim().min(2).max(200), questions: questionnaireQuestions, submissionKey: z.uuid(),
 });

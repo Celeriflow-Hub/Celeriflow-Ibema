@@ -10,7 +10,9 @@ O quadro de cobertura em `docs/CHECKLIST_POC_IBEMA_CODEX.md` registra 74 requisi
 
 **Conclusão:** já existe a fundação de navegação e autorização de SST e existem dados funcionais e serviços assistenciais reaproveitáveis. Não foi localizado um domínio ocupacional completo com ASO, GHE, LTCAT, PGR, PCMSO, CIPA e CAT nas buscas realizadas no schema e em `src`. Isso representa ausência de evidência de cobertura, e não homologação negativa de todas as funcionalidades do sistema.
 
-Esta matriz é uma síntese rastreável do checklist. O PDF permanece a referência para o texto integral. O cruzamento textual adicional com `ESPECIFICAÇÕES FUNCIONAIS DOS MÓDULOS EXECUTIVO.pdf` deverá ser registrado antes da homologação contratual; não é tratado aqui como conferência já realizada.
+Esta matriz é uma síntese rastreável do checklist. O PDF permanece a referência para o texto integral. O cruzamento com `ESPECIFICAÇÕES FUNCIONAIS DOS MÓDULOS EXECUTIVO.pdf` foi conferido em 10/10/2026: páginas PDF 56–62, itens 1.732–1.805, correspondem, na mesma ordem, aos 74 requisitos SST desta matriz (item n → 1.(731+n)). A equivalência textual não comprova implementação ou homologação.
+
+Referências correlatas conferidas: eSocial separado em páginas 62–63, itens 1.806–1.825; serviços SST do portal na página 103, itens 1.1309/1.1310 (CIPA), 1.1312 (PPP), 1.1313 (CAT), 1.1316 (planos) e 1.1318 (agenda). Esses itens correlatos não ampliam a contagem dos 74 requisitos SST.
 
 ## 2. Evidências e reaproveitamento
 

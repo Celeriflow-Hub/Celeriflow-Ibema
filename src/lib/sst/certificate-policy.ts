@@ -26,6 +26,7 @@ export const reasonInput = z.object({
   name: z.string().trim().min(2).max(160),
   dependentPolicy: z.enum(["DISABLED", "OPTIONAL", "REQUIRED"]),
   restrictedRoleIds: z.array(identifier).max(100).default([]),
+  restrictedRegimeIds: z.array(identifier).max(100).default([]),
   autoProtocol: z.boolean(), autoPresentedAt: z.boolean(), printReceipt: z.boolean(),
   suggestLeave: z.boolean(), createLeaveOnApproval: z.boolean(),
   leaveType: z.string().trim().min(2).max(100),

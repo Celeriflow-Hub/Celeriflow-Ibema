@@ -38,7 +38,7 @@ export async function createSstReason(form: FormData) {
   try {
     const context = await getTenantContextForModuleOperation("SST", "create");
     const id = await registerCertificateReason(context, {
-      ...Object.fromEntries(form), restrictedRoleIds: form.getAll("restrictedRoleIds").map(String),
+      ...Object.fromEntries(form), restrictedRoleIds: form.getAll("restrictedRoleIds").map(String), restrictedRegimeIds: form.getAll("restrictedRegimeIds").map(String),
       autoProtocol: form.get("autoProtocol") === "on", autoPresentedAt: form.get("autoPresentedAt") === "on",
       printReceipt: form.get("printReceipt") === "on", suggestLeave: form.get("suggestLeave") === "on",
       createLeaveOnApproval: form.get("createLeaveOnApproval") === "on",

@@ -4,7 +4,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 export function SstForm({ action, children, label = "Salvar", redirectBase, receipt = false }: {
-  action: (form: FormData) => Promise<{ error: string | null; id?: string; printReceipt?: boolean }>;
+  action: (form: FormData) => Promise<{ error: string | null; id?: string; printReceipt?: boolean; suggestLeave?: boolean }>;
   children: ReactNode; label?: string; redirectBase?: string; receipt?: boolean;
 }) {
   const router = useRouter();
@@ -27,7 +27,7 @@ export function SstForm({ action, children, label = "Salvar", redirectBase, rece
       const result = await action(data);
       if (result.error) { setError(result.error); return; }
       setSaved(true);
-      if (redirectBase && result.id) router.push(`${redirectBase}/${result.id}${receipt && result.printReceipt ? "/comprovante?print=1" : ""}`);
+      if (redirectBase && result.id) router.push(`${redirectBase}/${result.id}${receipt && result.suggestLeave ? `?confirmLeave=1${result.printReceipt ? "&receipt=1" : ""}` : receipt && result.printReceipt ? "/comprovante?print=1" : ""}`);
       router.refresh();
     } catch { setError("Não foi possível concluir a operação. Tente novamente."); }
     finally { setPending(false); }

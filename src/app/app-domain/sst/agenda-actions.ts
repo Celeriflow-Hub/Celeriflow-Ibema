@@ -43,7 +43,7 @@ export async function updateSstReason(form: FormData) {
   try {
     const context = await getTenantContextForModuleOperation("SST", "update");
     const id = await updateCertificateReason(context, z.string().min(1).parse(form.get("id")), {
-      ...Object.fromEntries(form), restrictedRoleIds: form.getAll("restrictedRoleIds").map(String),
+      ...Object.fromEntries(form), restrictedRoleIds: form.getAll("restrictedRoleIds").map(String), restrictedRegimeIds: form.getAll("restrictedRegimeIds").map(String),
       autoProtocol: form.get("autoProtocol") === "on", autoPresentedAt: form.get("autoPresentedAt") === "on",
       printReceipt: form.get("printReceipt") === "on", suggestLeave: form.get("suggestLeave") === "on", createLeaveOnApproval: form.get("createLeaveOnApproval") === "on",
     });

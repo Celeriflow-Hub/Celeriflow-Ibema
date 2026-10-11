@@ -23,15 +23,20 @@ export const asoExamInput = z.object({
   source: z.enum(["REALIZADO", "APRESENTADO"]), performedAt: sstCivilDate, validUntil: sstCivilDate,
   result: z.string().trim().min(2).max(10000), professionalPersonId: id,
   professionalCouncil: z.string().trim().min(2).max(100),
+  professionalDiscipline: z.enum(["MEDICINE", "NURSING", "PSYCHOLOGY", "SOCIAL_WORK"]).default("MEDICINE"),
   laboratoryCompanyId: z.string().max(100).default(""), reportNumber: z.string().trim().max(100).default(""),
 }).superRefine((exam, context) => {
   if (exam.validUntil < exam.performedAt) context.addIssue({ code: "custom", message: "A validade do exame não pode preceder sua realização." });
   if (exam.kind === "TOXICOLOGICO" && (!exam.laboratoryCompanyId || !exam.reportNumber)) context.addIssue({ code: "custom", message: "O toxicológico exige laboratório e número do laudo." });
+  if (exam.kind === "CLINICO" && exam.professionalDiscipline !== "MEDICINE") context.addIssue({ code: "custom", message: "Exame clínico de ASO exige Medicina." });
+  if (exam.professionalDiscipline === "SOCIAL_WORK" || (exam.kind === "TOXICOLOGICO" && exam.professionalDiscipline !== "MEDICINE")) context.addIssue({ code: "custom", message: "Atuação profissional incompatível com o tipo de exame ocupacional." });
 });
 export const asoInput = z.object({
   budgetUnitId: id, personId: id, programGroupId: id, examinerPersonId: id,
   examinerCouncil: z.string().trim().min(2).max(100),
   candidateReference: z.string().trim().max(200).default(""),
+  functionalPeriodId: z.string().max(100).default(""),
+  anamnesis: z.object({ questionnaireVersionId: id, answers: z.record(z.string(), z.unknown()) }),
   kind: z.enum(Object.keys(asoKinds) as [keyof typeof asoKinds, ...(keyof typeof asoKinds)[]]),
   result: z.enum(Object.keys(asoResults) as [keyof typeof asoResults, ...(keyof typeof asoResults)[]]),
   performedAt: sstCivilDate, validUntil: sstCivilDate,
@@ -83,6 +88,7 @@ export const asoSnapshot = z.object({
   role: z.string().nullable(), department: z.string().nullable(), unitName: z.string(),
   examinerName: z.string(), programCode: z.string(), programVersion: z.number(),
   group: asoGroupSnapshot, prescribedExams: z.array(z.object({ name: z.string(), occasion: z.string() })),
+  functional: z.object({ id: z.string(), governmentEntityId: z.string(), contractReference: z.string(), employmentRegimeId: z.string(), localId: z.string(), costCenterId: z.string(), startsAt: z.string(), endsAt: z.string() }).nullable().optional(),
 });
 export const asoExamSnapshot = z.object({ professionalName: z.string(), laboratoryName: z.string().nullable() });
 export function formatSstCivilDate(value: Date) {

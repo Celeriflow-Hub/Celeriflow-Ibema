@@ -38,9 +38,11 @@ test("SST module access alone cannot read diagnoses or assess and cross-UG acces
 test("assessment atomically claims state and cannot generate a second leave", async () => {
   let claims = 0; let leaves = 0; let assessments = 0;
   const tx = {
+    $executeRaw: async () => 1,
+    $queryRaw: async (sql: TemplateStringsArray) => String(sql).includes("SstCertificateFunctionalSource") ? [{ snapshot: { id: "period", employeeId: "employee", budgetUnitId: "ug", governmentEntityId: "entity", employmentRegimeId: "regime", roleId: "historical-role", departmentId: "historical-department", localId: "local", costCenterId: "center", startsAt: "2026-01-01T00:00:00Z", endsAt: "2027-01-01T00:00:00Z" } }] : [],
     sstMedicalCertificate: {
       updateMany: async () => ({ count: claims++ === 0 ? 1 : 0 }),
-      findUniqueOrThrow: async () => ({ id: "certificate", employeeId: "employee", startsAt: new Date("2026-10-01"), endsAt: new Date("2026-10-02"), protocolNumber: "SST-1", reason: { createLeaveOnApproval: true, leaveType: "Licença médica" } }),
+      findUniqueOrThrow: async () => ({ id: "certificate", employeeId: "employee", budgetUnitId: "ug", startsAt: new Date("2026-10-01"), endsAt: new Date("2026-10-02"), protocolNumber: "SST-1", reason: { createLeaveOnApproval: true, leaveType: "Licença médica" } }),
       update: async () => ({}),
     },
     person: { findUnique: async () => ({ id: "doctor" }) },
@@ -65,6 +67,7 @@ test("retry of certificate submission reuses the original protocol without dupli
   const input = { budgetUnitId: "ug", employeeId: "employee", reasonId: "reason", issuerPersonId: "doctor", issuerCouncil: "CRM PR 123", startsAt: new Date("2026-10-01T08:00Z"), endsAt: new Date("2026-10-01T12:00Z"), submissionKey: "2d161f17-63ca-4d57-9c87-82c4f74e4d5a" };
   let creates = 0;
   const tx = {
+    $executeRaw: async () => 1,
     budgetUnit: { findUnique: async () => ({ id: "ug", secretariatId: "s" }) },
     employee: { findUnique: async () => ({ id: "employee", secretariatId: "s", isActive: true, roleId: null }) },
     sstCertificateReason: { findUnique: async () => ({ id: "reason", budgetUnitId: "ug", isActive: true, autoProtocol: true, autoPresentedAt: true, dependentPolicy: "DISABLED", restrictedRoleIds: [], printReceipt: false, suggestLeave: false }) },

@@ -8,6 +8,7 @@ const navigation: ModuleNavGroup[] = [
   { title: "Atendimento ocupacional", items: [{ title: "Juntas médicas", href: "/sst/juntas", icon: "users" }, { title: "Agenda", href: "/sst/agenda", icon: "calendar" }, { title: "Exames e ASO", href: "/sst/aso", icon: "fileHeart" }] },
   { title: "Gestão", items: [{ title: "Jornada planejada", href: "/sst/jornadas", icon: "clock3" }, { title: "Relatórios", href: "/sst/relatorios", icon: "barChart3" }] },
   { title: "Formulários clínicos", items: [{ title: "Questionários de anamnese", href: "/sst/questionarios", icon: "fileText" }] },
+  { title: "Prontuários e profissionais", items: [{ title: "Profissionais", href: "/sst/profissionais", icon: "users" }, { title: "Prontuários por atuação", href: "/sst/prontuarios", icon: "fileHeart" }, { title: "Vacinação ocupacional", href: "/sst/vacinacao", icon: "fileHeart" }] },
   { title: "Exposição ocupacional", items: [{ title: "GHE", href: "/sst/ghe", icon: "hardHat" }, { title: "Programas e laudos", href: "/sst/programas", icon: "fileText" }] },
 ];
 

@@ -5,6 +5,7 @@ import { writeAuditEvent, auditEventTypes } from "@/lib/platform/audit-evidence"
 import { assertSstClinicalAccess } from "./access";
 import { asoInput, asoGroupSnapshot, assertAsoProgram } from "./aso-policy";
 import { SstValidationError } from "./errors";
+import { prepareAsoFlow } from "./aso-flow-registration";
 
 export async function registerAso(context: AppContext, raw: unknown) {
   if (!canPerformModuleOperation(context.user, "SST", "create")) throw new AccessError("O perfil não permite incluir ASO.", 403);
@@ -29,7 +30,9 @@ export async function registerAso(context: AppContext, raw: unknown) {
     if (!unit || !person || !examiner || !group) throw new SstValidationError("Confira a pessoa, o médico, a UG e a versão PCMSO selecionados.");
     const groupSnapshot = asoGroupSnapshot.parse(group.groupSnapshot);
     const prescribedExams = z.array(z.object({ name: z.string(), occasion: z.string() })).parse(group.exams);
-    assertAsoProgram(input, group.program, groupSnapshot, prescribedExams, person.employee, unit.secretariatId);
+    const flow = await prepareAsoFlow(tx, input, person.employee?.id);
+    // Historical contract is authoritative; never infer an entity from a shared secretariat.
+    assertAsoProgram(input, group.program, groupSnapshot, prescribedExams, flow.functional ? { isActive: true, secretariatId: unit.secretariatId, departmentId: flow.functional.departmentId, roleId: flow.functional.roleId } : null, unit.secretariatId);
     const professionals = await tx.person.findMany({ where: { id: { in: [...new Set(input.exams.map((exam) => exam.professionalPersonId))] } }, select: { id: true, fullName: true } });
     const labIds = [...new Set(input.exams.map((exam) => exam.laboratoryCompanyId).filter(Boolean))];
     const labs = labIds.length ? await tx.company.findMany({ where: { id: { in: labIds } }, select: { id: true, corporateName: true } }) : [];
@@ -41,16 +44,25 @@ export async function registerAso(context: AppContext, raw: unknown) {
       kind: input.kind, result: input.result, performedAt: input.performedAt, validUntil: input.validUntil,
       recommendations: input.recommendations, expectedExamCount: input.exams.length, submissionKey: input.submissionKey, requestHash, createdById: context.user.id,
       snapshot: {
-        personName: person.fullName, cpf: person.cpf, registration: person.employee?.registration || null,
-        role: person.employee?.role?.name || null, department: person.employee?.department?.name || null,
+        personName: person.fullName, cpf: person.cpf, registration: flow.functional ? z.object({ registration: z.string() }).parse(flow.functional.snapshot).registration : null,
+        role: flow.functional ? z.object({ role: z.string() }).parse(flow.functional.snapshot).role : null,
+        department: flow.functional ? z.object({ department: z.string() }).parse(flow.functional.snapshot).department : null,
         unitName: unit.name, examinerName: examiner.fullName, programCode: group.program.code,
         programVersion: group.program.version, group: groupSnapshot, prescribedExams,
+        risks: group.risks, functional: flow.functional ? JSON.parse(JSON.stringify(flow.functional)) : null,
+        professionalRoles: flow.professionalRoles, qualificationSource: "ADMINISTRATIVE_REGISTRY",
       },
-      exams: { create: input.exams.map((exam) => ({
+      exams: { create: input.exams.map(({ professionalDiscipline, ...exam }) => ({
         ...exam, laboratoryCompanyId: exam.laboratoryCompanyId || null, reportNumber: exam.reportNumber || null,
-        snapshot: { professionalName: professionals.find((person) => person.id === exam.professionalPersonId)!.fullName, laboratoryName: labs.find((lab) => lab.id === exam.laboratoryCompanyId)?.corporateName || null },
+        snapshot: { professionalDiscipline, professionalName: professionals.find((person) => person.id === exam.professionalPersonId)!.fullName, laboratoryName: labs.find((lab) => lab.id === exam.laboratoryCompanyId)?.corporateName || null },
       })) },
     } });
+    const anamnesis = await tx.sstAnamnesis.create({ data: {
+      asoId: record.id, questionnaireVersionId: flow.questionnaire.id, revision: 1, answers: flow.answers,
+      snapshot: { title: flow.questionnaire.title, code: flow.questionnaire.code, version: flow.questionnaire.version, questions: flow.questions, personName: person.fullName, examinerName: examiner.fullName, examinerCouncil: input.examinerCouncil, recordedByName: context.user.name, phase: "PRE_EMISSION" },
+      revisionReason: "Anamnese registrada na transação de emissão", submissionKey: input.submissionKey, requestHash, createdById: context.user.id,
+    } });
+    await tx.$executeRaw`INSERT INTO "SstAsoFlowSource" ("asoId","anamnesisId","physicianRoleId","functionalPeriodId") VALUES (${record.id},${anamnesis.id},${flow.physicianRoleId},${flow.functional?.id || null})`;
     await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "SST_ASO", targetId: record.id });
     return record.id;
   });

@@ -10,7 +10,7 @@ export function PayrollSimulationCard({ payrollId, status }: { payrollId: string
   const [isProcessing, setIsProcessing] = useState(false);
 
   const handleProcess = async () => {
-    if (confirm("Deseja simular/processar esta folha? Os cálculos serão gerados com base no salário e benefícios atuais dos servidores. Itens gerados anteriormente para esta competência serão sobrescritos.")) {
+    if (confirm("Integrar os lançamentos contratuais de planos de saúde desta competência? A operação valida histórico funcional, rubricas e eventos canônicos e preserva os itens existentes.")) {
       setIsProcessing(true);
       const result = await processPayroll(payrollId);
       setIsProcessing(false);
@@ -26,10 +26,10 @@ export function PayrollSimulationCard({ payrollId, status }: { payrollId: string
       <CardHeader className="border-b bg-blue-50/50 pb-2">
         <CardTitle className="text-blue-800 flex items-center">
           <Calculator className="w-5 h-5 mr-2" />
-          Simulação e Processamento
+          Integração de origens contratuais
         </CardTitle>
         <CardDescription>
-          Calcule automaticamente os vencimentos e descontos para todos os servidores ativos com base nas regras cadastradas (Salário Base e Benefícios).
+          Poste mensalidades, despesas e devoluções de planos com configuração de produção aprovada. Os valores vêm do ledger contratual; salário e outros benefícios exigem suas próprias origens canônicas.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center justify-center space-y-3 pt-3">
@@ -37,7 +37,7 @@ export function PayrollSimulationCard({ payrollId, status }: { payrollId: string
           <div className="flex flex-col items-center justify-center p-4 text-emerald-700 bg-emerald-50 rounded-lg w-full">
             <CheckCircle2 className="h-8 w-8 mb-2" />
             <p className="font-semibold">Folha já processada e consolidada.</p>
-            <p className="text-sm">Para recalcular, reabra a folha mudando seu status.</p>
+            <p className="text-sm">Correções de origens financeiras exigem lançamentos compensatórios em competência aberta.</p>
           </div>
         ) : (
           <Button 
@@ -46,7 +46,7 @@ export function PayrollSimulationCard({ payrollId, status }: { payrollId: string
             onClick={handleProcess}
             disabled={isProcessing}
           >
-            {isProcessing ? "Processando Cálculos..." : "Gerar Simulação de Folha"}
+            {isProcessing ? "Integrando origens..." : "Postar origens de planos"}
           </Button>
         )}
       </CardContent>

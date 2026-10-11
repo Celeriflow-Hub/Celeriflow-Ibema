@@ -6,6 +6,8 @@ import { parsePayrollMovementImport } from "../src/lib/rh/movement-import";
 import { calculateDailyBenefit, hrBenefitRuleSchema } from "../src/lib/rh/benefit-calculation";
 import { selectRemunerationAverage } from "../src/lib/rh/remuneration-average";
 import { calculateConsignmentMargin } from "../src/lib/rh/consignment-margin";
+import { dependentEligibilityPolicySchema, evaluateDependentEligibility } from "../src/lib/rh/dependent-eligibility";
+import { validateTimeBankBalances } from "../src/lib/rh/time-bank";
 
 test("fórmula Decimal preserva precisão, precedência e rejeita execução/ciclos", () => {
   const resolve = (name: string) => { if (name === "SALARIO_BASE") return new Prisma.Decimal("1000.01"); throw new Error("Base ausente"); };
@@ -76,4 +78,25 @@ test("margem consignável agrega vínculos e valida rubricas sem duplicar o limi
   assert.throws(() => calculateConsignmentMargin(rows, { ...policy, remunerationRubricCodes: ["AUSENTE"] }, "30"), /não encontrada/);
   assert.throws(() => calculateConsignmentMargin(rows, { ...policy, remunerationRubricCodes: ["PREVIDENCIA"], compulsoryDeductionRubricCodes: [] }, "30"), /incompatível/);
   assert.throws(() => calculateConsignmentMargin(rows, policy, "101"), /percentual/);
+});
+
+test("dependentes respeitam idade civil e validade documental no fim da competência", () => {
+  const policy = dependentEligibilityPolicySchema.parse({ relationships: [{ relationship: "Filho", maxAgeYears: 14 }], requiredDocumentTypes: ["ESCOLA"], acceptedDocumentStatuses: ["Válido"], allowDocumentsWithoutExpiry: false, legalReference: "Política sintética" });
+  const candidate = { id: "dependent", personId: "child", relationship: "Filho", person: { id: "child", birthDate: new Date("2012-06-01"), status: "Ativo" } };
+  const document = { id: "school", personId: "child", documentType: "ESCOLA", status: "Válido", validUntil: new Date("2027-05-31T23:59:59.999Z") };
+  assert.equal(evaluateDependentEligibility(candidate, [document], policy, payrollPeriod("05/2027")).eligible, true);
+  const june = evaluateDependentEligibility(candidate, [document], policy, payrollPeriod("06/2027"));
+  assert.equal(june.eligible, false);
+  assert.equal(june.age, 15);
+  assert.equal(june.reasons.length, 2);
+  assert.equal(evaluateDependentEligibility(candidate, [{ ...document, status: "Pendente" }], policy, payrollPeriod("05/2027")).eligible, false);
+  assert.equal(evaluateDependentEligibility(candidate, [{ ...document, validUntil: null }], policy, payrollPeriod("05/2027")).eligible, false);
+});
+
+test("banco de horas preserva precisão e não financia débito com crédito futuro", () => {
+  const credit = { date: new Date("2026-10-01"), quantity: "2.0001" };
+  const debit = { date: new Date("2026-10-02"), quantity: "-1.0001" };
+  assert.equal(validateTimeBankBalances([debit, credit], "10").toString(), "1");
+  assert.throws(() => validateTimeBankBalances([{ ...debit, date: new Date("2026-09-30") }, credit], "10"), /créditos futuros/);
+  assert.throws(() => validateTimeBankBalances([credit], "1"), /limite da política/);
 });

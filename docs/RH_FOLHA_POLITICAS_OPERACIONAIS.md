@@ -158,3 +158,79 @@ npx tsx scripts/deploy-hr-migrations.ts --consignments --apply
 ```
 
 Esse comando aplica apenas a migration de consignações; requer a foundation e a migration temporal previamente implantadas.
+
+## Dependentes, elegibilidade e salário-família
+
+Em `/rh/dependentes`, selecione a pessoa física central. CPF/nascimento/nome não são escritos como fonte independente no RH. As flags indicam candidatura, não direito confirmado. Documentos pertencem à pessoa central; o GED/cadastro existente mantém tipo, status e validade.
+
+Regra `DEPENDENTES_IRRF` (categoria CALCULO), JSON:
+
+```json
+{
+  "relationships": [{"relationship":"Filho(a)","maxAgeYears":21}],
+  "requiredDocumentTypes": ["COMPROVANTE_DEPENDENCIA"],
+  "acceptedDocumentStatuses": ["Válido"],
+  "allowDocumentsWithoutExpiry": false,
+  "legalReference": "Norma aplicável ao público e à competência"
+}
+```
+
+Parentesco/tipo/status são códigos exatos, não inferidos do nome. `maxAgeYears:null` remove o limite etário apenas para o parentesco explicitamente configurado. A idade é apurada no fim da competência; documentos precisam continuar válidos até esse instante. Quaisquer dispensas documentais devem ser explícitas na política. Exceções por deficiência/estudo/situações judiciais que exijam outros critérios ainda requerem políticas próprias.
+
+Regra `SALARIO_FAMILIA` (categoria CALCULO), JSON:
+
+```json
+{
+  "origin": "SALARIO_FAMILIA",
+  "rubricCode": "SAL_FAMILIA",
+  "incomeLimit": "VALOR_DECIMAL_OFICIAL",
+  "quota": "VALOR_DECIMAL_OFICIAL",
+  "proration": "POR_DIAS",
+  "allocationBasis": "DIAS",
+  "eligibility": {
+    "relationships": [{"relationship":"Filho(a)","maxAgeYears":14}],
+    "requiredDocumentTypes": ["COMPROVANTE_ESCOLAR"],
+    "acceptedDocumentStatuses": ["Válido"],
+    "allowDocumentsWithoutExpiry": false,
+    "legalReference": "Norma aplicável"
+  }
+}
+```
+
+Substitua os placeholders por números decimais com ponto. Rubrica MANUAL/PROVENTO, sem incidências. Renda bruta e dependentes são agregados entre todos os contratos da PF. A quota total não se multiplica pelo número de vínculos. `INTEGRAL` ou `POR_DIAS` define proporcionalidade (mesmos dias de referência do motor mensal); `DIAS` ou `REMUNERACAO` define pesos do rateio entre contratos. Origem manual concorrente é bloqueada, não somada novamente.
+
+Memória: renda/limite, candidaturas, idades, documentos, motivos de inelegibilidade, quota/fator e rateio em cada demonstrativo. Fechamento reavalia a elegibilidade preservada e exige novo cálculo se documentos/candidaturas mudaram. Conjuntos legados sem `DEPENDENTES_IRRF` continuam usando as flags anteriores; essa ausência não equivale à homologação das deduções.
+
+## Alteração coletiva de contratos
+
+Em `/rh/operacoes`, aba contratos, informe lote, seleção, vigência, fundamento e os campos a alterar. Exemplo:
+
+```json
+{"workLocation":"Unidade de destino","costCenterId":"ID_CENTRO","salaryLevel":"NIVEL-A","monthlyHours":180}
+```
+
+Campos aceitos: `regimeId`, `roleId`, `departmentId`, `costCenterId`, `workLocation`, `salaryLevel`, `salary` (string decimal), `monthlyHours` (inteiro), `endsAt` (AAAA-MM-DD; string vazia para remoção). `departmentId`, `costCenterId` e `salaryLevel` podem receber `null` para limpeza. Campo omitido é preservado. Identidade, matrícula e admissão não fazem parte deste lote.
+
+PREVIA mostra antes/depois sem gravação; APLICAR exige o hash correspondente. Usa a mesma validação temporal/referencial de alteração individual. Falha em um vínculo reverte todos. `CONTRATO_LIMITE_DIAS_<codigoDoRegime>` aceita inteiro positivo e bloqueia duração acima do limite, inclusive em alteração coletiva.
+
+## Banco de horas reconhecido no ponto
+
+Regra JSON (categoria CALCULO):
+
+```json
+{
+  "origin":"BANCO_HORAS_PONTO",
+  "maxBalanceHours":"40",
+  "maxCreditPerDayHours":"4",
+  "maxDebitPerDayHours":"8",
+  "allowedStatuses":["Presente"],
+  "forbidPaidOvertimeForCredit":true,
+  "legalReference":"Acordo/política aprovada"
+}
+```
+
+No ponto, informe banco reconhecido positivo (crédito) ou negativo (compensação), com até quatro casas. O serviço não infere reconhecimento dos horários. Em Operações > Direitos, escolha contrato de alocação, regra e competência para gerar o ledger. Limites diários consideram todas as origens do dia, não apenas cada linha. Saldo é validado cronologicamente, incluindo efeitos em débitos já registrados: crédito futuro não cobre déficit anterior.
+
+Origem única do ponto impede duplicação/alocação em outro vínculo. Replay preserva a entrada; falha reverte lote e auditoria. Ponto integrado não aceita edição/exclusão pelas actions RH. Produção exige conjunto oficial aprovado. Saldo e extrato são separados por escopo; entradas legadas sem escopo precisam de saneamento explícito. O titular consulta `/portal-servidor/banco-horas`.
+
+Expiração, transferência entre vínculos, compensação/estorno de entrada integrada e conversão em pagamento continuam pendentes. Não usar o extrato como prova de pagamento.

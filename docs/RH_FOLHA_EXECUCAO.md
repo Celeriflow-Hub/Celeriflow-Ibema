@@ -36,6 +36,9 @@ Os arquivos do domínio SST recebidos permanecem preservados. O processamento de
 - Cenários persistidos de simulação dos oito tipos especiais mediante política de rubricas e parâmetros com fonte explícita. Sem fechamento oficial, tributos automáticos, consumo de direitos ou alteração do vínculo.
 - Margem consignável por PF, agregada entre vínculos, com base/descontos/rubricas definidos explicitamente e percentual na política de cálculo; excesso bloqueia a execução antes de persistir. Memória imutável por demonstrativo, conferência em tela/PDF e consulta autenticada em `/portal-servidor/margem`.
 - `/rh/consignacoes`: contratos imutáveis vinculados ao credor central, cronograma de parcelas iguais, reserva de margem por competência, lançamento único e cancelamento compensatório de parcelas não lançadas. `/portal-servidor/consignacoes`: consulta do próprio titular, a partir de referências liberadas.
+- Dependentes vinculados a `Person`, com nome/CPF/nascimento projetados do Cadastro Único, flags de candidatura e proteção contra duplicidade/troca de titular. Elegibilidade de IRRF e salário-família por parentesco/idade/documentos vigentes; quotas e renda agregadas por PF, rateio entre vínculos e memória em tela/PDF. Fechamento rejeita elegibilidade alterada após o cálculo.
+- Alteração coletiva de cargo/regime/lotação/centro/nível/salário/jornada/término com prévia, hash, revisão temporal e rollback integral. Matrícula/identidade/admissão não são modificadas por esse lote.
+- Banco de horas reconhecido no ponto: créditos/débitos Decimal por origem, limites de saldo e somatórios diários, rejeição de déficit anterior financiado por crédito futuro, política de coexistência com horas extras pagas e preservação da origem integrada. Extrato próprio por escopo em `/portal-servidor/banco-horas`.
 
 Formatos de configuração e limites: `docs/RH_FOLHA_POLITICAS_OPERACIONAIS.md`.
 
@@ -45,7 +48,7 @@ O conjunto deve estar ativo e cobrir toda a competência e escopo escolhido. `HA
 
 Variáveis de expressão: `SALARIO_BASE`, `DIAS`, `JORNADA` e códigos de outras rubricas. `DIAS=30` para mês integral; períodos parciais usam dias civis limitados a 30. A regra de proporcionalidade municipal precisa ser conferida antes do uso oficial. Bases de previdência vêm das incidências RGPS/RPPS/COMPLEMENTAR.
 
-`IRRF_FAIXAS`: regra JSON com lista de `{ lowerLimit: string, upperLimit: string | null, employeeRate: string }`. O cálculo agrega os vínculos da mesma PF e deduz contribuição previdenciária e dependentes marcados para IRRF, usando `IRRF_DEDUCAO_DEPENDENTE`. Quando `IRRF_DEDUCAO_SIMPLIFICADA` está configurada, escolhe a maior dedução por PF, uma única vez. Seleção incompleta dos vínculos é rejeitada. **Elegibilidade documental/etária dos dependentes, pensão, exterior, pagamentos fora da competência e bases de folhas especiais ainda precisam ser completadas.** Esta tabela não equivale à homologação de todas as situações de IRRF.
+`IRRF_FAIXAS`: regra JSON com lista de `{ lowerLimit: string, upperLimit: string | null, employeeRate: string }`. O cálculo agrega os vínculos da mesma PF e deduz contribuição previdenciária e dependentes marcados para IRRF, usando `IRRF_DEDUCAO_DEPENDENTE`. Quando `DEPENDENTES_IRRF` está configurada, aplica elegibilidade por idade/parentesco/documentos e preserva memória; conjuntos legados sem essa regra continuam com a contagem por flag. Quando `IRRF_DEDUCAO_SIMPLIFICADA` está configurada, escolhe a maior dedução por PF, uma única vez. Seleção incompleta dos vínculos é rejeitada. **Exceções de elegibilidade, pensão, exterior, pagamentos fora da competência e bases de folhas especiais ainda precisam ser completadas.** Esta tabela não equivale à homologação de todas as situações de IRRF.
 
 `FGTS_ALIQUOTA`: percentual configurável, aplicado quando há base FGTS. O valor é informativo e integra encargos da entidade, sem reduzir o líquido do servidor.
 
@@ -68,10 +71,10 @@ O plano usa **F0–F9**, totalizando dez fases. Esta execução ainda está em a
 | Fase | Estado deste incremento | Próximos desenvolvimentos internos |
 |---|---|---|
 | F0 Fundação | Parcial | Temporalidade mensal entregue; completar rateios intramês, transições de regime e consolidação dos demais consumidores. |
-| F1 Cadastro | Parcial | Cargos/vagas/níveis, multivínculo temporal completo, campos configuráveis, cessões/estágio, pasta funcional e consultas integrais. |
+| F1 Cadastro | Parcial | Dependentes canônicos e alterações coletivas disponíveis; completar cargos/vagas/níveis, multivínculo temporal completo, campos configuráveis, cessões/estágio, pasta funcional e consultas integrais. |
 | F2 Motor | Parcial | IRRF completo, múltiplos esquemas/competências, regras de arredondamento, alocação temporal e conferência completa. |
-| F3 Movimentos/benefícios | Parcial | Completar múltiplas linhas/calendários de VT, família/documentos, pensões, submargens por produto, renegociação/compensações de consignação e reflexos das demais origens. Importação, VT/VA, margem agregada e contratos/parcelas/reservas simples disponíveis. |
-| F4 Direitos/frequência | Parcial | Médias, horas extras reconhecidas e cancelamento compensatório entregues; completar perdas/prorrogações/férias especiais, gozo de múltiplos aquisitivos, licença prêmio/ATS/averbação e banco de horas completo. |
+| F3 Movimentos/benefícios | Parcial | Completar múltiplas linhas/calendários de VT, exceções/faixas/elegibilidade especiais de família, pensões, submargens por produto, renegociação/compensações de consignação e reflexos das demais origens. Importação, VT/VA, salário-família parametrizado, margem agregada e contratos/parcelas/reservas simples disponíveis. |
+| F4 Direitos/frequência | Parcial | Médias, horas extras, banco de horas reconhecido/extrato e cancelamento compensatório entregues; completar perdas/prorrogações/férias especiais, gozo de múltiplos aquisitivos, licença prêmio/ATS/averbação, expiração e conversão financeira do banco. |
 | F5 Folhas especiais | Parcial | Mensal oficial e cenários isolados dos oito tipos especiais disponíveis. Fluxos oficiais de rescisão/RRA/13º/férias, tributação, direitos e reintegração continuam pendentes. Reajuste contratual coletivo disponível. |
 | F6 Contabilidade | Parcial | Solicitações de despesa integradas ao Financeiro com retomada; completar empenho, provisões, retenções/repasses, baixa, pagamentos, diárias e produtividade. |
 | F7 Portal | Parcial | PDF próprio, publicação futura, solicitações, campanhas/deferimento, margem histórica e consulta de cronogramas consignados disponíveis; faltam renda anual fiscal, solicitação de crédito pelo titular e demais jornadas. |
@@ -133,6 +136,14 @@ Seed preparado: `npx tsx scripts/seed-hr-engine-demo.ts` / `--apply`. Cria somen
 - Cálculo e fechamento verificam parcelas reservadas pendentes de lançamento. Parcela lançada não aceita cancelamento automático; exige conciliação/compensação própria, ainda pendente. Cancelar parcela não lançada cria entrada negativa e preserva a reserva original.
 - Testes PostgreSQL aprovados para reserva/replay/excesso sem gravação parcial, lançamento/replay, cancelamento, cronograma pendente, recência da referência, margem gerenciada e triggers imutáveis. TypeScript e ESLint aprovados; build atualizado ainda em validação.
 - Migration aplicada pelo deploy dirigido e reconferida com `APPLIED_CHECKSUM_VERIFIED`, sem dependências de runtime ausentes. `git diff --check` aprovado. O build foi interrompido e retomado em segundo plano; sua aprovação ainda depende do resultado final. A nova tentativa de navegador retornou `[browser.disconnected]`.
+- O build retomado concluiu com sucesso, incluindo as rotas RH/Portal de contratos e cronogramas consignados.
+
+### Continuidade — dependentes, alterações coletivas e banco de horas
+
+- Testes RH ampliados para vínculo central/projeções/duplicidade, idade civil/validade documental, quota única entre contratos, cessação futura, histórico preservado e fechamento bloqueado após alteração de elegibilidade.
+- Testes de alteração coletiva verificam hash invalidado por revisão concorrente, aplicação/replay e rollback do lote diante de limite de prazo em outro contrato.
+- Banco de horas exercita quatro casas decimais, replay entre operadores, alocação única, déficit sem gravação parcial e limites diários agregados. O extrato do Portal não mistura demonstração/homologação/produção, nem presume escopo de entradas legadas.
+- Dez testes RH passaram antes do último ajuste de somatório diário; checagens atualizadas e build integrado em andamento. As dez fases permanecem parciais conforme a tabela, com pendências internas explícitas.
 
 ## Cemitérios
 

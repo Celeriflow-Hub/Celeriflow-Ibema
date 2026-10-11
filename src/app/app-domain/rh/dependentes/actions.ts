@@ -2,6 +2,7 @@
 
 import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
+import { saveCanonicalDependent } from "@/lib/rh/dependent-service";
 
 async function getTenantPrisma(operation: "create" | "update" | "delete") {
   return (await getTenantContextForModuleOperation("RH", operation)).prisma;
@@ -9,42 +10,15 @@ async function getTenantPrisma(operation: "create" | "update" | "delete") {
 
 export async function saveDependente(formData: FormData) {
   const id = formData.get("id") as string | null;
-  const prisma = await getTenantPrisma(id ? "update" : "create");
+  const context = await getTenantContextForModuleOperation("RH", id ? "update" : "create");
   try {
-    const employeeId = formData.get("employeeId") as string;
-    const name = formData.get("name") as string;
-    const cpf = formData.get("cpf") as string;
-    const birthDate = formData.get("birthDate") as string;
-    const relationship = formData.get("relationship") as string;
-
-    if (!employeeId || !name || !birthDate || !relationship) {
-      return { success: false, error: "Servidor, Nome, Data de Nascimento e Parentesco são obrigatórios." };
-    }
-
-    const data = {
-      employeeId,
-      name,
-      cpf: cpf || null,
-      birthDate: new Date(birthDate),
-      relationship,
-    };
-
-    if (id) {
-      await prisma.dependent.update({
-        where: { id },
-        data,
-      });
-    } else {
-      await prisma.dependent.create({
-        data,
-      });
-    }
+    await saveCanonicalDependent(context.prisma, context.user.id, { id: id || undefined, employeeId: String(formData.get("employeeId") || ""), personId: String(formData.get("personId") || ""), relationship: String(formData.get("relationship") || ""), irrfDependent: formData.get("irrfDependent") === "on", familyWage: formData.get("familyWage") === "on" });
 
     revalidatePath("/rh/dependentes");
     return { success: true };
   } catch (error) {
     console.error("Erro ao salvar dependente:", error);
-    return { success: false, error: "Falha ao salvar o dependente." };
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao salvar o dependente." };
   }
 }
 

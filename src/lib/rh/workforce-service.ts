@@ -5,6 +5,7 @@ import { allocatePayrollAmount, calculateContractRubrics, calculateContribution,
 import { resolveContractRevision } from "./contract-timeline";
 import { calculateConsignmentMargin } from "./consignment-margin";
 import { assertConsignmentSchedulePosted } from "./consignment-service";
+import { assessPayrollDependents, dependentAssessmentSchema, familyWagePolicySchema, familyWageSnapshotSchema } from "./dependent-eligibility";
 
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
@@ -59,8 +60,9 @@ async function saveEmploymentContractInTransaction(tx: Tx, actorId: string, inpu
     if (input.costCenterId) await tx.costCenter.findUniqueOrThrow({ where: { id: input.costCenterId } });
     const termRule = await tx.hrPayrollRule.findFirst({ where: { ruleSetId: regime.ruleSetId, code: `CONTRATO_LIMITE_DIAS_${regime.code}`, isActive: true } });
     if (termRule) {
+      const limit = z.coerce.number().int().min(1).max(36500).parse(termRule.value);
       const days = input.endsAt ? Math.round((input.endsAt.getTime() - input.admittedAt.getTime()) / 86400000) + 1 : Infinity;
-      if (days > Number(termRule.value)) throw new Error("Prazo do contrato excede o limite do regime.");
+      if (days > limit) throw new Error("Prazo do contrato excede o limite do regime.");
     }
     const previous = input.id ? await tx.hrEmploymentContract.findUniqueOrThrow({ where: { id: input.id } }) : null;
     if (previous && (previous.employeeId !== input.employeeId || previous.version !== input.version)) throw new Error("Contrato alterado por outro operador ou titular incompatível. Recarregue a ficha.");
@@ -114,6 +116,39 @@ export async function adjustContractSalaries(db: PrismaClient, actorId: string, 
       await saveEmploymentContractInTransaction(tx, actorId, hrContractInputSchema.parse({ id: contract.id, version: contract.version, employeeId: contract.employeeId, registration: contract.registration, regimeId: contract.regimeId, roleId: contract.roleId, departmentId: contract.departmentId || undefined, costCenterId: contract.costCenterId || undefined, workLocation: contract.workLocation, salaryLevel: contract.salaryLevel || undefined, admittedAt: day(contract.admittedAt), appointedAt: day(contract.appointedAt), swornAt: day(contract.swornAt), endsAt: day(contract.endsAt), monthlyHours: contract.monthlyHours, salary: row.after, details: contract.details, reason: input.reason, effectiveFrom: day(input.effectiveFrom) }));
     }
     await enqueueHrIntegration(tx, { sourceKey: `REAJUSTE:${input.batchKey}`, domain: "AUDITORIA", environment: "INTERNO", eventType: "REAJUSTE_CONTRATUAL", payload: { request, requestHash, previewHash, rows, actorId } });
+    return { rows: json(rows), previewHash, applied: true, reused: false };
+  }, { timeout: 60000 });
+}
+
+export async function changeContractsCollectively(db: PrismaClient, actorId: string, raw: unknown) {
+  const changesSchema = z.object({ regimeId: z.string().min(1).optional(), roleId: z.string().min(1).optional(), departmentId: z.string().min(1).nullable().optional(), costCenterId: z.string().min(1).nullable().optional(), workLocation: z.string().trim().min(1).max(200).optional(), salaryLevel: z.string().trim().min(1).nullable().optional(), salary: money.refine(value => D(value).gte(0)).optional(), monthlyHours: z.number().int().min(1).max(744).optional(), endsAt: optionalDate.optional() }).strict().refine(value => Object.keys(value).length > 0, "Selecione ao menos um campo para alteração.");
+  const input = z.object({ batchKey: z.string().min(1).max(160), contractIds: z.array(z.string().min(1)).min(1), effectiveFrom: date, reason: z.string().trim().min(3).max(2000), changes: changesSchema, mode: z.enum(["PREVIA", "APLICAR"]), previewHash: z.string().default("") }).strict().parse(raw);
+  const ids = [...new Set(input.contractIds)].sort();
+  const request = { batchKey: input.batchKey, contractIds: ids, effectiveFrom: input.effectiveFrom, reason: input.reason, changes: input.changes };
+  const requestHash = createHash("sha256").update(stableJson(request)).digest("hex");
+  return db.$transaction(async tx => {
+    await lock(tx, `collective-contract:${input.batchKey}`);
+    const previous = await tx.hrIntegrationEvent.findUnique({ where: { sourceKey: `CONTRATOS:LOTE:${input.batchKey}` } });
+    if (previous) {
+      const evidence = previous.payload as { requestHash: string; previewHash: string; rows: Prisma.JsonValue[] };
+      if (evidence.requestHash !== requestHash) throw new Error("Lote de contratos reutilizado com parâmetros diferentes.");
+      return { rows: evidence.rows, previewHash: evidence.previewHash, applied: true, reused: true };
+    }
+    const original = await tx.hrEmploymentContract.findMany({ where: { id: { in: ids } }, orderBy: { id: "asc" } });
+    if (original.length !== ids.length) throw new Error("Seleção de contratos inválida.");
+    for (const employeeId of [...new Set(original.map(contract => contract.employeeId))].sort()) await lock(tx, `employee:${employeeId}`);
+    for (const id of ids) await lock(tx, `contract:${id}`);
+    const contracts = await tx.hrEmploymentContract.findMany({ where: { id: { in: ids } }, orderBy: { id: "asc" } });
+    const rows = contracts.map(contract => ({ id: contract.id, registration: contract.registration, version: contract.version, before: Object.fromEntries(Object.keys(input.changes).map(key => [key, json((contract as unknown as Record<string, unknown>)[key])])), after: json(input.changes) }));
+    const previewHash = createHash("sha256").update(stableJson({ request, rows })).digest("hex");
+    if (input.mode === "PREVIA") return { rows: json(rows), previewHash, applied: false, reused: false };
+    if (input.previewHash !== previewHash) throw new Error("Confira uma prévia atualizada; seleção, vigência ou dados foram alterados.");
+    const day = (value: Date | null) => value?.toISOString().slice(0, 10) || "";
+    for (const contract of contracts) {
+      const updated = { ...contract, ...input.changes };
+      await saveEmploymentContractInTransaction(tx, actorId, hrContractInputSchema.parse({ id: contract.id, version: contract.version, employeeId: contract.employeeId, registration: contract.registration, admittedAt: day(contract.admittedAt), appointedAt: day(contract.appointedAt), swornAt: day(contract.swornAt), endsAt: day(updated.endsAt), regimeId: updated.regimeId, roleId: updated.roleId, departmentId: updated.departmentId || undefined, costCenterId: updated.costCenterId || undefined, workLocation: updated.workLocation, salaryLevel: updated.salaryLevel || undefined, monthlyHours: updated.monthlyHours, salary: D(updated.salary).toFixed(2), details: contract.details, effectiveFrom: day(input.effectiveFrom), reason: input.reason }));
+    }
+    await enqueueHrIntegration(tx, { sourceKey: `CONTRATOS:LOTE:${input.batchKey}`, domain: "AUDITORIA", environment: "INTERNO", eventType: "ALTERACAO_CONTRATUAL_COLETIVA", payload: { request, requestHash, previewHash, rows, actorId } });
     return { rows: json(rows), previewHash, applied: true, reused: false };
   }, { timeout: 60000 });
 }
@@ -212,6 +247,32 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
       return resolved.status === "ATIVO" && resolved.admittedAt <= period.end && (!resolved.endsAt || resolved.endsAt >= period.start);
     });
     if (omitted) throw new Error("Inclua os demais contratos da mesma pessoa física para calcular tetos e retenções sem duplicar benefícios fiscais.");
+    const familyRule = ruleSet.rules.find(rule => rule.code === "SALARIO_FAMILIA");
+    const familyMemory = new Map<string, unknown>();
+    const irrfDependentMemory = new Map<string, unknown>();
+    if (familyRule) {
+      const policy = familyWagePolicySchema.parse(familyRule.value);
+      const rubric = ruleSet.rubrics.find(rubric => rubric.code === policy.rubricCode);
+      if (!rubric || rubric.type !== "PROVENTO" || rubric.calculationMethod !== "MANUAL" || rubric.incidences.some(incidence => incidence.isIncluded)) throw new Error("Salário-família exige rubrica MANUAL de provento sem incidências; configure a política explicitamente.");
+      for (const personId of samePersons) {
+        const rows = calculated.filter(row => row.contract.employee.personId === personId);
+        if (rows.some(row => row.contract.movements.some(movement => movement.rubricCode === policy.rubricCode)) || canonicalItems.some(item => rows.some(row => row.contract.employeeId === item.employeeId) && (item.sstBenefitOrigin?.rubricId === rubric.id || item.sstLeaveOrigin?.rubricId === rubric.id))) throw new Error("Salário-família com origem manual exige conciliação; não duplicar com cálculo automático.");
+        const assessment = await assessPayrollDependents(tx, [...new Set(rows.map(row => row.contract.employeeId))], "familyWage", policy.eligibility, period);
+        const income = rows.reduce((total, row) => total.add(row.result.gross), D(0));
+        const incomeEligible = income.lte(policy.incomeLimit);
+        const factor = policy.proration === "INTEGRAL" ? D(1) : D(Math.max(...rows.map(row => row.days))).div(30);
+        const value = incomeEligible ? D(policy.quota).mul(assessment.eligibleCount).mul(factor).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP) : D(0);
+        const weights = rows.map(row => policy.allocationBasis === "DIAS" ? D(row.days) : Prisma.Decimal.max(0, row.result.gross));
+        const shares = value.isZero() ? rows.map(() => D(0)) : allocatePayrollAmount(value, weights);
+        rows.forEach((row, index) => {
+          const item = row.result.items.find(item => item.code === rubric.code)!;
+          if (!D(item.value).isZero()) throw new Error("Rubrica de salário-família já possui valor; concilie a origem antes da apuração automática.");
+          item.value = shares[index].toFixed(2); item.method = "SALARIO_FAMILIA";
+          row.result.gross = row.result.gross.add(shares[index]);
+        });
+        familyMemory.set(personId, { ...assessment, policy, income: income.toFixed(2), incomeEligible, factor: factor.toString(), amount: value.toFixed(2), allocations: rows.map((row, index) => ({ contractId: row.contract.id, value: shares[index].toFixed(2) })) });
+      }
+    }
     // Apply the social security ceiling once per PF and scheme, then reconcile residual cents.
     const groups = new Map<string, typeof calculated>();
     for (const row of calculated) {
@@ -250,7 +311,11 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
         const rows = calculated.filter(row => row.contract.employee.personId === person);
         const originalBases = rows.map(row => Prisma.Decimal.max(D(0), row.result.bases.IRRF ?? D(0)));
         const originalBase = originalBases.reduce((a, b) => a.add(b), D(0));
-        const dependentCount = await tx.dependent.count({ where: { employeeId: { in: [...new Set(rows.map(row => row.contract.employeeId))] }, irrfDependent: true } });
+        const eligibilityRule = ruleSet.rules.find(rule => rule.code === "DEPENDENTES_IRRF");
+        const employeeIds = [...new Set(rows.map(row => row.contract.employeeId))];
+        const assessment = eligibilityRule ? await assessPayrollDependents(tx, employeeIds, "irrfDependent", eligibilityRule.value, period) : null;
+        if (assessment && person) irrfDependentMemory.set(person, assessment);
+        const dependentCount = assessment ? assessment.eligibleCount : await tx.dependent.count({ where: { employeeId: { in: employeeIds }, irrfDependent: true } });
         const deductionRule = ruleSet.rules.find(rule => rule.code === "IRRF_DEDUCAO_DEPENDENTE");
         if (dependentCount && !deductionRule) throw new Error("Dependentes de IRRF exigem IRRF_DEDUCAO_DEPENDENTE configurada.");
         const dependentDeduction = deductionRule ? D(z.union([z.string(), z.number()]).parse(deductionRule.value)).mul(dependentCount) : D(0);
@@ -298,7 +363,7 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
     const sum = (key: "gross" | "deductions" | "net" | "employer") => calculated.reduce((total, row) => total.add(row.result[key]), D(0));
     if (canonicalItems.some(item => !contracts.some(c => c.employeeId === item.employeeId))) throw new Error("Inclua todos os servidores com origens lançadas nesta folha.");
     if (new Set(contracts.map(c => c.employeeId)).size !== contracts.length && canonicalItems.length) throw new Error("Origens por servidor exigem alocação explícita entre vínculos antes deste cálculo.");
-    return tx.hrPayrollRun.create({ data: { payrollId: input.payrollId, requestKey: input.requestKey, mode: input.mode, scope: input.scope, ruleSetId: ruleSet.id, actorId, snapshot: json({ payroll, ruleSet, contractIds: ids, canonicalItems, contractVersions: contracts.map(c => ({ id: c.id, version: c.version })) }), gross: sum("gross"), deductions: sum("deductions"), net: sum("net"), employer: sum("employer"), statements: { create: calculated.map(row => ({ contractId: row.contract.id, gross: row.result.gross, deductions: row.result.deductions, net: row.result.net, employer: row.result.employer, snapshot: json({ contract: row.contract, regime: row.regime, days: row.days, items: row.result.items, bases: row.result.bases, consignmentMargin: margins.get(row.contract.employee.personId!) ?? null }) })) } }, include: { statements: true } });
+    return tx.hrPayrollRun.create({ data: { payrollId: input.payrollId, requestKey: input.requestKey, mode: input.mode, scope: input.scope, ruleSetId: ruleSet.id, actorId, snapshot: json({ payroll, ruleSet, contractIds: ids, canonicalItems, contractVersions: contracts.map(c => ({ id: c.id, version: c.version })) }), gross: sum("gross"), deductions: sum("deductions"), net: sum("net"), employer: sum("employer"), statements: { create: calculated.map(row => ({ contractId: row.contract.id, gross: row.result.gross, deductions: row.result.deductions, net: row.result.net, employer: row.result.employer, snapshot: json({ contract: row.contract, regime: row.regime, days: row.days, items: row.result.items, bases: row.result.bases, consignmentMargin: margins.get(row.contract.employee.personId!) ?? null, familyWage: familyMemory.get(row.contract.employee.personId!) ?? null, irrfDependents: irrfDependentMemory.get(row.contract.employee.personId!) ?? null }) })) } }, include: { statements: true } });
   }, { timeout: 60000 });
 }
 
@@ -325,6 +390,17 @@ export async function closePayrollRun(db: PrismaClient, actorId: string, runId: 
       if (contract.version !== version.version) throw new Error("Contrato mudou após o cálculo. Recalcule antes de fechar.");
       const statement = await tx.hrPayrollStatement.findUniqueOrThrow({ where: { runId_contractId: { runId, contractId: version.id } } });
       const contractSnapshot = (statement.snapshot as { contract: { movements: unknown } }).contract;
+      const dependentsSnapshot = statement.snapshot as { familyWage?: unknown; irrfDependents?: unknown };
+      if (dependentsSnapshot.familyWage) {
+        const family = familyWageSnapshotSchema.parse(dependentsSnapshot.familyWage);
+        const currentAssessment = await assessPayrollDependents(tx, [contract.employeeId], "familyWage", family.policy.eligibility, payrollPeriod(payroll.competence));
+        if (stableJson(currentAssessment.memory) !== stableJson(family.memory)) throw new Error("Elegibilidade/documentos de salário-família mudaram após o cálculo. Recalcule antes de fechar.");
+      }
+      if (dependentsSnapshot.irrfDependents) {
+        const originalAssessment = dependentAssessmentSchema.parse(dependentsSnapshot.irrfDependents);
+        const currentAssessment = await assessPayrollDependents(tx, [contract.employeeId], "irrfDependent", originalAssessment.policy, payrollPeriod(payroll.competence));
+        if (stableJson(currentAssessment.memory) !== stableJson(originalAssessment.memory)) throw new Error("Elegibilidade/documentos de IRRF mudaram após o cálculo. Recalcule antes de fechar.");
+      }
       const period = payrollPeriod(payroll.competence);
       const movements = await tx.hrMovement.findMany({ where: { contractId: version.id, startsAt: { lte: period.end }, OR: [{ endsAt: null }, { endsAt: { gte: period.start } }] } });
       const normalize = (value: unknown) => stableJson((json(value) as unknown as { id: string }[]).sort((a, b) => a.id.localeCompare(b.id)));

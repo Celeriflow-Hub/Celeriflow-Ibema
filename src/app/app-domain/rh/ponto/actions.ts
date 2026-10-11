@@ -17,6 +17,7 @@ export async function savePonto(formData: FormData) {
     const exitTimeStr = formData.get("exitTime") as string; // "17:00"
     const status = formData.get("status") as string;
     const extraHours = Number(formData.get("extraHours") || 0);
+    const bankHours = Number(formData.get("bankHours") || 0);
 
     if (!employeeId || !dateStr) {
       return { success: false, error: "Servidor e Data são obrigatórios." };
@@ -26,6 +27,7 @@ export async function savePonto(formData: FormData) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== dateStr) throw new Error("Data civil inválida.");
     if (!["Presente", "Falta", "Atraso", "Férias", "Licença"].includes(status)) throw new Error("Situação do ponto inválida.");
     if (!Number.isFinite(extraHours) || extraHours < 0 || extraHours > 24 || Number(extraHours.toFixed(4)) !== extraHours) throw new Error("Horas extras reconhecidas devem estar entre 0 e 24, com até quatro casas.");
+    if (!Number.isFinite(bankHours) || Math.abs(bankHours) > 24 || Number(bankHours.toFixed(4)) !== bankHours) throw new Error("Banco de horas reconhecido deve estar entre -24 e 24, com até quatro casas.");
     for (const time of [entryTimeStr, exitTimeStr]) if (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error("Horário inválido.");
     
     // Convert times to proper Date objects if provided
@@ -60,6 +62,7 @@ export async function savePonto(formData: FormData) {
       status: status || "Presente",
       hoursWorked,
       extraHours,
+      bankHours,
     };
 
     await prisma.$transaction(async tx => {
@@ -68,7 +71,7 @@ export async function savePonto(formData: FormData) {
         await tx.$queryRaw`SELECT id FROM "AttendanceRecord" WHERE id=${id} FOR UPDATE`;
         const previous = await tx.attendanceRecord.findUniqueOrThrow({ where: { id } });
         if (previous.employeeId !== employeeId) throw new Error("Não é permitido trocar o titular do ponto.");
-        if (await tx.hrIntegrationEvent.findUnique({ where: { sourceKey: `PONTO:HORAS_EXTRAS:${id}` } })) throw new Error("Ponto com reflexo na folha exige ajuste compensatório, preservando a origem.");
+        if (await tx.hrIntegrationEvent.findFirst({ where: { sourceKey: { in: [`PONTO:HORAS_EXTRAS:${id}`, `PONTO:BANCO_HORAS:${id}`] } } })) throw new Error("Ponto com reflexo na folha/direitos exige ajuste compensatório, preservando a origem.");
         await tx.attendanceRecord.update({ where: { id }, data });
       } else await tx.attendanceRecord.create({ data });
     });
@@ -88,7 +91,7 @@ export async function deletePonto(id: string) {
       const previous = await tx.attendanceRecord.findUniqueOrThrow({ where: { id } });
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:employee:${previous.employeeId}`}))`;
       await tx.$queryRaw`SELECT id FROM "AttendanceRecord" WHERE id=${id} FOR UPDATE`;
-      if (await tx.hrIntegrationEvent.findUnique({ where: { sourceKey: `PONTO:HORAS_EXTRAS:${id}` } })) throw new Error("Ponto com reflexo na folha não pode ser excluído.");
+      if (await tx.hrIntegrationEvent.findFirst({ where: { sourceKey: { in: [`PONTO:HORAS_EXTRAS:${id}`, `PONTO:BANCO_HORAS:${id}`] } } })) throw new Error("Ponto com reflexo na folha/direitos não pode ser excluído.");
       await tx.attendanceRecord.delete({ where: { id } });
     });
     revalidatePath("/rh/ponto");

@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import PDFDocument from "pdfkit";
 import { consignmentMarginSchema } from "./consignment-margin";
+import { dependentAssessmentSchema, familyWageSnapshotSchema } from "./dependent-eligibility";
 
 const snapshotSchema = z.object({
   contract: z.object({ registration: z.string(), workLocation: z.string(), salary: z.string(), employee: z.object({ name: z.string() }) }),
@@ -9,6 +10,8 @@ const snapshotSchema = z.object({
   items: z.array(z.object({ code: z.string(), name: z.string(), type: z.string(), value: z.string(), method: z.string(), formula: z.string().nullable(), base: z.string().nullable(), rate: z.string().nullable(), movement: z.string() })),
   bases: z.record(z.string(), z.string()),
   consignmentMargin: consignmentMarginSchema.nullable().optional().default(null),
+  familyWage: familyWageSnapshotSchema.nullable().optional().default(null),
+  irrfDependents: dependentAssessmentSchema.nullable().optional().default(null),
 });
 
 export async function getPayrollStatement(db: PrismaClient, id: string, employeeId?: string) {
@@ -35,6 +38,12 @@ export async function renderPayrollStatementPdf(statement: Awaited<ReturnType<ty
   pdf.fontSize(9).text(`Bases: ${Object.entries(statement.bases).map(([key, value]) => `${key}: ${value}`).join(" · ")}`);
   pdf.text(`Versão do demonstrativo: ${statement.id}`);
   pdf.text("O demonstrativo não comprova quitação bancária.");
+  if (statement.familyWage) {
+    const family = statement.familyWage;
+    pdf.moveDown().text(`Salário-família por PF: ${family.eligibleCount} dependentes elegíveis · renda apurada R$ ${family.income} · limite R$ ${family.policy.incomeLimit} · total agregado R$ ${family.amount}`);
+    pdf.text(`Fundamento: ${family.policy.eligibility.legalReference}`);
+  }
+  if (statement.irrfDependents) pdf.text(`Dependentes elegíveis de IRRF na versão: ${statement.irrfDependents.eligibleCount} · ${statement.irrfDependents.policy.legalReference}`);
   if (statement.consignmentMargin) {
     const margin = statement.consignmentMargin;
     pdf.moveDown().text(`Margem consignável agregada: base R$ ${margin.base} · limite ${margin.rate}% = R$ ${margin.limit} · utilizado R$ ${margin.used} · disponível R$ ${margin.available}`);

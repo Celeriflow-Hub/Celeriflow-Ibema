@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Save } from "lucide-react";
-import { MaskedInput } from "@/components/ui/MaskedInput";
+import { ReferenceLookup } from "../operacoes/ReferenceLookup";
 import type { Dependent, Employee } from "@prisma/client";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { ErpPageTitle as PageHeader } from "@/components/app-ui/erp/ErpPageTitle";
@@ -30,12 +30,6 @@ export function DependenteForm({ data, employees = [], defaultEmployeeId }: { da
       alert(result.error);
     }
   }
-
-  const formatDateForInput = (dateString?: string | Date | null) => {
-    if (!dateString) return "";
-    const date = new Date(dateString);
-    return date.toISOString().split("T")[0];
-  };
 
   const effectiveEmployeeId = data?.employeeId || defaultEmployeeId;
   const effectiveEmployee = effectiveEmployeeId ? employees.find(e => e.id === effectiveEmployeeId) : null;
@@ -85,29 +79,14 @@ export function DependenteForm({ data, employees = [], defaultEmployeeId }: { da
               )}
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome Completo</Label>
-                <Input id="name" name="name" defaultValue={data?.name || ""} placeholder="Nome do dependente" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="cpf">CPF</Label>
-                <MaskedInput 
-                  maskType="cpf"
-                  id="cpf" 
-                  name="cpf" 
-                  defaultValue={data?.cpf || ""} 
-                  placeholder="000.000.000-00"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label>Pessoa física do dependente no Cadastro Único</Label>
+              <ReferenceLookup name="personId" kind="person" initialValue={data?.personId || ""} required />
+              <p className="text-xs text-muted-foreground">Nome, CPF e nascimento são obtidos do cadastro central. Documentos e validade devem ser mantidos na pessoa física.</p>
+              {data && <p className="text-xs">Projeção atual: {data.name} · {data.cpf || "sem CPF"} · {data.birthDate?.toISOString().slice(0, 10) || "sem nascimento"}</p>}
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="birthDate">Data de Nascimento</Label>
-                <Input type="date" id="birthDate" name="birthDate" defaultValue={formatDateForInput(data?.birthDate)} required />
-              </div>
               <div className="space-y-2">
                 <Label htmlFor="relationship">Parentesco</Label>
                 <Select name="relationship" defaultValue={data?.relationship || "Filho(a)"} required>
@@ -123,6 +102,11 @@ export function DependenteForm({ data, employees = [], defaultEmployeeId }: { da
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="flex flex-wrap gap-4 text-xs">
+              <label className="flex items-center gap-2"><input type="checkbox" name="irrfDependent" defaultChecked={data?.irrfDependent || false} />Candidato à dedução de IRRF</label>
+              <label className="flex items-center gap-2"><input type="checkbox" name="familyWage" defaultChecked={data?.familyWage || false} />Candidato ao salário-família</label>
+              <p className="w-full text-muted-foreground">As marcações não garantem pagamento/dedução: a elegibilidade é apurada pela política vigente na competência.</p>
             </div>
 
             <div className="flex justify-end gap-2 border-t pt-3">

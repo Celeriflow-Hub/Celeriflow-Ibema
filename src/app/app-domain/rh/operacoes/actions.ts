@@ -8,18 +8,19 @@ import { acquireVacationRights, cancelVacationReservation, reserveVacationRight 
 import { importPayrollMovements } from "@/lib/rh/movement-import";
 import { generateBenefitMovement } from "@/lib/rh/benefit-calculation";
 import { decideEmployeeHrRequest } from "@/lib/rh/portal-requests";
-import { adjustContractSalaries } from "@/lib/rh/workforce-service";
+import { adjustContractSalaries, changeContractsCollectively } from "@/lib/rh/workforce-service";
 import { generateAttendanceOvertime } from "@/lib/rh/attendance-payroll";
 import { decideRecertificationProposal } from "@/lib/rh/recertification";
 import { dispatchPayrollExpenseRequests } from "@/lib/rh/finance-bridge";
 import { simulateSpecialPayroll } from "@/lib/rh/special-simulation";
 import { reserveConsignmentAgreement, postConsignmentInstallment, cancelConsignmentInstallment } from "@/lib/rh/consignment-service";
 import { assertPayrollBudgetScope } from "@/lib/rh/payroll-access";
+import { generateAttendanceTimeBank, reverseAttendanceTimeBank } from "@/lib/rh/time-bank";
 
 export async function executeWorkforceOperation(command: string, values: Record<string, string>) {
-  const allowed = ["contrato", "movimento", "direito", "calcular", "fechar", "cancelar", "publicar", "vincular", "aquisitivos", "reservar-ferias", "importar", "beneficio", "decidir-solicitacao", "reajustar", "cancelar-ferias", "ponto-horas-extras", "decidir-recadastramento", "financeiro", "simular-especial", "consignacao-reservar", "consignacao-lancar", "consignacao-cancelar"];
+  const allowed = ["contrato", "movimento", "direito", "calcular", "fechar", "cancelar", "publicar", "vincular", "aquisitivos", "reservar-ferias", "importar", "beneficio", "decidir-solicitacao", "reajustar", "cancelar-ferias", "ponto-horas-extras", "decidir-recadastramento", "financeiro", "simular-especial", "consignacao-reservar", "consignacao-lancar", "consignacao-cancelar", "contratos-coletivos", "ponto-banco-horas", "estornar-banco-horas"];
   if (!allowed.includes(command)) return { error: "Operação inválida." };
-  const context = await getTenantContextForModuleOperation("RH", ["contrato", "movimento", "direito", "aquisitivos", "reservar-ferias", "importar", "beneficio", "ponto-horas-extras", "consignacao-reservar"].includes(command) && !values.id ? "create" : "update");
+  const context = await getTenantContextForModuleOperation("RH", ["contrato", "movimento", "direito", "aquisitivos", "reservar-ferias", "importar", "beneficio", "ponto-horas-extras", "ponto-banco-horas", "consignacao-reservar"].includes(command) && !values.id ? "create" : "update");
   try {
     let id = "";
     let message = "Operação registrada.";
@@ -52,6 +53,14 @@ export async function executeWorkforceOperation(command: string, values: Record<
       const result = await generateAttendanceOvertime(context.prisma, context.user.id, values);
       message = `${result.records} registros de ponto conciliados; ${result.movements.length} movimentos vinculados.`;
     }
+    if (command === "ponto-banco-horas") {
+      const result = await generateAttendanceTimeBank(context.prisma, context.user.id, values);
+      id = result.ids.join(", "); message = `${result.records} registros de banco de horas conciliados no extrato de direitos.`;
+    }
+    if (command === "estornar-banco-horas") {
+      id = (await reverseAttendanceTimeBank(context.prisma, context.user.id, values)).id;
+      message = "Estorno compensatório registrado, com preservação do ponto e da entrada original.";
+    }
     if (command === "decidir-solicitacao") id = (await decideEmployeeHrRequest(context.prisma, context.user.id, values)).id;
     if (command === "decidir-recadastramento") id = (await decideRecertificationProposal(context.prisma, context.user.id, values)).id;
     if (command === "financeiro") {
@@ -64,6 +73,11 @@ export async function executeWorkforceOperation(command: string, values: Record<
       const result = await adjustContractSalaries(context.prisma, context.user.id, { ...values, contractIds: values.contractIds.split(/[\s,;]+/).filter(Boolean) });
       id = result.previewHash;
       message = `${result.applied ? "Lote aplicado" : "Prévia sem gravação; copie o hash para aplicar"}: ${JSON.stringify(result.rows)}`;
+    }
+    if (command === "contratos-coletivos") {
+      const result = await changeContractsCollectively(context.prisma, context.user.id, { ...values, changes: JSON.parse(values.changes || "{}"), contractIds: values.contractIds.split(/[\s,;]+/).filter(Boolean) });
+      id = result.previewHash;
+      message = `${result.applied ? "Alterações aplicadas" : "Prévia sem gravação; copie o hash para aplicar"}: ${JSON.stringify(result.rows)}`;
     }
     if (command === "importar") {
       const result = await importPayrollMovements(context.prisma, context.user.id, values);

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Calculator, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 import { processPayroll } from "./actions";
+import Link from "next/link";
 
 export function PayrollSimulationCard({ payrollId, status }: { payrollId: string, status: string }) {
   const [isProcessing, setIsProcessing] = useState(false);

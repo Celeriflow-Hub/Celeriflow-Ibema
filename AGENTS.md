@@ -6,23 +6,23 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ---
 
-# Regras obrigatórias
+# 🛑 Regras de Segurança do Projeto (OBRIGATÓRIO)
 
-## Alterações em massa
-- Nunca use regex/replace genérico em vários arquivos; analise e altere cada arquivo individualmente.
+## 1. PROIBIDO: Scripts de Find-and-Replace em massa
+- **NUNCA** rode scripts que alteram múltiplos arquivos de uma vez com regex/replace genérico.
+- Se o mesmo padrão aparece em vários arquivos, **cada arquivo deve ser analisado individualmente** para entender como é usado.
+- Uma função pode ter o mesmo padrão de código mas ser consumida de formas completamente diferentes.
 
-## Funções exportadas
-- Antes de mudar parâmetros ou retorno, use `grep` e verifique todos os consumidores.
-- Não troque `{ error: string }` por `throw` quando o cliente lê `result?.error`.
+## 2. OBRIGATÓRIO: Verificar consumidores antes de alterar assinaturas
+- Antes de mudar o retorno ou parâmetros de qualquer função exportada (`export async function`, `export function`), **SEMPRE** verifique TODOS os arquivos que importam/chamam essa função.
+- Use `grep` para encontrar todos os `import` e usos antes de modificar.
+- Se a função retorna `{ error: string }` e um componente client faz `result?.error`, você **NÃO PODE** trocar para `throw`.
 
-## Build
-- Rode `npm run build` antes de commit/push e corrija qualquer falha.
-- A publicação gera o Next em `dist/` e ignora sua checagem TypeScript para caber na memória; `npm run build:check` mantém a checagem completa.
+## 3. OBRIGATÓRIO: Rodar build antes de commitar
+- Sempre rode `npm run build` e confirme que passa **ANTES** de fazer commit/push.
+- Se o build falhar, corrija antes de enviar ao GitHub.
 
-## Server Actions
-- Em `<form action={...}>`, retorne `void`/`Promise<void>` e lance erros.
-- Quando chamada via `await` no cliente, retorne `{ error: string }`; não lance erros.
-- Verifique o consumo antes de escolher o padrão.
-
-## Identidade da instância
-- Nome, endereço, UF, CNPJ, IBGE e links do município vêm só de `src/lib/platform/municipality.ts`; nunca texto fixo — permite trocar de município sem caçar strings.
+## 4. Padrões de Server Actions neste projeto
+- **Actions usadas em `<form action={...}>`**: Devem retornar `void` ou `Promise<void>`. Usar `throw new Error()` para erros.
+- **Actions chamadas via `await` em client components**: Devem retornar `{ error: string }` para que o componente trate o erro na UI. **NÃO** trocar para `throw`.
+- **Sempre verifique** como a action é usada antes de decidir o padrão de erro.

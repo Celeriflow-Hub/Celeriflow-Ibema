@@ -68,15 +68,13 @@ async function main() {
     },
     update: { status: "Aberto" },
   });
-  if (process.env.SKIP_BANK_SANDBOX_HEALTH_CHECK !== "true") {
-    await bankIntegrationClient.checkSandboxHealth();
-    const integrationCheck = await bankIntegrationClient.fetchBankStatement(
-      { banco: bankName, agencia: agency, contaNumero: "20001-1" },
-      { periodoInicio: "2025-08-01", periodoFim: "2025-08-31" },
-    );
-    if (integrationCheck.items.length === 0) {
-      throw new Error("O Banco Virtual Robonuvem não retornou movimentações para a validação da POC.");
-    }
+  await bankIntegrationClient.checkSandboxHealth();
+  const integrationCheck = await bankIntegrationClient.fetchBankStatement(
+    { banco: bankName, agencia: agency, contaNumero: "20001-1" },
+    { periodoInicio: "2025-08-01", periodoFim: "2025-08-31" },
+  );
+  if (integrationCheck.items.length === 0) {
+    throw new Error("O Banco Virtual Robonuvem não retornou movimentações para a validação da POC.");
   }
 
   const [budgetUnit, year2025] = await Promise.all([
@@ -85,8 +83,8 @@ async function main() {
     ensureFinancialYear(2026),
   ]);
   if (!budgetUnit) throw new Error("A UG 0101 é obrigatória para provisionar as contas da POC.");
-  await prisma.budgetUnit.update({ where: { id: budgetUnit.id }, data: { name: municipality.prefectureName } });
-  await prisma.budgetUnit.updateMany({ where: { code: "0201" }, data: { name: `Câmara Municipal de ${municipality.name}` } });
+  await prisma.budgetUnit.update({ where: { id: budgetUnit.id }, data: { name: "Prefeitura Municipal de São João do Ivaí" } });
+  await prisma.budgetUnit.updateMany({ where: { code: "0201" }, data: { name: "Câmara Municipal de São João do Ivaí" } });
   const sourceCodes = [...new Set([
     ...sandboxAccounts.flatMap((account) => account.sourceCode ? [account.sourceCode] : []),
     ...constitutionalRevenueRules.map((rule) => rule.fonteRecurso.match(/^\d+/)?.[0]).filter((code): code is string => Boolean(code)),

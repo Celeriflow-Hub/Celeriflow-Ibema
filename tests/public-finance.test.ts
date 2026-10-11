@@ -154,9 +154,9 @@ test("gera PDF binário a partir do conjunto canônico", async () => {
   const csv = reportDatasetCsv(dataset);
 
   assert.equal(Buffer.from(pdf).subarray(0, 5).toString("ascii"), "%PDF-");
-  assert.match(csv.csv, /"'=não é fórmula"/);
-  assert.match(csv.csv, /"Metadados do relatório"/);
-  assert.match(csv.csv, /"INTERNAL_PARTIAL"/);
+  assert.match(csv.csv, /'=não é fórmula/);
+  assert.match(csv.csv, /Metadados do relatório/);
+  assert.match(csv.csv, /INTERNAL_PARTIAL/);
 });
 
 test("reconhece apenas relatórios legais publicáveis e cria uma chave estável para o snapshot", () => {
@@ -246,8 +246,8 @@ test("entrega o Diário canônico como CSV seguro", async () => {
   const result = await generateFinancialReportCsv(db, "DIARIO", "year-2026");
 
   assert.equal(result.rowCount, 2);
-  assert.match(result.csv, /"data","historico","contaCodigo"/);
-  assert.match(result.csv, /"'=FORMULA"/);
+  assert.match(result.csv, /data,historico,contaCodigo/);
+  assert.match(result.csv, /'=FORMULA/);
 });
 
 test("gera balancete mensal com período e situação de fechamento explícitos", async () => {
@@ -432,6 +432,6 @@ test("exporta dados publicos em formato TXT tabulado higienizado e fornece infor
 
   const faqInfo = getPublicHelpFaqAndContactInfo();
   assert.equal(faqInfo.faq.length, 4);
-  assert.match(faqInfo.portalInfo.title, /Lagoa Seca/);
+  assert.match(faqInfo.portalInfo.title, /Aurora das Veredas/);
   assert.match(faqInfo.contact.ombudsmanName, /Ouvidoria Geral/);
 });

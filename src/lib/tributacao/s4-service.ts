@@ -53,6 +53,12 @@ export async function emitNfse(db: PrismaClient, actor: TaxActor, input: {
       tx.taxServiceActivity.findFirst({ where: { id: input.serviceActivityId, isActive: true }, include: { tax: true } }),
     ]);
     if (!provider || !registration || registration.taxpayerId !== provider.id || !activity) throw new TributarioS4Error("Prestador, inscrição ou atividade não conferem.");
+    if (!activity.issRate) throw new TributarioS4Error("A atividade não possui alíquota de ISS configurada.");
+    const parameter = await tx.taxParameter.findFirst({
+      where: { taxId: activity.taxId, isActive: true },
+      orderBy: { effectiveFrom: "desc" },
+    });
+    if (!parameter) throw new TributarioS4Error("Não há parâmetro fiscal ativo para a atividade informada.");
     if (!input.occasionalRequestId) {
       const credential = await tx.nfseCredentialRequest.findFirst({ where: { taxpayerId: provider.id, economicRegistrationId: registration.id, serviceActivityId: activity.id, status: "HABILITADO" } });
       if (!credential) throw new TributarioS4Error("O prestador precisa de credenciamento habilitado para emitir NFS-e.");
@@ -72,13 +78,13 @@ export async function emitNfse(db: PrismaClient, actor: TaxActor, input: {
       creditTotal = creditTotal.plus(amount); credits.push({ id: credit.id, amount, available: credit.availableAmountDecimal });
     }
     const deductions = money(input.manualDeductions ?? 0).plus(creditTotal);
-    const rate = activity.issRate ?? new Prisma.Decimal(String((defaults.parameter.configuration as Record<string, unknown>).rate ?? 0));
+    const rate = activity.issRate;
     const calc = calculateNfse({ serviceValue: input.serviceValue, deductions, ratePercent: rate, retained: input.retained });
     const verificationCode = randomUUID().replaceAll("-", "").slice(0, 16).toUpperCase();
     const invoice = await tx.invoice.create({ data: { verificationCode, serviceValue: Number(calc.serviceValue), serviceValueDecimal: calc.serviceValue, deductions: Number(calc.deductions), deductionsDecimal: calc.deductions, issRetained: input.retained, issValue: Number(calc.iss), issValueDecimal: calc.iss, competence: required(input.competence, "Competência"), status: "Emitida", providerId: provider.id, takerId: input.takerId || null } });
     const authenticityUrl = `/portal/nfse/${verificationCode}`;
-    const snapshot = { formula: "(valorServico - deducoes) × aliquota", serviceValue: calc.serviceValue.toFixed(2), deductions: calc.deductions.toFixed(2), taxableBase: calc.taxableBase.toFixed(2), rate: calc.rate.toString(), iss: calc.iss.toFixed(2), ownIss: calc.ownIss.toFixed(2), retainedIss: calc.retainedIss.toFixed(2), parameterId: defaults.parameter.id };
-    await tx.nfseInvoiceData.create({ data: { invoiceId: invoice.id, economicRegistrationId: registration.id, serviceActivityId: activity.id, parameterId: defaults.parameter.id, serviceDescription: required(input.serviceDescription, "Descrição do serviço"), serviceLocation: input.serviceLocation?.trim() || null, taxableBaseDecimal: calc.taxableBase, rate: calc.rate, ownIssDecimal: calc.ownIss, retainedIssDecimal: calc.retainedIss, retentionType: input.retained ? "RETIDO" : "PROPRIO", calculationSnapshot: asJson(snapshot), source: input.source ?? "WEB", authenticityUrl, qrPayload: authenticityUrl, occasionalRequestId: input.occasionalRequestId, rpsItemId: input.rpsItemId } });
+    const snapshot = { formula: "(valorServico - deducoes) × aliquota", serviceValue: calc.serviceValue.toFixed(2), deductions: calc.deductions.toFixed(2), taxableBase: calc.taxableBase.toFixed(2), rate: calc.rate.toString(), iss: calc.iss.toFixed(2), ownIss: calc.ownIss.toFixed(2), retainedIss: calc.retainedIss.toFixed(2), parameterId: parameter.id };
+    await tx.nfseInvoiceData.create({ data: { invoiceId: invoice.id, economicRegistrationId: registration.id, serviceActivityId: activity.id, parameterId: parameter.id, serviceDescription: required(input.serviceDescription, "Descrição do serviço"), serviceLocation: input.serviceLocation?.trim() || null, taxableBaseDecimal: calc.taxableBase, rate: calc.rate, ownIssDecimal: calc.ownIss, retainedIssDecimal: calc.retainedIss, retentionType: input.retained ? "RETIDO" : "PROPRIO", calculationSnapshot: asJson(snapshot), source: input.source ?? "WEB", authenticityUrl, qrPayload: authenticityUrl, occasionalRequestId: input.occasionalRequestId, rpsItemId: input.rpsItemId } });
     await tx.nfseEvent.create({ data: { invoiceId: invoice.id, eventType: "EMITIDA", description: "NFS-e emitida com cálculo fiscal persistido.", actorUsuarioId: actor.usuarioId, payload: asJson(snapshot) } });
     await tx.taxDeclaration.create({ data: { taxpayerId: provider.id, economicRegistrationId: registration.id, activityId: activity.id, competence: parseCompetence(input.competence), serviceValueDecimal: calc.serviceValue, deductionValueDecimal: calc.deductions, issValueDecimal: calc.iss, status: input.retained ? "ISS_RETIDO" : "ISS_PROPRIO", calculationSnapshot: asJson({ ...snapshot, invoiceId: invoice.id }) } });
     for (const credit of credits) {
@@ -172,10 +178,11 @@ export async function createOccasionalRequest(db: PrismaClient, actor: TaxActor,
 export async function approveOccasionalRequest(db: PrismaClient, actor: TaxActor, id: string) {
   const request = await db.nfseOccasionalRequest.findUnique({ where: { id } });
   if (!request || request.status !== "SOLICITADA") throw new TributarioS4Error("Solicitação avulsa indisponível.");
-  const defaults = await ensureTributarioS4Defaults(db);
+  const activity = await db.taxServiceActivity.findFirst({ where: { id: request.serviceActivityId, isActive: true } });
+  if (!activity?.issRate) throw new TributarioS4Error("Atividade sem alíquota de ISS configurada.");
   const assessment = await db.$transaction(async (tx) => {
     const number = await nextNumber(tx, "ASSESSMENT", "LAN");
-    return tx.taxAssessment.create({ data: { year: new Date().getUTCFullYear(), assessmentNumber: number, competence: new Date(), originalValue: Number(request.taxAmountDecimal), originalValueDecimal: request.taxAmountDecimal, taxableBaseDecimal: request.serviceValueDecimal.minus(request.deductionValueDecimal), rate: 3, discountValueDecimal: 0, interestValueDecimal: 0, penaltyValueDecimal: 0, correctionValueDecimal: 0, finalValueDecimal: request.taxAmountDecimal, calculationSnapshot: { origin: "NFSE_AVULSA", requestId: request.id }, status: "Lançado", taxId: defaults.tax.id, taxpayerId: request.providerTaxpayerId } });
+    return tx.taxAssessment.create({ data: { year: new Date().getUTCFullYear(), assessmentNumber: number, competence: new Date(), originalValue: Number(request.taxAmountDecimal), originalValueDecimal: request.taxAmountDecimal, taxableBaseDecimal: request.serviceValueDecimal.minus(request.deductionValueDecimal), rate: activity.issRate, discountValueDecimal: 0, interestValueDecimal: 0, penaltyValueDecimal: 0, correctionValueDecimal: 0, finalValueDecimal: request.taxAmountDecimal, calculationSnapshot: { origin: "NFSE_AVULSA", requestId: request.id }, status: "Lançado", taxId: activity.taxId, taxpayerId: request.providerTaxpayerId } });
   });
   let guideId: string | null = null;
   if (request.paymentRequired) {

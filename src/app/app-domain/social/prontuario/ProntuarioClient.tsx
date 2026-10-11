@@ -88,21 +88,23 @@ export default function ProntuarioClient({ atendimentosInicial, familias, person
 
   async function handleRegisterRma() {
     if (!cadUnicoResult) return;
+    if (!units.length) { alert("Não há equipamento disponível para registrar a consulta."); return; }
     setCadLoading(true);
 
     const res = await saveRmaRecordAction({
       nis: cadUnicoResult.nis,
       nomeCidadao: cadUnicoResult.nomeCompleto,
-      unidadeAtendimento: "CRAS Centro - Atendimento Especializado",
-      tipoAtendimento: "Acompanhamento Familiar PAIF / Bolsa Família",
-      detalhesRma: `Consulta e validação cadastral CadÚnico efetuada. Renda per capita: R$ ${cadUnicoResult.rendaPerCapita.toFixed(2)}. Elegível Bolsa Família: ${cadUnicoResult.elegivelBolsaFamilia ? "SIM" : "NÃO"}.`,
+      unidadeAtendimento: units[0].name,
+      tipoAtendimento: "Consulta cadastral local",
+      detalhesRma: `Consulta ao cadastro local. Renda per capita registrada: R$ ${cadUnicoResult.rendaPerCapita.toFixed(2)}.`,
     });
 
     setCadLoading(false);
 
     if (res.data) {
-      setRmaSuccessMsg(`Atendimento registrado com sucesso no Prontuário SUAS/RMA (ID: ${res.data.id})`);
+      setRmaSuccessMsg(`Consulta local registrada (ID: ${res.data.id}). Este registro não representa emissão do RMA oficial.`);
     }
+    else { alert(res.error || "Não foi possível registrar a consulta."); }
   }
 
   const filtered = atendimentos.filter((a) =>
@@ -136,11 +138,13 @@ export default function ProntuarioClient({ atendimentosInicial, familias, person
     e.preventDefault();
     if (editingAtendimento) {
       const res = await updateAttendance(editingAtendimento.id, formData);
+      if (!res.success) { alert(res.error); return; }
       if (res.success && res.data) {
         setAtendimentos(atendimentos.map((a) => a.id === editingAtendimento.id ? res.data : a));
       }
     } else {
       const res = await createAttendance(formData);
+      if (!res.success) { alert(res.error); return; }
       if (res.success && res.data) {
         setAtendimentos([res.data, ...atendimentos]);
       }
@@ -159,20 +163,20 @@ export default function ProntuarioClient({ atendimentosInicial, familias, person
     <PageFrame className="flex h-full min-h-0 flex-col gap-2 overflow-hidden p-2 sm:p-3">
       {/* CadÚnico & SUAS Engine Card */}
       <details className="shrink-0 rounded-lg border border-blue-900 bg-slate-950 text-white shadow-sm">
-        <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-blue-200">Consulta CadÚnico e emissão RMA</summary>
+        <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-blue-200">Consulta ao cadastro local do CadÚnico</summary>
         <section className="space-y-3 border-t border-blue-900 p-3">
         <div className="flex flex-col gap-3 border-b border-blue-900 pb-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <span className="bg-blue-500/30 text-blue-200 text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-              Integração Federal — CadÚnico (MDS) &amp; SUAS
+              Base municipal — CadÚnico
             </span>
             <h2 className="mt-2 flex items-center gap-2 text-base font-bold">
               <SearchCode className="size-5 text-blue-400" />
-              Consulta Unificada CadÚnico &amp; Emissão RMA
+              Consulta cadastral local
             </h2>
           </div>
           <span className="w-fit shrink-0 rounded-full border border-emerald-500/40 bg-emerald-500/20 px-2.5 py-1 text-xs font-bold text-emerald-300">
-            Sincronizado MDS
+            Dados locais
           </span>
         </div>
 
@@ -223,25 +227,14 @@ export default function ProntuarioClient({ atendimentosInicial, familias, person
             </div>
 
             <div className="flex flex-col sm:flex-row justify-between items-center gap-2 pt-2 border-t border-slate-800">
-              <div className="flex gap-2">
-                {cadUnicoResult.elegivelBolsaFamilia && (
-                  <span className="bg-emerald-950 text-emerald-300 border border-emerald-800 text-[10px] font-bold px-2.5 py-0.5 rounded">
-                    Elegível Bolsa Família
-                  </span>
-                )}
-                {cadUnicoResult.elegivelBPC && (
-                  <span className="bg-indigo-950 text-indigo-300 border border-indigo-800 text-[10px] font-bold px-2.5 py-0.5 rounded">
-                    Elegível BPC
-                  </span>
-                )}
-              </div>
+              <p className="text-xs text-slate-400">A consulta não determina concessão de BPC ou Bolsa Família.</p>
 
               <button
                 onClick={handleRegisterRma}
                 disabled={cadLoading}
                 className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-1.5 rounded flex items-center gap-1 shadow text-xs"
               >
-                <HeartHandshake className="w-4 h-4" /> Registrar Atendimento no Prontuário RMA
+                <HeartHandshake className="w-4 h-4" /> Registrar consulta local
               </button>
             </div>
             {rmaSuccessMsg && <div className="text-emerald-400 font-bold p-2 bg-emerald-950/60 rounded border border-emerald-800">{rmaSuccessMsg}</div>}

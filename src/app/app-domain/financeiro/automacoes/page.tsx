@@ -54,7 +54,7 @@ export default async function AutomacoesFinanceirasPage() {
   return (
     <main className="flex h-full min-h-0 flex-col gap-2 overflow-hidden px-1 py-1 sm:px-2">
       <header className="border-b border-slate-300 bg-white px-3 py-2 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">{`POC ${municipality.name}`}</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">POC São João do Ivaí</p>
         <h1 className="mt-0.5 text-sm font-bold tracking-tight text-slate-900">Central de Automações Financeiras</h1>
         <p className="mt-0.5 text-xs text-slate-600">Histórico operacional, falhas e evidências do banco simulado externo.</p>
       </header>

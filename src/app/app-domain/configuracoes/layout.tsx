@@ -10,6 +10,7 @@ const navigation: ModuleNavGroup[] = [{
     { title: "Perfis de Acesso", href: "/configuracoes/perfis", icon: "shieldCheck" },
     { title: "Usuários", href: "/configuracoes/usuarios", icon: "users" },
     { title: "Workflows e Processos", href: "/configuracoes/processos", icon: "workflow" },
+    { title: "Certificados A1", href: "/configuracoes/certificados", icon: "shieldCheck" },
     { title: "Auditoria", href: "/configuracoes/auditoria", icon: "history" },
   ],
 }];

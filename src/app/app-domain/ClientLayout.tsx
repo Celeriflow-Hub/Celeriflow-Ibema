@@ -125,7 +125,7 @@ export default function ClientLayout({
     "/patrimonio/materiais",
     "/patrimonio/requisicoes",
     "/patrimonio/inventarios",
-  ].includes(pathname) || isFixedRhWorkspace || isFixedComprasWorkspace || isFixedLote2Workspace || isFixedLote3Workspace;
+  ].includes(pathname) || pathname === "/planejamento" || pathname.startsWith("/planejamento/") || pathname === "/sst" || pathname.startsWith("/sst/") || isFixedRhWorkspace || isFixedComprasWorkspace || isFixedLote2Workspace || isFixedLote3Workspace;
 
   return (
     <div className={isFixedErpWorkspace ? "flex h-dvh w-full flex-col overflow-hidden bg-slate-100" : "flex min-h-dvh w-full flex-col bg-slate-100"}>
@@ -180,13 +180,13 @@ export default function ClientLayout({
             <LogOut className="mr-2 h-4 w-4" />
             Sair
           </Button>
-          <Button onClick={handleLogout} variant="ghost" size="icon" aria-label="Sair do sistema" className="shrink-0 text-slate-600 hover:bg-red-50 hover:text-destructive sm:hidden">
+          <Button onClick={handleLogout} variant="ghost" size="icon" className="shrink-0 text-slate-600 hover:bg-red-50 hover:text-destructive sm:hidden">
             <LogOut className="h-5 w-5" />
           </Button>
         </div>
       </header>
 
-      <main id="conteudo" tabIndex={-1} className={isFixedErpWorkspace ? "flex min-h-0 flex-1 flex-col overflow-hidden p-2 outline-none sm:p-3" : "flex min-h-0 flex-1 flex-col p-2 outline-none sm:p-3"}>
+      <main className={isFixedErpWorkspace ? "flex min-h-0 flex-1 flex-col overflow-hidden p-2 sm:p-3" : "flex min-h-0 flex-1 flex-col p-2 sm:p-3"}>
         {children}
       </main>
 

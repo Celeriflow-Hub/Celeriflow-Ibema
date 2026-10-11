@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { exportPublicDataCSV, getPublicRevenues, parsePublicDataFilter } from "@/lib/transparencia/portal-fiscal";
+import { getInstitutionalContact } from "@/lib/portal-institucional/public-content";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,10 @@ export async function GET(request: NextRequest) {
     if (format && format !== "csv") {
       return NextResponse.json({ error: "Parâmetro format inválido." }, { status: 400 });
     }
-    const revenues = await getPublicRevenues(prisma, parsePublicDataFilter(request.nextUrl.searchParams));
+    const [revenues, institution] = await Promise.all([
+      getPublicRevenues(prisma, parsePublicDataFilter(request.nextUrl.searchParams)),
+      getInstitutionalContact(),
+    ]);
     if (format === "csv") {
       return new NextResponse(exportPublicDataCSV(revenues.data), {
         headers: {
@@ -21,7 +25,7 @@ export async function GET(request: NextRequest) {
       });
     }
     return NextResponse.json({
-      entity: "Prefeitura Municipal de Lagoa Seca/PB",
+      entity: institution.name,
       updatedAt: revenues.updatedAt?.toISOString() ?? null,
       total: revenues.total,
       page: revenues.page,

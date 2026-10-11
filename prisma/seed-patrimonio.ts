@@ -486,7 +486,7 @@ async function main() {
     data: {
       nome: 'Administrador do Sistema',
       email: 'admin@prefeitura.gov.br',
-      perfilId: adminPerfil.id,
+      perfilId: adminPerfil.id
     }
   })
 

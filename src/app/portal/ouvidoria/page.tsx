@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Headset } from "lucide-react";
 import { PortalBreadcrumb } from "@/components/portal-institucional/PortalShell";
-import { municipality, fullAddress } from "@/lib/platform/municipality";
+import { MUNICIPALITY_INSTITUTION_NAME } from "@/lib/municipality-identity";
 
 export const metadata: Metadata = {
-  title: `Ouvidoria | ${municipality.cityHallShort}`,
-  description: `Ouvidoria municipal da ${municipality.prefectureName} — canais de manifestação do cidadão.`,
+  title: `Ouvidoria | ${MUNICIPALITY_INSTITUTION_NAME}`,
+  description: `Ouvidoria municipal de ${MUNICIPALITY_INSTITUTION_NAME} — canais de manifestação do cidadão.`,
 };
 
 const CHANNELS = [
@@ -23,7 +23,7 @@ export default function OuvidoriaPage() {
       <p className="mt-5 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[#0e4c7e]"><Headset className="size-4" aria-hidden="true" /> Participação e controle social</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">Ouvidoria municipal</h1>
       <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-        A Ouvidoria é o canal oficial de escuta do cidadão da {municipality.prefectureName}.
+        A Ouvidoria é o canal oficial de escuta do cidadão de {MUNICIPALITY_INSTITUTION_NAME}.
         Registre manifestações pelo Fale Conosco institucional e acompanhe os relatórios de atendimento.
       </p>
       <div className="mt-6 grid gap-3 md:grid-cols-2">

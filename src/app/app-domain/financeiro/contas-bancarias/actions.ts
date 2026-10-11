@@ -43,6 +43,8 @@ async function getTransferAccount(context: Awaited<ReturnType<typeof getTenantPr
 export async function createBankAccount(data: {
   bankName: string;
   agency: string;
+  bankId?: string;
+  bankBranchId?: string;
   accountNumber: string;
   accountType: string;
   currentBalance: number;
@@ -58,13 +60,16 @@ export async function createBankAccount(data: {
     openingBalance: data.currentBalance,
   });
 
-  revalidatePath("/financeiro/contas-bancarias");
+  revalidatePath("/app-domain/financeiro/contas-bancarias");
+  revalidatePath("/app-domain/cadastros/bancos-agencias");
   return account;
 }
 
 export async function updateBankAccount(id: string, data: {
   bankName?: string;
   agency?: string;
+  bankId?: string | null;
+  bankBranchId?: string | null;
   accountNumber?: string;
   accountType?: string;
   currentBalance?: number;
@@ -77,7 +82,8 @@ export async function updateBankAccount(id: string, data: {
   await assertAccountAccess(context, id, data.budgetUnitId);
   const account = await updateBankAccountDetails(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, id, data);
 
-  revalidatePath("/financeiro/contas-bancarias");
+  revalidatePath("/app-domain/financeiro/contas-bancarias");
+  revalidatePath("/app-domain/cadastros/bancos-agencias");
   return account;
 }
 
@@ -86,7 +92,7 @@ export async function toggleBankAccountStatus(id: string, isActive: boolean) {
   await assertAccountAccess(context, id);
   const account = await updateBankAccountDetails(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, id, { isActive });
 
-  revalidatePath("/financeiro/contas-bancarias");
+  revalidatePath("/app-domain/financeiro/contas-bancarias");
   return account;
 }
 

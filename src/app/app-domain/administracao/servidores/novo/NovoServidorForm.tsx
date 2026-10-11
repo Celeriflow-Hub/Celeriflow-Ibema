@@ -5,6 +5,7 @@ import { ArrowLeft, Save } from "lucide-react";
 import { createEmployee } from "../actions";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
+import { ReferenceLookup } from "@/app/app-domain/rh/operacoes/ReferenceLookup";
 
 type NamedOption = { id: string; name: string };
 
@@ -40,24 +41,8 @@ export default function NovoServidorForm({ roles, secretariats, departments, uni
           
           <div>
             <h2 className="mb-2 border-b border-slate-200 pb-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-600">Dados Pessoais</h2>
-            <div className="grid gap-2 md:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">Nome Completo *</label>
-                <input type="text" name="name" required className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">CPF *</label>
-                <input type="text" name="cpf" required className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">E-mail</label>
-                <input type="email" name="email" className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">Telefone</label>
-                <input type="text" name="phone" className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm" />
-              </div>
-            </div>
+            <label className="text-xs">Pessoa física do Cadastro Único<ReferenceLookup kind="person" name="personId" required /></label>
+            <p className="mt-2 text-xs text-slate-600">Nome, CPF, e-mail e telefone vêm da pessoa física selecionada. Cadastre ou atualize os dados pessoais no Cadastro Único.</p>
           </div>
 
           <div>

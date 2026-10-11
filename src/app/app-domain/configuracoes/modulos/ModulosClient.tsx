@@ -5,7 +5,8 @@ import {
   Blocks, Search, CheckCircle2, Lock, Unlock, 
   Building2, Users, FileText, ShoppingCart, DollarSign, 
   Package, Receipt, Stethoscope, GraduationCap, HeartHandshake, HardHat, 
-  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, AlertCircle, RefreshCw, Truck, BadgeCheck
+  Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, AlertCircle, RefreshCw, Truck, BadgeCheck,
+  Church, ClipboardCheck, Headset, Lightbulb
 } from "lucide-react";
 import { toggleModulo } from "../actions";
 import { PageFrame } from "@/components/app-ui/PageFrame";
@@ -24,11 +25,13 @@ const MODULE_ICONS: Record<string, { icon: React.ElementType; color: string; bg:
   ADMINISTRACAO: { icon: Building2, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-950/50" },
   CADASTROS: { icon: FileText, color: "text-slate-600 dark:text-slate-400", bg: "bg-slate-50 dark:bg-slate-900" },
   PROCESSOS: { icon: Share2, color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-50 dark:bg-cyan-950/50" },
-  DOCUMENTOS: { icon: FileText, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/50" },
+  ILUMINACAO_PUBLICA: { icon: Lightbulb, color: "text-yellow-600 dark:text-yellow-400", bg: "bg-yellow-50 dark:bg-yellow-950/50" },
   ATENDIMENTO: { icon: Users, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-950/50" },
   TRANSPARENCIA: { icon: Share2, color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-50 dark:bg-sky-950/50" },
   TRIBUTACAO: { icon: Receipt, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/50" },
   FINANCEIRO: { icon: DollarSign, color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-950/50" },
+  PLANEJAMENTO: { icon: Landmark, color: "text-indigo-700 dark:text-indigo-300", bg: "bg-indigo-50 dark:bg-indigo-950/50" },
+  SST: { icon: HardHat, color: "text-teal-700 dark:text-teal-300", bg: "bg-teal-50 dark:bg-teal-950/50" },
   COMPRAS: { icon: ShoppingCart, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-950/50" },
   RH: { icon: Users, color: "text-pink-600 dark:text-pink-400", bg: "bg-pink-50 dark:bg-pink-950/50" },
   PORTAL_SERVIDOR: { icon: BadgeCheck, color: "text-sky-700 dark:text-sky-300", bg: "bg-sky-50 dark:bg-sky-950/50" },
@@ -43,6 +46,9 @@ const MODULE_ICONS: Record<string, { icon: React.ElementType; color: string; bg:
   CULTURA: { icon: Palette, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-950/50" },
   CAMARA: { icon: Landmark, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950/50" },
   SEGURANCA: { icon: Shield, color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-50 dark:bg-teal-950/50" },
+  CEMITERIOS: { icon: Church, color: "text-stone-700 dark:text-stone-300", bg: "bg-stone-100 dark:bg-stone-900" },
+  AUDITORIA: { icon: ClipboardCheck, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950/50" },
+  SUPORTE_TECNICO: { icon: Headset, color: "text-sky-700 dark:text-sky-300", bg: "bg-sky-50 dark:bg-sky-950/50" },
   CONFIGURACOES: { icon: Settings, color: "text-slate-700 dark:text-slate-300", bg: "bg-slate-100 dark:bg-slate-800" },
 };
 
@@ -80,8 +86,8 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
 
   return (
     <PageFrame className="space-y-3 px-1 py-1 md:px-2">
-      <PageHeader title="Módulos contratados" icon={<Blocks className="size-4 shrink-0 text-slate-700 dark:text-slate-300" />} className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white" />
-      <p className="text-sm text-slate-500 dark:text-slate-400">{totalAtivos} de {initialModulos.length} ativos. Ative ou bloqueie o acesso conforme o plano contratado.</p>
+      <PageHeader title="Módulos" icon={<Blocks className="size-4 shrink-0 text-slate-700 dark:text-slate-300" />} className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white" />
+      <p className="text-sm text-slate-500 dark:text-slate-400">{totalAtivos} de {initialModulos.length} ativos. A ativação define quais módulos estão disponíveis nesta instância.</p>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -100,7 +106,7 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
             <Unlock className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Liberados / Contratados</p>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Módulos ativos</p>
             <h3 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{totalAtivos}</h3>
           </div>
         </div>
@@ -110,7 +116,7 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
             <Lock className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Bloqueados / Não Contratados</p>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Módulos inativos</p>
             <h3 className="text-2xl font-bold text-rose-600 dark:text-rose-400">{totalInativos}</h3>
           </div>
         </div>
@@ -120,7 +126,7 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
       <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200 sm:text-sm">
         <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
         <div>
-          <span className="font-bold">Como funciona a liberação de módulos:</span> Ao desativar um módulo nesta tela, o card correspondente na página inicial do sistema ficará <strong>escurecido com um ícone de cadeado 🔒</strong>, impedindo a entrada de usuários nas subpáginas. As rotas internas de integração continuam preservadas no banco de dados.
+          <span className="font-bold">Como funciona a liberação de módulos:</span> Ao desativar um módulo nesta tela, o cartão correspondente deixa de aparecer no Dashboard e o acesso direto às páginas e operações do módulo é bloqueado para todos os perfis. O código e os dados permanecem preservados para uma futura reativação.
         </div>
       </div>
 
@@ -157,7 +163,7 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
               }`}
             >
-              Contratados ({totalAtivos})
+              Ativos ({totalAtivos})
             </button>
             <button
               onClick={() => setFilterStatus("INACTIVE")}
@@ -167,7 +173,7 @@ export default function ModulosClient({ initialModulos }: { initialModulos: Modu
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
               }`}
             >
-              Bloqueados ({totalInativos})
+              Inativos ({totalInativos})
             </button>
           </div>
         </div>

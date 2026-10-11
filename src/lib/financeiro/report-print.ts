@@ -1,3 +1,5 @@
+import { MUNICIPALITY_INSTITUTION_NAME, MUNICIPALITY_NAME, MUNICIPALITY_STATE } from "@/lib/municipality-identity";
+
 /**
  * report-print.ts
  * 
@@ -101,9 +103,9 @@ function formatCurrency(val: number): string {
 }
 
 function getHeaderHtml(title: string, opts?: DocumentPrintOptions): string {
-  const inst = opts?.institutionName || "PREFEITURA MUNICIPAL DE LAGOA SECA";
-  const city = opts?.cityName || "Lagoa Seca";
-  const uf = opts?.state || "PB";
+  const inst = opts?.institutionName || MUNICIPALITY_INSTITUTION_NAME.toUpperCase();
+  const city = opts?.cityName || MUNICIPALITY_NAME;
+  const uf = opts?.state || MUNICIPALITY_STATE;
   return `
     <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #000; padding-bottom:12px; margin-bottom:20px;">
       <div>

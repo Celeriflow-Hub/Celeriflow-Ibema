@@ -84,7 +84,7 @@ export function assertIntegrationEnvironmentPolicy(code: string, environment: In
   if (controlledHealthConnector && environment !== "SANDBOX" && environment !== "HOMOLOGACAO") {
     throw new Error(`O conector ${code} exige ambiente SANDBOX ou HOMOLOGACAO e endpoint controlado.`);
   }
-  if (code !== "BANCO_API" && code !== "SIAFIC_DEMO" && !controlledHealthConnector && environment !== "MOCK") {
+  if (code !== "BANCO_API" && !controlledHealthConnector && environment !== "MOCK") {
     throw new Error(`O conector ${code} é restrito ao ambiente MOCK e não realiza conexões de rede.`);
   }
 }

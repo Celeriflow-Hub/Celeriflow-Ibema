@@ -4,6 +4,13 @@ import { downloadFilename, getFile } from "@/lib/platform/blob";
 import { getAttendanceContext, getOmbudsmanReadContext, ombudsmanScope, ticketScope } from "@/lib/attendance/access";
 import { getProtocolContext, protocolScope } from "@/lib/protocols/access";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
+import { assertSstClinicalAccess } from "@/lib/sst/access";
+import { asoDocumentOwners } from "@/lib/sst/aso-flow-access";
+import { assertConstructionGedSignature } from "@/lib/obras/construction-documents-service";
+import { readConstructionPdf } from "@/lib/obras/construction-document-storage";
+import { assertConstructionProjectStampDownload, findConstructionProjectStampByFile } from "@/lib/obras/construction-project-stamp";
+import { resolveConstructionAccess } from "@/lib/obras/construction-access";
+import { constructionCaseWhere } from "@/lib/obras/construction-policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,19 +25,52 @@ export async function GET(request: NextRequest) {
 
   try {
     const context = await getCurrentTenantContext();
+    const constructionProjectStamp = await findConstructionProjectStampByFile(context.prisma, url);
+    if (constructionProjectStamp && !constructionProjectStamp.publishedAt) throw new AccessError("Cópia derivada urbanística ainda não publicada.", 403);
+    const constructionArtifact = await context.prisma.constructionIssuedDocument.findFirst({ where: { fileUrl: url } });
+    if (constructionArtifact) {
+      if (constructionArtifact.status !== "PUBLISHED") throw new AccessError("Documento urbanístico não publicado ou substituído.", 403);
+      await assertConstructionGedSignature(context.prisma, constructionArtifact.documentVersionId);
+    }
+    // Check occupational ownership independently of generic copies of the same file URL.
+    const asoOwners = await asoDocumentOwners(context.prisma, url);
+    if (asoOwners.length) {
+      const sst = await getTenantContextForModule("SST");
+      for (const owner of asoOwners) await assertSstClinicalAccess(sst, owner.budgetUnitId);
+    }
+    const occupational = await context.prisma.sstCertificateDocument.findFirst({
+      where: { document: { fileUrl: url } },
+      select: { certificate: { select: { budgetUnitId: true } } },
+    });
+    if (occupational) {
+      const sst = await getTenantContextForModule("SST");
+      await assertSstClinicalAccess(sst, occupational.certificate.budgetUnitId);
+    }
     let auditTarget: { type: string; id: string } | null = null;
     const document = await context.prisma.document.findFirst({
       where: { fileUrl: url },
       select: {
         id: true,
+        sstCertificateDocument: { select: { certificate: { select: { budgetUnitId: true } } } },
         ticketLinks: { select: { ticketId: true } },
         ombudsmanLinks: { select: { ombudsmanId: true } },
         processDocuments: { select: { processId: true } },
         healthStandardDocument: { select: { id: true } },
       },
     });
+    const civilCaseIds = constructionArtifact ? [constructionArtifact.caseId] : constructionProjectStamp ? [constructionProjectStamp.caseId] : document?.processDocuments.length ? (await context.prisma.constructionCase.findMany({ where: { processId: { in: document.processDocuments.map((link) => link.processId) } }, select: { id: true } })).map((item) => item.id) : [];
+    if (civilCaseIds.length) {
+      const civilContext = await getTenantContextForModule("OBRAS");
+      const civilAccess = await resolveConstructionAccess(civilContext);
+      if (!await civilContext.prisma.constructionCase.findFirst({ where: { AND: [{ id: { in: civilCaseIds } }, constructionCaseWhere(civilAccess)] }, select: { id: true } })) throw new AccessError("Sem habilitação urbanística no setor responsável pelo documento.", 403);
+    }
 
-    if (document && (document.ticketLinks.length || document.ombudsmanLinks.length)) {
+    if (asoOwners.length && document) {
+      auditTarget = { type: "SST_ASO_DOCUMENT", id: document.id };
+    } else if (document?.sstCertificateDocument) {
+      const sst = await getTenantContextForModule("SST");
+      await assertSstClinicalAccess(sst, document.sstCertificateDocument.certificate.budgetUnitId);
+    } else if (document && (document.ticketLinks.length || document.ombudsmanLinks.length)) {
       let hasLinkedAccess = false;
       if (document.ombudsmanLinks.length) {
         const ombudsmanContext = await getOmbudsmanReadContext();
@@ -83,6 +123,23 @@ export async function GET(request: NextRequest) {
     }
     if (document) auditTarget = { type: "DOCUMENT", id: document.id };
     if (!auditTarget) throw new AccessError("Documento nao encontrado", 404);
+    if (constructionProjectStamp) {
+      const bytes = await assertConstructionProjectStampDownload(context.prisma, constructionProjectStamp);
+      await writeAuditEvent(context.prisma, { actorUsuarioId: context.user.id, eventType: auditEventTypes.documentDownload, targetType: auditTarget.type, targetId: auditTarget.id });
+      return new NextResponse(Buffer.from(bytes), { headers: { "Content-Type": "application/pdf", "Content-Disposition": "inline; filename=projeto-aprovado-copia-derivada.pdf", "Cache-Control": "private, no-store" } });
+    }
+    if (constructionArtifact) {
+      const bytes = await readConstructionPdf(url, constructionArtifact.hashSha256);
+      await writeAuditEvent(context.prisma, { actorUsuarioId: context.user.id, eventType: auditEventTypes.documentDownload, targetType: auditTarget.type, targetId: auditTarget.id });
+      return new NextResponse(Buffer.from(bytes), { headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="${constructionArtifact.number.replaceAll("/", "-")}.pdf"`, "Cache-Control": "private, no-store" } });
+    }
+    if (document && url.startsWith("construction-local:")) {
+      const version = await context.prisma.documentVersion.findFirst({ where: { documentId: document.id, fileUrl: url, status: { in: ["FINAL", "SIGNED"] } }, orderBy: { versionNumber: "desc" }, select: { hashSha256: true } });
+      if (!version) throw new AccessError("Versão complementar indisponível.", 404);
+      const bytes = await readConstructionPdf(url, version.hashSha256);
+      await writeAuditEvent(context.prisma, { actorUsuarioId: context.user.id, eventType: auditEventTypes.documentDownload, targetType: auditTarget.type, targetId: auditTarget.id });
+      return new NextResponse(Buffer.from(bytes), { headers: { "Content-Type": "application/pdf", "Content-Disposition": "inline; filename=complemento-revisado.pdf", "Cache-Control": "private, no-store" } });
+    }
     const response = await getFile(url);
 
     if (!response || !response.stream) {
@@ -102,6 +159,7 @@ export async function GET(request: NextRequest) {
       headers: {
         "Content-Type": contentType,
         "Content-Disposition": `inline; filename="${filename}"`,
+        "Cache-Control": "private, no-store",
       },
     });
   } catch (error) {

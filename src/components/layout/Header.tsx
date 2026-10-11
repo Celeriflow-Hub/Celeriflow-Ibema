@@ -86,7 +86,7 @@ export function Header() {
                   Painel Executivo 360°
                 </Link>
                 <Link href="#regulatorio" className="text-sm font-medium p-2.5 hover:bg-muted rounded-lg transition-colors">
-                  SIAFIC, PNCP & Pix
+                  Finanças, PNCP & Pix
                 </Link>
                 <Link href="#calculadora" className="text-sm font-medium p-2.5 hover:bg-muted rounded-lg transition-colors">
                   Calculadora de ROI Municipal

@@ -27,11 +27,11 @@ import { reconcileFleetMonth } from "../src/lib/integrations/sagres/frota-reconc
 
 test("Frotas · persistência e cenários da POC em banco isolado", { timeout: 180000 }, async t => {
   const memory = await PGlite.create();
-  const generated = spawnSync(process.execPath, ["node_modules/prisma/build/index.js", "migrate", "diff", "--from-empty", "--to-schema", "prisma/", "--script"], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+  const generated = spawnSync(process.execPath, ["node_modules/prisma/build/index.js", "migrate", "diff", "--from-empty", "--to-schema", "prisma/schema.prisma", "--script"], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
   assert.equal(generated.status, 0, generated.stderr);
   await memory.exec(generated.stdout);
   // Only this newly created in-memory database is reset, to execute the exact incremental migration.
-  await memory.exec('DROP TABLE "FleetSagresMonthEvent", "FleetSagresMonthRevision", "FleetSagresMonthSituation", "FleetSagresMonthUnit", "FleetSagresMonth", "FleetPortalRateLimit", "FleetWorkshopReport", "FleetDriver", "FleetFuelStation", "FleetFuelQuota", "FleetFuelOrder", "FleetTrip", "FleetTire", "FleetFine", "FleetAssetEvent", "FleetMutation", "FleetExpense", "FleetOccurrence", "FleetDocument", "FleetConsumption", "FleetWorkOrder", "FleetPlan", "FleetUsage", "FleetRoute", "FleetUnit" CASCADE; ALTER TABLE "AssetMaintenance" DROP COLUMN "fleetPreviousStatus";');
+  await memory.exec('DROP TABLE "FleetAssetEvent", "FleetMutation", "FleetExpense", "FleetOccurrence", "FleetDocument", "FleetConsumption", "FleetWorkOrder", "FleetPlan", "FleetUsage", "FleetRoute", "FleetUnit" CASCADE; ALTER TABLE "AssetMaintenance" DROP COLUMN "fleetPreviousStatus";');
   await memory.exec(readFileSync("prisma/migrations/20260918193000_add_independent_fleet_module/migration.sql", "utf8"));
   await memory.exec(readFileSync("prisma/migrations/20260918213000_integrate_fleet_assets_stock/migration.sql", "utf8"));
   // These isolated fixture tables are rebuilt from historical Fleet migrations.

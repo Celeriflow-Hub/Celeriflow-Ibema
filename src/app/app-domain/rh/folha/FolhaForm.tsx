@@ -15,6 +15,8 @@ import type { Payroll } from "@prisma/client";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { ErpPageTitle as PageHeader } from "@/components/app-ui/erp/ErpPageTitle";
 
+const PAYROLL_TYPES = ["Mensal", "Complementar", "Rescisão", "RRA", "Férias", "1ª parcela 13º", "13º", "Diferença 13º", "Adiantamento salarial"];
+
 export function FolhaForm({ data }: { data?: Payroll }) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);

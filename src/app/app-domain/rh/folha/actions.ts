@@ -74,6 +74,7 @@ function refresh(payrollId: string) {
 
 /** Calcula a folha com o motor (INSS/RPPS, IRRF, variáveis, consignados). */
 export async function processPayroll(payrollId: string) {
+  const context = await getTenantContextForModuleOperation("RH", "update");
   try {
     const { prisma, user } = await getTenantContextForModuleOperation("RH", "update");
     const result = await calculatePayrollRun(prisma, payrollId, user.email);

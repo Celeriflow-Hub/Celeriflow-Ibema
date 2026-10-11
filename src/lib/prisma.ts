@@ -9,30 +9,16 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-export function createPrismaClient(connectionString = process.env.NODE_ENV === "test" ? process.env.TEST_DATABASE_URL : process.env.DATABASE_URL) {
-  if (!connectionString?.trim()) {
-    throw new Error("DATABASE_URL is required to create a Prisma client. Tests must provide an isolated TEST_DATABASE_URL through the test runner.");
-  }
-
-  const url = new URL(connectionString);
-  const schema = url.searchParams.get("schema")?.trim() || undefined;
-  url.searchParams.delete("schema");
+export function createPrismaClient(connectionString = process.env.DATABASE_URL!) {
   const adapter = new PrismaNeon({
-    connectionString: url.toString(),
-  }, schema ? { schema } : undefined);
-  return new PrismaClient({ adapter });
+    connectionString,
+  });
+  return new PrismaClient({
+    adapter,
+    transactionOptions: { maxWait: 10_000, timeout: 30_000 },
+  });
 }
 
-// Lazy: the build collects page data without DATABASE_URL, so only connect on first use.
-function getPrismaClient(): PrismaClient {
-  if (!globalForPrisma.prisma) globalForPrisma.prisma = createPrismaClient();
-  return globalForPrisma.prisma;
-}
+export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
-export const prisma = new Proxy({} as PrismaClient, {
-  get(_target, property) {
-    const client = getPrismaClient();
-    const value = Reflect.get(client, property, client);
-    return typeof value === "function" ? value.bind(client) : value;
-  },
-});
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;

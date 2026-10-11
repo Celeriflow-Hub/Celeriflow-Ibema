@@ -6,6 +6,18 @@ import { municipality } from "@/lib/platform/municipality";
 // ATENÇÃO: O middleware roda no Edge Runtime — NÃO importar módulos Node.js aqui.
 const SESSION_COOKIE_NAME = "celeriflow_session";
 
+function configuredSystemHostname() {
+  const configuredUrl = process.env.CELERIFLOW_PUBLIC_BASE_URL;
+  if (!configuredUrl) return null;
+
+  try {
+    const url = new URL(/^https?:\/\//i.test(configuredUrl) ? configuredUrl : `https://${configuredUrl}`);
+    return url.hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 export const config = {
   matcher: [
     /*

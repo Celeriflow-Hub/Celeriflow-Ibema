@@ -96,31 +96,37 @@ export async function ensureDefaultModulos() {
   const prisma = await getTenantPrisma();
   const existing = await prisma.configuracaoModulo.findMany({ select: { codigo: true } });
   const existingCodes = new Set(existing.map((m) => m.codigo.toUpperCase()));
+  const inactiveByDefault = new Set(["EDUCACAO", "SANEAMENTO", "CULTURA", "SEGURANCA", "MEIO_AMBIENTE"]);
 
   const defaultModules = [
-    { codigo: "ADMINISTRACAO", nome: "Administração Geral & Entidades" },
-    { codigo: "CADASTROS", nome: "Pessoas & Cadastros Gerais" },
-    { codigo: "PROCESSOS", nome: "Processos Administrativos & Protocolos" },
-    { codigo: "DOCUMENTOS", nome: "Documentos / GED & Certidões" },
-    { codigo: "ATENDIMENTO", nome: "Atendimento ao Cidadão & Ouvidoria" },
-    { codigo: "TRANSPARENCIA", nome: "Portal da Transparência & LAI" },
-    { codigo: "TRIBUTACAO", nome: "Tributação, Arrecadação & IPTU" },
-    { codigo: "FINANCEIRO", nome: "Financeiro, Orçamento & Tesouraria" },
-    { codigo: "COMPRAS", nome: "Compras, Licitações & Cotações" },
-    { codigo: "RH", nome: "Recursos Humanos & Servidores" },
+    { codigo: "ADMINISTRACAO", nome: "Administração" },
+    { codigo: "CADASTROS", nome: "Cadastros" },
+    { codigo: "PROCESSOS", nome: "Processos e Protocolo" },
+    { codigo: "ATENDIMENTO", nome: "Atendimento ao Cidadão" },
+    { codigo: "TRANSPARENCIA", nome: "Portal Transparência" },
+    { codigo: "TRIBUTACAO", nome: "Tributário" },
+    { codigo: "FINANCEIRO", nome: "Financeiro e Contábil" },
+    { codigo: "PLANEJAMENTO", nome: "Planejamento e Orçamento" },
+    { codigo: "SST", nome: "Segurança e Medicina do Trabalho" },
+    { codigo: "COMPRAS", nome: "Compras e Contratos" },
+    { codigo: "RH", nome: "RH e Folha" },
     { codigo: "PORTAL_SERVIDOR", nome: "Portal do Servidor" },
     { codigo: "PATRIMONIO", nome: "Almoxarifado e Patrimônio" },
-    { codigo: "EDUCACAO", nome: "Educação Pública & Escolas" },
-    { codigo: "SAUDE", nome: "Saúde Pública & UBSs" },
-    { codigo: "SOCIAL", nome: "Assistência Social & CRAS" },
-    { codigo: "MEIO_AMBIENTE", nome: "Meio Ambiente & Licenciamento" },
-    { codigo: "SANEAMENTO", nome: "Saneamento, Água & Esgoto" },
-    { codigo: "OBRAS", nome: "Obras Públicas & Vistorias" },
+    { codigo: "EDUCACAO", nome: "Educação" },
+    { codigo: "SAUDE", nome: "Saúde" },
+    { codigo: "SOCIAL", nome: "Assistência Social" },
+    { codigo: "MEIO_AMBIENTE", nome: "Meio Ambiente" },
+    { codigo: "SANEAMENTO", nome: "Água e Saneamento" },
+    { codigo: "OBRAS", nome: "Obras e Construção Civil" },
+    { codigo: "ILUMINACAO_PUBLICA", nome: "Iluminação Pública (Iluminaflow)" },
     { codigo: "FROTAS", nome: "Frotas" },
-    { codigo: "CULTURA", nome: "Cultura, Esporte & Turismo" },
-    { codigo: "CAMARA", nome: "Câmara Municipal & Legislação" },
-    { codigo: "SEGURANCA", nome: "Segurança Pública & Guarda Municipal" },
-    { codigo: "CONFIGURACOES", nome: "Configurações do Sistema & Integrações" },
+    { codigo: "CULTURA", nome: "Cultura e Lazer" },
+    { codigo: "CAMARA", nome: "Câmara Municipal" },
+    { codigo: "SEGURANCA", nome: "Segurança e Mobilidade" },
+    { codigo: "CEMITERIOS", nome: "Cemitérios" },
+    { codigo: "AUDITORIA", nome: "Auditoria" },
+    { codigo: "SUPORTE_TECNICO", nome: "Suporte Técnico" },
+    { codigo: "CONFIGURACOES", nome: "Configurações" },
   ];
 
   for (const mod of defaultModules) {
@@ -129,11 +135,18 @@ export async function ensureDefaultModulos() {
         data: {
           codigo: mod.codigo,
           nome: mod.nome,
-          ativo: true,
-          dataAtivacao: new Date(),
+          ativo: !inactiveByDefault.has(mod.codigo),
+          dataAtivacao: inactiveByDefault.has(mod.codigo) ? null : new Date(),
         },
       });
     }
+  }
+
+  for (const mod of defaultModules) {
+    await prisma.configuracaoModulo.updateMany({
+      where: { codigo: mod.codigo, nome: { not: mod.nome } },
+      data: { nome: mod.nome },
+    });
   }
 
   await prisma.configuracaoModulo.updateMany({

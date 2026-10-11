@@ -88,6 +88,22 @@ export function occupancyStats(graves: { capacity: number; occupantCount: number
   return { graves: graves.length, capacity, occupied, free, rate: capacity ? Number(((occupied / capacity) * 100).toFixed(2)) : 0 };
 }
 
+export function assertLotCanReceiveGrave(graveCount: number, graveLimit: number) {
+  if (!Number.isInteger(graveLimit) || graveLimit < 1) throw new TributarioS9Error("Limite de sepulturas inválido.");
+  if (graveCount >= graveLimit) throw new TributarioS9Error("O lote já atingiu o limite de sepulturas configurado.");
+}
+
+export function assertCemeteryTransferAllowed(input: { deceasedStatus: string; currentGraveId: string | null; originGraveId: string }) {
+  if (input.deceasedStatus !== "SEPULTADO" || input.currentGraveId !== input.originGraveId) throw new TributarioS9Error("A transferência só pode ocorrer para um falecido atualmente sepultado na origem informada.");
+}
+
+export function cemeteryFeeAmount(input: { formula: "VALOR_FIXO" | "BASE_X_QUANTIDADE"; baseAmount: Prisma.Decimal | string | number; quantity?: number }) {
+  const base = money(input.baseAmount, "Valor-base");
+  const quantity = input.quantity ?? 1;
+  if (!Number.isFinite(quantity) || quantity <= 0) throw new TributarioS9Error("Quantidade inválida para o cálculo da taxa.");
+  return input.formula === "BASE_X_QUANTIDADE" ? base.mul(quantity).toDecimalPlaces(2) : base;
+}
+
 // TRI-428 — Situação da concessão temporária/indeterminada.
 export function concessionSituation(concession: { concessionType: string; status: string; endsAt?: Date | string | null }, now = new Date()) {
   if (concession.status === "CANCELADA") return "CANCELADA";

@@ -93,6 +93,10 @@ export default async function RHDashboard() {
           </CardHeader>
           <CardContent>
             <div className="grid gap-2 sm:grid-cols-2">
+              <Link href="/rh/operacoes" className="flex items-center rounded-md border p-2.5 transition-colors hover:bg-muted">
+                <FileText className="mr-3 size-5 text-blue-500" />
+                <div><div className="font-semibold">Contratos e operações</div><div className="text-xs text-muted-foreground">Movimentos, direitos, cálculos e integrações</div></div>
+              </Link>
               <Link href="/rh/servidores" className="flex items-center rounded-md border p-2.5 transition-colors hover:bg-muted">
                 <Users className="mr-3 size-5 text-emerald-500" />
                 <div>

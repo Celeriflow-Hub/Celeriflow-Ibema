@@ -1,4 +1,4 @@
-import { BadgeCheck, Bell, CalendarDays, Clock3, FileSignature, LockKeyhole, UserRoundCheck } from "lucide-react";
+import { BadgeCheck, CalendarDays, Clock3, FileSignature, LockKeyhole, UserRoundCheck } from "lucide-react";
 import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import { getEmployeePortalAccess } from "@/lib/portal-servidor/access";
 import Link from "next/link";
@@ -59,20 +59,7 @@ export default async function PortalServidorPage() {
         icon={<UserRoundCheck className="size-5 text-emerald-700" />}
       />
 
-      <div className="grid min-h-0 flex-1 grid-rows-[auto_auto_1fr] gap-2 p-3">
-        <section className="flex flex-col gap-2" aria-label="Avisos">
-          {latestPayslip && (
-            <Link href="/portal-servidor/emissao" className="flex items-center gap-2 border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 hover:bg-emerald-100">
-              <Bell className="size-4" /> Novo contracheque disponível: <strong>{latestPayslip.type} {latestPayslip.competence}</strong>. Toque para emitir.
-            </Link>
-          )}
-          {decidedRequests > 0 && (
-            <Link href="/portal-servidor/solicitacoes" className="flex items-center gap-2 border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-900 hover:bg-sky-100">
-              <Bell className="size-4" /> {decidedRequests} solicitação(ões) respondida(s) pelo RH nos últimos 30 dias.
-            </Link>
-          )}
-          {pendingRequests > 0 && <p className="px-1 text-[11px] text-slate-500">{pendingRequests} solicitação(ões) em análise no RH.</p>}
-        </section>
+      <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr] gap-2 p-3">
         <section className="grid gap-px overflow-hidden border border-slate-300 bg-slate-200 shadow-sm md:grid-cols-3">
           <div className="min-w-0 bg-white px-3 py-2.5">
             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Servidor</p>

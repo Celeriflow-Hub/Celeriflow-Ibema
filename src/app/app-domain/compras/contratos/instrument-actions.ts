@@ -35,8 +35,6 @@ import {
   cancelInstrumentMeasurementLiquidationAuthorization,
   recordInstrumentMeasurementLiquidationAuthorization,
 } from "@/lib/compras/procurement-finance-bridge";
-import { dispatchSiaficEvents } from "@/lib/siafic/dispatcher";
-import { queueCovenantSnapshot } from "@/lib/siafic/source";
 
 export type InstrumentActionResult = { success: true } | { success: false; error: string };
 
@@ -209,15 +207,6 @@ function revalidateInstrumentPaths(reference: InstrumentReference) {
   revalidatePath(`${basePath}/${reference.id}/relatorio`);
 }
 
-async function queueCovenantSnapshotAfterInstrumentMutation(
-  tx: Transaction,
-  actorUsuarioId: string,
-  reference: InstrumentReference,
-) {
-  if (reference.kind !== "COVENANT") return [];
-  return queueCovenantSnapshot(tx, { usuarioId: actorUsuarioId }, reference.id, "UPDATE");
-}
-
 async function lockInstrumentExecution(tx: Transaction, instrument: AuthorizedInstrument) {
   const now = new Date();
   const updated = instrument.kind === "CONTRACT"
@@ -296,10 +285,10 @@ export async function saveInstrumentResponsibilityGroup(formData: FormData): Pro
     const key = idempotencyKey(formData, "INSTRUMENT_GROUP", reference);
     const context = await getTenantContextForModuleOperation("COMPRAS", "update");
 
-    const eventIds = await context.prisma.$transaction(async (tx) => {
+    await context.prisma.$transaction(async (tx) => {
       const instrument = await getAuthorizedInstrument(tx, context.user, reference);
       assertInstrumentWritable(instrument);
-      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_RESPONSIBILITY_GROUP")) return [];
+      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_RESPONSIBILITY_GROUP")) return;
 
       const parent = instrumentParentFields(reference);
       const duplicate = await tx.instrumentResponsibilityGroup.findFirst({
@@ -321,15 +310,13 @@ export async function saveInstrumentResponsibilityGroup(formData: FormData): Pro
         });
         if (updated.count !== 1) throw new ContractLifecycleError("O grupo foi alterado por outra operação. Atualize e tente novamente.");
         await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_RESPONSIBILITY_GROUP_UPDATED", entityType: "INSTRUMENT_RESPONSIBILITY_GROUP", entityId: existing.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-        return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
+        return;
       }
 
       const created = await tx.instrumentResponsibilityGroup.create({ data: { ...parent, name, description, status } });
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_RESPONSIBILITY_GROUP_CREATED", entityType: "INSTRUMENT_RESPONSIBILITY_GROUP", entityId: created.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -344,10 +331,10 @@ export async function deleteInstrumentResponsibilityGroup(formData: FormData): P
     const key = idempotencyKey(formData, "INSTRUMENT_GROUP_DELETE", reference);
     const context = await getTenantContextForModuleOperation("COMPRAS", "update");
 
-    const eventIds = await context.prisma.$transaction(async (tx) => {
+    await context.prisma.$transaction(async (tx) => {
       const instrument = await getAuthorizedInstrument(tx, context.user, reference);
       assertInstrumentWritable(instrument);
-      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_RESPONSIBILITY_GROUP")) return [];
+      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_RESPONSIBILITY_GROUP")) return;
 
       const group = await tx.instrumentResponsibilityGroup.findUnique({
         where: { id: groupId },
@@ -362,10 +349,8 @@ export async function deleteInstrumentResponsibilityGroup(formData: FormData): P
       });
       if (deleted.count !== 1) throw new ContractLifecycleError("O grupo foi alterado por outra operação. Atualize e tente novamente.");
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_RESPONSIBILITY_GROUP_DELETED", entityType: "INSTRUMENT_RESPONSIBILITY_GROUP", entityId: group.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -387,10 +372,10 @@ export async function saveInstrumentParty(formData: FormData): Promise<Instrumen
     const key = idempotencyKey(formData, "INSTRUMENT_PARTY", reference);
     const context = await getTenantContextForModuleOperation("COMPRAS", "update");
 
-    const eventIds = await context.prisma.$transaction(async (tx) => {
+    await context.prisma.$transaction(async (tx) => {
       const instrument = await getAuthorizedInstrument(tx, context.user, reference);
       assertInstrumentWritable(instrument);
-      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_PARTY")) return [];
+      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_PARTY")) return;
 
       const [identity, responsibilityGroupId] = await Promise.all([
         validatePartyIdentity(tx, formString(formData, "partyReference")),
@@ -412,15 +397,13 @@ export async function saveInstrumentParty(formData: FormData): Promise<Instrumen
         });
         if (updated.count !== 1) throw new ContractLifecycleError("A parte foi alterada por outra operação. Atualize e tente novamente.");
         await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_PARTY_UPDATED", entityType: "INSTRUMENT_PARTY", entityId: existing.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-        return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
+        return;
       }
 
       const created = await tx.instrumentParty.create({ data: { ...parent, ...data } });
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_PARTY_CREATED", entityType: "INSTRUMENT_PARTY", entityId: created.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -435,10 +418,10 @@ export async function deleteInstrumentParty(formData: FormData): Promise<Instrum
     const key = idempotencyKey(formData, "INSTRUMENT_PARTY_DELETE", reference);
     const context = await getTenantContextForModuleOperation("COMPRAS", "update");
 
-    const eventIds = await context.prisma.$transaction(async (tx) => {
+    await context.prisma.$transaction(async (tx) => {
       const instrument = await getAuthorizedInstrument(tx, context.user, reference);
       assertInstrumentWritable(instrument);
-      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_PARTY")) return [];
+      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_PARTY")) return;
 
       const party = await tx.instrumentParty.findUnique({
         where: { id: partyId },
@@ -452,10 +435,8 @@ export async function deleteInstrumentParty(formData: FormData): Promise<Instrum
       });
       if (deleted.count !== 1) throw new ContractLifecycleError("A parte foi alterada por outra operação. Atualize e tente novamente.");
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_PARTY_DELETED", entityType: "INSTRUMENT_PARTY", entityId: party.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -560,10 +541,10 @@ export async function saveInstrumentMeasurement(formData: FormData): Promise<Ins
     const key = idempotencyKey(formData, "INSTRUMENT_MEASUREMENT", reference);
     const context = await getTenantContextForModuleOperation("COMPRAS", "update");
 
-    const eventIds = await context.prisma.$transaction(async (tx) => {
+    await context.prisma.$transaction(async (tx) => {
       const instrument = await getAuthorizedInstrument(tx, context.user, reference);
       assertInstrumentWritable(instrument);
-      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_MEASUREMENT")) return [];
+      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_MEASUREMENT")) return;
 
       const parent = instrumentParentFields(reference);
       if (measurementId) {
@@ -645,7 +626,7 @@ export async function saveInstrumentMeasurement(formData: FormData): Promise<Ins
         });
         if (updated.count !== 1) throw new ContractLifecycleError("A medição foi alterada por outra operação. Atualize e tente novamente.");
         await recordInstrumentEvent(tx, { eventType: isCancellation ? "INSTRUMENT_MEASUREMENT_CANCELLED" : "INSTRUMENT_MEASUREMENT_UPDATED", entityType: "INSTRUMENT_MEASUREMENT", entityId: existing.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-        return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
+        return;
       }
 
       const data = {
@@ -662,7 +643,6 @@ export async function saveInstrumentMeasurement(formData: FormData): Promise<Ins
       await assertMeasurementAggregateWithinInstrumentValue(tx, reference, instrument, null, data);
       const created = await tx.instrumentMeasurement.create({ data: { ...parent, ...data } });
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_MEASUREMENT_CREATED", entityType: "INSTRUMENT_MEASUREMENT", entityId: created.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
     // A repeated request also retries the append-only AL candidate after a prior transient failure.
@@ -682,7 +662,6 @@ export async function saveInstrumentMeasurement(formData: FormData): Promise<Ins
       }
     }
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -697,10 +676,10 @@ export async function deleteInstrumentMeasurement(formData: FormData): Promise<I
     const key = idempotencyKey(formData, "INSTRUMENT_MEASUREMENT_DELETE", reference);
     const context = await getTenantContextForModuleOperation("COMPRAS", "update");
 
-    const eventIds = await context.prisma.$transaction(async (tx) => {
+    await context.prisma.$transaction(async (tx) => {
       const instrument = await getAuthorizedInstrument(tx, context.user, reference);
       assertInstrumentWritable(instrument);
-      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_MEASUREMENT")) return [];
+      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_MEASUREMENT")) return;
 
       const measurement = await tx.instrumentMeasurement.findUnique({
         where: { id: measurementId },
@@ -716,10 +695,8 @@ export async function deleteInstrumentMeasurement(formData: FormData): Promise<I
       });
       if (deleted.count !== 1) throw new ContractLifecycleError("A medição foi alterada por outra operação. Atualize e tente novamente.");
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_MEASUREMENT_DELETED", entityType: "INSTRUMENT_MEASUREMENT", entityId: measurement.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -762,10 +739,10 @@ export async function saveInstrumentMeasurementItem(formData: FormData): Promise
     const key = idempotencyKey(formData, "INSTRUMENT_MEASUREMENT_ITEM", reference);
     const context = await getTenantContextForModuleOperation("COMPRAS", "update");
 
-    const eventIds = await context.prisma.$transaction(async (tx) => {
+    await context.prisma.$transaction(async (tx) => {
       const instrument = await getAuthorizedInstrument(tx, context.user, reference);
       assertInstrumentWritable(instrument);
-      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_MEASUREMENT_ITEM")) return [];
+      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_MEASUREMENT_ITEM")) return;
       await measurementForItem(tx, reference, measurementId);
       const purchaseProcessItemId = await validatePurchaseProcessItem(tx, instrument, formString(formData, "purchaseProcessItemId") || null);
 
@@ -782,15 +759,13 @@ export async function saveInstrumentMeasurementItem(formData: FormData): Promise
         });
         if (updated.count !== 1) throw new ContractLifecycleError("O item foi alterado por outra operação. Atualize e tente novamente.");
         await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_MEASUREMENT_ITEM_UPDATED", entityType: "INSTRUMENT_MEASUREMENT_ITEM", entityId: existing.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-        return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
+        return;
       }
 
       const created = await tx.instrumentMeasurementItem.create({ data: { measurementId, ...data, purchaseProcessItemId } });
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_MEASUREMENT_ITEM_CREATED", entityType: "INSTRUMENT_MEASUREMENT_ITEM", entityId: created.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -806,10 +781,10 @@ export async function deleteInstrumentMeasurementItem(formData: FormData): Promi
     const key = idempotencyKey(formData, "INSTRUMENT_MEASUREMENT_ITEM_DELETE", reference);
     const context = await getTenantContextForModuleOperation("COMPRAS", "update");
 
-    const eventIds = await context.prisma.$transaction(async (tx) => {
+    await context.prisma.$transaction(async (tx) => {
       const instrument = await getAuthorizedInstrument(tx, context.user, reference);
       assertInstrumentWritable(instrument);
-      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_MEASUREMENT_ITEM")) return [];
+      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_MEASUREMENT_ITEM")) return;
       await measurementForItem(tx, reference, measurementId);
 
       const item = await tx.instrumentMeasurementItem.findUnique({
@@ -823,10 +798,8 @@ export async function deleteInstrumentMeasurementItem(formData: FormData): Promi
       });
       if (deleted.count !== 1) throw new ContractLifecycleError("O item foi alterado por outra operação. Atualize e tente novamente.");
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_MEASUREMENT_ITEM_DELETED", entityType: "INSTRUMENT_MEASUREMENT_ITEM", entityId: item.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -886,10 +859,10 @@ export async function saveInstrumentInstallment(formData: FormData): Promise<Ins
     const key = idempotencyKey(formData, "INSTRUMENT_INSTALLMENT", reference);
     const context = await getTenantContextForModuleOperation("COMPRAS", "update");
 
-    const eventIds = await context.prisma.$transaction(async (tx) => {
+    await context.prisma.$transaction(async (tx) => {
       const instrument = await getAuthorizedInstrument(tx, context.user, reference);
       assertInstrumentWritable(instrument);
-      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_INSTALLMENT")) return [];
+      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_INSTALLMENT")) return;
 
       const parent = instrumentParentFields(reference);
       const duplicate = await tx.instrumentInstallment.findFirst({
@@ -915,16 +888,14 @@ export async function saveInstrumentInstallment(formData: FormData): Promise<Ins
         });
         if (updated.count !== 1) throw new ContractLifecycleError("A parcela foi alterada por outra operação. Atualize e tente novamente.");
         await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_INSTALLMENT_UPDATED", entityType: "INSTRUMENT_INSTALLMENT", entityId: existing.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-        return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
+        return;
       }
 
       await assertInstallmentAggregateWithinInstrumentValue(tx, reference, instrument, null, data);
       const created = await tx.instrumentInstallment.create({ data: { ...parent, ...data } });
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_INSTALLMENT_CREATED", entityType: "INSTRUMENT_INSTALLMENT", entityId: created.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {
@@ -939,10 +910,10 @@ export async function deleteInstrumentInstallment(formData: FormData): Promise<I
     const key = idempotencyKey(formData, "INSTRUMENT_INSTALLMENT_DELETE", reference);
     const context = await getTenantContextForModuleOperation("COMPRAS", "update");
 
-    const eventIds = await context.prisma.$transaction(async (tx) => {
+    await context.prisma.$transaction(async (tx) => {
       const instrument = await getAuthorizedInstrument(tx, context.user, reference);
       assertInstrumentWritable(instrument);
-      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_INSTALLMENT")) return [];
+      if (await isRepeatedAction(tx, key, reference, "INSTRUMENT_INSTALLMENT")) return;
 
       const installment = await tx.instrumentInstallment.findUnique({
         where: { id: installmentId },
@@ -957,10 +928,8 @@ export async function deleteInstrumentInstallment(formData: FormData): Promise<I
       });
       if (deleted.count !== 1) throw new ContractLifecycleError("A parcela foi alterada por outra operação. Atualize e tente novamente.");
       await recordInstrumentEvent(tx, { eventType: "INSTRUMENT_INSTALLMENT_DELETED", entityType: "INSTRUMENT_INSTALLMENT", entityId: installment.id, reference, actorUsuarioId: context.user.id, idempotencyKey: key });
-      return queueCovenantSnapshotAfterInstrumentMutation(tx, context.user.id, reference);
     });
 
-    await dispatchSiaficEvents(context.prisma, eventIds);
     revalidateInstrumentPaths(reference);
     return { success: true };
   } catch (error) {

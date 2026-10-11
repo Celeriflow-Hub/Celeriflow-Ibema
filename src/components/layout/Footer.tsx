@@ -20,11 +20,11 @@ export function Footer() {
               />
             </Link>
             <p className="max-w-sm text-xs text-slate-400 leading-relaxed">
-              O ecossistema definitivo de inteligência e gestão pública municipal. SIAFIC, PNCP, Pix Dinâmico, Processo Eletrônico 100% Sem Papel e Saúde e-SUS integrados em nuvem serverless de alta velocidade.
+              O ecossistema definitivo de inteligência e gestão pública municipal. Finanças, PNCP, Pix Dinâmico, Processo Eletrônico 100% Sem Papel e Saúde e-SUS integrados em nuvem serverless de alta velocidade.
             </p>
             <div className="mt-4 inline-flex items-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-3 py-1 rounded-full">
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              Sistemas SIAFIC & PNCP 100% Operacionais
+              Sistemas Financeiros & PNCP 100% Operacionais
             </div>
           </div>
           
@@ -44,7 +44,7 @@ export function Footer() {
               </li>
               <li>
                 <Link href="#regulatorio" className="hover:text-blue-400 transition-colors">
-                  Conformidade SIAFIC & PNCP
+                  Conformidade Fiscal & PNCP
                 </Link>
               </li>
               <li>
@@ -59,7 +59,7 @@ export function Footer() {
             <h3 className="font-bold text-slate-200 mb-4 text-xs uppercase tracking-wider font-mono">Regulatório</h3>
             <ul className="space-y-2.5 text-xs">
               <li>
-                <span className="text-slate-400">Decreto nº 10.540/20 (SIAFIC)</span>
+                <span className="text-slate-400">Lei nº 14.133/21 (Licitações)</span>
               </li>
               <li>
                 <span className="text-slate-400">Lei nº 14.133/21 (PNCP)</span>

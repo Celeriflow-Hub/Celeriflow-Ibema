@@ -27,7 +27,7 @@ export default async function ObrasDashboard() {
   return (
     <PageFrame className="space-y-2 px-1 py-1 md:px-2">
       <PageHeader
-        title="Obras e Serviços"
+        title="Obras e Construção Civil"
         icon={<HardHat className="size-4 shrink-0 text-amber-600" />}
         className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white"
       />

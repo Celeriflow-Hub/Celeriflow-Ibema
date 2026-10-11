@@ -1,8 +1,6 @@
 "use server";
 
 import { assertBudgetUnitAccess, AccessError, getTenantContextForModuleOperation, type AppContext, type ModuleOperation } from "@/lib/platform/tenant-context";
-import { dispatchSiaficEvents } from "@/lib/siafic/dispatcher";
-import { queueContractSnapshot, saveContractWithSiaficEvent } from "@/lib/siafic/source";
 import { FinanceError } from "@/lib/financeiro";
 import {
   ProcurementFinanceBridgeError,
@@ -120,14 +118,6 @@ export async function deleteContract(id: string) {
 
       authorizeContractBudgetUnits(context.user, { currentSourceBudgetUnitId: contract.sourceBudgetUnitId });
 
-      const exported = await tx.siaficOutboxEvent.findFirst({
-        where: { entityType: "INSTRUMENT", entityId: contract.id },
-        select: { id: true },
-      });
-      if (exported) {
-        throw new ContractLifecycleError("Contrato com histórico de integração SIAFIC não pode ser excluído. Use o encerramento do instrumento.");
-      }
-
       // The source UG is part of the delete predicate so a concurrent reassignment cannot bypass authorization.
       const deleted = await tx.contract.deleteMany({
         where: { id: contract.id, sourceBudgetUnitId: contract.sourceBudgetUnitId, updatedAt: contract.updatedAt },
@@ -229,10 +219,9 @@ export async function saveContract(formData: FormData) {
       sourceBudgetUnitId,
     };
 
-    let result: { eventIds: string[] };
     if (current) {
       const existing = current;
-      result = await context.prisma.$transaction(async (tx) => {
+      await context.prisma.$transaction(async (tx) => {
         const fresh = await tx.contract.findUnique({
           where: { id: existing.id },
           select: { id: true, sourceBudgetUnitId: true },
@@ -249,12 +238,10 @@ export async function saveContract(formData: FormData) {
           data,
         });
         if (updated.count !== 1) throw new ContractLifecycleError("O contrato foi alterado por outra operação. Revise e tente novamente.");
-        return { eventIds: await queueContractSnapshot(tx, { usuarioId: context.user.id }, existing.id, "UPDATE") };
       });
     } else {
-      result = await saveContractWithSiaficEvent(context.prisma, { usuarioId: context.user.id }, data);
+      await context.prisma.contract.create({ data });
     }
-    await dispatchSiaficEvents(context.prisma, result.eventIds);
     revalidatePath("/compras/contratos");
     if (id) revalidateContractPaths(id);
     return { success: true };
@@ -284,7 +271,7 @@ export async function saveContractAmendment(formData: FormData): Promise<Contrac
     if (!current) return { success: false, error: "Contrato não encontrado." };
     authorizeContractBudgetUnits(context.user, { currentSourceBudgetUnitId: current.sourceBudgetUnitId });
 
-    const result = await context.prisma.$transaction(async (tx) => {
+    await context.prisma.$transaction(async (tx) => {
       const contract = await tx.contract.findUnique({
         where: { id: contractId },
         select: { id: true, sourceBudgetUnitId: true, updatedValue: true, startDate: true, endDate: true, status: true, updatedAt: true },
@@ -300,7 +287,7 @@ export async function saveContractAmendment(formData: FormData): Promise<Contrac
         if (existingEvent.entityType !== "CONTRACT_AMENDMENT" || existingEvent.sourceId !== contract.id) {
           throw new ContractLifecycleError("A chave de repetição já foi usada em outro ato contratual.");
         }
-        return { eventIds: [] as string[] };
+        return;
       }
 
       if (contract.status === "Rescindido") throw new ContractLifecycleError("Contrato rescindido não aceita novos atos.");
@@ -359,14 +346,8 @@ export async function saveContractAmendment(formData: FormData): Promise<Contrac
         },
       });
 
-      // Legacy contracts can be repaired only by administrators, but cannot be exported without a source UG.
-      const eventIds = contract.sourceBudgetUnitId
-        ? await queueContractSnapshot(tx, { usuarioId: context.user.id }, contract.id, "UPDATE")
-        : [];
-      return { eventIds };
     });
 
-    await dispatchSiaficEvents(context.prisma, result.eventIds);
     revalidateContractPaths(contractId);
     return { success: true };
   } catch (error) {

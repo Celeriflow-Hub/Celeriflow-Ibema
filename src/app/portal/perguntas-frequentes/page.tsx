@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PortalBreadcrumb } from "@/components/portal-institucional/PortalShell";
-import { municipality, fullAddress } from "@/lib/platform/municipality";
+import { MUNICIPALITY_INSTITUTION_NAME } from "@/lib/municipality-identity";
 
 export const metadata: Metadata = {
-  title: `Perguntas Frequentes | ${municipality.cityHallShort}`,
-  description: `Perguntas frequentes sobre serviços e canais da ${municipality.prefectureName}.`,
+  title: `Perguntas Frequentes | ${MUNICIPALITY_INSTITUTION_NAME}`,
+  description: `Perguntas frequentes sobre serviços e canais de ${MUNICIPALITY_INSTITUTION_NAME}.`,
 };
 
 const FAQS = [

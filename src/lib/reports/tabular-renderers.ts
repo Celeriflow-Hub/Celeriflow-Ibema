@@ -21,7 +21,7 @@ export function formulaSafeCell(value: string | number) {
 
 function csvCell(value: string | number) {
   const safe = String(formulaSafeCell(value));
-  return `"${safe.replace(/"/g, '""')}"`;
+  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
 function templateMetadataRows(dataset: InternalReportDataset, presentation: TabularReportPresentation): ReportRow[] {

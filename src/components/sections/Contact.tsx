@@ -158,7 +158,7 @@ export function Contact() {
                   </Label>
                   <Input 
                     id="city" 
-                    placeholder="Ex: Lagoa Seca - PB" 
+                    placeholder="Ex: Aurora das Veredas - MG"
                     {...register("city")} 
                     className="bg-slate-950 border-slate-800 focus:border-blue-500 text-slate-100 h-11 text-sm"
                   />
@@ -207,7 +207,7 @@ export function Contact() {
                   className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded-lg text-slate-100 h-11 px-3 text-sm focus:outline-none"
                 >
                   <option value="Todos os 24 Módulos (ERP Completo)">Todos os 24 Módulos (ERP Completo para Prefeitura)</option>
-                  <option value="Finanças, SIAFIC & Tesouraria">Finanças, SIAFIC & Tesouraria</option>
+                  <option value="Finanças & Tesouraria">Finanças & Tesouraria</option>
                   <option value="Tributação & Pix Dinâmico">Tributação & Pix Dinâmico (IPTU/ISS)</option>
                   <option value="Compras, Licitações & PNCP">Compras, Licitações & PNCP (Lei 14.133/21)</option>
                   <option value="Processo Eletrônico Sem Papel">Processo Eletrônico 100% Sem Papel & Ouvidoria</option>

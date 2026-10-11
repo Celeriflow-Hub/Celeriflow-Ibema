@@ -1,51 +1,31 @@
-import { Inbox } from "lucide-react";
-import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
+import Link from "next/link";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
-import { PORTAL_REQUEST_KINDS, PORTAL_REQUEST_STATUS, type PortalRequestKind } from "@/lib/portal-servidor/documents";
-import { decidePortalRequest } from "./actions";
+import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
+import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
+import { OperationForm } from "../operacoes/OperationForm";
 
 export const dynamic = "force-dynamic";
-
-const labels: Record<string, string> = { start: "Início", end: "Fim", days: "Dias", leaveType: "Tipo", email: "E-mail", phone: "Telefone", bankCode: "Banco", bankAgency: "Agência", bankAccount: "Conta" };
-
-export default async function RhSolicitacoesPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
-  const { prisma } = await getTenantContextForModule("RH");
-  const { status = "PENDENTE" } = await searchParams;
-  const requests = await prisma.employeePortalRequest.findMany({ where: status === "TODAS" ? {} : { status }, orderBy: { createdAt: "asc" }, take: 100 });
-  const employees = await prisma.employee.findMany({ where: { id: { in: requests.map((r) => r.employeeId) } }, select: { id: true, name: true, registration: true } });
-  const byId = new Map(employees.map((e) => [e.id, e]));
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto bg-slate-50 p-3 dark:bg-slate-950">
-      <ErpPageTitle title="Solicitações do Portal do Servidor" icon={<Inbox className="size-4 text-violet-600" />} />
-      <nav className="flex gap-2 text-xs">
-        {["PENDENTE", "APROVADA", "INDEFERIDA", "TODAS"].map((s) => (
-          <a key={s} href={`?status=${s}`} className={`rounded-md border px-3 py-1 ${s === status ? "border-violet-600 bg-violet-50 font-semibold text-violet-800" : "bg-white"}`}>{s === "TODAS" ? "Todas" : PORTAL_REQUEST_STATUS[s]}</a>
-        ))}
-      </nav>
-      {!requests.length ? <p className="rounded-md border bg-white p-3 text-sm text-slate-500">Nenhuma solicitação nesta situação.</p> : requests.map((r) => {
-        const e = byId.get(r.employeeId);
-        const p = r.payload as Record<string, string>;
-        return (
-          <section key={r.id} className="rounded-md border border-slate-200 bg-white p-3 text-xs dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex flex-wrap justify-between gap-2">
-              <p className="text-sm font-semibold">{PORTAL_REQUEST_KINDS[r.kind as PortalRequestKind] ?? r.kind} — {e?.name ?? "Servidor"} <span className="font-normal text-slate-500">(mat. {e?.registration ?? "—"})</span></p>
-              <span className="text-slate-500">{r.createdAt.toLocaleString("pt-BR")} · {PORTAL_REQUEST_STATUS[r.status] ?? r.status}</span>
-            </div>
-            <p className="mt-1 text-slate-700">{Object.entries(p).map(([k, v]) => `${labels[k] ?? k}: ${v}`).join(" · ")}</p>
-            {r.justification && <p className="mt-1 text-slate-500">Observação: {r.justification}</p>}
-            {r.decisionNote && <p className="mt-1 text-slate-500">Parecer: {r.decisionNote}</p>}
-            {r.status === "PENDENTE" && (
-              <form action={decidePortalRequest} className="mt-2 flex flex-wrap items-center gap-2">
-                <input type="hidden" name="id" value={r.id} />
-                <input name="note" placeholder="Parecer (obrigatório para indeferir)" className="h-8 min-w-60 flex-1 rounded-md border px-2" />
-                <button name="decision" value="APROVADA" className="h-8 rounded-md bg-emerald-700 px-3 font-semibold text-white">Aprovar</button>
-                <button name="decision" value="INDEFERIDA" className="h-8 rounded-md border border-red-300 px-3 font-semibold text-red-700">Indeferir</button>
-              </form>
-            )}
-          </section>
-        );
-      })}
-    </div>
-  );
+export default async function HrRequests({ searchParams }: { searchParams: Promise<{ page?: string; status?: string }> }) {
+  const { prisma } = await getTenantContextForModule("RH"); const params = await searchParams;
+  const status = ["EM_ANALISE", "DEFERIDA", "INDEFERIDA"].includes(params.status || "") ? params.status || "EM_ANALISE" : "EM_ANALISE";
+  const where = { status, kind: { not: "ACESSO_PORTAL" } };
+  const total = await prisma.hrPortalRequest.count({ where });
+  const page = Math.min(Math.max(1, Number.parseInt(params.page || "1") || 1), Math.max(1, Math.ceil(total / 20)));
+  const rows = await prisma.hrPortalRequest.findMany({ where, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 20, skip: (page - 1) * 20 });
+  const employees = await prisma.employee.findMany({ where: { id: { in: rows.map(row => row.employeeId) } }, select: { id: true, name: true } });
+  const href = (value: number) => `?${new URLSearchParams({ page: String(value), status })}`;
+  return <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
+    <ErpPageTitle title="Solicitações do Portal ao RH" description="Registre a decisão e a referência à providência funcional adotada." action={<Link href="/rh/operacoes">Operações</Link>} />
+    <form className="flex gap-2 text-xs"><select name="status" defaultValue={status} className="rounded border p-2"><option>EM_ANALISE</option><option>DEFERIDA</option><option>INDEFERIDA</option></select><button className="rounded border px-3">Filtrar</button></form>
+    <p className="text-xs">{total} solicitações no filtro</p>
+    {rows.map(row => <article key={row.id} className="rounded border bg-white p-3 text-xs">
+      <strong>{employees.find(employee => employee.id === row.employeeId)?.name} · {row.kind} · {row.status}</strong>
+      <p className="whitespace-pre-wrap">{(row.payload as { description: string }).description}</p>
+      {row.kind === "CREDITO_CONSIGNADO" && <details><summary>Pedido, margem e política na solicitação</summary><pre className="whitespace-pre-wrap break-words">{JSON.stringify(row.payload, null, 2)}</pre><p>Deferir reserva todas as parcelas em transação única. Não representa liberação bancária de crédito.</p></details>}
+      {row.kind === "RECADASTRAMENTO" && <details className="my-2"><summary>Conferir valores anteriores e propostos</summary><pre className="whitespace-pre-wrap break-words">{JSON.stringify({ before: (row.payload as { before: unknown }).before, proposal: (row.payload as { proposal: unknown }).proposal }, null, 2)}</pre><p>O deferimento aplica os campos aprovados ao Cadastro Único na mesma transação da decisão.</p></details>}
+      {row.decision && <p className="whitespace-pre-wrap">Decisão: {row.decision}</p>}
+      {row.status === "EM_ANALISE" && <OperationForm command={row.kind === "CREDITO_CONSIGNADO" ? "decidir-credito" : row.kind === "RECADASTRAMENTO" ? "decidir-recadastramento" : "decidir-solicitacao"} title="Registrar decisão" fields={[{ name: "requestId", label: "Solicitação", value: row.id, type: "hidden" }, { name: "status", label: "Resultado", options: [{ value: "DEFERIDA", label: "Deferida" }, { value: "INDEFERIDA", label: "Indeferida" }] }, { name: "decision", label: "Fundamento, providência e referência ao registro funcional", type: "textarea", required: true }, ...(row.kind === "CREDITO_CONSIGNADO" ? [{ name: "number", label: "Número do contrato (deferimento)" }, { name: "rubricCode", label: "Rubrica consignada (deferimento)" }] : [])]} />}
+    </article>)}
+    <ErpPagination page={page} total={total} pageSize={20} label="solicitações" previousHref={href(page - 1)} nextHref={href(page + 1)} />
+  </div>;
 }

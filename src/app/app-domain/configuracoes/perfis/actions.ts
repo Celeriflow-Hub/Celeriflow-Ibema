@@ -2,13 +2,14 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { AccessError, getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
+import { AccessError, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { normalizeRestrictiveProfilePermissions, SYSTEM_ADMIN_PROFILE_CODE } from "@/lib/administration/c3-policy";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 
 const MODULE_CODES = new Set([
-  "ADMINISTRACAO", "RH", "PORTAL_SERVIDOR", "CADASTROS", "ATENDIMENTO", "COMPRAS", "CONTRATOS", "FINANCEIRO", "PATRIMONIO", "TRIBUTACAO", "PROCESSOS", "SAUDE",
-  "EDUCACAO", "SOCIAL", "FROTAS", "MEIO_AMBIENTE", "CAMARA", "TRANSPARENCIA", "CONFIGURACOES",
+  "ADMINISTRACAO", "CADASTROS", "PROCESSOS", "ATENDIMENTO", "TRANSPARENCIA", "TRIBUTACAO", "FINANCEIRO", "COMPRAS", "RH",
+  "PORTAL_SERVIDOR", "PATRIMONIO", "EDUCACAO", "SAUDE", "SOCIAL", "MEIO_AMBIENTE", "SANEAMENTO", "OBRAS", "FROTAS", "CULTURA", "CAMARA",
+  "SEGURANCA", "CONFIGURACOES", "CEMITERIOS", "AUDITORIA", "SUPORTE_TECNICO", "PLANEJAMENTO", "SST", "ILUMINACAO_PUBLICA",
 ]);
 
 function normalizePermissions(value: string | undefined) {
@@ -27,7 +28,7 @@ export async function upsertPerfil(data: {
   ativo: boolean;
 }) {
   try {
-    const context = await getTenantContextForSystemAdministration();
+    const context = await getTenantContextForModuleOperation("CONFIGURACOES", data.id ? "update" : "create");
     const { prisma } = context;
     const nome = data.nome.trim();
     if (!nome) return { error: "Informe o nome do perfil." };
@@ -54,6 +55,15 @@ export async function upsertPerfil(data: {
       if (existing.codigo === SYSTEM_ADMIN_PROFILE_CODE) {
         return { error: "O perfil técnico do administrador do sistema é gerenciado automaticamente." };
       }
+      // GED is internal: preserve its existing ACL on the server, never accept
+      // grants for this hidden capability from the editable module matrix.
+      if (existing.permissoes) {
+        const previous = JSON.parse(existing.permissoes);
+        const next = JSON.parse(jsonPermissoes);
+        if (previous.modules?.DOCUMENTOS) next.modules.DOCUMENTOS = previous.modules.DOCUMENTOS;
+        if (previous.modulosBloqueados?.includes("DOCUMENTOS")) next.modulosBloqueados.push("DOCUMENTOS");
+        jsonPermissoes = JSON.stringify(next);
+      }
       
       await prisma.$transaction(async (tx) => {
         const profile = await tx.configuracaoPerfil.update({ where: { id: data.id }, data: { nome, descricao: data.descricao, permissoes: jsonPermissoes, ativo: data.ativo } });
@@ -75,7 +85,7 @@ export async function upsertPerfil(data: {
 
 export async function togglePerfilStatus(id: string, ativo: boolean) {
   try {
-    const context = await getTenantContextForSystemAdministration();
+    const context = await getTenantContextForModuleOperation("CONFIGURACOES", "update");
     const { prisma } = context;
     const perfil = await prisma.configuracaoPerfil.findUnique({ where: { id } });
     if (!perfil) return { error: "Perfil não encontrado." };
@@ -96,7 +106,7 @@ export async function togglePerfilStatus(id: string, ativo: boolean) {
 
 export async function deletePerfil(id: string) {
   try {
-    const context = await getTenantContextForSystemAdministration();
+    const context = await getTenantContextForModuleOperation("CONFIGURACOES", "delete");
     const { prisma } = context;
     const perfil = await prisma.configuracaoPerfil.findUnique({ where: { id }, select: { id: true, codigo: true } });
     if (!perfil) return { error: "Perfil não encontrado." };
@@ -127,6 +137,8 @@ function revalidatePermissionConsumers() {
   revalidatePath("/configuracoes");
   revalidatePath("/dashboard");
   revalidatePath("/app-domain/dashboard");
+  revalidatePath("/app-domain/planejamento", "layout");
+  revalidatePath("/app-domain/sst", "layout");
   revalidatePath("/");
 }
 

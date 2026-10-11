@@ -121,7 +121,7 @@ export async function releaseLabReport(context: AppContext, reportId: string, pu
     if (!report?.order.collectionUnitId || report.status !== "REVIEWED") throw new LaboratoryError("Somente laudo revisado pode ser liberado.");
     assertHealthUnitAccess(context.user, report.order.collectionUnitId);
     const configuration = await tx.healthLaboratoryConfiguration.findFirst({ where: { unitId: report.order.collectionUnitId, isActive: true }, orderBy: { createdAt: "desc" } });
-    if (configuration?.usesDigitalSignature && !await tx.documentSignature.findFirst({ where: { documentId: report.documentId }, select: { id: true } })) throw new LaboratoryError("A configuração da unidade exige assinatura digital antes da liberação.");
+    if (configuration?.usesDigitalSignature && !await tx.documentSignature.findFirst({ where: { documentId: report.documentId, status: "SIGNED", documentVersion: { status: "SIGNED" } }, select: { id: true } })) throw new LaboratoryError("A configuração da unidade exige assinatura digital concluída antes da liberação.");
     if (publishToPatient && !configuration?.publishesPatientPortal) throw new LaboratoryError("A publicação ao paciente não está habilitada para a unidade.");
     const now = new Date();
     await tx.healthLabOrder.update({ where: { id: report.order.id }, data: { status: "RELEASED" } });

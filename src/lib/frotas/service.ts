@@ -145,11 +145,7 @@ async function apply(tx: Tx, scope: FleetScope, input: FleetMutation): Promise<{
       return { targetType: "FLEET_WORK_ORDER", targetId: order.id };
     }
     case "completeOrder": {
-      const d = input.data;
-      // Serialize finalization with the workshop portal and approval flow.
-      const orderLock = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "FleetWorkOrder" WHERE "id" = ${d.orderId} FOR UPDATE`;
-      if (!orderLock.length) throw new FleetError("OS não encontrada.");
-      const order = await tx.fleetWorkOrder.findFirst({ where: { id: d.orderId, unit: departmentWhere(scope) } });
+      const d = input.data, order = await tx.fleetWorkOrder.findFirst({ where: { id: d.orderId, unit: departmentWhere(scope) } });
       if (!order) throw new FleetError("OS não encontrada ou fora do seu setor.");
       if (order.status === "CONCLUIDA") {
         if (order.completedAt?.getTime() !== dateOnly(d.completedAt).getTime() || order.performed !== d.performed || order.result !== d.result || (order.actualCost?.toString() ?? null) !== (decimal(d.actualCost)?.toString() ?? null)) throw new FleetError("A OS já foi concluída com outros dados; seu histórico foi preservado.");

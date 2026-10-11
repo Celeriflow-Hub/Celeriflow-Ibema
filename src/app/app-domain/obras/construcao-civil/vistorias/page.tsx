@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { resolveConstructionAccess } from "@/lib/obras/construction-access";
 import { constructionCaseWhere } from "@/lib/obras/construction-policy";
 import ApplyPropertyUpdateButton from "./ApplyPropertyUpdateButton";
@@ -8,7 +8,7 @@ import { lifecycleFilter, lifecyclePage, lifecycleSearch, listConstructionProper
 
 export default async function ConstructionInspectionsPage({ searchParams }: { searchParams: Promise<LifecycleListQuery> }) {
   const query = await searchParams;
-  const context = await getTenantContextForModuleOperation("OBRAS", "read");
+  const context = await getTenantContextForModule("OBRAS");
   const access = await resolveConstructionAccess(context);
   const search = lifecycleSearch(query.inspectionQ);
   const status = lifecycleFilter(query.inspectionStatus, ["REQUESTED", "APPROVED", "FAILED"]);

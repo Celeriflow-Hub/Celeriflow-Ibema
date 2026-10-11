@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { resolveConstructionAccess } from "@/lib/obras/construction-access";
 import { constructionCaseWhere } from "@/lib/obras/construction-policy";
 import { getConstructionPropertyDebts } from "@/lib/obras/construction-taxation";
@@ -12,7 +12,7 @@ import { getConstructionInspectionCorrections } from "@/lib/obras/construction-l
 export default async function ConstructionLifecyclePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<LifecycleListQuery> }) {
   const { id } = await params;
   const query = await searchParams;
-  const context = await getTenantContextForModuleOperation("OBRAS", "read");
+  const context = await getTenantContextForModule("OBRAS");
   const access = await resolveConstructionAccess(context);
   const record = await context.prisma.constructionCase.findFirst({ where: { AND: [{ id }, constructionCaseWhere(access)] }, include: { configuration: true, process: true, inspectionPlan: true, lifecycleStart: true, reviews: { where: { decision: "APPROVED", reviewType: "PROJECT" }, select: { id: true }, orderBy: { createdAt: "desc" }, take: 1 }, properties: { include: { realEstate: true } } } });
   if (!record) notFound();

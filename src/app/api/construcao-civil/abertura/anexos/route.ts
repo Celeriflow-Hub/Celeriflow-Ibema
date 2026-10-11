@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
   try {
     const identity = await getConstructionPortalIdentity();
     const applicationId = request.nextUrl.searchParams.get("applicationId"); const documentId = request.nextUrl.searchParams.get("documentId");
-    if (!applicationId || !documentId) throw new AccessError("Referência incompleta.", 400);
+    if (!applicationId || !documentId) return NextResponse.json({ error: "Referência incompleta." }, { status: 400 });
     const application = await prisma.constructionExternalApplication.findFirst({ where: { id: applicationId, identityId: identity.id } });
     if (!application) throw new AccessError("Abertura indisponível.", 404);
     assertExternalApplicationScope(application, identity.id);

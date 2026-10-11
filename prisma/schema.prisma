@@ -175,8 +175,11 @@ model Role {
 
 // Servidores BÃ¡sicos (Base para RH e vinculaÃ§Ã£o de responsÃ¡veis)
 model Employee {
+  sstAsos SstAso[]
   constructionStaff ConstructionStaffRole[]
   assignedConstructionCases ConstructionCase[]
+  sstPlannedShifts SstPlannedShift[]
+  sstAppointments SstAppointment[]
   socialLinks SocialProfessionalLink[]
   id              String  @id @default(cuid())
   name            String
@@ -345,7 +348,13 @@ model CalendarEvent {
 
 // Pessoas FÃ­sicas
 model Person {
+  sstAsos SstAso[] @relation("SstAsoSubject")
+  sstExaminedAsos SstAso[] @relation("SstAsoExaminer")
+  sstPerformedExams SstOccupationalExam[]
   constructionProfessionals ConstructionProfessional[]
+  sstPrograms SstOccupationalProgram[]
+  sstBoardMemberships SstMedicalBoardMember[]
+  sstAvailabilities SstScheduleAvailability[]
   socialFacts SocialPersonFact[]
   socialFinancialEntries SocialFinancialEntry[]
   socialProfile SocialPersonProfile?
@@ -437,6 +446,7 @@ model Person {
 // Pessoas JurÃ­dicas
 model Company {
   constructionProfile ConstructionCompanyProfile?
+  sstExamLaboratories SstOccupationalExam[]
   constructionEmployers ConstructionProfessionalEmployer[]
   id             String    @id @default(cuid())
   corporateName  String
@@ -3566,6 +3576,13 @@ model CreditRequestItem {
 }
 
 model BudgetUnit {
+  sstQuestionnaires SstQuestionnaireVersion[]
+  sstAsos SstAso[]
+  sstPrograms SstOccupationalProgram[]
+  sstExposureGroups SstExposureGroup[]
+  sstPlannedShifts SstPlannedShift[]
+  sstBoards SstMedicalBoard[]
+  sstAvailabilities SstScheduleAvailability[]
   id            String      @id @default(cuid())
   code          String      @unique
   name          String
@@ -5447,6 +5464,7 @@ model SstCertificateReason {
 }
 
 model SstMedicalCertificate {
+  reasonSnapshot Json?
   id String @id @default(cuid())
   budgetUnitId String
   budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
@@ -5484,6 +5502,8 @@ model SstMedicalCertificate {
 }
 
 model SstMedicalAssessment {
+  boardId String?
+  board SstMedicalBoard? @relation(fields: [boardId], references: [id], onDelete: Restrict)
   id String @id @default(cuid())
   certificateId String
   certificate SstMedicalCertificate @relation(fields: [certificateId], references: [id], onDelete: Restrict)
@@ -5507,6 +5527,240 @@ model SstCertificateDocument {
   createdById String
   createdAt DateTime @default(now())
   @@index([certificateId])
+}
+
+model SstMedicalBoard {
+  id String @id @default(cuid())
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  name String
+  startsAt DateTime
+  endsAt DateTime
+  isActive Boolean @default(true)
+  members SstMedicalBoardMember[]
+  assessments SstMedicalAssessment[]
+  createdById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([budgetUnitId, startsAt, endsAt])
+}
+
+model SstMedicalBoardMember {
+  id String @id @default(cuid())
+  boardId String
+  board SstMedicalBoard @relation(fields: [boardId], references: [id], onDelete: Restrict)
+  personId String
+  person Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+  council String
+  @@unique([boardId, personId])
+}
+
+model SstScheduleAvailability {
+  id String @id @default(cuid())
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  professionalPersonId String
+  professional Person @relation(fields: [professionalPersonId], references: [id], onDelete: Restrict)
+  unitName String
+  startsAt DateTime
+  endsAt DateTime
+  slotMinutes Int
+  blocks SstScheduleBlock[]
+  appointments SstAppointment[]
+  isActive Boolean @default(true)
+  createdById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([budgetUnitId, startsAt])
+}
+
+model SstScheduleBlock {
+  id String @id @default(cuid())
+  availabilityId String
+  availability SstScheduleAvailability @relation(fields: [availabilityId], references: [id], onDelete: Restrict)
+  startsAt DateTime
+  endsAt DateTime
+  reason String
+  createdById String
+  createdAt DateTime @default(now())
+  @@index([availabilityId, startsAt])
+}
+
+model SstAppointment {
+  id String @id @default(cuid())
+  availabilityId String
+  availability SstScheduleAvailability @relation(fields: [availabilityId], references: [id], onDelete: Restrict)
+  employeeId String
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  purpose String
+  startsAt DateTime
+  endsAt DateTime
+  status String @default("BOOKED")
+  cancellationReason String?
+  cancelledAt DateTime?
+  createdById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([availabilityId, startsAt, status])
+  @@index([employeeId, startsAt])
+}
+
+model SstPlannedShift {
+  id String @id @default(cuid())
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  employeeId String
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  startsAt DateTime
+  endsAt DateTime
+  source String @default("RH_MANUAL")
+  roleIdSnapshot String?
+  departmentIdSnapshot String?
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([budgetUnitId, employeeId, startsAt, endsAt])
+  @@index([budgetUnitId, employeeId, startsAt])
+}
+
+model SstExposureGroup {
+  programGroups SstProgramExposureGroup[]
+  id String @id @default(cuid())
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  code String
+  name String
+  departmentIds String[] @default([])
+  roleIds String[] @default([])
+  startsAt DateTime
+  endsAt DateTime?
+  isActive Boolean @default(true)
+  createdById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([budgetUnitId, code])
+  @@index([budgetUnitId, isActive, startsAt])
+}
+
+model SstOccupationalProgram {
+  id String @id @default(cuid())
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  code String
+  kind String
+  version Int
+  startsAt DateTime
+  endsAt DateTime
+  responsiblePersonId String
+  responsible Person @relation(fields: [responsiblePersonId], references: [id], onDelete: Restrict)
+  responsibleCouncil String
+  responsibleSnapshot Json
+  content Json
+  groups SstProgramExposureGroup[]
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([budgetUnitId, code, kind, version])
+  @@index([budgetUnitId, kind, startsAt])
+}
+
+model SstProgramExposureGroup {
+  asos SstAso[]
+  id String @id @default(cuid())
+  programId String
+  program SstOccupationalProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+  groupId String
+  group SstExposureGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  groupSnapshot Json
+  risks Json
+  exams Json
+  @@unique([programId, groupId])
+}
+
+model SstAso {
+  anamneses SstAnamnesis[]
+  id String @id @default(cuid())
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  personId String
+  person Person @relation("SstAsoSubject", fields: [personId], references: [id], onDelete: Restrict)
+  employeeId String?
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  candidateReference String?
+  programGroupId String
+  programGroup SstProgramExposureGroup @relation(fields: [programGroupId], references: [id], onDelete: Restrict)
+  examinerPersonId String
+  examiner Person @relation("SstAsoExaminer", fields: [examinerPersonId], references: [id], onDelete: Restrict)
+  examinerCouncil String
+  kind String
+  result String
+  performedAt DateTime @db.Date
+  validUntil DateTime @db.Date
+  recommendations String
+  expectedExamCount Int
+  snapshot Json
+  submissionKey String
+  requestHash String
+  createdById String
+  createdAt DateTime @default(now())
+  exams SstOccupationalExam[]
+  @@unique([budgetUnitId, submissionKey])
+  @@index([budgetUnitId, validUntil, id])
+  @@index([personId, performedAt])
+}
+
+model SstQuestionnaireVersion {
+  id String @id @default(cuid())
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  code String
+  title String
+  version Int
+  questions Json
+  submissionKey String
+  requestHash String
+  createdById String
+  createdAt DateTime @default(now())
+  anamneses SstAnamnesis[]
+  @@unique([budgetUnitId, code, version])
+  @@unique([budgetUnitId, submissionKey])
+  @@index([budgetUnitId, createdAt, id])
+}
+
+model SstAnamnesis {
+  id String @id @default(cuid())
+  asoId String
+  aso SstAso @relation(fields: [asoId], references: [id], onDelete: Restrict)
+  questionnaireVersionId String
+  questionnaireVersion SstQuestionnaireVersion @relation(fields: [questionnaireVersionId], references: [id], onDelete: Restrict)
+  revision Int
+  answers Json
+  snapshot Json
+  revisionReason String
+  submissionKey String
+  requestHash String
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([asoId, revision])
+  @@unique([asoId, submissionKey])
+}
+
+model SstOccupationalExam {
+  id String @id @default(cuid())
+  asoId String
+  aso SstAso @relation(fields: [asoId], references: [id], onDelete: Restrict)
+  name String
+  kind String
+  source String
+  performedAt DateTime @db.Date
+  validUntil DateTime @db.Date
+  result String
+  professionalPersonId String
+  professional Person @relation(fields: [professionalPersonId], references: [id], onDelete: Restrict)
+  professionalCouncil String
+  laboratoryCompanyId String?
+  laboratory Company? @relation(fields: [laboratoryCompanyId], references: [id], onDelete: Restrict)
+  reportNumber String?
+  snapshot Json
+  @@index([asoId])
 }
 
 model AttendanceRecord {

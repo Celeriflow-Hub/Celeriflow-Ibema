@@ -8,6 +8,7 @@ import { assertExternalApplicationScope } from "./construction-external-policy";
 import { automaticViabilityInputSchema, evaluateAutomaticConstructionViability, generateAutomaticViabilityDraft } from "./construction-automatic-viability-policy";
 import { assertConstructionGedSignature } from "./construction-documents-service";
 import { readConstructionPdf, storeConstructionPdf } from "./construction-document-storage";
+import { zoneSchema } from "./construction-rules";
 
 type Db = Prisma.TransactionClient;
 export type ConstructionAutomaticViabilityRun = {
@@ -51,7 +52,7 @@ export async function runConstructionAutomaticViability(db: PrismaClient, identi
       const assigned = p.realEstate.constructionZone?.zone;
       // Territorial assignment supplies the code; use the latest published version effective today.
       const zone = assigned ? await tx.constructionZoneVersion.findFirst({ where: { code: assigned.code, startsAt: { lte: now }, publishedAt: { lte: now }, OR: [{ endsAt: null }, { endsAt: { gte: new Date(now.toISOString().slice(0, 10) + "T00:00:00Z") } }] }, orderBy: { version: "desc" } }) : null;
-      properties.push({ realEstateId: p.realEstateId, landArea: String(p.realEstate.landArea || 0), cadastralSnapshot: { linkedAtOpening: p.cadastralSnapshot, current: p.realEstate }, rule: zone ? { ...zone, startsAt: zone.startsAt.toISOString().slice(0, 10), endsAt: zone.endsAt?.toISOString().slice(0, 10) || "", minimumLandArea: zone.minimumLandArea.toString(), maxFloorAreaRatio: zone.maxFloorAreaRatio.toString() } : null });
+      properties.push({ realEstateId: p.realEstateId, landArea: String(p.realEstate.landArea || 0), cadastralSnapshot: { linkedAtOpening: p.cadastralSnapshot, current: p.realEstate }, rule: zone ? { ...zone, ...zoneSchema.parse({ ...zone, startsAt: zone.startsAt.toISOString().slice(0, 10), endsAt: zone.endsAt?.toISOString().slice(0, 10) || "", minimumLandArea: zone.minimumLandArea.toString(), maxFloorAreaRatio: zone.maxFloorAreaRatio.toString() }) } : null });
     }
     const viabilityDefinition = await tx.constructionDefinitionVersion.findFirst({ where: { kind: "VIABILITY", publishedAt: { lte: now } }, orderBy: { version: "desc" } });
     const snapshot = evaluateAutomaticConstructionViability({ category: record.category, locationType: record.locationType, purposeId, purposeActive, catalogSnapshot: record.catalogSnapshot, proposedArea: record.totalArea.toString(), today: now.toISOString().slice(0, 10), properties, viabilityDefinitionSnapshot: viabilityDefinition ? { ...viabilityDefinition, publishedAt: viabilityDefinition.publishedAt.toISOString() } : null });
@@ -68,7 +69,8 @@ export async function runConstructionAutomaticViability(db: PrismaClient, identi
       const version = await tx.documentVersion.create({ data: { documentId: document.id, versionNumber: 1, fileUrl: stored.fileUrl, hashSha256: stored.hashSha256, publicValidationCode: validationCode, status: "FINAL" } });
       await tx.processDocument.create({ data: { processId: record.processId, documentId: document.id, purpose: "Viabilidade automática demonstrativa — assinatura GED pendente" } });
       documentId = document.id; documentVersionId = version.id;
-      const roles = await tx.constructionStaffRole.findMany({ where: { role: "MANAGER", departmentId: record.process.currentDepartmentId, isActive: true, startsAt: { lte: today(now) }, OR: [{ endsAt: null }, { endsAt: { gte: today(now) } }], employee: { isActive: true, departmentId: record.process.currentDepartmentId } }, select: { employeeId: true } });
+      const departmentId = record.process.currentDepartmentId;
+      const roles = departmentId ? await tx.constructionStaffRole.findMany({ where: { role: "MANAGER", departmentId, isActive: true, startsAt: { lte: today(now) }, OR: [{ endsAt: null }, { endsAt: { gte: today(now) } }], employee: { isActive: true, departmentId } }, select: { employeeId: true } }) : [];
       const signers = roles.length ? await tx.usuario.findMany({ where: { ativo: true, employeeId: { in: roles.map((r) => r.employeeId) } }, select: { id: true, employeeId: true, nome: true, email: true } }) : [];
       routing = signers.length ? "REQUESTED" : "AWAITING_SIGNER_CONFIGURATION";
       if (signers.length) {

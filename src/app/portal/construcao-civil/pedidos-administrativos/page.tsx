@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { resolveConstructionAccess } from "@/lib/obras/construction-access";
 import { constructionCaseWhere } from "@/lib/obras/construction-policy";
 import { constructionRequestKinds } from "@/lib/obras/construction-request-policy";
@@ -7,7 +7,7 @@ import ConstructionExternalRequestAttendance from "@/components/construction/Con
 import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
 
 export default async function ConstructionExternalRequestQueue({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
-  const context = await getTenantContextForModuleOperation("OBRAS", "view");
+  const context = await getTenantContextForModule("OBRAS");
   const access = await resolveConstructionAccess(context);
   if (!access.administrator && !access.roles.some((role) => ["MANAGER", "ANALYST"].includes(role))) throw new Error("Atendimento reservado ao setor urbanístico.");
   // Scope through central processes, never through untrusted external request IDs.

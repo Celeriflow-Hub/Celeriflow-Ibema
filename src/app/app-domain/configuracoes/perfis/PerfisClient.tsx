@@ -84,7 +84,7 @@ const emptyPermission = (): ModulePermission => ({
   issueReports: false,
 });
 
-export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
+export default function PerfisClient({ perfis, capabilities }: { perfis: Perfil[]; capabilities: { create: boolean; update: boolean; delete: boolean } }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -184,6 +184,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
   }
 
   function openNew() {
+    if (!capabilities.create) return;
     const defaultMap: Record<string, ModulePermission> = {};
     MODULES_LIST.forEach((m) => {
       defaultMap[m.code] = emptyPermission();
@@ -254,6 +255,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (formData.id ? !capabilities.update : !capabilities.create) return;
     setIsSubmitting(true);
     const jsonPerms = serializePermissionsJSON(formData.accessLevel, formData.permissionsMap);
     const result = await upsertPerfil({
@@ -272,11 +274,13 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
   }
 
   async function handleToggle(id: string, ativo: boolean) {
+    if (!capabilities.update) return;
     const result = await togglePerfilStatus(id, !ativo);
     if (result.error) alert(result.error);
   }
 
   async function handleDelete(perfil: Perfil) {
+    if (!capabilities.delete) return;
     if (!window.confirm(`Excluir o perfil "${perfil.nome}"? Esta ação não pode ser desfeita.`)) return;
 
     setDeletingId(perfil.id);
@@ -290,7 +294,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
       <PageHeader
         title="Gestão de Perfis e Permissões"
         icon={<ShieldCheck className="size-4 shrink-0 text-indigo-600 dark:text-indigo-300" />}
-        action={<button onClick={openNew} className="flex h-8 items-center justify-center gap-2 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition-colors hover:bg-indigo-700"><Plus className="h-4 w-4" />Criar perfil</button>}
+        action={capabilities.create ? <button onClick={openNew} className="flex h-8 items-center justify-center gap-2 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition-colors hover:bg-indigo-700"><Plus className="h-4 w-4" />Criar perfil</button> : undefined}
         className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white"
       />
       <ErpListFrame toolbar={
@@ -348,6 +352,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
                       <td className="px-6 py-4">
                         <button
                           onClick={() => handleToggle(perfil.id, perfil.ativo)}
+                          disabled={!capabilities.update}
                           className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
                             perfil.ativo
                               ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
@@ -364,9 +369,9 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950 dark:text-indigo-300 dark:hover:bg-indigo-900 text-xs font-bold transition-colors"
                           >
                             <Pencil className="h-3.5 w-3.5" />
-                            Configurar Permissões
+                            {capabilities.update ? "Configurar Permissões" : "Visualizar Permissões"}
                           </button>
-                          {perfil.codigo !== "SYSTEM_ADMINISTRATOR" && (
+                          {capabilities.delete && perfil.codigo !== "SYSTEM_ADMINISTRATOR" && (
                             <button
                               onClick={() => handleDelete(perfil)}
                               disabled={deletingId === perfil.id}
@@ -440,7 +445,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
                 </button>
               </div>
 
-              {activeTab === "matriz" && (
+              {activeTab === "matriz" && (formData.id ? capabilities.update : capabilities.create) && (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-400 font-semibold mr-1">Presets Rápidos:</span>
                   <button
@@ -470,6 +475,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
 
             {/* Form Content */}
             <form onSubmit={handleSubmit} className="space-y-5 p-4">
+              <fieldset disabled={formData.id ? !capabilities.update : !capabilities.create} className="space-y-5">
               {activeTab === "dados" && (
                 <div className="space-y-4 max-w-xl mx-auto py-4">
                   <div>
@@ -590,6 +596,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
                   </div>
                 </div>
               )}
+              </fieldset>
             </form>
 
             {/* Modal Footer */}
@@ -608,7 +615,7 @@ export default function PerfisClient({ perfis }: { perfis: Perfil[] }) {
                 <button
                   type="button"
                   onClick={handleSubmit}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || (formData.id ? !capabilities.update : !capabilities.create)}
                   className="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-70 flex items-center gap-2 shadow-md"
                 >
                   {isSubmitting ? (

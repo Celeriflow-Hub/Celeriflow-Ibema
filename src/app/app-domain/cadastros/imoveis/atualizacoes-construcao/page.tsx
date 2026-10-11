@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { resolveConstructionAccess } from "@/lib/obras/construction-access";
 import ApplyPropertyUpdateButton from "../../../obras/construcao-civil/vistorias/ApplyPropertyUpdateButton";
 import { ConstructionLifecycleFilters, ConstructionLifecyclePagination } from "@/components/construction/ConstructionLifecycleListControls";
@@ -7,7 +7,7 @@ import { listConstructionPropertyUpdates, type LifecycleListQuery } from "@/lib/
 
 export default async function ConstructionCadastralUpdatesPage({ searchParams }: { searchParams: Promise<LifecycleListQuery> }) {
   const query = await searchParams;
-  const context = await getTenantContextForModuleOperation("CADASTROS", "read");
+  const context = await getTenantContextForModule("CADASTROS");
   const access = await resolveConstructionAccess(context);
   const { updates, processes, total, page } = await listConstructionPropertyUpdates(context.prisma, access, query);
   return <main className="space-y-5 p-6"><Link href="/cadastros/imoveis" className="underline">Cadastro imobiliário</Link><h1 className="text-2xl font-bold">Atualizações vinculadas à Construção Civil</h1><p>Receba o processo cadastral em Protocolos antes de aplicar a proposta.</p>

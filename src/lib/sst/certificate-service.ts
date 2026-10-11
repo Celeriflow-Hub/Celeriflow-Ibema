@@ -35,7 +35,8 @@ export async function registerCertificate(context: AppContext, raw: unknown) {
     if (existing) {
       const sameRequest = reason.autoProtocol && existing.createdById === context.user.id && existing.employeeId === employee.id && existing.reasonId === reason.id && existing.issuerPersonId === issuer.id && existing.issuerCouncil === input.issuerCouncil && existing.startsAt.getTime() === input.startsAt.getTime() && existing.endsAt.getTime() === input.endsAt.getTime() && (existing.dependentId || "") === input.dependentId && (existing.processId || "") === input.processId && (reason.autoPresentedAt || existing.presentedAt.getTime() === presentedAt.getTime()) && [...existing.cidCodes].sort().join(",") === [...new Set(input.cidCodes)].sort().join(",");
       if (!sameRequest) throw new SstValidationError("O protocolo já foi utilizado. Confira os dados antes de registrar outro atestado.");
-      return { id: existing.id, printReceipt: reason.printReceipt, suggestLeave: reason.suggestLeave };
+      const settings = z.object({ printReceipt: z.boolean().default(false), suggestLeave: z.boolean().default(false) }).parse(existing.reasonSnapshot ?? reason);
+      return { id: existing.id, printReceipt: settings.printReceipt, suggestLeave: settings.suggestLeave };
     }
     const record = await tx.sstMedicalCertificate.create({ data: {
       budgetUnitId: unit.id, employeeId: employee.id, reasonId: reason.id,
@@ -45,6 +46,7 @@ export async function registerCertificate(context: AppContext, raw: unknown) {
       processId: input.processId || null,
       cidCodes: [...new Set(input.cidCodes)], roleIdSnapshot: employee.roleId,
       departmentIdSnapshot: employee.departmentId, createdById: context.user.id,
+      reasonSnapshot: { name: reason.name, createLeaveOnApproval: reason.createLeaveOnApproval, leaveType: reason.leaveType, suggestLeave: reason.suggestLeave, printReceipt: reason.printReceipt },
     } });
     await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "SST_CERTIFICATE", targetId: record.id });
     return { id: record.id, printReceipt: reason.printReceipt, suggestLeave: reason.suggestLeave };
@@ -66,6 +68,7 @@ export async function registerCertificateReason(context: AppContext, raw: unknow
 }
 
 const assessmentInput = z.object({
+  boardId: z.string().default(""),
   certificateId: z.string().min(1), examinerPersonId: z.string().min(1),
   examinerCouncil: z.string().trim().min(2).max(100),
   opinion: z.string().trim().min(10).max(10000),
@@ -83,21 +86,40 @@ export async function assessCertificate(context: AppContext, raw: unknown) {
     const claimed = await tx.sstMedicalCertificate.updateMany({ where: { id: input.certificateId, status: "RECEIVED" }, data: { status: input.decision } });
     if (claimed.count !== 1) throw new SstValidationError("Este atestado já possui uma decisão. Atualize a consulta.");
     const certificate = await tx.sstMedicalCertificate.findUniqueOrThrow({ where: { id: input.certificateId }, include: { reason: true } });
+    const policy = z.object({ createLeaveOnApproval: z.boolean(), leaveType: z.string() }).parse(certificate.reasonSnapshot ?? certificate.reason);
     const examiner = await tx.person.findUnique({ where: { id: input.examinerPersonId }, select: { id: true } });
     if (!examiner) throw new SstValidationError("Perito não encontrado no Cadastro Único.");
     if (input.assessedAt > new Date()) throw new SstValidationError("A perícia não pode ter data futura.");
-    const generateLeave = input.decision === "APPROVED" && (certificate.reason.createLeaveOnApproval || input.confirmLeave);
+    if (input.boardId) {
+      const board = await tx.sstMedicalBoard.findUnique({ where: { id: input.boardId }, include: { members: true } });
+      if (!board?.isActive || board.budgetUnitId !== certificate.budgetUnitId || input.assessedAt < board.startsAt || input.assessedAt > board.endsAt || !board.members.some((member) => member.personId === examiner.id)) throw new SstValidationError("Junta fora da vigência, de outra UG ou sem o perito informado.");
+    }
+    const generateLeave = input.decision === "APPROVED" && (policy.createLeaveOnApproval || input.confirmLeave);
     if (generateLeave) {
       if (!canPerformModuleOperation(context.user, "RH", "create")) throw new SstValidationError("A integração exige permissão de inclusão no RH.");
       const activeRh = await tx.configuracaoModulo.findUnique({ where: { codigo: "RH" } });
       if (activeRh?.ativo === false) throw new SstValidationError("O módulo RH está desativado.");
       const conflict = await tx.leave.findFirst({ where: { employeeId: certificate.employeeId, status: "Ativa", startDate: { lte: certificate.endsAt }, endDate: { gte: certificate.startsAt } }, select: { id: true } });
       if (conflict) throw new SstValidationError("Já existe afastamento ativo neste período. Revise o vínculo antes de deferir.");
-      const leave = await tx.leave.create({ data: { employeeId: certificate.employeeId, type: certificate.reason.leaveType, startDate: certificate.startsAt, endDate: certificate.endsAt, reason: `Atestado ocupacional ${certificate.protocolNumber}`, status: "Ativa" } });
+      const leave = await tx.leave.create({ data: { employeeId: certificate.employeeId, type: policy.leaveType, startDate: certificate.startsAt, endDate: certificate.endsAt, reason: `Atestado ocupacional ${certificate.protocolNumber}`, status: "Ativa" } });
       await tx.sstMedicalCertificate.update({ where: { id: certificate.id }, data: { leaveId: leave.id } });
     }
-    await tx.sstMedicalAssessment.create({ data: { certificateId: certificate.id, examinerPersonId: examiner.id, examinerCouncil: input.examinerCouncil, decision: input.decision, opinion: input.opinion, assessedAt: input.assessedAt, createdById: context.user.id } });
+    await tx.sstMedicalAssessment.create({ data: { certificateId: certificate.id, boardId: input.boardId || null, examinerPersonId: examiner.id, examinerCouncil: input.examinerCouncil, decision: input.decision, opinion: input.opinion, assessedAt: input.assessedAt, createdById: context.user.id } });
     await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "SST_ASSESSMENT", targetId: certificate.id });
     return certificate.id;
+  });
+}
+
+export async function updateCertificateReason(context: AppContext, id: string, raw: unknown) {
+  const input = reasonInput.parse(raw);
+  assertBudgetUnitAccess(context.user, input.budgetUnitId);
+  return context.prisma.$transaction(async (tx) => {
+    const reason = await tx.sstCertificateReason.findUnique({ where: { id } });
+    if (!reason || reason.budgetUnitId !== input.budgetUnitId) throw new SstValidationError("Motivo não encontrado nesta unidade gestora.");
+    const roles = [...new Set(input.restrictedRoleIds)];
+    if (await tx.role.count({ where: { id: { in: roles } } }) !== roles.length) throw new SstValidationError("Cargo não encontrado.");
+    await tx.sstCertificateReason.update({ where: { id }, data: input });
+    await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "SST_REASON_UPDATED", targetId: id });
+    return id;
   });
 }

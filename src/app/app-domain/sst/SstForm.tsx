@@ -19,6 +19,10 @@ export function SstForm({ action, children, label = "Salvar", redirectBase, rece
     try {
       submissionKey.current ??= crypto.randomUUID();
       const data = new FormData(form);
+      // datetime-local has no timezone; send the user's actual instant to server actions.
+      for (const input of Array.from(form.querySelectorAll<HTMLInputElement>('input[type="datetime-local"]'))) {
+        if (input.name && input.value) data.set(input.name, new Date(input.value).toISOString());
+      }
       data.set("submissionKey", submissionKey.current);
       const result = await action(data);
       if (result.error) { setError(result.error); return; }

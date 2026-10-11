@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { AccessError, getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
+import { AccessError, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { normalizeRestrictiveProfilePermissions, SYSTEM_ADMIN_PROFILE_CODE } from "@/lib/administration/c3-policy";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 
@@ -28,7 +28,7 @@ export async function upsertPerfil(data: {
   ativo: boolean;
 }) {
   try {
-    const context = await getTenantContextForSystemAdministration();
+    const context = await getTenantContextForModuleOperation("CONFIGURACOES", data.id ? "update" : "create");
     const { prisma } = context;
     const nome = data.nome.trim();
     if (!nome) return { error: "Informe o nome do perfil." };
@@ -76,7 +76,7 @@ export async function upsertPerfil(data: {
 
 export async function togglePerfilStatus(id: string, ativo: boolean) {
   try {
-    const context = await getTenantContextForSystemAdministration();
+    const context = await getTenantContextForModuleOperation("CONFIGURACOES", "update");
     const { prisma } = context;
     const perfil = await prisma.configuracaoPerfil.findUnique({ where: { id } });
     if (!perfil) return { error: "Perfil não encontrado." };
@@ -97,7 +97,7 @@ export async function togglePerfilStatus(id: string, ativo: boolean) {
 
 export async function deletePerfil(id: string) {
   try {
-    const context = await getTenantContextForSystemAdministration();
+    const context = await getTenantContextForModuleOperation("CONFIGURACOES", "delete");
     const { prisma } = context;
     const perfil = await prisma.configuracaoPerfil.findUnique({ where: { id }, select: { id: true, codigo: true } });
     if (!perfil) return { error: "Perfil não encontrado." };

@@ -53,7 +53,7 @@ export async function importPlanningLines(context: PlanningContext, raw: unknown
         }
         actionId = sourceActions.get(line.actionId)!;
       }
-      const imported = await tx.planningBudgetLine.create({ data: { instrumentId: target.id, kind: line.kind, code: line.code, description: line.description, year: input.targetYear, budgetUnitId: line.budgetUnitId, resourceSourceId: line.resourceSourceId, revenueNatureId: line.revenueNatureId, expenseNatureId: line.expenseNatureId, programId, actionId, functionCode: line.functionCode, subfunctionCode: line.subfunctionCode, product: line.product, productUnit: line.productUnit, physicalTarget: input.mode === "VALUES" ? line.physicalTarget : 0, originalValue: value } });
+      const imported = await tx.planningBudgetLine.create({ data: { instrumentId: target.id, kind: line.kind, code: line.code, description: line.description, year: input.targetYear, budgetUnitId: line.budgetUnitId, resourceSourceId: line.resourceSourceId, destinationEntityId: line.destinationEntityId, transferDirection: line.transferDirection, revenueNatureId: line.revenueNatureId, expenseNatureId: line.expenseNatureId, programId, actionId, functionCode: line.functionCode, subfunctionCode: line.subfunctionCode, product: line.product, productUnit: line.productUnit, physicalTarget: input.mode === "VALUES" ? line.physicalTarget : 0, originalValue: value } });
       if (target.annualBudgetLawId) {
         if (imported.kind === "REVENUE") {
           await tx.annualBudgetRevenueForecast.create({ data: { annualBudgetLawId: target.annualBudgetLawId, code: imported.code, name: imported.description, estimatedValue: value } });

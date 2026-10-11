@@ -4,6 +4,8 @@ import { z } from "zod";
 import { AccessError, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { assertPlanningOperation, planningEntityWhere, planningInstrumentWhere, planningLineWhere, planningUnitWhere, type PlanningContext } from "./access";
 import { actionInput, allocateRevenue, instrumentInput, lineInput, memoryInput, moneySchema, programInput, projectedValue, waiverInput } from "./policy";
+import { planningDateSchema } from "./revisions";
+import { applyLineDelta, canonicalPiece, contentHash, finalizeLegalRevision, lockLegalInstrument, planningAppropriationCode, planningAudit, snapshotVersion } from "./operations-core";
 
 type Tx = Prisma.TransactionClient;
 async function audit(tx: Tx, context: PlanningContext, entityId: string, action: string, payload: Prisma.InputJsonValue) {
@@ -94,6 +96,60 @@ export async function addPlanningLine(context: PlanningContext, raw: unknown) {
   return context.prisma.$transaction(async (tx) => {
     const instrument = await lockPlanningInstrument(tx, context, input.instrumentId);
     return savePlanningLine(tx, context, instrument, input);
+  });
+}
+
+export async function addPlanningTransfer(context: PlanningContext, raw: unknown) {
+  assertPlanningOperation(context, "create");
+  const input = z.object({ instrumentId: z.string().min(1), code: z.string().trim().min(1).max(60), description: z.string().trim().min(1).max(4000), year: z.coerce.number().int(), budgetUnitId: z.string().min(1), resourceSourceId: z.string().min(1), destinationEntityId: z.string().min(1), transferDirection: z.enum(["IN", "OUT"]), originalValue: moneySchema }).parse(raw);
+  return context.prisma.$transaction(async (tx) => {
+    const piece = await lockPlanningInstrument(tx, context, input.instrumentId);
+    if (input.year < piece.startYear || input.year > piece.endYear || input.destinationEntityId === piece.governmentEntityId) throw new Error("Revise exercício e contraparte da transferência.");
+    const unit = await tx.budgetUnit.findFirst({ where: { AND: [planningUnitWhere(context), { id: input.budgetUnitId, planningEntityUnit: { is: { governmentEntityId: piece.governmentEntityId } } }] } });
+    if (!unit || !await tx.governmentEntity.findFirst({ where: { id: input.destinationEntityId, status: "ATIVA" } })) throw new Error("Unidade ou contraparte inválida.");
+    const line = await tx.planningBudgetLine.create({ data: { ...input, kind: "TRANSFER" } });
+    await planningAudit(tx, context, piece.id, "PLANNING_TRANSFER_CREATE", { lineId: line.id, ...input }); return line.id;
+  });
+}
+
+export async function addApprovedPlanningLine(context: PlanningContext, raw: unknown) {
+  assertPlanningOperation(context, "update");
+  const input = lineInput.parse(raw);
+  const legal = z.object({ effectiveAt: planningDateSchema, legalActNumber: z.string().trim().min(1), legalText: z.string().trim().min(1), reason: z.string().trim().min(1), submissionKey: z.string().uuid() }).parse(raw);
+  return context.prisma.$transaction(async (tx) => {
+    const piece = await lockLegalInstrument(tx, context, input.instrumentId);
+    const canonical = canonicalPiece(piece)!;
+    if (!["SANCTIONED", "PUBLISHED"].includes(canonical.status) || !canonical.sanctionedAt) throw new Error("Inclusão formal exige peça sancionada/publicada.");
+    const date = new Date(legal.effectiveAt);
+    if (legal.effectiveAt > new Date().toISOString().slice(0, 10) || date < canonical.sanctionedAt || date.getUTCFullYear() > piece.endYear) throw new Error("Data fora da vigência legal da peça.");
+    if (input.kind === "EXPENSE" && !new Prisma.Decimal(input.originalValue).isZero()) throw new Error("Nova classificação de despesa inicia sem saldo. Efetive a dotação pelo fluxo de crédito especial.");
+    const existing = await tx.financialAuditLog.findFirst({ where: { entityId: piece.id, action: "PLANNING_APPROVED_LINE", payload: { path: ["submissionKey"], equals: legal.submissionKey } } });
+    if (existing) {
+      const saved = existing.payload as { lineId: string; inputHash: string };
+      if (saved.inputHash !== contentHash({ input, legal })) throw new Error("Solicitação repetida com dados diferentes.");
+      return saved.lineId;
+    }
+    if (input.year < piece.startYear || input.year > piece.endYear) throw new Error("Exercício fora da vigência.");
+    const unit = await tx.budgetUnit.findFirst({ where: { AND: [planningUnitWhere(context), { id: input.budgetUnitId, planningEntityUnit: { is: { governmentEntityId: piece.governmentEntityId } } }] } });
+    if (!unit) throw new AccessError("Unidade não autorizada na entidade da peça.", 403);
+    if (input.kind === "EXPENSE" && !await tx.actionPPA.findFirst({ where: { id: input.actionId, programId: input.programId, program: { multiYearPlanId: ppaId(piece) } } })) throw new Error("Programa/ação não pertencem ao PPA da peça.");
+    await snapshotVersion(tx, context, piece.id, canonical.sanctionedAt, canonical.legalActNumber ?? legal.legalActNumber, "Antes da inclusão formal de classificação");
+    const line = await tx.planningBudgetLine.create({ data: { ...input, originalValue: 0, physicalTarget: input.physicalTarget } });
+    if (piece.annualBudgetLawId) {
+      if (input.kind === "REVENUE") await tx.annualBudgetRevenueForecast.create({ data: { annualBudgetLawId: piece.annualBudgetLawId, code: line.code, name: line.description, estimatedValue: 0 } });
+      else {
+        const fixation = await tx.annualBudgetExpenseFixation.create({ data: { annualBudgetLawId: piece.annualBudgetLawId, code: line.code, name: line.description, fixedValue: 0 } });
+        if (piece.implantedAt && piece.annualBudgetLaw) {
+          const appropriation = await tx.budgetAppropriation.create({ data: { code: await planningAppropriationCode(tx, piece, line), financialYearId: piece.annualBudgetLaw.financialYearId, budgetUnitId: line.budgetUnitId, expenseNatureId: line.expenseNatureId!, resourceSourceId: line.resourceSourceId, annualBudgetExpenseFixationId: fixation.id, programPPAId: line.programId, actionPPAId: line.actionId, initialValue: 0, initialValueDecimal: 0, updatedValue: 0, updatedValueDecimal: 0, committedValueDecimal: 0 } });
+          await tx.planningBudgetLine.update({ where: { id: line.id }, data: { appropriationId: appropriation.id } });
+        }
+      }
+    }
+    const value = new Prisma.Decimal(input.originalValue);
+    if (!value.isZero()) await applyLineDelta(tx, context, piece, { lineId: line.id, value, effectiveAt: new Date(legal.effectiveAt), legalActNumber: legal.legalActNumber, legalText: legal.legalText, reason: legal.reason, key: legal.submissionKey, allowBlocked: true });
+    await finalizeLegalRevision(tx, context, piece, new Date(legal.effectiveAt), legal.legalActNumber, legal.reason);
+    await planningAudit(tx, context, piece.id, "PLANNING_APPROVED_LINE", { ...legal, lineId: line.id, inputHash: contentHash({ input, legal }) });
+    return line.id;
   });
 }
 
@@ -191,7 +247,9 @@ export async function listPlanningInstruments(context: PlanningContext, filters:
   return { records, total, page };
 }
 
-export async function getPlanningInstrument(context: PlanningContext, id: string, pageInput = "1") {
+export async function getPlanningInstrument(context: PlanningContext, id: string, pageInput = "1", dateInput?: string) {
+  const asOf = dateInput ? planningDateSchema.parse(dateInput) : new Date().toISOString().slice(0, 10);
+  const effectiveAt = { lte: new Date(`${asOf}T00:00:00.000Z`) };
   const instrument = await context.prisma.planningInstrument.findFirst({ where: { id, ...planningInstrumentWhere(context) }, include: { governmentEntity: true, multiYearPlan: true, parent: { include: { parent: true } }, budgetGuideline: true, annualBudgetLaw: true } });
   if (!instrument) throw new AccessError("Peça orçamentária não encontrada neste escopo.", 404);
   const where = { instrumentId: id, ...planningLineWhere(context) };
@@ -199,10 +257,14 @@ export async function getPlanningInstrument(context: PlanningContext, id: string
   const requestedPage = Number(pageInput);
   const page = Math.min(Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1, Math.max(1, Math.ceil(total / 20)));
   const [lines, sums, memories, waivers] = await Promise.all([
-    context.prisma.planningBudgetLine.findMany({ where, include: { budgetUnit: true, resourceSource: true }, orderBy: [{ year: "asc" }, { code: "asc" }, { id: "asc" }], take: 20, skip: (page - 1) * 20 }),
+    context.prisma.planningBudgetLine.findMany({ where, include: { budgetUnit: true, resourceSource: true, movements: { where: { effectiveAt } }, physicalEvents: { where: { effectiveAt }, orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }, { id: "desc" }], take: 1 } }, orderBy: [{ year: "asc" }, { code: "asc" }, { id: "asc" }], take: 20, skip: (page - 1) * 20 }),
     context.prisma.planningBudgetLine.groupBy({ by: ["kind"], where, _sum: { originalValue: true } }),
     context.prisma.planningCalculationMemory.findMany({ where: { instrumentId: id }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: 20 }),
     context.prisma.planningRevenueWaiver.findMany({ where: { instrumentId: id }, orderBy: [{ year: "asc" }, { id: "asc" }], take: 20 }),
   ]);
-  return { instrument, lines, sums, total, page, memories, waivers };
+  const revisedSums = await Promise.all(sums.map(async (row) => {
+    const delta = await context.prisma.planningLineMovement.aggregate({ where: { line: { ...where, kind: row.kind }, effectiveAt }, _sum: { value: true } });
+    return { kind: row.kind, value: (row._sum.originalValue ?? new Prisma.Decimal(0)).plus(delta._sum.value ?? 0) };
+  }));
+  return { instrument, lines: lines.map((line) => ({ ...line, physicalTarget: line.physicalEvents[0]?.target ?? line.originalPhysicalTarget ?? line.physicalTarget, physicalActual: line.physicalEvents[0]?.actual ?? line.originalPhysicalActual ?? line.physicalActual, revisedValue: line.movements.reduce((value, movement) => value.plus(movement.value), line.originalValue) })), sums, revisedSums, asOf, total, page, memories, waivers };
 }

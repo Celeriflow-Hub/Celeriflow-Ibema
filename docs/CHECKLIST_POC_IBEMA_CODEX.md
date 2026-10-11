@@ -521,6 +521,7 @@ Evidências principais: `prisma/schema.prisma`, migration `20261010100000_comple
 | Módulo avaliado | Requisitos | Mínimo de 90% | Organização no produto |
 |---|---:|---:|---|
 | EXE-04 — Gestão e Controle de Custos | 31 | 28 | Área funcional própria dentro de Financeiro e Contábil, sem cartão separado no Dashboard |
+| EXE-03 — Gestão de Controle Interno | 36 | 33 | Área funcional própria dentro de Auditoria, com acesso autorizado pela Administração; independente da consulta de logs |
 | EXE-10 — Segurança e Medicina do Trabalho | 74 | 67 | Módulo e cartão próprios (`SST`), integrado aos vínculos funcionais de RH |
 | EXE-11 — Gestão eSocial | 20 | 18 | Área funcional própria dentro de RH e Folha, sem cartão separado no Dashboard |
 | EXE-18 — Gestão da Construção Civil | Auditar checklist específico | Calcular após auditoria | Área própria dentro de Obras e Serviços Públicos, integrada aos cadastros imobiliário e tributário |
@@ -538,7 +539,8 @@ Evidências principais: `prisma/schema.prisma`, migration `20261010100000_comple
 Decisões de navegação:
 
 - Business Intelligence fica em Administração.
-- Gestão de Custos fica em Financeiro e Contábil.
+- Gestão de Custos fica em Financeiro e Contábil, com indicadores gerenciais em Administração/BI consumindo o mesmo domínio. Checkup dos 28 módulos e plano F11: [CHECKUP_28_MODULOS_ADERENCIA_CUSTOS.md](CHECKUP_28_MODULOS_ADERENCIA_CUSTOS.md) e [PLANO_IMPLEMENTACAO_CUSTOS_CONTROLE_INTERNO.md](PLANO_IMPLEMENTACAO_CUSTOS_CONTROLE_INTERNO.md). Meta de desenvolvimento atual: 31/31, sem usar o mínimo contratual para reduzir a entrega.
+- Gestão de Controle Interno fica em Auditoria, conforme confirmação do usuário em 11/10/2026, com rotinas/permissões próprias para checklists, auditorias, pareceres, notificações e obrigações. A consulta de eventos técnicos atual não comprova o checklist. F12 planejada no mesmo plano, meta 36/36; depois F9/F10 de Planejamento.
 - Planejamento e Orçamento possui módulo e cartão próprios (`PLANEJAMENTO`), integrado à base financeira existente; aplica-se a EXE-01 e LEG-01.
 - Segurança e Medicina do Trabalho possui módulo e cartão próprios (`SST`), com integração a RH; eSocial permanece integrado a RH e Folha.
 - Gestão da Construção Civil fica em Obras e Serviços Públicos, mantendo integração com Tributário.

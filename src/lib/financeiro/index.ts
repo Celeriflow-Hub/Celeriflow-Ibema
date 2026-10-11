@@ -490,6 +490,10 @@ export async function createBudgetMovementInTransaction(
   await lockAppropriation(tx, input.appropriationId);
   const appropriation = await tx.budgetAppropriation.findUnique({ where: { id: input.appropriationId } });
   if (!appropriation) throw new FinanceError("Dotação orçamentária não encontrada.");
+  const [planningSchema] = await tx.$queryRaw<{ ready: boolean }[]>`SELECT to_regclass('"PlanningBudgetLine"') IS NOT NULL AS ready`;
+  if (planningSchema.ready && await tx.planningBudgetLine.findUnique({ where: { appropriationId: appropriation.id }, select: { id: true } })) {
+    throw new FinanceError("A dotação pertence ao Planejamento e Orçamento. Efetive a alteração pelo fluxo orçamentário da entidade responsável.");
+  }
   const year = await assertFinancialYearOpen(tx, appropriation.financialYearId, input.date);
   const current = requiredDecimal(appropriation.updatedValueDecimal, "BudgetAppropriation.updatedValueDecimal");
   if (direction < 0) {

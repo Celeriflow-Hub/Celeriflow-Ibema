@@ -25,6 +25,14 @@ Diretriz atualizada do usuário: **entrega de 100% funcional**, com demonstraç�
 - Preparar modelos e dados fictícios plausíveis com persistência e regras reais, inclusive vereadores, assessores, órgãos e fornecedores. Usar nomes completos e descrições municipais naturais. A base fictícia é identificada e isolada por configuração técnica; **não usar “demo”, “POC” ou “teste” nos cadastros, documentos e interface apresentados ao cliente**. Adaptadores simulados não substituem integração real no aceite final.
 - Manter rigorosamente os padrões existentes de tabelas, formulários, componentes, paginação e feedback, nos dois caminhos de acesso.
 
+### 1.2 Avaliação condicional de F11/F12 — Custos e Controle Interno
+
+Pedido de 11/10/2026: analisar os checklists de Gestão e Controle de Custos e Gestão de Controle Interno antes de F9/F10; incluir e executar F11/F12 em Planejamento somente se aderentes, deixando os demais para outra frente.
+
+**Decisão: aderência parcial por integração, sem incorporação dos dois domínios completos ao Planejamento.** EXE-04 tem 31 itens e sua apropriação nasce na liquidação/VPD, folha, almoxarifado e patrimônio: o checkup dos 28 módulos recomenda Custos no Financeiro e Contábil e indicadores em Administração/BI. EXE-03 tem 36 itens de auditoria/documentos/notificações/obrigações e consultas a vários módulos: localização em **Auditoria confirmada pelo usuário**. Tributação fornece dados para essas rotinas.
+
+A análise individual dos **67 itens** está em [ANALISE_ADERENCIA_CUSTOS_CONTROLE_INTERNO.md](ANALISE_ADERENCIA_CUSTOS_CONTROLE_INTERNO.md). Após as novas orientações, **F11/F12 ficam planejadas nas áreas próprias antes de F9/F10**, conforme [PLANO_IMPLEMENTACAO_CUSTOS_CONTROLE_INTERNO.md](PLANO_IMPLEMENTACAO_CUSTOS_CONTROLE_INTERNO.md) e [CHECKUP_28_MODULOS_ADERENCIA_CUSTOS.md](CHECKUP_28_MODULOS_ADERENCIA_CUSTOS.md). EXE-01/LEG-01 continuam com 99 itens cada; EXE-03/EXE-04 mantêm avaliação própria. A publicação dos planos não inicia a implementação ou promove aceites.
+
 ## 2. Fontes e critério de avaliação
 
 ### 2.1 Fontes oficiais e referências de produto
@@ -338,12 +346,22 @@ Itens: 15, 18–20, 24, 26–32, 36, 41–42, 46–47, 49–51, 53–54, 65–66
 
 **Verificação interna F8:** todos os filtros/agrupamentos exigidos, PDF legível, CSV consistente, versões antigas reproduzíveis e demonstrativos conferidos. **Aceite integral das saídas dependentes de publicação/layout externo:** depois de F9, com link público do mesmo documento/versão e validação dos documentos recebidos.
 
+### F11/F12 — adaptação dos módulos existentes antes de F9/F10
+
+| Identificação solicitada | Resultado da análise | Encaminhamento |
+|---|---|---|
+| F11 — Gestão e Controle de Custos | Planejada no Financeiro e Contábil; indicadores em Administração/BI | Implantar 31 itens e produtores/estornos reais antes de encerrar F11; Planejamento fornece LOA/classificações/dotações e consome custos realizados |
+| F12 — Gestão de Controle Interno | Planejada em Auditoria, conforme confirmação do usuário | Implantar 36 itens, gestão de auditorias e integrações próprias antes de encerrar F12; Planejamento é um dos domínios fiscalizados |
+
+Regras de apropriação e auditoria transversal não devem ser implementadas novamente sob permissão `PLANEJAMENTO`. O plano próprio da seção 1.2 define fases, produtores de dados, fronteiras transacionais, acesso/indicadores e 67 aceites. Nenhuma dessas fases foi executada por esta análise. Conexões indispensáveis a Custos/Controle Interno são entregas das próprias F11/F12; F9 posterior continua dedicada a encerrar as integrações do checklist de Planejamento.
+
 ### F9 — conexão das integrações e resolução de dependências externas (P1, G)
 
 **Última etapa de implementação funcional**, após F0–F8 nas duas jornadas. Todas as dependências identificadas são registradas desde o começo; conexão e pedidos ao usuário ficam concentrados aqui.
 
 - Transferir consumidores de Financeiro/Tributação/Compras/Câmara/relatórios para os contratos de Planejamento descritos na seção 6.4, preservando referências e efeitos transacionais.
 - Conectar orçamento/dotações/fontes/programação/cotas às reservas e execução; histórico de receita/despesa aos acompanhamentos/projeções; benefícios tributários à renúncia prevista/compensação; tramitação legislativa aos atos/peças.
+- Prever contratos de leitura por entidade/UG/peça/versão para Custos e Controladoria, conforme a análise de aderência. Conectar consumidores disponíveis sem mover apropriações/achados para Planejamento; futuras integrações de custos realizados e índices executados usam origem rastreável, sem dupla contagem nem confusão entre projetado e executado. Os 31/36 aceites permanecem nas frentes próprias.
 - Conectar GED, assinatura, storage e publicação na transparência. Reutilizar infraestrutura disponível e implementar adaptadores reais onde necessários.
 - APIs/provedores oficiais: usar adaptador versionado, autorização, timeout, retorno, estado, retry/idempotência e evidência. Definir primeiro quais requisitos realmente precisam comunicação externa; tabela/layout obtido por documento não exige inventar API.
 - Solicitar ao usuário, **nesta etapa**, as APIs/documentos/credenciais/atos/layouts que não puderem ser obtidos pelas fontes disponíveis. Registrar para cada pedido: ente, IDs afetados, arquivo/serviço, motivo, formato, responsável e cenário de validação.
@@ -369,6 +387,7 @@ Itens: 15, 18–20, 24, 26–32, 36, 41–42, 46–47, 49–51, 53–54, 65–66
 4. **F5:** emendas legislativas completas.
 5. **F6 + F7:** programação/cotas e implantação/créditos internos, com contratos preparados de saldo, consumo e contabilidade.
 6. **F8:** concluir consultas, catálogo de relatórios e preparação de publicação; desenvolver as saídas junto a cada fase.
+   - **F11 → F12 antes de F9/F10:** análise de aderência e checkup dos 28 módulos concluídos em 11/10/2026. Implantar Custos no Financeiro, indicadores em Administração/BI e Controle Interno em Auditoria conforme plano próprio; preservar denominadores e domínios independentes. Sequência vigente **F8 → F11 → F12 → F9 → F10**.
 7. **F9:** conectar todas as integrações; solicitar e resolver APIs/documentos externos pendentes; concluir transferência de consumidores e limpeza dos menus.
 8. **F10:** ensaio final, correções e homologação **100% Prefeitura + 100% Câmara**. Ensaios internos devem acontecer a cada fase.
 

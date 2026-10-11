@@ -19,6 +19,8 @@ O [plano principal](PLANO_IMPLEMENTACAO_PLANEJAMENTO_ORCAMENTO.md) contém a tra
 
 ## Controle individual dos requisitos da Prefeitura
 
+**Progresso técnico F4–F8:** versões/histórico/compatibilização, emendas, programação/cotas, créditos/implantação e catálogo PDF/CSV possuem implementação interna e testes PostgreSQL. Evidências e dependências estão em [PLANEJAMENTO_F4_F8_EVIDENCIAS.md](PLANEJAMENTO_F4_F8_EVIDENCIAS.md). As duas novas migrations, ensaio da jornada executiva, conexões F9 e aceite F10 permanecem separados; nenhuma caixa integral abaixo foi promovida por build/teste.
+
 Cada caixa abaixo é **pendente de entrega e demonstração integral do Executivo**; não representa inexistência das bases parciais já auditadas. Desenvolvimento interno indicado por fase; todos passam por F0/F1 transversais, F9 quando houver integração/dependência, e F10 para aceite final.
 
 | ID oficial de acompanhamento | Funcionalidade a entregar — texto integral no plano principal | Desenvolvimento | Entrega/aceite EXE |

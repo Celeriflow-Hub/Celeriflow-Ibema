@@ -69,7 +69,7 @@ async function main() {
         let total = new Prisma.Decimal(0);
         const programs = municipalReference.programs.filter((p) => entity.code === "CMVA" ? p.unit === "01.01" : p.unit !== "01.01");
         for (const program of programs) {
-          const row = await tx.programPPA.create({ data: { multiYearPlanId: ppa.id, code: program.code, name: program.name, origin: "Plano de governo e demandas das audiências públicas", guidelines: "Ampliar acesso aos serviços, melhorar resultados e assegurar transparência.", targetAudience: program.audience, financing: "Recursos ordinários livres e transferências legalmente vinculadas", managerName: program.manager, objectives: { create: { code: `${program.code}.01`, description: program.action, indicators: { create: { name: program.product, unit: program.productUnit, baselineValue: Number(program.target) * 0.8, targetValue: Number(program.target) } } } } } });
+          const row = await tx.programPPA.create({ data: { multiYearPlanId: ppa.id, code: program.code, name: program.name, type: ["01.01", "02.01"].includes(program.unit) ? "Gestão" : "Finalístico", origin: "Plano de governo e demandas das audiências públicas", guidelines: "Ampliar acesso aos serviços, melhorar resultados e assegurar transparência.", targetAudience: program.audience, financing: "Recursos ordinários livres e transferências legalmente vinculadas", managerName: program.manager, objectives: { create: { code: `${program.code}.01`, description: program.action, indicators: { create: { name: program.product, unit: program.productUnit, baselineValue: Number(program.target) * 0.8, targetValue: Number(program.target) } } } } } });
           const action = await tx.actionPPA.create({ data: { programId: row.id, code: program.actionCode, name: program.action, type: program.actionCode.startsWith("1") ? "Projeto" : "Atividade" } });
           for (const instrument of [ppaInstrument, ldoInstrument, loaInstrument]) {
             for (const year of instrument.kind === "PPA" ? [2026, 2027, 2028, 2029] : [2027]) {
@@ -77,8 +77,8 @@ async function main() {
               await tx.planningBudgetLine.create({ data: { instrumentId: instrument.id, kind: "REVENUE", code: `R.${program.code}.${year}`, description: entity.code === "CMVA" ? "Transferência financeira do Executivo para manutenção do Legislativo" : "Receitas ordinárias destinadas ao programa", year, budgetUnitId: units.get(program.unit)!, resourceSourceId: source.id, revenueNatureId: entity.code === "CMVA" ? legislativeRevenue.id : revenue.id, originalValue: program.value } });
             }
           }
-          await tx.annualBudgetExpenseFixation.create({ data: { annualBudgetLawId: loa.id, code: program.code, name: program.action, fixedValue: program.value } });
-          await tx.annualBudgetRevenueForecast.create({ data: { annualBudgetLawId: loa.id, code: `R.${program.code}`, name: "Receitas ordinárias", estimatedValue: program.value } });
+          await tx.annualBudgetExpenseFixation.create({ data: { annualBudgetLawId: loa.id, code: `${program.code}.2027`, name: program.action, fixedValue: program.value } });
+          await tx.annualBudgetRevenueForecast.create({ data: { annualBudgetLawId: loa.id, code: `R.${program.code}.2027`, name: "Receitas ordinárias", estimatedValue: program.value } });
           total = total.plus(program.value);
         }
         await tx.annualBudgetLaw.update({ where: { id: loa.id }, data: { totalRevenue: total, totalExpense: total } });

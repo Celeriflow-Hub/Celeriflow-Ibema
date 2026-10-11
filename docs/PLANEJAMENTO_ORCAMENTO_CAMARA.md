@@ -10,7 +10,7 @@ O [plano principal](PLANO_IMPLEMENTACAO_PLANEJAMENTO_ORCAMENTO.md) contém a tra
 
 ## Submódulo e layout profissional ERP
 
-- Alterar `src/app/app-domain/camara/layout.tsx` para incluir **Planejamento e Orçamento**; acrescentar card em `camara/page.tsx`. Hoje essa entrada não existe.
+- Entrada **Planejamento e Orçamento** implementada em `src/app/app-domain/camara/layout.tsx`, com card em `camara/page.tsx` e navegação própria do submódulo.
 - Entrada `/camara/planejamento` com painel/catálogo operacional e navegação por Cadastros, Instrumentos, Movimentos, Consultas e Relatórios. Não usar o painel executivo ou o Financeiro como tela de destino.
 - Telas próprias de PPA `/camara/planejamento/ppa`, LDO `/camara/planejamento/ldo`, LOA `/camara/planejamento/loa`, listas/detalhes `[id]`, audiências, emendas, importações, alterações, compatibilização, programação, cotas, memórias, renúncias e relatórios.
 - Breadcrumb **Câmara Municipal → Planejamento e Orçamento → área → registro**. Manter acesso de retorno à Câmara, título/contexto legislativo, exercício, entidade, UG e versão; conservar filtros/posição da consulta.
@@ -23,6 +23,8 @@ O [plano principal](PLANO_IMPLEMENTACAO_PLANEJAMENTO_ORCAMENTO.md) contém a tra
 - Preparar dataset legislativo fictício com persistência real e templates identificados; APIs/documentos externos são pedidos em F9. Critério final não aceita integração simulada como concluída.
 
 ## Controle individual dos requisitos da Câmara
+
+**Progresso técnico F4–F8:** os fluxos internos são expostos em `/camara/planejamento/[kind]/[id]/gestao/[section]`, com contexto legislativo obrigatório. Testes executam operação de emenda/programação/relatório legislativo e recusam consolidação cruzada não autorizada. Evidências e dependências: [PLANEJAMENTO_F4_F8_EVIDENCIAS.md](PLANEJAMENTO_F4_F8_EVIDENCIAS.md). Migrations, ensaio completo da Câmara, conexões F9 e aceite independente F10 continuam necessários; nenhuma caixa integral foi promovida automaticamente.
 
 Cada caixa abaixo é **pendente de entrega e demonstração integral do Legislativo**; não representa inexistência das bases parciais já auditadas. Desenvolvimento interno indicado por fase; todos passam por F0/F1 transversais, F9 quando houver integração/dependência, e F10 para aceite final.
 

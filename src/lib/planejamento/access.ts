@@ -22,6 +22,20 @@ export function assertPlanningOperation(context: PlanningContext, operation: Mod
   if (context.jurisdiction === "LEGISLATIVE" && !canViewModule(context.user, "CAMARA")) throw new AccessError("Acesso à Câmara não autorizado.", 403);
 }
 
+export function canDecidePlanningLegally(context: PlanningContext) {
+  if (!canPerformModuleOperation(context.user, "PLANEJAMENTO", "update")) return false;
+  if (isSystemAdministrator(context.user)) return true;
+  try {
+    const grants = JSON.parse(context.user.permissions ?? "{}") as { modules?: { PLANEJAMENTO?: { legalApproval?: boolean } } };
+    return grants.modules?.PLANEJAMENTO?.legalApproval === true;
+  } catch { return false; }
+}
+
+export function assertPlanningLegalAuthority(context: PlanningContext) {
+  assertPlanningOperation(context, "update");
+  if (!canDecidePlanningLegally(context)) throw new AccessError("Decisão legal exige autorização específica de aprovação no Planejamento.", 403);
+}
+
 export function planningEntityWhere(context: PlanningContext): Prisma.GovernmentEntityWhereInput {
   return {
     status: "ATIVA", planningScope: { is: { jurisdiction: context.jurisdiction, isActive: true } },

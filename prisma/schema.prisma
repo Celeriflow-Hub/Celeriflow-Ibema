@@ -819,8 +819,160 @@ model PlanningInstrument {
   waivers PlanningRevenueWaiver[]
   importsFrom PlanningImportBatch[] @relation("PlanningImportSource")
   importsTo PlanningImportBatch[] @relation("PlanningImportTarget")
+  versions PlanningVersion[]
+  creditBatches PlanningCreditBatch[]
+  reportSnapshots PlanningReportSnapshot[]
+  fiscalRules PlanningFiscalRule[]
+  plannedWorks PlanningPlannedWork[]
+  implantedAt DateTime?
+  implantedById String?
   @@unique([governmentEntityId, kind, code])
   @@index([governmentEntityId, kind, startYear])
+}
+
+model PlanningVersion {
+  id String @id @default(cuid())
+  instrumentId String
+  instrument PlanningInstrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  number Int
+  effectiveAt DateTime @db.Date
+  legalActNumber String
+  reason String
+  snapshot Json
+  hash String
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([instrumentId, number])
+  @@index([instrumentId, effectiveAt])
+}
+
+model PlanningFiscalRule {
+  id String @id @default(cuid())
+  instrumentId String
+  instrument PlanningInstrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  type String
+  normativeReference String
+  definition Json
+  updatedById String
+  updatedAt DateTime @updatedAt
+  @@unique([instrumentId, type])
+}
+
+model PlanningPlannedWork {
+  id String @id @default(cuid())
+  instrumentId String
+  instrument PlanningInstrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  title String
+  type String
+  location String
+  legalReference String
+  year Int
+  value Decimal @db.Decimal(18,2)
+  createdById String
+  createdAt DateTime @default(now())
+}
+
+model PlanningPhysicalEvent {
+  id String @id @default(cuid())
+  lineId String
+  line PlanningBudgetLine @relation(fields: [lineId], references: [id], onDelete: Restrict)
+  effectiveAt DateTime @db.Date
+  target Decimal @db.Decimal(18,4)
+  actual Decimal @db.Decimal(18,4)
+  reason String
+  submissionKey String @unique
+  createdById String
+  createdAt DateTime @default(now())
+  @@index([lineId, effectiveAt, createdAt])
+}
+
+model PlanningQuota {
+  id String @id @default(cuid())
+  lineId String
+  line PlanningBudgetLine @relation(fields: [lineId], references: [id], onDelete: Restrict)
+  month Int
+  kind String @default("EXPENSE")
+  periodMonths Int @default(2)
+  planned Decimal @db.Decimal(18,2)
+  disbursementPlanned Decimal @default(0) @db.Decimal(18,2)
+  disbursementPaid Decimal @default(0) @db.Decimal(18,2)
+  consumed Decimal @default(0) @db.Decimal(18,2)
+  blocked Decimal @default(0) @db.Decimal(18,2)
+  closedAt DateTime?
+  method String
+  calculation Json
+  events PlanningQuotaEvent[]
+  @@unique([lineId, month])
+}
+
+model PlanningQuotaEvent {
+  id String @id @default(cuid())
+  quotaId String
+  quota PlanningQuota @relation(fields: [quotaId], references: [id], onDelete: Restrict)
+  type String
+  effectiveAt DateTime @default(now()) @db.Date
+  value Decimal @db.Decimal(18,2)
+  reason String
+  submissionKey String @unique
+  originEventId String?
+  originEvent PlanningQuotaEvent? @relation("PlanningQuotaRelease", fields: [originEventId], references: [id], onDelete: Restrict)
+  releases PlanningQuotaEvent[] @relation("PlanningQuotaRelease")
+  createdById String
+  createdAt DateTime @default(now())
+  @@index([quotaId, createdAt])
+}
+
+model PlanningCreditBatch {
+  id String @id @default(cuid())
+  instrumentId String
+  instrument PlanningInstrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  creditRequestId String @unique
+  creditRequest CreditRequest @relation(fields: [creditRequestId], references: [id], onDelete: Restrict)
+  origin String
+  originEvidence String
+  originLimit Decimal @db.Decimal(18,2)
+  status String @default("DRAFT")
+  effectiveAt DateTime? @db.Date
+  createdById String
+  submissionKey String @unique
+  createdAt DateTime @default(now())
+  items PlanningCreditLine[]
+}
+
+model PlanningCreditLine {
+  id String @id @default(cuid())
+  batchId String
+  batch PlanningCreditBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  lineId String
+  line PlanningBudgetLine @relation(fields: [lineId], references: [id], onDelete: Restrict)
+  value Decimal @db.Decimal(18,2)
+  reserved Decimal @default(0) @db.Decimal(18,2)
+  @@unique([batchId, lineId])
+}
+
+model PlanningReportSnapshot {
+  id String @id @default(cuid())
+  instrumentId String
+  instrument PlanningInstrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  reportType String
+  filters Json
+  dataset Json
+  hash String
+  status String @default("GENERATED")
+  createdById String
+  createdAt DateTime @default(now())
+  @@index([instrumentId, createdAt])
+}
+
+// Adapters are connected in F9, using these transactional commands.
+model PlanningIntegrationCommand {
+  id String @id @default(cuid())
+  type String
+  sourceId String
+  payload Json
+  idempotencyKey String @unique
+  status String @default("PENDING")
+  createdAt DateTime @default(now())
 }
 
 model PlanningImportBatch {
@@ -846,12 +998,16 @@ model PlanningBudgetLine {
   instrument PlanningInstrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
   kind PlanningLineKind
   code String
+  reducedCode String?
   description String
   year Int
   budgetUnitId String
   budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
   resourceSourceId String
   resourceSource ResourceSource @relation(fields: [resourceSourceId], references: [id], onDelete: Restrict)
+  destinationEntityId String?
+  destinationEntity GovernmentEntity? @relation("PlanningTransferDestination", fields: [destinationEntityId], references: [id], onDelete: Restrict)
+  transferDirection String?
   revenueNatureId String?
   revenueNature RevenueNature? @relation(fields: [revenueNatureId], references: [id], onDelete: Restrict)
   expenseNatureId String?
@@ -866,12 +1022,23 @@ model PlanningBudgetLine {
   productUnit String?
   physicalTarget Decimal @default(0) @db.Decimal(18, 4)
   physicalActual Decimal @default(0) @db.Decimal(18, 4)
+  originalPhysicalTarget Decimal? @db.Decimal(18, 4)
+  originalPhysicalActual Decimal? @db.Decimal(18, 4)
   originalValue Decimal @db.Decimal(18, 2)
   amendmentBlocked Boolean @default(false)
   createdAt DateTime @default(now())
   movements PlanningLineMovement[]
   amendmentItems PlanningAmendmentItem[]
+  quotas PlanningQuota[]
+  physicalEvents PlanningPhysicalEvent[]
+  creditLines PlanningCreditLine[]
+  amendmentBlockReason String?
+  amendmentBlockedById String?
+  amendmentBlockedAt DateTime?
+  appropriationId String? @unique
+  appropriation BudgetAppropriation? @relation(fields: [appropriationId], references: [id], onDelete: Restrict)
   @@unique([instrumentId, code])
+  @@unique([instrumentId, reducedCode])
   @@index([instrumentId, year, kind, budgetUnitId, resourceSourceId], map: "planning_line_scope_period")
 }
 
@@ -933,6 +1100,11 @@ model PlanningLegislativeAmendment {
   councilor CamVereador @relation(fields: [councilorId], references: [id], onDelete: Restrict)
   legalText String
   status String @default("DRAFT")
+  versionNumber Int @default(1)
+  decisionReason String?
+  effectiveAt DateTime? @db.Date
+  appliedAt DateTime?
+  legalActNumber String?
   decidedById String?
   decidedAt DateTime?
   createdById String
@@ -986,6 +1158,7 @@ model PlanningRevenueWaiver {
 }
 
 model GovernmentEntity {
+  incomingPlanningTransfers PlanningBudgetLine[] @relation("PlanningTransferDestination")
   id        String             @id @default(cuid())
   code      String             @unique
   name      String
@@ -3936,6 +4109,7 @@ model BimonthlyRevenueTarget {
 }
 
 model CreditRequest {
+  planningBatch PlanningCreditBatch?
   id                   String          @id @default(cuid())
   number               String          @unique
   financialYearId      String
@@ -4082,6 +4256,7 @@ model ExpenseNature {
 }
 
 model BudgetAppropriation {
+  planningLine PlanningBudgetLine?
   id                            String                       @id @default(cuid())
   code                          String                       @unique
   financialYearId               String

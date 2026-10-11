@@ -101,6 +101,10 @@ function assertBudgetUnitPermission(actor: FinanceActor, budgetUnitId: string) {
 
 async function lockCreditRequest(tx: Prisma.TransactionClient, creditRequestId: string) {
   await tx.$queryRaw`SELECT id FROM "CreditRequest" WHERE id = ${creditRequestId} FOR UPDATE`;
+  const [planningSchema] = await tx.$queryRaw<{ ready: boolean }[]>`SELECT to_regclass('"PlanningCreditBatch"') IS NOT NULL AS ready`;
+  if (planningSchema.ready && await tx.planningCreditBatch.findUnique({ where: { creditRequestId }, select: { id: true } })) {
+    throw new FinanceError("Este crédito pertence ao Planejamento e Orçamento. Utilize a jornada da entidade responsável.");
+  }
 }
 
 async function audit(
@@ -569,6 +573,10 @@ export async function transitionPlanningLegalWorkflow(
         ? await tx.budgetGuideline.findUnique({ where: { id: input.entityId }, select: { id: true, status: true, draftedById: true, submittedById: true, approvedById: true, sanctionedById: true, financialYearId: true } })
         : await tx.annualBudgetLaw.findUnique({ where: { id: input.entityId }, select: { id: true, status: true, draftedById: true, submittedById: true, approvedById: true, sanctionedById: true, financialYearId: true } });
     if (!record) throw new FinanceError(`${input.entityType} não encontrado.`);
+    const [planningSchema] = await tx.$queryRaw<{ ready: boolean }[]>`SELECT to_regclass('"PlanningInstrument"') IS NOT NULL AS ready`;
+    if (planningSchema.ready && await tx.planningInstrument.findFirst({ where: input.entityType === "PPA" ? { multiYearPlanId: record.id } : input.entityType === "LDO" ? { budgetGuidelineId: record.id } : { annualBudgetLawId: record.id }, select: { id: true } })) {
+      throw new FinanceError("Esta peça pertence ao Planejamento e Orçamento. Utilize a jornada da entidade responsável para a tramitação legal.");
+    }
 
     const expected: Record<Exclude<LegalWorkflowStatus, "DRAFT">, LegalWorkflowStatus> = {
       SUBMITTED: "DRAFT",

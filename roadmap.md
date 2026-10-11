@@ -35,3 +35,8 @@
 - [ ] Leiautes oficiais SAGRES, tabelas INSS/IRRF/RPPS 2026, chave Pix, CTM, parâmetros de frota/Portaria 344 — aguardam órgãos
 - [ ] Trocar senhas expostas; desativar login de teste antes da entrega
 - [ ] Produção publicar só da `main` (painel Vercel)
+
+## Plano de 10 sprints — Termo de Referência Ibema (ver .lovable/plan/)
+- [~] Sprints 2–3 Frota: feito — cadastro complementar (espécie, cor, tanque, FIPE, aquisição, sem marcador), agenda com bloqueio de conflito, destinos, guarita, CNH/pontos (bloqueio 20 pts), terceirizado, baterias com despesa, seguros obrigatório/facultativo, autorização de serviço com despesa e vínculo a dispensa/licitação, multas CTB com pagamento e consulta, ocorrências com coordenada, sinistros com apólice automática, consumo alto/normal/baixo (/frotas/controle). Pendentes: upload de anexos (tabela pronta), carga FIPE oficial, tabela CTB completa (só amostra), impressão formatada das autorizações, dossiê multi-veículo, saldo de combustível licitado, aplicar migração no banco.
+- [ ] Sprint 1 matriz de conformidade; Sprints 4–10 demais módulos
+- [ ] Adaptador TCE-PR (SIM-AM/AP) — aguarda leiautes oficiais

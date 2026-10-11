@@ -6,6 +6,11 @@ import { getTenantContextForModuleOperation, assertBudgetUnitAccess, canViewModu
 import { calculatePayrollRun, cancelPayrollRun, closePayrollRun, publishPayrollStatements, recordHrRightEntry, saveEmploymentContract, savePayrollMovement } from "@/lib/rh/workforce-service";
 import { acquireVacationRights, cancelVacationReservation, reserveVacationRight } from "@/lib/rh/vacation-rights";
 import { reserveMultipleVacationPeriods, cancelMultipleVacationPeriods } from "@/lib/rh/vacation-multiple-periods";
+import { acquireServiceRights, reserveServiceRight, cancelServiceReservation } from "@/lib/rh/service-rights";
+import { registerServiceTimeCredit, reverseServiceTimeCredit, postServiceTimeAllowance, reverseServiceTimeAllowance } from "@/lib/rh/service-time-allowance";
+import { postPayrollProvisions, reversePayrollProvision } from "@/lib/rh/payroll-provisions";
+import { expireTimeBankLots } from "@/lib/rh/time-bank-expiration";
+import { consumeProvisionsAtCommitment, reverseProvisionCommitmentConsumption } from "@/lib/rh/provision-commitment";
 import { importPayrollMovements } from "@/lib/rh/movement-import";
 import { generateBenefitMovement } from "@/lib/rh/benefit-calculation";
 import { decideEmployeeHrRequest } from "@/lib/rh/portal-requests";
@@ -24,11 +29,43 @@ import { decideEmployeeCreditRequest } from "@/lib/rh/credit-requests";
 
 export async function executeWorkforceOperation(command: string, values: Record<string, string>) {
   const allowed = ["contrato", "movimento", "direito", "calcular", "fechar", "cancelar", "publicar", "vincular", "aquisitivos", "reservar-ferias", "importar", "beneficio", "decidir-solicitacao", "reajustar", "cancelar-ferias", "ponto-horas-extras", "decidir-recadastramento", "financeiro", "simular-especial", "consignacao-reservar", "consignacao-lancar", "consignacao-cancelar", "contratos-coletivos", "ponto-banco-horas", "estornar-banco-horas"];
-  if (![...allowed, "ocorrencia", "cancelar-ocorrencia", "decidir-credito", "transferir-banco-horas", "estornar-transferencia-horas", "pagar-banco-horas", "estornar-pagamento-horas", "ferias-multiplos", "cancelar-ferias-multiplos"].includes(command)) return { error: "Operação inválida." };
-  const context = await getTenantContextForModuleOperation("RH", ["contrato", "movimento", "direito", "aquisitivos", "reservar-ferias", "importar", "beneficio", "ponto-horas-extras", "ponto-banco-horas", "consignacao-reservar", "ocorrencia", "transferir-banco-horas", "pagar-banco-horas", "ferias-multiplos"].includes(command) && !values.id ? "create" : "update");
+  if (![...allowed, "ocorrencia", "cancelar-ocorrencia", "decidir-credito", "transferir-banco-horas", "estornar-transferencia-horas", "pagar-banco-horas", "estornar-pagamento-horas", "ferias-multiplos", "cancelar-ferias-multiplos", "licenca-adquirir", "licenca-reservar", "licenca-cancelar", "averbar-tempo", "estornar-averbacao", "apurar-ats", "estornar-ats", "provisionar", "estornar-provisao", "expirar-banco-horas", "baixar-provisao-empenho", "estornar-baixa-provisao"].includes(command)) return { error: "Operação inválida." };
+  const context = await getTenantContextForModuleOperation("RH", ["contrato", "movimento", "direito", "aquisitivos", "reservar-ferias", "importar", "beneficio", "ponto-horas-extras", "ponto-banco-horas", "consignacao-reservar", "ocorrencia", "transferir-banco-horas", "pagar-banco-horas", "ferias-multiplos", "licenca-adquirir", "licenca-reservar", "averbar-tempo", "apurar-ats"].includes(command) && !values.id ? "create" : "update");
   try {
     let id = "";
     let message = "Operação registrada.";
+    if (command === "baixar-provisao-empenho") {
+      id = (await consumeProvisionsAtCommitment(context, { ...values, allocations: JSON.parse(values.allocations || "[]") })).entryIds.join(", ");
+      message = "Provisões baixadas e vinculadas ao empenho nativo com histórico preservado.";
+    }
+    if (command === "estornar-baixa-provisao") id = (await reverseProvisionCommitmentConsumption(context, values)).entryIds.join(", ");
+    if (command === "expirar-banco-horas") {
+      const result = await expireTimeBankLots(context.prisma, context.user.id, values);
+      id = result.entryIds.join(", "); message = `${result.applied ? "Expiração aplicada" : "Prévia sem baixas"}: ${JSON.stringify(result.rows)}`;
+      revalidatePath("/portal-servidor/banco-horas");
+    }
+    if (command === "provisionar" || command === "estornar-provisao") {
+      const runId = command === "provisionar" ? values.runId : z.object({ runId: z.string() }).parse((await context.prisma.hrRightEntry.findUniqueOrThrow({ where: { id: values.entryId } })).details).runId;
+      const run = await context.prisma.hrPayrollRun.findUniqueOrThrow({ where: { id: runId } });
+      await assertPayrollBudgetScope(context, run.payrollId);
+      id = command === "provisionar" ? (await postPayrollProvisions(context.prisma, context.user.id, values)).entryIds.join(", ") : (await reversePayrollProvision(context.prisma, context.user.id, values)).id;
+      message = "Ledger de provisões atualizado com memória por rubrica. Consulte os saldos no relatório de direitos.";
+    }
+    if (command === "averbar-tempo") id = (await registerServiceTimeCredit(context.prisma, context.user.id, values)).id;
+    if (command === "estornar-averbacao") id = (await reverseServiceTimeCredit(context.prisma, context.user.id, values)).id;
+    if (command === "apurar-ats" || command === "estornar-ats") {
+      const payrollId = command === "apurar-ats" ? values.payrollId : z.object({ input: z.object({ payrollId: z.string() }) }).parse((await context.prisma.hrIntegrationEvent.findUniqueOrThrow({ where: { sourceKey: values.originalSourceKey } })).payload).input.payrollId;
+      await assertPayrollBudgetScope(context, payrollId);
+      id = (command === "apurar-ats" ? await postServiceTimeAllowance(context.prisma, context.user.id, values) : await reverseServiceTimeAllowance(context.prisma, context.user.id, values)).movementId;
+      message = "ATS registrado com memória temporal. Recalcule a folha para incorporar o movimento.";
+    }
+    if (command === "licenca-adquirir") {
+      const result = await acquireServiceRights(context.prisma, context.user.id, values);
+      id = result.ids.join(", "); message = `Aquisitivos conferidos: ${result.ids.length}; dias contados no período pendente: ${result.pending.countedDays}.`;
+    }
+    if (command === "licenca-reservar") id = (await reserveServiceRight(context.prisma, context.user.id, values)).id;
+    if (command === "licenca-cancelar") id = (await cancelServiceReservation(context.prisma, context.user.id, values)).id;
+    if (command.startsWith("licenca-")) revalidatePath("/rh/licencas");
     if (command === "ferias-multiplos") {
       const result = await reserveMultipleVacationPeriods(context.prisma, context.user.id, { ...values, allocations: JSON.parse(values.allocations || "[]") });
       id = result.sourceKey;

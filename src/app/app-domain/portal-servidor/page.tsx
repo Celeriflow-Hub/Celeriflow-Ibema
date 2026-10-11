@@ -76,6 +76,7 @@ export default async function PortalServidorPage() {
         </section>
 
         <section className="grid min-h-0 gap-2 sm:grid-cols-2 xl:grid-cols-4" aria-label="Consultas pessoais disponíveis">
+          <Link href="/portal-servidor/licenca-premio" className="border border-slate-300 bg-white p-3 shadow-sm hover:bg-slate-50"><strong className="text-sm">Licença-prêmio</strong><p className="mt-2 text-xs text-slate-500">Aquisitivos, reservas e saldo reconhecido pelo RH.</p></Link>
           <Link href="/portal-servidor/ficha-funcional" className="border border-slate-300 bg-white p-3 shadow-sm outline-none transition-colors hover:border-slate-400 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-emerald-600">
             <div className="flex items-center gap-2">
               <div className="flex size-8 items-center justify-center rounded bg-slate-100 text-slate-700"><UserRoundCheck className="size-4" /></div>

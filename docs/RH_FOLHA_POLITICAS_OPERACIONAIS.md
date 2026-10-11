@@ -2,7 +2,63 @@
 
 Configure regras JSON em **RH > Parametrizações**, dentro do conjunto do regime. Os exemplos são formatos; substitua IDs, fundamentos e valores por dados reais. Conjunto ativo e vigência não substituem homologação oficial.
 
-## Gozo de vários aquisitivos
+## Licença-prêmio por dias contáveis (regra LICENCA_PREMIO)
+
+```json
+{"origin":"LICENCA_PREMIO","acquisitionDays":1825,"entitlementDays":90,"minSplitDays":15,"maxSplits":6,"allowsCash":true,"maxCashDays":30,"absences":[{"type":"Licença-prêmio","effect":"CONTAR"},{"type":"Sem vencimento","effect":"SUSPENDER"}],"legalReference":"Política sintética POC, substituir por fundamento aplicável"}
+```
+
+Valores acima são demonstrativos, não regra municipal nem equivalência de cinco anos civis. Operações > Direitos apura até data não futura, reserva GOZO/PECUNIA por aquisitivo e cancela reservas futuras. `SUSPENDER` prorroga pela união dos dias sem contagem; `REINICIAR` recomeça após o último dia do afastamento; tipo não configurado bloqueia apuração. Períodos de gozo são afastamentos nativos protegidos contra alteração manual. Pecúnia apenas reserva dias; geração financeira tem fluxo próprio. Consulta do titular: `/portal-servidor/licenca-premio`.
+
+## ATS e averbação anterior (regra ATS)
+
+```json
+{"origin":"ATS","rubricCode":"ATS_POC","basis":"SALARIO_TEMPORAL","tiers":[{"minimumDays":365,"rate":"1"},{"minimumDays":1825,"rate":"5"}],"absences":[{"type":"Licença-prêmio","counts":true},{"type":"Sem vencimento","counts":false}],"legalReference":"Regra sintética de tempo de serviço"}
+```
+
+Faixas se baseiam em dias explicitamente contados até o fim da competência, não anos presumidos. Averbação exige intervalo anterior à admissão, dias reconhecidos não superiores ao intervalo e ato; período sobreposto da mesma identidade não pode ser duplicado em outro contrato. Escopo é explícito. Estorno de averbação mantém o original. Apuração ATS exige mensal integral aberta, rubrica MANUAL/PROVENTO e salário temporal. Movimento é único por contrato/competência, sem duplicar em outra folha. Estorno de ATS cria movimento contrário; mudanças de tempo/salário/afastamentos bloqueiam cálculo/fechamento de ATS não conciliado. Rateio intramês, outras bases, reposicionamento após estorno e correção retroativa possuem desenvolvimento próprio pendente.
+
+## Provisões mensais (regra PROVISOES_FOLHA)
+
+```json
+{"origin":"PROVISOES_FOLHA","legalReference":"Classificação sintética POC","components":[{"kind":"PROVISAO_13","rubricCodes":["SALARIO"],"rate":"8.33333333","employerRate":"20"}]}
+```
+
+Tipos: `PROVISAO_FERIAS`, `PROVISAO_13`, `PROVISAO_LICENCA`. Base é soma das rubricas de provento únicas no snapshot; remuneração = base × rate/100 e patronal = remuneração × employerRate/100, com arredondamento separado HALF_UP. Apropriação usa ano da competência no ledger, quantidade 1 por mês e memória por verba. Relatório DIREITOS mostra os saldos. Estorno compensatório não apaga origem. Esse ledger RH não representa razão contábil, empenho ou pagamento.
+
+## Lotes e expiração explícita (regra BANCO_HORAS_EXPIRACAO)
+
+## Baixa de provisão por empenho nativo
+
+Em Operações > Direitos, informe chave estável, empenho e alocações de apropriações:
+
+```json
+[{"entryId":"ID_DA_APROPRIACAO","amount":"100.00"}]
+```
+
+O empenho deve existir no Financeiro, ligado por reserva à despesa RH/PAYROLL_RUN já empenhada e à folha oficial fechada de produção. Exige RH/update, Financeiro/update e acesso à UG. Apropriações precisam pertencer aos contratos daquela folha, em produção, e estar disponíveis. Total acumulado das baixas não pode exceder valor vigente do empenho (incluindo reforços/anulações), nem saldo da apropriação. Nenhum empenho ou pagamento é criado por esse formulário.
+
+Guarde `PROVISAO:BAIXA:<chave>`. Após anulação integral do empenho no Financeiro, o formulário de estorno devolve as quantias integralmente ao ledger com histórico compensatório. Empenho ativo ou apenas parcialmente anulado bloqueia devolução automática. Enquanto consumida, a apropriação original não pode ser estornada. Razão patrimonial, automatização da seleção de parcelas e anulação parcial permanecem em desenvolvimento.
+
+## Lotes e expiração explícita — operação
+
+```json
+{"origin":"BANCO_HORAS_EXPIRACAO","method":"FIFO_PRESERVA_ORIGEM","effectiveMode":"BAIXA_EXPLICITA_NA_APURACAO","maximumAgeDays":180,"legalReference":"Vencimento sintético POC"}
+```
+
+Operações > Direitos oferece PREVIA/APLICAR por titular e data não futura. FIFO reconstitui todos os contratos do titular no escopo, conserva datas de aquisição nas transferências e elimina pares de estorno. Créditos ordinários do dia são considerados antes de transferências e débitos ordinários, conforme a apuração por dia civil. O vencimento dá elegibilidade à baixa explícita; até aplicar, o saldo agregado permanece reconhecido. Baixa é efetiva na data da apuração, não retroativamente no aniversário do lote. Saldos insuficientes por consumo futuro, transferências sem origem íntegra e políticas de regimes não abrangidos bloqueiam a aplicação integral. Não há cron novo.
+
+## Layouts configuráveis de obrigações (regras OBRIGACAO_LAYOUT*)
+
+```json
+{"origin":"OBRIGACAO_LAYOUT","obligation":"CONFERENCIA","version":"POC_V1","format":"FIXED_WIDTH","legalReference":"Layout sintético de conferência","fields":[{"name":"MATRICULA","source":{"type":"FIELD","path":"identity.registration"},"required":true,"width":20,"align":"LEFT","pad":"SPACE","transform":"NONE"},{"name":"LIQUIDO","source":{"type":"FIELD","path":"totals.net"},"required":true,"width":14,"align":"RIGHT","pad":"ZERO","transform":"CENTAVOS"}]}
+```
+
+Formatos CSV/FIXED_WIDTH. Fontes FIELD usam paths permitidos de identidade/competência/local/centro/regime/totais/versão; RUBRIC exige `code` único no snapshot; LITERAL exige `value`. Transformações: NONE, COMPETENCIA_AAAAMM, DIGITOS, SEM_ACENTOS_MAIUSCULO, CENTAVOS. Largura fixa é ASCII com overflow bloqueado; normalização deve ser explícita. CSV usa UTF-8/BOM, aspas, ponto e vírgula e proteção contra fórmulas. `required` é revalidado após transformação. Não aceita NUL/quebras de linha em campos.
+
+Gere em `/rh/esocial` por regra/ano/escopo. Evento guarda bytes, SHA-256, política e versões utilizadas; download posterior não regenera o passado e revalida acesso orçamentário. `obligation` admite CONFERENCIA/DIRF/SEFIP_GFIP/MANAD/SIOPE/TCE/CADPREV como identificação; não implica homologação do respectivo layout. `officialLayout=false` até implementação/validação específica. XML/eSocial e populações externas à folha têm fluxos próprios pendentes.
+
+## Gozo de vários aquisitivos — operação
 
 Em `/rh/operacoes`, aba Direitos, informe contrato, chave estável, início, fundamento e a distribuição JSON:
 

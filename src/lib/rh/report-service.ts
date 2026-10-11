@@ -68,14 +68,15 @@ export async function buildHrReport(db: PrismaClient, input: z.infer<typeof hrRe
     return { title: "Folha calculada e fechada — não comprova pagamento", headers: ["Competência", "Tipo", "Escopo", "Matrícula", "Servidor", "Bruto BRL", "Descontos BRL", "Líquido BRL", "Encargos BRL", "Versão"], rows: rows.map(row => { const snapshot = payrollSnapshot.parse(row.snapshot); return [row.run.payroll.competence, row.run.payroll.type, row.run.scope, snapshot.contract.registration, snapshot.contract.employee.name, row.gross.toFixed(2), row.deductions.toFixed(2), row.net.toFixed(2), row.employer.toFixed(2), row.id]; }) };
   }
   const entries = await db.hrRightEntry.findMany({ where: { contract: contractWhere }, include: { contract: { select: { registration: true, employee: { select: { name: true } } } } }, orderBy: [{ periodStart: "asc" }, { createdAt: "asc" }, { id: "asc" }] });
-  const totals = new Map<string, { registration: string; name: string; kind: string; start: string; end: string; quantity: Prisma.Decimal; amount: Prisma.Decimal }>();
+  const totals = new Map<string, { registration: string; name: string; kind: string; scope: string; start: string; end: string; quantity: Prisma.Decimal; amount: Prisma.Decimal }>();
   for (const entry of entries) {
     const start = entry.periodStart.toISOString().slice(0, 10); const end = entry.periodEnd.toISOString().slice(0, 10);
-    const key = `${entry.contractId}:${entry.kind}:${start}:${end}`;
-    const row = totals.get(key) || { registration: entry.contract.registration, name: entry.contract.employee.name, kind: entry.kind, start, end, quantity: new Prisma.Decimal(0), amount: new Prisma.Decimal(0) };
+    const scope = (entry.details as { scope?: string }).scope || "LEGADO_SEM_ESCOPO";
+    const key = `${entry.contractId}:${entry.kind}:${scope}:${start}:${end}`;
+    const row = totals.get(key) || { registration: entry.contract.registration, name: entry.contract.employee.name, kind: entry.kind, scope, start, end, quantity: new Prisma.Decimal(0), amount: new Prisma.Decimal(0) };
     row.quantity = row.quantity.add(entry.quantity); row.amount = row.amount.add(entry.amount); totals.set(key, row);
   }
-  return { title: "Saldos de direitos e provisões", headers: ["Matrícula", "Servidor", "Direito", "Início", "Fim", "Saldo quantidade", "Saldo BRL"], rows: [...totals.values()].map(row => [row.registration, row.name, row.kind, row.start, row.end, row.quantity.toString(), row.amount.toFixed(2)]) };
+  return { title: "Saldos de direitos e provisões por escopo", headers: ["Matrícula", "Servidor", "Direito", "Escopo", "Início", "Fim", "Saldo quantidade", "Saldo BRL"], rows: [...totals.values()].map(row => [row.registration, row.name, row.kind, row.scope, row.start, row.end, row.quantity.toString(), row.amount.toFixed(2)]) };
 }
 
 export async function renderHrReport(report: Report, format: "CSV" | "XLSX" | "PDF") {

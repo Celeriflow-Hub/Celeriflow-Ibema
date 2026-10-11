@@ -10,6 +10,13 @@ import { getPayrollStatement, renderPayrollStatementPdf } from "../src/lib/rh/st
 import { acquireVacationRights, cancelVacationReservation, reserveVacationRight } from "../src/lib/rh/vacation-rights";
 import { reserveMultipleVacationPeriods, cancelMultipleVacationPeriods } from "../src/lib/rh/vacation-multiple-periods";
 import { buildObligationHistory } from "../src/lib/rh/obligation-history";
+import { acquireServiceRights, reserveServiceRight, cancelServiceReservation } from "../src/lib/rh/service-rights";
+import { registerServiceTimeCredit, reverseServiceTimeCredit, postServiceTimeAllowance, reverseServiceTimeAllowance } from "../src/lib/rh/service-time-allowance";
+import { postPayrollProvisions, reversePayrollProvision } from "../src/lib/rh/payroll-provisions";
+import { listServiceRightLedger } from "../src/lib/rh/service-right-query";
+import { renderObligationExport, generateObligationExport, readObligationExport } from "../src/lib/rh/obligation-export";
+import { expireTimeBankLots } from "../src/lib/rh/time-bank-expiration";
+import { consumeProvisionsAtCommitment, reverseProvisionCommitmentConsumption } from "../src/lib/rh/provision-commitment";
 import { assertRhAbsenceDoesNotOverlap } from "../src/lib/rh/absence-conflicts";
 import { resolveEmployeePerson } from "../src/lib/rh/employee-person";
 import { buildHrReport, renderHrReport } from "../src/lib/rh/report-service";
@@ -38,7 +45,7 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
   const server = new PGLiteSocketServer({ db: pg, port: 0, host: "127.0.0.1" });
   let db: PrismaClient | undefined;
   try {
-    for (const name of ["Person", "Document", "PersonnelAct", "HealthClinicalDocument", "HealthStandardDocument", "SstCertificateDocument", "Employee", "Role", "Department", "CostCenter", "Dependent", "Vacation", "Leave", "AttendanceRecord", "HrVacationPolicy", "BenefitConfig", "PayrollBenefit", "FinancialYear", "BudgetUnit", "BudgetAppropriation", "ExpenseNature", "Supplier", "Expense", "FinancialAuditLog", "SstBenefitPayrollScope", "Payroll", "PayrollItem", "PayrollEvent", "HrEmploymentRegime", "HrPayrollRuleSet", "HrPayrollRule", "HrPayrollRubric", "HrPayrollRubricIncidence", "HrCalculationPolicy", "HrSocialSecurityScheme", "HrSocialSecurityBand", "SstBenefitPayrollOrigin", "SstLeavePayrollOrigin"]) {
+    for (const name of ["Person", "Document", "PersonnelAct", "HealthClinicalDocument", "HealthStandardDocument", "SstCertificateDocument", "Employee", "Role", "Department", "CostCenter", "Dependent", "Vacation", "Leave", "AttendanceRecord", "HrVacationPolicy", "BenefitConfig", "PayrollBenefit", "FinancialYear", "BudgetUnit", "BudgetAppropriation", "ExpenseNature", "Supplier", "Expense", "BudgetReservation", "Commitment", "CommitmentMovement", "FinancialAuditLog", "SstBenefitPayrollScope", "Payroll", "PayrollItem", "PayrollEvent", "HrEmploymentRegime", "HrPayrollRuleSet", "HrPayrollRule", "HrPayrollRubric", "HrPayrollRubricIncidence", "HrCalculationPolicy", "HrSocialSecurityScheme", "HrSocialSecurityBand", "SstBenefitPayrollOrigin", "SstLeavePayrollOrigin"]) {
       const model = Prisma.dmmf.datamodel.models.find(m => m.name === name)!;
       const columns = model.fields.filter(f => f.kind !== "object" && f.type !== "Unsupported").map(f => {
         const types: Record<string, string> = { Int: "INTEGER", Float: "DOUBLE PRECISION", Decimal: "NUMERIC(24,6)", DateTime: "TIMESTAMP(3)", Boolean: "BOOLEAN", Json: "JSONB" };
@@ -194,6 +201,58 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
     assert.deepEqual(await cancelMultipleVacationPeriods(db, "other-actor", multiCancelInput), canceledGroup);
     assert.equal(await db.vacation.count({ where: { id: { in: multiReservation.vacationIds }, status: "Cancelada" } }), 2);
     await assert.rejects(cancelMultipleVacationPeriods(db, "actor", { ...multiCancelInput, reason: "Outro fundamento de cancelamento integral" }), /outro fundamento/);
+    const servicePolicy = { origin: "LICENCA_PREMIO", acquisitionDays: 365, entitlementDays: 90, minSplitDays: 15, maxSplits: 6, allowsCash: true, maxCashDays: 30, legalReference: "Licença-prêmio sintética POC", absences: [{ type: "Licença-prêmio", effect: "CONTAR" }] };
+    await db.hrPayrollRule.create({ data: { id: "service-right", ruleSetId: "set", code: "LICENCA_PREMIO", name: "Direito sintético", category: "GERAL", valueType: "JSON", value: servicePolicy, isActive: true } });
+    const serviceAcquisition = { contractId: historical.id, ruleId: "service-right", through: "2025-12-31" };
+    const serviceAcquired = await acquireServiceRights(db, "actor", serviceAcquisition);
+    assert.equal(serviceAcquired.ids.length, 1);
+    assert.deepEqual(await acquireServiceRights(db, "other-actor", serviceAcquisition), serviceAcquired);
+    const serviceReservationInput = { contractId: historical.id, ruleId: "service-right", sourceKey: "service-reservation", periodStart: "2025-01-01", periodEnd: "2025-12-31", start: `${new Date().getUTCFullYear() + 1}-09-01`, days: 15, kind: "GOZO", reason: "Ato sintético de gozo de licença-prêmio" };
+    const serviceReserved = await reserveServiceRight(db, "actor", serviceReservationInput);
+    assert.equal((await reserveServiceRight(db, "other-actor", serviceReservationInput)).id, serviceReserved.id);
+    const serviceLeaveId = (serviceReserved.details as { leaveId: string }).leaveId;
+    await assert.rejects(db.$transaction(tx => assertRhAbsenceDoesNotOverlap(tx, { employeeId: "employee", startsAt: new Date(serviceReservationInput.start), endsAt: new Date(serviceReservationInput.start), kind: "FERIAS" })), /conflita/);
+    const serviceCash = await reserveServiceRight(db, "actor", { ...serviceReservationInput, sourceKey: "service-cash", kind: "PECUNIA", days: 30 });
+    assert.equal((serviceCash.details as { leaveId: string | null }).leaveId, null, "pecúnia reserva direito sem gerar afastamento");
+    await assert.rejects(reserveServiceRight(db, "actor", { ...serviceReservationInput, sourceKey: "service-cash-excess", kind: "PECUNIA", days: 1 }), /superior ao limite/);
+    const serviceCancelInput = { entryId: serviceReserved.id, reason: "Ato sintético de cancelamento de licença futura" };
+    const serviceRestored = await cancelServiceReservation(db, "actor", serviceCancelInput);
+    assert.equal((await cancelServiceReservation(db, "other-actor", serviceCancelInput)).id, serviceRestored.id);
+    assert.equal((await db.leave.findUniqueOrThrow({ where: { id: serviceLeaveId } })).status, "Cancelada");
+    const serviceLedger = await db.hrRightEntry.findMany({ where: { contractId: historical.id, kind: "LICENCA_PREMIO" } });
+    assert.equal(serviceLedger.reduce((sum, row) => sum.add(row.quantity), new Prisma.Decimal(0)).toString(), "60");
+    assert.equal((await listServiceRightLedger(db, "employee", { scope: "DEMONSTRACAO" })).balanceDays, "60");
+    assert.equal((await listServiceRightLedger(db, "intruder", { scope: "DEMONSTRACAO", contractId: historical.id })).total, 0, "titularidade permanece obrigatória mesmo com contrato informado");
+    assert.equal((await listServiceRightLedger(db, "employee", { scope: "PRODUCAO" })).total, 0, "Portal não presume demonstração como produção");
+    const serviceCreditInput = { contractId: contract.id, sourceKey: "credit-ats", start: "2024-01-01", end: "2024-01-31", recognizedDays: 31, scope: "DEMONSTRACAO", reason: "Ato sintético de reconhecimento de tempo anterior" };
+    const timeCredit = await registerServiceTimeCredit(db, "actor", serviceCreditInput);
+    assert.equal((await registerServiceTimeCredit(db, "other-actor", serviceCreditInput)).id, timeCredit.id);
+    await assert.rejects(registerServiceTimeCredit(db, "actor", { ...serviceCreditInput, sourceKey: "credit-ats-other-contract", contractId: second.id }), /não duplique/);
+    await db.hrPayrollRule.create({ data: { id: "ats-policy", ruleSetId: "set", code: "ATS", name: "ATS sintético", category: "CALCULO", valueType: "JSON", isActive: true, value: { origin: "ATS", rubricCode: "EXTRA", basis: "SALARIO_TEMPORAL", legalReference: "Ato sintético ATS", tiers: [{ minimumDays: 60, rate: "5" }], absences: [] } } });
+    await db.payroll.create({ data: { id: "ats-payroll", competence: "02/2026", type: "Mensal", status: "Aberta", totalValue: 0 } });
+    const atsInput = { contractId: contract.id, payrollId: "ats-payroll", ruleId: "ats-policy" };
+    const ats = await postServiceTimeAllowance(db, "actor", atsInput);
+    assert.equal(ats.assessment.countedDays, 90);
+    assert.equal(ats.assessment.amount, "75.00");
+    assert.equal((await postServiceTimeAllowance(db, "another-actor", atsInput)).movementId, ats.movementId);
+    const atsRun = await calculatePayrollRun(db, "actor", { ...selection, contractIds: [contract.id, second.id, historical.id], payrollId: "ats-payroll", requestKey: "ats-calculation" });
+    assert.equal((await getPayrollStatement(db, atsRun.statements.find(row => row.contractId === contract.id)!.id)).items.find(row => row.code === "EXTRA")?.value, "75.00");
+    const timeCreditReversal = await reverseServiceTimeCredit(db, "actor", { entryId: timeCredit.id, reason: "Cancelamento sintético de tempo anteriormente averbado" });
+    assert.equal(timeCreditReversal.quantity.toString(), "-31");
+    await assert.rejects(calculatePayrollRun(db, "actor", { ...selection, contractIds: [contract.id, second.id, historical.id], payrollId: "ats-payroll", requestKey: "ats-stale" }), /mudaram após apuração/);
+    const atsReversed = await reverseServiceTimeAllowance(db, "actor", { originalSourceKey: `ATS:${contract.id}:02/2026`, reason: "Estorno sintético de ATS em competência aberta" });
+    assert.equal((await db.hrMovement.findUniqueOrThrow({ where: { id: atsReversed.movementId } })).amount.toFixed(2), "-75.00");
+    assert.equal((await getPayrollStatement(db, atsRun.statements.find(row => row.contractId === contract.id)!.id)).items.find(row => row.code === "EXTRA")?.value, "75.00", "estorno mantém memória do cálculo anterior");
+    await db.hrPayrollRule.create({ data: { id: "provision-policy", ruleSetId: "set", code: "PROVISOES_FOLHA", name: "Provisão sintética", category: "CALCULO", valueType: "JSON", isActive: true, value: { origin: "PROVISOES_FOLHA", legalReference: "Política sintética de provisão", components: [{ kind: "PROVISAO_13", rubricCodes: ["SALARIO"], rate: "8.33333333", employerRate: "20" }] } } });
+    const provisionInput = { runId: updated.id, ruleId: "provision-policy" };
+    const provision = await postPayrollProvisions(db, "actor", provisionInput);
+    assert.equal(provision.entryIds.length, 2);
+    assert.deepEqual(await postPayrollProvisions(db, "another-actor", provisionInput), provision);
+    const provisionEntry = await db.hrRightEntry.findUniqueOrThrow({ where: { id: provision.entryIds[0] } });
+    assert.equal(provisionEntry.amount.toFixed(2), "150.00");
+    const provisionReversal = await reversePayrollProvision(db, "actor", { entryId: provisionEntry.id, reason: "Estorno sintético da provisão sem baixa financeira" });
+    assert.equal(provisionReversal.amount.toFixed(2), "-150.00");
+    assert.equal((await db.hrRightEntry.findUniqueOrThrow({ where: { id: provisionEntry.id } })).amount.toFixed(2), "150.00", "estorno preserva apropriação original");
     await pg.exec(`
       INSERT INTO "HrPayrollRubricIncidence" (id,"rubricId","incidenceType","isIncluded") VALUES ('inc-irrf','rubric','IRRF',true),('inc-fgts','rubric','FGTS',true);
       INSERT INTO "HrPayrollRule" (id,"ruleSetId",code,name,category,"valueType",value,"isActive") VALUES
@@ -321,6 +380,32 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
     await dispatchPayrollExpenseRequests(financeContext, dispatchInput);
     assert.equal(await db.expense.count(), 2, "replay não duplica solicitação financeira");
     await assert.rejects(dispatchPayrollExpenseRequests(financeContext, { ...dispatchInput, date: "2026-11-01" }), /outra classificação/);
+    const productionProvision = await postPayrollProvisions(db, "actor", { runId: financeRun.id, ruleId: "provision-policy" });
+    const commitmentContext = { ...financeContext, user: { ...financeContext.user, permissions: JSON.stringify({ modules: { RH: { update: true }, FINANCEIRO: { create: true, update: true } } }) } };
+    await db.expense.update({ where: { id: dispatched.expenseIds[0] }, data: { status: "Empenhada" } });
+    await db.budgetReservation.create({ data: { id: "provision-reservation", number: "RES-POC", value: 100, valueDecimal: "100.00", appropriationId: "appropriation", expenseId: dispatched.expenseIds[0], status: "Empenhada" } });
+    await db.commitment.create({ data: { id: "provision-commitment", number: "EMP-POC", value: 100, valueDecimal: "100.00", history: "Empenho sintético no banco isolado", appropriationId: "appropriation", supplierId: "salary-supplier", reservationId: "provision-reservation", status: "Emitido" } });
+    const provisionConsumptionInput = { sourceKey: "provision-consumption", commitmentId: "provision-commitment", allocations: [{ entryId: productionProvision.entryIds[0], amount: "20.00" }], reason: "Conciliação sintética da provisão ao empenho" };
+    await assert.rejects(consumeProvisionsAtCommitment(financeContext, provisionConsumptionInput), /alteração RH e Financeiro/);
+    await assert.rejects(consumeProvisionsAtCommitment({ ...commitmentContext, user: { ...commitmentContext.user, allowedBudgetUnitIds: [] } }, provisionConsumptionInput));
+    await pg.exec(`CREATE FUNCTION test_provision_consumption_gate() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW."eventType"='PROVISOES_BAIXADAS_EMPENHO' THEN RAISE EXCEPTION 'TEST_PROVISION_CONSUMPTION_GATE'; END IF; RETURN NEW; END $$; CREATE TRIGGER test_provision_consumption_gate BEFORE INSERT ON "HrIntegrationEvent" FOR EACH ROW EXECUTE FUNCTION test_provision_consumption_gate()`);
+    await assert.rejects(consumeProvisionsAtCommitment(commitmentContext, provisionConsumptionInput), /TEST_PROVISION_CONSUMPTION_GATE/);
+    assert.equal(await db.hrRightEntry.count({ where: { sourceKey: { startsWith: "PROVISAO:BAIXA:provision-consumption" } } }), 0, "falha da auditoria reverte todas as baixas");
+    await pg.exec('DROP TRIGGER test_provision_consumption_gate ON "HrIntegrationEvent"');
+    const consumedProvision = await consumeProvisionsAtCommitment(commitmentContext, provisionConsumptionInput);
+    assert.equal(consumedProvision.entryIds.length, 1);
+    assert.deepEqual(await consumeProvisionsAtCommitment(commitmentContext, provisionConsumptionInput), consumedProvision);
+    await assert.rejects(reversePayrollProvision(db, "actor", { entryId: productionProvision.entryIds[0], reason: "Tentativa de estornar apropriação já parcialmente baixada" }), /baixa vinculada/);
+    await assert.rejects(consumeProvisionsAtCommitment(commitmentContext, { ...provisionConsumptionInput, sourceKey: "consumption-over-limit", allocations: [{ entryId: productionProvision.entryIds[0], amount: "81.00" }] }), /valor vigente do empenho/);
+    const reverseConsumptionInput = { originalSourceKey: "PROVISAO:BAIXA:provision-consumption", reason: "Anulação integral sintética do empenho no Financeiro" };
+    await assert.rejects(reverseProvisionCommitmentConsumption(commitmentContext, reverseConsumptionInput), /integralmente anulado/);
+    await db.commitment.update({ where: { id: "provision-commitment" }, data: { status: "Anulado" } });
+    const restoredProvision = await reverseProvisionCommitmentConsumption(commitmentContext, reverseConsumptionInput);
+    assert.equal((await db.hrRightEntry.findUniqueOrThrow({ where: { id: restoredProvision.entryIds[0] } })).amount.toFixed(2), "20.00");
+    assert.deepEqual(await reverseProvisionCommitmentConsumption(commitmentContext, reverseConsumptionInput), restoredProvision);
+    const provisionReport = await buildHrReport(db, { kind: "DIREITOS", format: "CSV", q: "DEMO-" });
+    assert.ok(provisionReport.rows.some(row => row[2] === "PROVISAO_13" && row[3] === "DEMONSTRACAO"));
+    assert.ok(provisionReport.rows.some(row => row[2] === "PROVISAO_13" && row[3] === "PRODUCAO"), "relatório não mistura provisões demonstrativas com produção");
     await db.hrPayrollRubric.create({ data: { ruleSetId: "set", code: "CONSIGNADO", name: "Consignado sintético", type: "DESCONTO", calculationMethod: "MANUAL", priority: 3, isActive: true } });
     const marginPolicy = { origin: "MARGEM_CONSIGNAVEL", remunerationRubricCodes: ["SALARIO"], compulsoryDeductionRubricCodes: ["PREVIDENCIA_RGPS_DEMO"], consignmentRubricCodes: ["CONSIGNADO"], legalReference: "Política sintética para teste" };
     await db.hrPayrollRule.create({ data: { ruleSetId: "set", code: "MARGEM_CONSIGNAVEL", name: "Margem sintética", category: "CONSIGNACAO", valueType: "JSON", value: marginPolicy, isActive: true } });
@@ -695,10 +780,41 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
     assert.equal(history.totals.net, "5015.01");
     assert.equal(history.records.at(-1)?.identity.registration, "EXPORT-500");
     assert.equal(history.records[0].identity.name, "Nome histórico", "identidade provém da memória, não do cadastro atual");
+    const filePolicy = { origin: "OBRIGACAO_LAYOUT", obligation: "CONFERENCIA", version: "POC_V1", format: "FIXED_WIDTH", legalReference: "Layout sintético para teste de conferência", fields: [
+      { name: "MATRICULA", source: { type: "FIELD", path: "identity.registration" }, required: true, width: 10, align: "LEFT", pad: "SPACE", transform: "NONE" },
+      { name: "COMPETENCIA", source: { type: "FIELD", path: "competence" }, required: true, width: 6, align: "LEFT", pad: "SPACE", transform: "COMPETENCIA_AAAAMM" },
+      { name: "LIQUIDO", source: { type: "FIELD", path: "totals.net" }, required: true, width: 8, align: "RIGHT", pad: "ZERO", transform: "CENTAVOS" },
+    ] };
+    const fixedFile = renderObligationExport(history, filePolicy);
+    assert.equal(fixedFile.count, 501);
+    assert.equal(fixedFile.bytes.toString().trimEnd().split("\r\n").at(-1), "EXPORT-50020261200001001");
+    assert.equal(fixedFile.fileSha256, renderObligationExport(history, filePolicy).fileSha256);
+    assert.throws(() => renderObligationExport(history, { ...filePolicy, fields: [{ ...filePolicy.fields[0], width: 2 }] }), /truncamento não permitido/);
+    assert.throws(() => renderObligationExport(history, { ...filePolicy, fields: [{ ...filePolicy.fields[0], source: { type: "FIELD", path: "costCenterId" } }] }), /obrigatório/);
     assert.match(history.records[0].snapshotSha256, /^[a-f0-9]{64}$/);
     assert.equal((await buildObligationHistory(db, { year: 2026, scope: "DEMONSTRACAO" }, { id: "history-payroll" })).contentSha256, history.contentSha256, "conteúdo idêntico mantém hash determinístico");
     assert.equal((await buildObligationHistory(db, { year: 2026, scope: "PRODUCAO" }, { id: "history-payroll" })).count, 0, "escopos não se misturam");
     assert.equal((await buildObligationHistory(db, { year: 2025, scope: "DEMONSTRACAO" }, { id: "history-payroll" })).count, 0);
     assert.equal((await buildObligationHistory(db, { year: 2026, scope: "DEMONSTRACAO" }, { id: "inaccessible-payroll" })).count, 0, "exportação respeita restrição orçamentária");
+    await db.hrPayrollRuleSet.update({ where: { id: "set" }, data: { scope: "DEMONSTRACAO" } });
+    await db.hrPayrollRule.create({ data: { id: "file-layout", ruleSetId: "set", code: "OBRIGACAO_LAYOUT_CONFERENCIA", name: "Arquivo sintético", category: "CALCULO", valueType: "JSON", value: filePolicy, isActive: true } });
+    const fileInput = { year: 2026, scope: "DEMONSTRACAO", ruleId: "file-layout" };
+    const generatedFile = await generateObligationExport(db, "actor", fileInput, { id: "history-payroll" });
+    assert.equal(generatedFile.count, 501);
+    assert.equal((await generateObligationExport(db, "other-actor", fileInput, { id: "history-payroll" })).eventId, generatedFile.eventId, "arquivo igual retorna evidência anterior inclusive entre operadores");
+    assert.deepEqual((await readObligationExport(db, generatedFile.eventId, { id: "history-payroll" })).bytes, fixedFile.bytes, "download usa bytes preservados");
+    await assert.rejects(readObligationExport(db, generatedFile.eventId, { id: "inaccessible-payroll" }), /fora do acesso/);
+    await db.hrRightEntry.create({ data: { id: "expiry-credit", contractId: contract.id, sourceKey: "expiry-credit", kind: "BANCO_HORAS", periodStart: new Date("2026-01-01"), periodEnd: new Date("2026-01-01"), quantity: "1.0001", amount: 0, actorId: "actor", details: { scope: "DEMONSTRACAO" } } });
+    await transferTimeBank(db, "actor", { ...transferInput, sourceKey: "expiry-transfer", date: "2026-02-01", hours: "0.5001" });
+    await db.hrPayrollRule.create({ data: { id: "expiry-policy", ruleSetId: "set", code: "BANCO_HORAS_EXPIRACAO", name: "Expiração sintética", category: "CALCULO", valueType: "JSON", isActive: true, value: { origin: "BANCO_HORAS_EXPIRACAO", method: "FIFO_PRESERVA_ORIGEM", effectiveMode: "BAIXA_EXPLICITA_NA_APURACAO", maximumAgeDays: 90, legalReference: "Política sintética de vencimento" } } });
+    const expiryInput = { employeeId: "employee", ruleId: "expiry-policy", through: "2026-10-01", mode: "PREVIA" };
+    const expiryPreview = await expireTimeBankLots(db, "actor", expiryInput);
+    assert.equal(expiryPreview.rows.length, 2);
+    assert.equal(expiryPreview.applied, false);
+    assert.ok(expiryPreview.rows.every(row => row.origins.includes("expiry-credit")), "ambos vínculos mantêm a origem adquirida em janeiro");
+    const expired = await expireTimeBankLots(db, "actor", { ...expiryInput, mode: "APLICAR" });
+    assert.equal(expired.entryIds.length, 2);
+    assert.deepEqual(await expireTimeBankLots(db, "other-actor", { ...expiryInput, mode: "APLICAR" }), expired);
+    assert.equal((await db.hrRightEntry.aggregate({ where: { kind: "BANCO_HORAS", details: { path: ["scope"], equals: "DEMONSTRACAO" } }, _sum: { quantity: true } }))._sum.quantity?.toString(), "0");
   } finally { await db?.$disconnect(); await server.stop(); await pg.close(); }
 });

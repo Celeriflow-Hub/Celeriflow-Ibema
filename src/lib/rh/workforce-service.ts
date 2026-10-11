@@ -9,6 +9,7 @@ import { assessPayrollDependents, dependentAssessmentSchema, familyWagePolicySch
 import { contractCustomFieldsPolicySchema, contractCustomFieldsPolicyHash, validateContractCustomFields } from "./contract-custom-fields";
 import { assertPositionPlanForContract, positionPlanSchema } from "./position-plan";
 import { selectReceiptMessages } from "./receipt-messages";
+import { assertServiceTimeAllowanceCurrent } from "./service-time-allowance";
 
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
@@ -252,6 +253,7 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
       return { ...resolved.contract, revisionId: resolved.revisionId };
     }).filter(contract => contract.status === "ATIVO" && contract.admittedAt <= period.end && (!contract.endsAt || contract.endsAt >= period.start));
     if (contracts.length !== ids.length) throw new Error("Seleção contém vínculo inválido ou fora da competência.");
+    for (const contract of contracts) await assertServiceTimeAllowanceCurrent(tx, contract.id, payroll.competence);
     const regimes = await tx.hrEmploymentRegime.findMany({ where: { id: { in: contracts.map(c => c.regimeId) }, isActive: true }, include: { socialSecurityScheme: { include: { bands: { orderBy: { sequence: "asc" } } } } } });
     const sets = new Set(regimes.map(r => r.ruleSetId));
     if (sets.size !== 1) throw new Error("Selecione vínculos do mesmo conjunto de regras.");
@@ -429,6 +431,7 @@ export async function closePayrollRun(db: PrismaClient, actorId: string, runId: 
       const storedContract = await tx.hrEmploymentContract.findUniqueOrThrow({ where: { id: version.id }, include: { employee: true, revisions: true } });
       const contract = resolveContractRevision(storedContract, storedContract.revisions, payrollPeriod(payroll.competence)).contract;
       await tx.$queryRaw`SELECT id FROM "Employee" WHERE id=${contract.employeeId} FOR SHARE`;
+      await assertServiceTimeAllowanceCurrent(tx, contract.id, payroll.competence);
       const employee = await tx.employee.findUniqueOrThrow({ where: { id: contract.employeeId } });
       if (!employee.isActive || contract.status !== "ATIVO") throw new Error("Servidor/contrato inativado após o cálculo. Recalcule a seleção antes de fechar.");
       if (contract.version !== version.version) throw new Error("Contrato mudou após o cálculo. Recalcule antes de fechar.");

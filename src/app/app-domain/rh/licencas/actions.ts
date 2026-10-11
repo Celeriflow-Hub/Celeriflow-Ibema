@@ -40,6 +40,7 @@ export async function saveLicenca(formData: FormData) {
         if (previous.employeeId !== employeeId) throw new Error("Não é permitido trocar o titular do afastamento.");
         const occupational = await tx.sstMedicalCertificate.findUnique({ where: { leaveId: id }, select: { id: true } });
         if (occupational) throw new Error("Este afastamento possui origem em uma perícia SST. A decisão ocupacional e seu vínculo são preservados.");
+        if (await tx.hrRightEntry.findFirst({ where: { details: { path: ["leaveId"], equals: id } } })) throw new Error("Licença integrada a direitos exige cancelamento compensatório; a projeção não pode ser editada.");
       }
       if (data.status === "Ativa") await assertRhAbsenceDoesNotOverlap(tx, { employeeId, startsAt: data.startDate, endsAt: data.endDate, kind: "LICENCA", excludeId: id || undefined });
       if (id) await tx.leave.update({ where: { id }, data });
@@ -61,8 +62,13 @@ export async function deleteLicenca(id: string) {
   try {
     const occupational = await prisma.sstMedicalCertificate.findUnique({ where: { leaveId: id }, select: { id: true } });
     if (occupational) return { success: false, error: "Afastamentos vinculados a uma perícia SST não podem ser excluídos pelo RH." };
-    await prisma.leave.delete({
-      where: { id },
+    await prisma.$transaction(async tx => {
+      const initial = await tx.leave.findUniqueOrThrow({ where: { id } });
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:employee:${initial.employeeId}`}))`;
+      await tx.$queryRaw`SELECT id FROM "Leave" WHERE id=${id} FOR UPDATE`;
+      if (await tx.hrRightEntry.findFirst({ where: { details: { path: ["leaveId"], equals: id } } })) throw new Error("Licença integrada a direitos não pode ser excluída; use cancelamento compensatório.");
+      if (await tx.sstMedicalCertificate.findUnique({ where: { leaveId: id }, select: { id: true } })) throw new Error("Afastamento possui origem SST protegida.");
+      await tx.leave.delete({ where: { id } });
     });
     revalidatePath("/rh/licencas");
     revalidatePath("/portal-servidor");
@@ -70,7 +76,7 @@ export async function deleteLicenca(id: string) {
     return { success: true };
   } catch (error) {
     console.error("Erro ao excluir licença:", error);
-    return { success: false, error: "Falha ao excluir o registro de licença." };
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao excluir o registro de licença." };
   }
 }
 

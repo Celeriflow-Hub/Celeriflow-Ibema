@@ -2,6 +2,11 @@
 import { contractCustomFieldsPolicySchema } from "@/lib/rh/contract-custom-fields";
 import { positionPlanSchema } from "@/lib/rh/position-plan";
 import { receiptMessagesPolicySchema } from "@/lib/rh/receipt-messages";
+import { serviceRightPolicySchema } from "@/lib/rh/service-rights";
+import { serviceTimeAllowancePolicySchema } from "@/lib/rh/service-time-allowance";
+import { payrollProvisionPolicySchema } from "@/lib/rh/payroll-provisions";
+import { obligationExportPolicySchema } from "@/lib/rh/obligation-export";
+import { timeBankExpirationPolicySchema } from "@/lib/rh/time-bank-expiration";
 import { timeBankTransferPolicySchema } from "@/lib/rh/time-bank-transfer";
 import { timeBankPaymentPolicySchema } from "@/lib/rh/time-bank-payment";
 
@@ -269,6 +274,26 @@ export async function saveHrPayrollRule(
         const regimeIds = [...new Set(policy.messages.flatMap(message => message.regimeIds))];
         if (contractIds.length && await tx.hrEmploymentContract.count({ where: { id: { in: contractIds } } }) !== contractIds.length) throw new Error("Mensagem referencia contrato inexistente.");
         if (regimeIds.length && await tx.hrEmploymentRegime.count({ where: { id: { in: regimeIds } } }) !== regimeIds.length) throw new Error("Mensagem referencia regime inexistente.");
+      }
+      if (input.code === "LICENCA_PREMIO") {
+        if (input.valueType !== "JSON") throw new Error("Licença-prêmio exige política JSON.");
+        serviceRightPolicySchema.parse(value);
+      }
+      if (input.code === "ATS") {
+        if (input.valueType !== "JSON") throw new Error("ATS exige política JSON.");
+        serviceTimeAllowancePolicySchema.parse(value);
+      }
+      if (input.code === "PROVISOES_FOLHA") {
+        if (input.valueType !== "JSON") throw new Error("Provisões exigem política JSON.");
+        payrollProvisionPolicySchema.parse(value);
+      }
+      if (input.code.startsWith("OBRIGACAO_LAYOUT")) {
+        if (input.valueType !== "JSON") throw new Error("Layout de obrigação exige política JSON.");
+        obligationExportPolicySchema.parse(value);
+      }
+      if (input.code === "BANCO_HORAS_EXPIRACAO") {
+        if (input.valueType !== "JSON") throw new Error("Expiração de banco de horas exige política JSON.");
+        timeBankExpirationPolicySchema.parse(value);
       }
       if (input.code === "BANCO_HORAS_PAGAMENTO") {
         if (input.valueType !== "JSON") throw new Error("Conversão de horas exige regra JSON.");

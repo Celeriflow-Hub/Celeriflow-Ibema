@@ -1,6 +1,10 @@
 # Avisos automáticos de término da restrição
 
-Agendamento Vercel em `vercel.json`: a cada hora UTC, `GET /api/sst/restricoes/expiracao`. O ambiente de implantação precisa suportar/ativar essa frequência de cron. Outro agendador pode chamar GET ou POST com o mesmo Bearer; a rotina não depende de sessão de navegador.
+Agendamento Vercel em `vercel.json`: **temporariamente diário para o plano Hobby**, `0 9 * * *`, `GET /api/sst/restricoes/expiracao`. Isso corresponde a 09:00 UTC (06:00 de Brasília); no Hobby, a execução pode ocorrer entre 09:00 e 09:59 UTC. Há um único job configurado no projeto.
+
+O agendamento anterior, `0 * * * *` (horário), foi incluído no commit `76728e5 — sst5` e é incompatível com o Hobby: expressões com frequência superior a uma vez por dia são rejeitadas no deploy. Referência: https://vercel.com/docs/cron-jobs/usage-and-pricing.
+
+Quando houver plano/agendador adequado para produção, restaurar a frequência horária e homologar os avisos/retries. Enquanto a execução for diária, avisos terão até cerca de um dia de atraso e falhas transitórias poderão ultrapassar a janela automática de retry de 23h; itens com reconciliação pendente devem ser conferidos pela operação. O limite de 20 itens por execução permanece. Outro agendador pode chamar GET ou POST com o mesmo Bearer; a rotina não depende de sessão de navegador.
 
 Configuração exigida, exclusivamente no ambiente do servidor:
 

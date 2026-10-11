@@ -26,6 +26,7 @@ export async function decideEmployeeHrRequest(db: PrismaClient, actorId: string,
     const request = await tx.hrPortalRequest.findUniqueOrThrow({ where: { id: input.requestId } });
     if (request.kind === "ACESSO_PORTAL") throw new Error("Provisionamento de acesso depende da rotina de identidade e não pode ser deferido por este formulário.");
     if (request.kind === "RECADASTRAMENTO") throw new Error("Recadastramento exige revisão do diff e atualização canônica pelo fluxo próprio.");
+    if (request.kind === "CREDITO_CONSIGNADO") throw new Error("Crédito consignado exige decisão e reserva transacional pelo fluxo próprio.");
     if (request.status !== "EM_ANALISE") {
       if (request.status === input.status && request.decision === input.decision) return request;
       throw new Error("Solicitação já decidida; o histórico foi preservado.");

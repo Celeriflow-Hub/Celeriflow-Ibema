@@ -33,10 +33,13 @@ async function assertOpenCompetence(tx: Tx, employeeId: string, date: Date) {
 }
 
 export async function reserveConsignmentAgreement(db: PrismaClient, actorId: string, raw: unknown) {
+  return db.$transaction(tx => reserveConsignmentAgreementInTransaction(tx, actorId, raw), { timeout: 60000 });
+}
+
+export async function reserveConsignmentAgreementInTransaction(tx: Tx, actorId: string, raw: unknown) {
   const input = z.object({ sourceKey: z.string().trim().min(1).max(160), contractId: z.string().min(1), supplierId: z.string().min(1), sourceRunId: z.string().min(1), ruleId: z.string().min(1), number: z.string().trim().min(1).max(100), rubricCode: z.string().min(1), firstCompetence: z.string(), count: z.coerce.number().int().min(1).max(120), amount: cents, reason: z.string().trim().min(10).max(2000) }).strict().parse(raw);
   const first = payrollPeriod(input.firstCompetence).start;
   const normalized = { ...input, amount: new Prisma.Decimal(input.amount).toFixed(2) };
-  return db.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:consignment:${input.sourceKey}`}))`;
     const previous = await tx.hrConsignmentAgreement.findUnique({ where: { sourceKey: input.sourceKey }, include: { installments: { include: { entries: true } } } });
     if (previous) {
@@ -83,7 +86,6 @@ export async function reserveConsignmentAgreement(db: PrismaClient, actorId: str
       schedules.push({ sequence: index + 1, competenceAt: date, amount: input.amount });
     }
     return tx.hrConsignmentAgreement.create({ data: { sourceKey: input.sourceKey, contractId: stored.id, supplierId: supplier.id, sourceRunId: run.id, scope: run.scope, number: input.number, rubricCode: input.rubricCode, actorId, snapshot: json({ request: normalized, policy, margin, baselineUsed: baselineUsed.toFixed(2), supplier }), installments: { create: schedules.map(schedule => ({ ...schedule, entries: { create: { sourceKey: `CONSIGNACAO:RESERVA:${input.sourceKey}:${schedule.sequence}`, kind: "RESERVA", amount: schedule.amount, reason: input.reason, actorId } } })) } }, include: { installments: { include: { entries: true } } } });
-  }, { timeout: 60000 });
 }
 
 export async function postConsignmentInstallment(db: PrismaClient, actorId: string, raw: unknown) {

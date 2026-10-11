@@ -128,6 +128,16 @@ A consulta é histórica, calculada na versão da folha. Alterar a política pos
 
 ## Contratos e cronogramas consignados
 
+### Pedido de crédito no Portal
+
+Em `/portal-servidor/credito`, o titular seleciona a última folha mensal oficial publicada por escopo, vínculo e consignatária habilitada em `CONSIGNACAO_CONTRATOS`. Informa primeira competência `MM/AAAA`, quantidade de parcelas, valor positivo com ponto decimal e descrição/autorização do pedido. O serviço exige política ativa, credor ativo, prazo permitido, publicação da referência e titularidade. Produção exige conjunto oficial aprovado. O Portal precisa ter demonstrativos habilitados.
+
+O pedido fica em análise, sem reservar margem, e aparece em Minhas solicitações. O RH usa a decisão específica em `/rh/solicitacoes`: para deferir, informa número contratual e rubrica consignada MANUAL; as demais condições do pedido são preservadas. Para indeferir, basta o fundamento.
+
+O deferimento revalida a referência mais recente e as reservas de todos os vínculos, por competência. Todo o cronograma, a decisão e a auditoria são uma transação única: se a margem tiver sido ocupada por outra operação, nada é gravado parcialmente e o pedido permanece em análise. Replay não gera outra consignação; dados de decisão divergentes são rejeitados. A reserva resultante aparece na consulta habitual de consignações, vinculada ao pedido por origem `PORTAL:CREDITO:<requestId>`.
+
+O fluxo não representa autorização de liberação de dinheiro pela instituição bancária. Taxas bancárias, portabilidade, carência, submargens por produto e liberação manual por banco continuam exigindo fluxos/políticas próprios. A integração externa não é inferida da decisão do RH.
+
 Regra ativa JSON na categoria CONSIGNACAO, no mesmo conjunto da referência mensal:
 
 ```json

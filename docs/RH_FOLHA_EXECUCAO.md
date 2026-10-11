@@ -77,11 +77,26 @@ O plano usa **F0–F9**, totalizando dez fases. Esta execução ainda está em a
 | F4 Direitos/frequência | Parcial | Médias, horas extras, banco de horas reconhecido/extrato e cancelamento compensatório entregues; completar perdas/prorrogações/férias especiais, gozo de múltiplos aquisitivos, licença prêmio/ATS/averbação, expiração e conversão financeira do banco. |
 | F5 Folhas especiais | Parcial | Mensal oficial e cenários isolados dos oito tipos especiais disponíveis. Fluxos oficiais de rescisão/RRA/13º/férias, tributação, direitos e reintegração continuam pendentes. Reajuste contratual coletivo disponível. |
 | F6 Contabilidade | Parcial | Solicitações de despesa integradas ao Financeiro com retomada; completar empenho, provisões, retenções/repasses, baixa, pagamentos, diárias e produtividade. |
-| F7 Portal | Parcial | PDF próprio, publicação futura, solicitações, campanhas/deferimento, margem histórica e consulta de cronogramas consignados disponíveis; faltam renda anual fiscal, solicitação de crédito pelo titular e demais jornadas. |
+| F7 Portal | Parcial | PDF próprio, publicação futura, solicitações, campanhas/deferimento, margem histórica, consulta de cronogramas e pedido de crédito do titular com decisão/reserva transacional disponíveis; faltam renda anual fiscal, carência/liberação de margem por banco e demais jornadas. |
 | F8 eSocial/obrigações | Parcial | Origens/outbox disponíveis; faltam layouts/validadores/cliente/worker e exportadores históricos. Configuração externa posterior não substitui esses desenvolvimentos internos. |
 | F9 POC | Parcial | Testes iniciais e regressão; ampliar casos ouro, relatórios e evidências item a item, além do percurso autenticado. |
 
 ## Comandos de verificação e implantação
+
+### Continuidade — solicitação de crédito pelo titular (F3/F7)
+
+- `/portal-servidor/credito` apresenta as referências mensais oficiais mais recentes do próprio titular que estejam publicadas e tenham política ativa de consignação; vínculos e credores centrais habilitados são selecionáveis. Identidade funcional é obtida da sessão, nunca de um campo do formulário.
+- Solicitação `CREDITO_CONSIGNADO` mantém descrição, parcela/quantidade/início, consignatária, política e margem de referência. Solicitar não ocupa margem; replay com mesmos dados retorna a mesma solicitação e origem divergente é rejeitada. Referência não publicada, de outro titular, desatualizada ou fora do prazo da política é bloqueada.
+- RH confere o pedido em `/rh/solicitacoes`. A decisão própria exige número e rubrica no deferimento, revalida publicação, vigência, referência, cadastro/cronograma e margem disponível. Reserva completa de todas as parcelas, decisão e evento de auditoria são gravados na mesma transação. Falha de qualquer etapa mantém o pedido em análise e reverte todas as reservas.
+- Action aplica escopo orçamentário da referência. Decisão genérica não pode deferir crédito; campos solicitados pelo titular não podem ser alterados pelo deferimento. Repetir decisão não duplica contrato/parcelas; alterar número/rubrica/fundamento após decisão é rejeitado. Indeferimento não cria reserva.
+- Teste PostgreSQL real verifica titularidade, replay normalizado, referência antiga, bloqueio de decisão genérica, rollback após falha injetada no evento, reserva e replay da decisão, alteração de decisão e concorrência de margem com reservas existentes. Doze testes RH aprovados; build integrado em validação.
+- Crédito bancário/liberação de dinheiro e repasse à consignatária têm procedimentos externos/financeiros próprios. A entrega não homologa FOL-084 (carência e liberação manual por banco) nem conclui F3/F7. Nenhuma migration nova foi necessária.
+
+### Ajuste temporário de deploy — plano Vercel Hobby
+
+- `vercel.json` tinha um cron horário de SST, incluído em `76728e5 — sst5`. Frequência horária é rejeitada pelo plano Hobby.
+- Ajustado para um único job diário: `0 9 * * *` (09h UTC, 06h Brasília; janela de uma hora no Hobby). Procedimento de retorno à frequência de produção e impacto em avisos/retries: `src/app/app-domain/sst/restricoes/EMAIL-CRON.md`.
+- Configuração JSON e frequência diária conferidas localmente. O status efetivo de deploy na Vercel depende da publicação das alterações e de verificação do projeto remoto.
 
 ```powershell
 node --conditions=react-server --import tsx --test --test-concurrency=1 tests/hr-calculation.test.ts tests/hr-workforce-service.test.ts

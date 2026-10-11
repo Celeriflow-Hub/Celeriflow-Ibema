@@ -17,14 +17,23 @@ import { reserveConsignmentAgreement, postConsignmentInstallment, cancelConsignm
 import { assertPayrollBudgetScope } from "@/lib/rh/payroll-access";
 import { generateAttendanceTimeBank, reverseAttendanceTimeBank } from "@/lib/rh/time-bank";
 import { registerFunctionalOccurrence, cancelFunctionalOccurrence } from "@/lib/rh/functional-occurrences";
+import { decideEmployeeCreditRequest } from "@/lib/rh/credit-requests";
 
 export async function executeWorkforceOperation(command: string, values: Record<string, string>) {
   const allowed = ["contrato", "movimento", "direito", "calcular", "fechar", "cancelar", "publicar", "vincular", "aquisitivos", "reservar-ferias", "importar", "beneficio", "decidir-solicitacao", "reajustar", "cancelar-ferias", "ponto-horas-extras", "decidir-recadastramento", "financeiro", "simular-especial", "consignacao-reservar", "consignacao-lancar", "consignacao-cancelar", "contratos-coletivos", "ponto-banco-horas", "estornar-banco-horas"];
-  if (![...allowed, "ocorrencia", "cancelar-ocorrencia"].includes(command)) return { error: "Operação inválida." };
+  if (![...allowed, "ocorrencia", "cancelar-ocorrencia", "decidir-credito"].includes(command)) return { error: "Operação inválida." };
   const context = await getTenantContextForModuleOperation("RH", ["contrato", "movimento", "direito", "aquisitivos", "reservar-ferias", "importar", "beneficio", "ponto-horas-extras", "ponto-banco-horas", "consignacao-reservar", "ocorrencia"].includes(command) && !values.id ? "create" : "update");
   try {
     let id = "";
     let message = "Operação registrada.";
+    if (command === "decidir-credito") {
+      const request = await context.prisma.hrPortalRequest.findUniqueOrThrow({ where: { id: values.requestId } });
+      const sourceRunId = z.object({ input: z.object({ sourceRunId: z.string() }) }).parse(request.payload).input.sourceRunId;
+      const run = await context.prisma.hrPayrollRun.findUniqueOrThrow({ where: { id: sourceRunId } });
+      await assertPayrollBudgetScope(context, run.payrollId);
+      id = (await decideEmployeeCreditRequest(context.prisma, context.user.id, values)).id;
+      revalidatePath("/rh/solicitacoes"); revalidatePath("/rh/consignacoes"); revalidatePath("/portal-servidor/solicitacoes-rh"); revalidatePath("/portal-servidor/consignacoes");
+    }
     if (command === "ocorrencia") {
       const documentIds = (values.documentIds || "").split(/[\s,;]+/).filter(Boolean);
       if (documentIds.length && !canViewModule(context.user, "DOCUMENTOS")) throw new Error("Vinculação de anexos exige acesso ao GED.");

@@ -16636,3 +16636,145 @@ model FleetSagresMonthEvent {
 
   @@index([monthId, createdAt])
 }
+
+// ---- Ibema TR — Gestão de Frota (itens 1.568–1.617) ----
+model FleetBattery {
+  id           String    @id @default(cuid())
+  unitId       String
+  identifier   String
+  brand        String
+  installedAt  DateTime  @db.Date
+  removedAt    DateTime? @db.Date
+  cost         Decimal?  @db.Decimal(18, 2)
+  notes        String?
+  createdById  String
+  createdAt    DateTime  @default(now())
+
+  @@index([unitId, installedAt])
+}
+
+model FleetSchedule {
+  id           String   @id @default(cuid())
+  unitId       String
+  driverId     String?
+  departmentId String?
+  kind         String
+  purpose      String
+  destination  String?
+  startsAt     DateTime
+  endsAt       DateTime
+  status       String   @default("AGENDADO")
+  createdById  String
+  createdAt    DateTime @default(now())
+
+  @@index([unitId, startsAt])
+  @@index([driverId, startsAt])
+}
+
+model FleetGateEvent {
+  id          String   @id @default(cuid())
+  unitId      String
+  driverId    String?
+  kind        String
+  reading     Decimal? @db.Decimal(14, 3)
+  occurredAt  DateTime @default(now())
+  notes       String?
+  createdById String
+
+  @@index([unitId, occurredAt])
+}
+
+model FleetDestination {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  city      String?
+  distanceKm Decimal? @db.Decimal(10, 1)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model FleetCtbInfraction {
+  code        String  @id
+  description String
+  nature      String
+  points      Int
+  amount      Decimal @db.Decimal(18, 2)
+  article     String?
+}
+
+model FleetFipeModel {
+  code      String   @id
+  brand     String
+  model     String
+  yearLabel String?
+  reference String?
+  updatedAt DateTime @default(now())
+
+  @@index([brand, model])
+}
+
+model FleetInsurancePolicy {
+  id           String   @id @default(cuid())
+  unitId       String
+  kind         String
+  insurer      String
+  policyNumber String
+  startsAt     DateTime @db.Date
+  endsAt       DateTime @db.Date
+  premium      Decimal? @db.Decimal(18, 2)
+  createdById  String
+  createdAt    DateTime @default(now())
+
+  @@index([unitId, endsAt])
+}
+
+model FleetServiceAuthorization {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  unitId       String
+  supplierName String
+  supplierCnpj String?
+  description  String
+  amountLimit  Decimal  @db.Decimal(18, 2)
+  amountActual Decimal? @db.Decimal(18, 2)
+  procurementRef String?
+  procurementKind String?
+  status       String   @default("EMITIDA")
+  validUntil   DateTime? @db.Date
+  expenseId    String?  @unique
+  createdById  String
+  createdAt    DateTime @default(now())
+  executedAt   DateTime?
+
+  @@index([unitId, status])
+}
+
+model FleetClaim {
+  id             String   @id @default(cuid())
+  occurrenceId   String   @unique
+  unitId         String
+  responsibility String
+  insurer        String?
+  policyNumber   String?
+  workshopName   String?
+  workshopCnpj   String?
+  parties        Json
+  status         String   @default("ABERTO")
+  createdById    String
+  createdAt      DateTime @default(now())
+}
+
+model FleetAttachment {
+  id          String   @id @default(cuid())
+  unitId      String
+  ownerType   String   @default("VEICULO")
+  ownerId     String?
+  fileName    String
+  mimeType    String
+  sizeBytes   Int
+  url         String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([unitId, ownerType])
+}

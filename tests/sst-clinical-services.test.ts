@@ -316,7 +316,7 @@ test("private chart and vaccine lists are audited before reading, paginated by 2
   await listOccupationalVaccinations(context, { discipline: "MEDICINE", budgetUnitId: "foreign", page: 100 });
   assert.deepEqual(queries[1].where.budgetUnitId, { in: [] });
   assert.equal(queries[1].take, 20); assert.equal(queries[1].skip, 40);
-  context.prisma.auditEvent.create = async () => { throw new Error("audit unavailable"); };
+  (context.prisma.auditEvent as unknown as { create: () => Promise<never> }).create = async () => { throw new Error("audit unavailable"); };
   const reads = queries.length;
   await assert.rejects(listClinicalRecords(context, { discipline: "MEDICINE", page: 1 }), /audit unavailable/);
   assert.equal(queries.length, reads);

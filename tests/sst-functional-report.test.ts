@@ -43,7 +43,7 @@ async function fixture() {
     INSERT INTO "HealthSusReference" VALUES ('officialCID','CID','M54.5',true,true),('retiredCID','CID','Z99',false,true);
   `);
   let datasetQueries = 0;
-  const user = { id: "u", profileCode: "OPERADOR", allowedBudgetUnitIds: ["ug"], modulePermissions: [], permissions: JSON.stringify({ modules: { SST: { blocked: false, issueReports: true, create: true } } }) } as AppContext["user"];
+  const user = { id: "u", profileCode: "OPERADOR", allowedBudgetUnitIds: ["ug"], modulePermissions: [], permissions: JSON.stringify({ modules: { SST: { blocked: false, issueReports: true, create: true } } }) } as unknown as AppContext["user"];
   const audit = { create: async ({ data }: { data: Record<string, string> }) => db.query('INSERT INTO "AuditEvent" VALUES ($1,$2,$3,$4)', [data.actorUsuarioId, data.eventType, data.targetType, data.targetId]) };
   const raw = async (sql: Prisma.Sql | TemplateStringsArray, ...values: unknown[]) => {
     datasetQueries++;

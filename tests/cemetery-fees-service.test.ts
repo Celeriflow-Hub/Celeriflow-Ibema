@@ -63,7 +63,7 @@ test("PostgreSQL: versões, fatos imutáveis, responsável real, replay, rollbac
     await server.start();
     prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: `postgresql://postgres:postgres@${server.getServerConn()}/postgres`, max: 1 }) });
     const client = prisma;
-    const actor = { usuarioId: "operator" };
+    const actor = { usuarioId: "operator", employeeId: "operator-employee" };
     const rule = { cemeteryId: "", eventType: "ACQUISICAO_LOTE", label: "Aquisição", formula: "BASE_X_QUANTIDADE", baseAmount: "10.10", dueDays: 30, taxId: "tax", validFrom: "2026-01-01", validUntil: "", legalBasis: "Lei municipal 123" };
     const first = await publishCemeteryFeeRule(client, actor, rule);
     const input = { eventType: "ACQUISICAO_LOTE", sourceType: "LOTE" as const, sourceId: "lot", quantity: "3" };

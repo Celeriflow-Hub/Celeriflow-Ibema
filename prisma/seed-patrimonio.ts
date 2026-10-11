@@ -484,7 +484,7 @@ async function main() {
   if (!adminPerfil) throw new Error('Nenhum perfil configurado para criar o usuário administrador.')
   const adminUser = await prisma.usuario.findFirst() || await prisma.usuario.create({
     data: {
-      name: 'Administrador do Sistema',
+      nome: 'Administrador do Sistema',
       email: 'admin@prefeitura.gov.br',
       role: 'ADMIN'
     }

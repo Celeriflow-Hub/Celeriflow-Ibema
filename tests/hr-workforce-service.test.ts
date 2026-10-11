@@ -305,7 +305,7 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
     await assert.rejects(dispatchPayrollExpenseRequests(financeContext, { ...financialInput, mode: "APLICAR" }), /Financeiro real/);
     assert.equal(await db.expense.count(), 0);
     await db.hrPayrollRuleSet.update({ where: { id: "set" }, data: { scope: "PRODUCAO", isDemo: false, approvedAt: new Date(), legalReference: "Aprovação sintética no banco isolado do teste" } });
-    const financeRun = await db.hrPayrollRun.create({ data: { payrollId: "payroll", requestKey: "finance-run-isolated", mode: "OFICIAL", status: "FECHADA", scope: "PRODUCAO", ruleSetId: "set", actorId: "actor", snapshot: updated.snapshot, gross: updated.gross, deductions: updated.deductions, net: updated.net, employer: updated.employer, statements: { create: updated.statements.map(statement => ({ contractId: statement.contractId, snapshot: statement.snapshot, gross: statement.gross, deductions: statement.deductions, net: statement.net, employer: statement.employer })) } } });
+    const financeRun = await db.hrPayrollRun.create({ data: { payrollId: "payroll", requestKey: "finance-run-isolated", mode: "OFICIAL", status: "FECHADA", scope: "PRODUCAO", ruleSetId: "set", actorId: "actor", snapshot: updated.snapshot, gross: updated.gross, deductions: updated.deductions, net: updated.net, employer: updated.employer, statements: { create: (updated.statements as Array<{ contractId: string; snapshot: unknown; gross: Prisma.Decimal; deductions: Prisma.Decimal; net: Prisma.Decimal; employer: Prisma.Decimal }>).map(statement => ({ contractId: statement.contractId, snapshot: statement.snapshot as Prisma.InputJsonValue, gross: statement.gross, deductions: statement.deductions, net: statement.net, employer: statement.employer })) } } });
     const dispatchInput = { ...financialInput, runId: financeRun.id, mode: "APLICAR" };
     await assert.rejects(dispatchPayrollExpenseRequests({ ...financeContext, user: { ...financeContext.user, allowedBudgetUnitIds: [] } }, dispatchInput));
     await pg.exec(`CREATE FUNCTION test_block_second_expense() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW."supplierId"='pension-supplier' THEN RAISE EXCEPTION 'TEST_FINANCIAL_GATE'; END IF; RETURN NEW; END $$; CREATE TRIGGER test_expense_gate BEFORE INSERT ON "Expense" FOR EACH ROW EXECUTE FUNCTION test_block_second_expense()`);
@@ -660,7 +660,7 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
     assert.equal(report.rows.at(-1)?.[0], "EXPORT-500");
     assert.match((await renderHrReport(report, "CSV")).bytes.toString(), /EXPORT-500/);
     const spreadsheet = new ExcelJS.Workbook();
-    await spreadsheet.xlsx.load((await renderHrReport(report, "XLSX")).bytes);
+    await spreadsheet.xlsx.load((await renderHrReport(report, "XLSX")).bytes as unknown as Parameters<typeof spreadsheet.xlsx.load>[0]);
     assert.equal(spreadsheet.worksheets[0].rowCount, 502);
     assert.equal(spreadsheet.worksheets[0].getCell("A502").value, "EXPORT-500");
     const reportPdf = await renderHrReport(report, "PDF");

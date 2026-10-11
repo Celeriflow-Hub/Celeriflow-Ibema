@@ -6,8 +6,9 @@ import { resolveContractRevision } from "./contract-timeline";
 import { payrollPeriod } from "./calculation-engine";
 
 export const hrReportInputSchema = z.object({
-  kind: z.enum(["CONTRATOS", "FOLHA", "DIREITOS", "RESUMO_CONTABIL", "PREVIDENCIA", "CONTRATOS_MULTIPLOS"]), format: z.enum(["CSV", "XLSX", "PDF"]),
+  kind: z.enum(["CONTRATOS", "FOLHA", "DIREITOS", "RESUMO_CONTABIL", "PREVIDENCIA", "CONTRATOS_MULTIPLOS", "SERVIDORES_ATIVOS", "QUANTIDADE_SERVIDORES"]), format: z.enum(["CSV", "XLSX", "PDF"]),
   q: z.string().max(200).default(""), competence: z.string().regex(/^(0[1-9]|1[0-2])\/\d{4}$/).optional(),
+  referenceDate: z.iso.date().optional(),
   payrollId: z.string().min(1).optional(),
   customCode: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/).optional(), customValue: z.string().max(4000).optional(), customType: z.enum(["TEXTO", "BOOLEANO"]).optional(),
 });
@@ -42,6 +43,34 @@ export async function buildHrReport(db: PrismaClient, input: z.infer<typeof hrRe
       group.registrations.push(active.registration); group.regimes.push(active.regimeId); grouped.set(contract.employeeId, group);
     }
     return { title: "Servidores com contratos simultâneos na data de referência", headers: ["Referência", "Servidor", "Quantidade", "Matrículas", "Regimes IDs"], rows: [...grouped.values()].filter(group => group.registrations.length > 1).map(group => [reference.toISOString().slice(0, 10), group.name, String(group.registrations.length), group.registrations.join(" · "), [...new Set(group.regimes)].join(" · ")]) };
+  }
+  if (input.kind === "SERVIDORES_ATIVOS" || input.kind === "QUANTIDADE_SERVIDORES") {
+    const reference = input.referenceDate
+      ? new Date(`${input.referenceDate}T00:00:00Z`)
+      : input.competence ? payrollPeriod(input.competence).end : new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+    const contracts = await db.hrEmploymentContract.findMany({ where: contractWhere, include: { revisions: true, employee: { select: { id: true, name: true } } }, orderBy: [{ registration: "asc" }, { id: "asc" }] });
+    const active = contracts.flatMap(contract => {
+      if (!contract.revisions.some(revision => revision.effectiveFrom <= reference)) return [];
+      const snapshot = resolveContractRevision(contract, contract.revisions, { start: reference, end: reference }).contract;
+      return snapshot.status === "ATIVO" && snapshot.admittedAt <= reference && (!snapshot.endsAt || snapshot.endsAt >= reference) ? [{ ...snapshot, employee: contract.employee }] : [];
+    });
+    const regimes = await db.hrEmploymentRegime.findMany({ where: { id: { in: [...new Set(active.map(contract => contract.regimeId))] } }, select: { id: true, name: true } });
+    const regimeNames = new Map(regimes.map(regime => [regime.id, regime.name]));
+    const date = reference.toISOString().slice(0, 10);
+    if (input.kind === "QUANTIDADE_SERVIDORES") {
+      const groups = new Map<string, { people: Set<string>; contracts: number }>();
+      for (const contract of active) {
+        const group = groups.get(contract.regimeId) || { people: new Set<string>(), contracts: 0 };
+        group.people.add(contract.employeeId); group.contracts++; groups.set(contract.regimeId, group);
+      }
+      return { title: "Quantidade ativa na referência — pessoas distintas e vínculos; totais de pessoas por regime não são aditivos", headers: ["Referência", "Regime ID", "Regime (nome cadastral atual)", "Pessoas distintas", "Vínculos ativos"], rows: [
+        ...[...groups.entries()].map(([id, group]) => [date, id, regimeNames.get(id) || id, String(group.people.size), String(group.contracts)]),
+        [date, "TOTAL", "Total do filtro", String(new Set(active.map(contract => contract.employeeId)).size), String(active.length)],
+      ] };
+    }
+    const roles = await db.role.findMany({ where: { id: { in: [...new Set(active.map(contract => contract.roleId))] } }, select: { id: true, name: true } });
+    const roleNames = new Map(roles.map(role => [role.id, role.name]));
+    return { title: "Relação de servidores/vínculos ativos — referência documental Ibema; nomes de cargo/regime do cadastro atual", headers: ["Referência", "Matrícula", "Nome", "Cargo/Função", "Lotação", "Situação", "Regime", "Admissão", "Faixa salarial", "Jornada mensal (horas)", "Versão contratual"], rows: active.map(contract => [date, contract.registration, contract.employee.name, roleNames.get(contract.roleId) || contract.roleId, contract.workLocation, contract.status, regimeNames.get(contract.regimeId) || contract.regimeId, contract.admittedAt.toISOString().slice(0, 10), contract.salaryLevel || "", String(contract.monthlyHours), String(contract.version)]) };
   }
   if (["FOLHA", "RESUMO_CONTABIL", "PREVIDENCIA"].includes(input.kind)) {
     const rows = await db.hrPayrollStatement.findMany({ where: { contract: contractWhere, run: { mode: "OFICIAL", status: "FECHADA", ...(input.payrollId ? { payrollId: input.payrollId } : {}), payroll: { AND: [payrollScope, ...(input.competence ? [{ competence: input.competence }] : [])] } } }, include: { contract: { select: { registration: true, employee: { select: { name: true } } } }, run: { select: { payroll: { select: { competence: true, type: true } }, scope: true } } }, orderBy: [{ run: { createdAt: "asc" } }, { id: "asc" }] });

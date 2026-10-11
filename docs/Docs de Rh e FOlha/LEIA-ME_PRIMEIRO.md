@@ -15,10 +15,14 @@ Pacote **preparatório de desenvolvimento**, não comprova implementação nem c
 ## Ordem recomendada
 
 1. Abrir `DOSSIÊ_CODEX_CELERIFLOW_RH_FOLHA_IBEMA.md`; ler o checklist PDF e matrizes.
-2. Baixar fontes oficiais no computador, especialmente o Estatuto (passos no README da pasta 02).
+2. Conferir os downloads já presentes e seus resultados (passos no README da pasta 02); consultar a análise documental para uso e limitações.
 3. Entregar a pasta completa ao Codex no workspace do CeleriFlow, sem `.env`, certificados ou CPFs reais.
 4. Solicitar primeiro **auditoria/diagnóstico sem alterar código**, depois um plano e implementação por lotes.
 
-## O que não está fisicamente incluído
+## Situação dos arquivos — conferência em 11/10/2026
 
-Não foi possível anexar o **PDF original do Estatuto de Ibema** nem demais PDFs externos. O catálogo contém URL real verificada e o script tenta baixá-los. Não colocar no repositório um PDF recriado artificialmente com o título de documento oficial.
+O checkout contém **38 downloads externos** (35 PDFs e 3 ZIPs), incluindo o **Estatuto original de Ibema**, além dos três PDFs do certame. Seus hashes conferem com `DOWNLOAD_RESULTADOS.json`. Há uma tentativa com HTTP 404 (formulário de General Carneiro); 21 fontes do catálogo são páginas de consulta e não arquivos locais baixados.
+
+O Estatuto é escaneado, histórico (LC 025/2005); sua presença não comprova vigência integral em 2026. Os XSDs incluem um pacote com implantação futura, que deve ser selecionado por data e ambiente.
+
+Consulte [a análise detalhada dos 67 arquivos originais](../ANALISE_DOCUMENTAL_RH_FOLHA_IBEMA_2026.md), com aproveitamento por módulo, lacunas, roteiro de demonstração e documentos ainda necessários.

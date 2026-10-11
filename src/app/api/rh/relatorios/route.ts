@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
   const context = await getTenantContextForModuleOperation("RH", "issueReports");
   const values = Object.fromEntries(request.nextUrl.searchParams);
   if (!values.competence) delete values.competence;
+  if (!values.referenceDate) delete values.referenceDate;
   const input = hrReportInputSchema.parse(values);
   const report = await buildHrReport(context.prisma, input, accessiblePayrollWhere(context.user));
   const output = await renderHrReport(report, input.format);

@@ -1,6 +1,20 @@
 # RH/Folha — registro de execução
 
+## Análise do pacote documental — 11/10/2026
+
+Registrada em [ANALISE_DOCUMENTAL_RH_FOLHA_IBEMA_2026.md](ANALISE_DOCUMENTAL_RH_FOLHA_IBEMA_2026.md): inventário e aproveitamento dos 67 arquivos originais, regras históricas do Estatuto confrontadas com serviços atuais, limitações, roteiro POC e documentos ainda necessários. As 114 linhas de Folha e 20 de eSocial conferem com o checklist; 38 hashes de downloads conferem, ZIPs íntegros e XSDs sintaticamente bem formados; os 11 testes aritméticos Python do pacote passaram, sem representar testes do motor TypeScript.
+
+Achados prioritários: IRRF completo de 2026 ainda pendente no fluxo mensal; direitos por dias não equivalem automaticamente a quinquênios civis; faixas históricas de férias deixam 6/15/24/33 faltas sem enquadramento; licença-prêmio de Paranaguá (60 dias) não é parâmetro de Ibema (90 dias históricos); pacote XSD futuro tem calendário por ambiente. O README inicial foi atualizado quanto aos downloads já presentes. Esta entrega é documental; F0–F9 continuam parciais e a homologação autenticada/oficial segue pendente.
+
 ## Integração recebida
+
+### Documentos municipais adicionais — 11/10/2026
+
+Análise e aplicação por módulo em [ANALISE_NOVOS_DOCUMENTOS_IBEMA_2025_2026.md](ANALISE_NOVOS_DOCUMENTOS_IBEMA_2025_2026.md), com [catálogo individual de 141 arquivos](CATALOGO_NOVOS_DOCUMENTOS_IBEMA.md). Acrescentados os relatórios `SERVIDORES_ATIVOS` e `QUANTIDADE_SERVIDORES` em `/rh/operacoes`, nos formatos CSV/XLSX/PDF, por data explícita ou fim da competência, com revisão contratual vigente e contagem separada de pessoas/vínculos. Dois testes específicos aprovados: temporalidade/término/jornada e deduplicação entre regimes. PDF usa o renderizador genérico; diagramação oficial ainda pendente.
+
+As relações não fornecem salários monetários/incidências completas e não autorizam converter jornada semanal em mensal sem regra. O estatuto de nome opaco é de Campina do Simão; a escala tutelar é de julho/2024; o decreto 2912/2026 prevê ponto facultativo em 30/10/2026 com exceções para saúde/coleta de lixo. Não houve carga automática de pessoas ou regras no banco a partir de OCR. Quadro de vagas, estatuto consolidado, ficha financeira/rubricas e conciliação normativa permanecem pendentes.
+
+O RACI 2025, p. 33, contém certidão municipal de 19/02/2026 (imagem conferida) que informa extinção do fundo pela Lei 002/1999 e vinculação ao RGPS. Esta fonte resolve a dúvida documental sobre o regime municipal geral; os anexos RPPS zerados não devem originar configuração RPPS. Alíquotas/incidências, RAT/FAP/patronal e categoria de cada vínculo permanecem parâmetros próprios. Regressão após os novos relatórios: 32 testes RH/SST aprovados.
 
 Em 11/10/2026 foi executado `git pull --ff-only origin main`, de `a9a6b11` para **`7f28090`**. As alterações locais foram preservadas no stash `opencode-rh-before-sst-pull-20261011`, reaplicadas e os conflitos de schema e das duas telas/actions compartilhadas de Folha resolvidos.
 

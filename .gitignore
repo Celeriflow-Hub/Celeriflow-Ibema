@@ -45,6 +45,10 @@ next-env.d.ts
 docs/doc_extracted/
 docs/doc.zip
 
+# Local document archive exceeds GitHub's per-file limit.
+/docs/Novos docs.zip
+/docs/Novos docs/Novos docs/LEI Nº 687-2025 - PPA 2026-2029.zip
+
 /src/generated/prisma
 /src/generated/platform-prisma
 *.json

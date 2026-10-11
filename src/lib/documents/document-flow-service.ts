@@ -270,6 +270,12 @@ export async function requestInternalDocumentSignatures(
   return context.prisma.$transaction((tx) => createInternalDocumentSignatures(tx, context.user.id, documentId, signerUsuarioIds, metadata));
 }
 
+// Background/domain issuers use the same GED signature request implementation
+// without fabricating a session context. The caller authorizes the domain action.
+export async function requestDocumentSignaturesForActor(db: PrismaClient, actorUsuarioId: string, documentId: string, signerUsuarioIds: string[], metadata?: Record<string, string | number>) {
+  return db.$transaction((tx) => createInternalDocumentSignatures(tx, actorUsuarioId, documentId, signerUsuarioIds, metadata));
+}
+
 export async function requestProcessDocumentSignatures(
   context: AppContext,
   input: { processId: string; departmentId: string; employeeId: string; documentId: string; signerUsuarioIds: string[] },

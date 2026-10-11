@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { constructionCaseWhere, type ConstructionAccess } from "./construction-policy";
 import { definitionSchema, validateConstructionFields } from "./construction-rules";
+import { assertConstructionFeesSatisfied } from "./construction-taxation";
 
 export const projectReviewSchema = z.object({ caseId: z.string().min(1), requestKey: z.uuid(), revision: z.number().int().nonnegative(), definitionVersion: z.number().int().nonnegative(), reviewType: z.enum(["PREANALYSIS", "PROJECT"]), decision: z.enum(["CORRECTION_REQUIRED", "APPROVED", "DENIED"]), notes: z.string().trim().min(3).max(10000), checks: z.record(z.string(), z.boolean()), documentIds: z.record(z.string(), z.string()), fieldValues: z.record(z.string(), z.string().max(4000)) });
 
@@ -31,7 +32,7 @@ export async function reviewConstructionProject(tx: Prisma.TransactionClient, ac
   if (documents.length !== ids.length || documents.some((document) => !document.versions.length || !["FINAL", "SIGNED"].includes(document.versions[0].status))) throw new Error("Os documentos devem pertencer ao processo e possuir versão GED atual válida.");
   if (data.decision === "APPROVED") {
     if (!definition) throw new Error("Publique o checklist de análise antes de aprovar.");
-    if (record.revisionCount > record.configuration.freeRevisions) throw new Error("Franquia de readequações excedida. A integração da taxa de reanálise precisa ser concluída antes do deferimento.");
+    if (record.revisionCount > record.configuration.freeRevisions) await assertConstructionFeesSatisfied(tx, record.id, "REANALYSIS");
     if (checklist.checks.some((check) => check.required && data.checks[check.key] !== true)) throw new Error("Todos os critérios obrigatórios precisam estar atendidos.");
     if (checklist.documents.some((document) => document.required && !data.documentIds[document.label])) throw new Error("Vincule todos os documentos obrigatórios.");
   }

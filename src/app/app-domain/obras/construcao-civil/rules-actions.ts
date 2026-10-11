@@ -47,9 +47,10 @@ export async function saveConstructionEmployer(input: unknown) {
     const data = employerSchema.parse(input);
     const context = await manager(data.id ? "update" : "create");
     await context.prisma.$transaction(async (tx) => {
-      const [professional, company] = await Promise.all([tx.constructionProfessional.findUnique({ where: { id: data.professionalId } }), tx.company.findUnique({ where: { id: data.companyId }, select: { status: true } })]);
+      const [professional, company] = await Promise.all([tx.constructionProfessional.findUnique({ where: { id: data.professionalId } }), tx.company.findUnique({ where: { id: data.companyId }, select: { status: true, constructionProfile: { select: { isActive: true, startsAt: true, endsAt: true } } } })]);
       if (data.isActive && (!professional?.isActive || professional.professionalType === "BROKER" || company?.status !== "Ativo")) throw new Error("Vínculo de construtora exige empresa ativa e engenheiro/arquiteto ativo.");
       if (data.isActive && professional && (data.startsAt < professional.startsAt.toISOString().slice(0, 10) || (professional.endsAt && (!data.endsAt || data.endsAt > professional.endsAt.toISOString().slice(0, 10))))) throw new Error("A vigência do vínculo deve estar contida na vigência do registro profissional.");
+      if (data.isActive && (!company?.constructionProfile?.isActive || data.startsAt < company.constructionProfile.startsAt.toISOString().slice(0, 10) || !data.endsAt || data.endsAt > company.constructionProfile.endsAt.toISOString().slice(0, 10))) throw new Error("Cadastre a habilitação da construtora e mantenha a vigência do vínculo dentro da validade da empresa.");
       if (data.id) {
         const current = await tx.constructionProfessionalEmployer.findUnique({ where: { id: data.id } });
         if (!current || current.professionalId !== data.professionalId || current.companyId !== data.companyId || current.startsAt.toISOString().slice(0, 10) !== data.startsAt) throw new Error("Empresa, profissional e início são imutáveis.");

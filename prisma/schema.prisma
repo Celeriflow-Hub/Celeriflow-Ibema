@@ -436,6 +436,7 @@ model Person {
 
 // Pessoas JurÃ­dicas
 model Company {
+  constructionProfile ConstructionCompanyProfile?
   constructionEmployers ConstructionProfessionalEmployer[]
   id             String    @id @default(cuid())
   corporateName  String
@@ -485,6 +486,7 @@ model Company {
 
 // Contribuintes
 model Taxpayer {
+  constructionFees ConstructionFee[]
   id                 String  @id @default(cuid())
   taxpayerType       String // PF ou PJ
   municipalInsc      String? @unique
@@ -943,6 +945,8 @@ model Street {
 
 // ImÃ³veis
 model RealEstate {
+  constructionFees ConstructionFee[]
+  constructionEnforcementCases ConstructionEnforcementCase[]
   constructionZone ConstructionPropertyZone?
   constructionCases ConstructionCaseProperty[]
   id            String  @id @default(cuid())
@@ -1000,6 +1004,7 @@ model DocumentClass {
 }
 
 model Document {
+  constructionEnforcementEvidence ConstructionEnforcementEvidence[]
   id              String         @id @default(cuid())
   sstCertificateDocument SstCertificateDocument?
   title           String
@@ -1245,6 +1250,7 @@ model Subject {
 
 // Processo / Protocolo Principal
 model Process {
+  constructionEnforcementCase ConstructionEnforcementCase?
   constructionCase ConstructionCase?
   sstCertificates SstMedicalCertificate[]
   id             String  @id @default(cuid())
@@ -1960,6 +1966,7 @@ model EconomicRegistration {
 
 // Tabela de ParametrizaÃ§Ã£o de Tributos (Ex: IPTU, ISS, Taxa de AlvarÃ¡)
 model Tax {
+  constructionRules ConstructionTaxRuleVersion[]
   id              String    @id @default(cuid())
   name            String // IPTU, ITBI, ISS, Taxa de Coleta de Lixo
   taxType         String // Imposto, Taxa, ContribuiÃ§Ã£o
@@ -1982,6 +1989,7 @@ model Tax {
 
 // LanÃ§amento TributÃ¡rio (DÃ­vida gerada para um contribuinte/imÃ³vel/empresa)
 model TaxAssessment {
+  constructionFee ConstructionFee?
   id                     String    @id @default(cuid())
   year                   Int // ExercÃ­cio (Ex: 2026)
   originalValue          Float
@@ -10871,6 +10879,10 @@ model ConstructionStaffRole {
 }
 
 model ConstructionCase {
+  enforcementCases ConstructionEnforcementCase[]
+  federalExports ConstructionFederalExportItem[]
+  planExtractions ConstructionPlanExtraction[]
+  fees ConstructionFee[]
   id String @id @default(cuid())
   requestKey String @unique
   processId String @unique
@@ -10901,7 +10913,182 @@ model ConstructionCase {
   correctionDeadline DateTime?
   reviews ConstructionReview[]
   analystReplacements ConstructionAnalystReplacement[]
+  participants ConstructionParticipant[]
+  messages ConstructionMessage[]
+  externalServiceRequests ConstructionServiceRequest[]
+  acceptances ConstructionTermAcceptance[]
   properties ConstructionCaseProperty[]
+  consultations ConstructionConsultation[]
+  inspectionPlan ConstructionInspectionPlan?
+  lifecycleStart ConstructionLifecycleStart?
+  inspections ConstructionInspection[]
+  completions ConstructionCompletion[]
+}
+
+// Demonstrative municipal interchange: not an official federal layout.
+model ConstructionFederalExport {
+  id String @id @default(cuid())
+  requestKey String @unique
+  scope String
+  period String
+  version Int
+  layout String @default("MUNICIPAL_DEMO_JSON_V1")
+  payload String @db.Text
+  hashSha256 String
+  validationSnapshot Json
+  rectifiesId String?
+  rectifies ConstructionFederalExport? @relation("ConstructionExportRectification", fields: [rectifiesId], references: [id], onDelete: Restrict)
+  rectifications ConstructionFederalExport[] @relation("ConstructionExportRectification")
+  reason String?
+  createdBy String
+  createdAt DateTime @default(now())
+  items ConstructionFederalExportItem[]
+  receipts ConstructionFederalExportReceipt[]
+  @@unique([scope, period, version])
+}
+
+model ConstructionFederalExportItem {
+  id String @id @default(cuid())
+  exportId String
+  export ConstructionFederalExport @relation(fields: [exportId], references: [id], onDelete: Restrict)
+  caseId String
+  case ConstructionCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  @@unique([exportId, caseId])
+}
+
+model ConstructionFederalExportReceipt {
+  id String @id @default(cuid())
+  exportId String
+  export ConstructionFederalExport @relation(fields: [exportId], references: [id], onDelete: Restrict)
+  protocol String
+  destination String
+  submittedAt DateTime
+  evidenceUrl String
+  evidenceHash String
+  notes String
+  createdBy String
+  createdAt DateTime @default(now())
+  @@unique([exportId, protocol])
+}
+
+model ConstructionPlanExtraction {
+  id String @id @default(cuid())
+  caseId String
+  case ConstructionCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  filename String
+  sourceUrl String
+  sourceHash String
+  engine String
+  model String
+  status String
+  pages Json
+  measurements Json
+  comparison Json
+  limitations Json
+  createdBy String
+  createdAt DateTime @default(now())
+  @@index([caseId, createdAt])
+}
+
+// Immutable issued artifacts and PDF revisions. Scalar references are also enforced
+// by the construction_documents migration without extending shared GED models.
+model ConstructionDocumentTemplateVersion {
+  id String @id @default(cuid())
+  kind String
+  version Int
+  title String
+  body String
+  stamp String
+  signaturePolicy String
+  createdBy String
+  createdAt DateTime @default(now())
+  @@unique([kind, version])
+}
+
+model ConstructionIssuedDocument {
+  id String @id @default(cuid())
+  requestKey String @unique
+  caseId String
+  processId String
+  kind String
+  year Int
+  sequence Int
+  number String @unique
+  templateVersionId String
+  templateSnapshot Json
+  documentId String @unique
+  documentVersionId String @unique
+  fileUrl String
+  hashSha256 String
+  backupPath String
+  validationCode String @unique
+  status String @default("ISSUED")
+  sourceIssuedDocumentId String?
+  requestType String @default("INITIAL")
+  completionId String?
+  validUntil DateTime?
+  publishedAt DateTime?
+  createdBy String
+  createdAt DateTime @default(now())
+  @@unique([kind, year, sequence])
+  @@index([caseId, kind, status])
+}
+
+model ConstructionDocumentRequest {
+  id String @id @default(cuid())
+  requestKey String @unique
+  caseId String
+  sourceIssuedDocumentId String
+  type String
+  reason String
+  identityId String?
+  createdBy String?
+  status String @default("PENDING")
+  issuedDocumentId String? @unique
+  createdAt DateTime @default(now())
+  @@index([caseId, status])
+}
+
+model ConstructionPdfAnnotation {
+  id String @id @default(cuid())
+  requestKey String @unique
+  caseId String
+  documentId String
+  sourceVersionId String
+  revisionVersionId String @unique
+  originalHash String
+  revisionHash String
+  annotations Json
+  backupPath String
+  createdBy String
+  createdAt DateTime @default(now())
+  @@index([caseId, documentId])
+}
+
+// Approved project is a derived, separately signed GED copy; never overwrites source.
+model ConstructionProjectStamp {
+  id String @id @default(cuid())
+  requestKey String @unique
+  caseId String
+  reviewId String
+  templateVersionId String
+  sourceDocumentId String
+  sourceVersionId String
+  originalHash String
+  originalBackupPath String
+  documentId String @unique
+  documentVersionId String @unique
+  fileUrl String
+  hashSha256 String
+  backupPath String
+  validationCode String @unique
+  stampSnapshot Json
+  createdBy String
+  createdAt DateTime @default(now())
+  publishedAt DateTime?
+  @@unique([caseId, sourceVersionId, reviewId])
+  @@index([caseId, createdAt])
 }
 
 model ConstructionProfessional {
@@ -10917,7 +11104,58 @@ model ConstructionProfessional {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   employers ConstructionProfessionalEmployer[]
+  portalIdentity ConstructionPortalIdentity?
   @@unique([council, registration])
+}
+
+model ConstructionConsultation {
+  id String @id @default(cuid())
+  caseId String
+  case ConstructionCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  requestedBy String
+  sourceDepartmentId String
+  targetDepartmentId String
+  question String
+  dueAt DateTime
+  createdAt DateTime @default(now())
+  response ConstructionConsultationResponse?
+  @@index([targetDepartmentId, dueAt])
+}
+
+model ConstructionConsultationResponse {
+  id String @id @default(cuid())
+  consultationId String @unique
+  consultation ConstructionConsultation @relation(fields: [consultationId], references: [id], onDelete: Restrict)
+  employeeId String
+  actorId String
+  opinion String
+  createdAt DateTime @default(now())
+}
+
+model ConstructionCompanyProfile {
+  id String @id @default(cuid())
+  companyId String @unique
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  startsAt DateTime @db.Date
+  endsAt DateTime @db.Date
+  isActive Boolean @default(true)
+  legalReference String
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  events ConstructionCompanyProfileEvent[]
+}
+
+model ConstructionCompanyProfileEvent {
+  id String @id @default(cuid())
+  profileId String
+  profile ConstructionCompanyProfile @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  actorId String
+  before Json
+  after Json
+  createdAt DateTime @default(now())
+  @@index([profileId, createdAt])
 }
 
 model ConstructionProfessionalEmployer {
@@ -10983,6 +11221,22 @@ model ConstructionPropertyZone {
   updatedAt DateTime @updatedAt
 }
 
+// Scalar FKs are enforced by the accompanying migration; external/system actors never become Usuario.
+model ConstructionAutomaticViabilityRun {
+  id String @id @default(cuid())
+  requestKey String @unique
+  caseId String
+  identityId String
+  outcome String
+  calculationSnapshot Json
+  viabilityResultId String @unique
+  documentId String? @unique
+  documentVersionId String? @unique
+  signatureRoutingStatus String
+  createdAt DateTime @default(now())
+  @@index([caseId, createdAt])
+}
+
 model ConstructionViabilityResult {
   id String @id @default(cuid())
   caseId String
@@ -10992,6 +11246,72 @@ model ConstructionViabilityResult {
   calculationSnapshot Json
   createdBy String
   createdAt DateTime @default(now())
+}
+
+model ConstructionPortalIdentity {
+  id String @id @default(cuid())
+  firebaseUid String @unique
+  email String
+  professionalId String @unique
+  professional ConstructionProfessional @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  isActive Boolean @default(true)
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  participants ConstructionParticipant[]
+  messages ConstructionMessage[]
+  acceptances ConstructionTermAcceptance[]
+}
+
+model ConstructionParticipant {
+  id String @id @default(cuid())
+  caseId String
+  case ConstructionCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  identityId String
+  identity ConstructionPortalIdentity @relation(fields: [identityId], references: [id], onDelete: Restrict)
+  role String
+  isActive Boolean @default(true)
+  startsAt DateTime @default(now())
+  endsAt DateTime?
+  reason String
+  createdBy String
+  @@index([caseId, identityId, isActive])
+}
+
+model ConstructionTermVersion {
+  id String @id @default(cuid())
+  version Int @unique
+  text String
+  publishedBy String
+  publishedAt DateTime @default(now())
+  acceptances ConstructionTermAcceptance[]
+}
+
+model ConstructionTermAcceptance {
+  id String @id @default(cuid())
+  caseId String
+  case ConstructionCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  identityId String
+  identity ConstructionPortalIdentity @relation(fields: [identityId], references: [id], onDelete: Restrict)
+  termId String
+  term ConstructionTermVersion @relation(fields: [termId], references: [id], onDelete: Restrict)
+  acceptedAt DateTime @default(now())
+  @@unique([caseId, identityId, termId])
+}
+
+model ConstructionMessage {
+  id String @id @default(cuid())
+  caseId String
+  case ConstructionCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  identityId String?
+  identity ConstructionPortalIdentity? @relation(fields: [identityId], references: [id], onDelete: Restrict)
+  employeeId String?
+  content String
+  documentId String?
+  evidenceSnapshot Json @default("{}")
+  createdAt DateTime @default(now())
+  @@index([caseId, createdAt])
 }
 
 model ConstructionAnalystReplacement {
@@ -11033,6 +11353,355 @@ model ConstructionCaseProperty {
   realEstate RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Restrict)
   cadastralSnapshot Json
   @@unique([caseId, realEstateId])
+}
+
+// Building/posture enforcement is independent from ISS and may exist without a permit.
+model ConstructionEnforcementCase {
+  id String @id @default(cuid())
+  requestKey String @unique
+  requestHash String
+  processId String @unique
+  process Process @relation(fields: [processId], references: [id], onDelete: Restrict)
+  realEstateId String
+  realEstate RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Restrict)
+  permitCaseId String?
+  permitCase ConstructionCase? @relation(fields: [permitCaseId], references: [id], onDelete: Restrict)
+  locationType String
+  permitStatus String
+  reason String
+  cadastralSnapshot Json
+  assignedEmployeeId String?
+  status String @default("OPEN")
+  revision Int @default(0)
+  isDemonstration Boolean @default(true)
+  createdBy String
+  createdAt DateTime @default(now())
+  assignments ConstructionEnforcementAssignment[]
+  visits ConstructionEnforcementVisit[]
+  acts ConstructionEnforcementAct[]
+  @@index([realEstateId, createdAt])
+}
+
+model ConstructionEnforcementAssignment {
+  id String @id @default(cuid())
+  caseId String
+  case ConstructionEnforcementCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  requestHash String
+  previousEmployeeId String?
+  employeeId String
+  departmentId String
+  staffRoleId String
+  reason String
+  createdBy String
+  createdAt DateTime @default(now())
+  @@index([caseId, createdAt])
+}
+
+model ConstructionEnforcementVisit {
+  id String @id @default(cuid())
+  caseId String
+  case ConstructionEnforcementCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  requestHash String
+  visitedAt DateTime
+  findings String
+  employeeId String
+  departmentId String
+  staffRoleId String
+  createdBy String
+  createdAt DateTime @default(now())
+  evidence ConstructionEnforcementEvidence[]
+  acts ConstructionEnforcementAct[]
+  @@index([caseId, visitedAt])
+}
+
+model ConstructionEnforcementAct {
+  id String @id @default(cuid())
+  caseId String
+  case ConstructionEnforcementCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  requestHash String
+  number String @unique
+  kind String
+  visitId String?
+  visit ConstructionEnforcementVisit? @relation(fields: [visitId], references: [id], onDelete: Restrict)
+  relatedActId String?
+  relatedAct ConstructionEnforcementAct? @relation("EnforcementRelatedAct", fields: [relatedActId], references: [id], onDelete: Restrict)
+  relatedActs ConstructionEnforcementAct[] @relation("EnforcementRelatedAct")
+  reason String
+  legalBasis String
+  issuedAt DateTime
+  deadlineAt DateTime?
+  employeeId String
+  departmentId String
+  staffRoleId String
+  createdBy String
+  createdAt DateTime @default(now())
+  evidence ConstructionEnforcementEvidence[]
+  acknowledgements ConstructionEnforcementAcknowledgement[]
+  @@index([caseId, issuedAt])
+}
+
+model ConstructionEnforcementAcknowledgement {
+  id String @id @default(cuid())
+  actId String
+  act ConstructionEnforcementAct @relation(fields: [actId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  requestHash String
+  acknowledgedAt DateTime
+  method String
+  recipient String
+  notes String
+  createdBy String
+  createdAt DateTime @default(now())
+  evidence ConstructionEnforcementEvidence[]
+}
+
+model ConstructionEnforcementEvidence {
+  id String @id @default(cuid())
+  documentId String
+  document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  visitId String?
+  visit ConstructionEnforcementVisit? @relation(fields: [visitId], references: [id], onDelete: Restrict)
+  actId String?
+  act ConstructionEnforcementAct? @relation(fields: [actId], references: [id], onDelete: Restrict)
+  acknowledgementId String?
+  acknowledgement ConstructionEnforcementAcknowledgement? @relation(fields: [acknowledgementId], references: [id], onDelete: Restrict)
+  kind String
+  versionSnapshot Json
+  createdAt DateTime @default(now())
+  @@index([documentId])
+}
+
+model ConstructionEnforcementSequence {
+  year Int
+  kind String
+  nextNumber Int
+  @@id([year, kind])
+}
+
+// Explicit administrative scope for an external opening; no internal user is impersonated.
+model ConstructionInternalOpeningDocument {
+  id String @id @default(cuid())
+  requestKey String
+  uploadKey String @unique
+  actorId String
+  formVersion Int
+  label String
+  documentId String @unique
+  documentVersionId String @unique
+  hashSha256 String
+  filename String
+  mimeType String
+  caseId String?
+  createdAt DateTime @default(now())
+  @@index([actorId, requestKey, label])
+  @@index([caseId])
+}
+
+model ConstructionExternalApplication {
+  id String @id @default(cuid())
+  requestKey String @unique
+  identityId String
+  personId String?
+  companyId String?
+  propertyIds String[]
+  subjectIds String[]
+  authorizationReason String
+  authorizedBy String
+  expiresAt DateTime
+  revokedAt DateTime?
+  revokedReason String?
+  caseId String? @unique
+  createdAt DateTime @default(now())
+  documents ConstructionExternalDocument[]
+  @@index([identityId, expiresAt])
+}
+
+model ConstructionExternalDocument {
+  id String @id @default(cuid())
+  applicationId String
+  application ConstructionExternalApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  label String
+  documentId String @unique
+  documentVersionId String @unique
+  hashSha256 String
+  filename String
+  mimeType String
+  createdAt DateTime @default(now())
+  @@index([applicationId, label])
+}
+
+model ConstructionServiceRequest {
+  id String @id @default(cuid())
+  requestKey String @unique
+  caseId String
+  case ConstructionCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  identityId String
+  kind String
+  status String @default("PENDING")
+  revision Int
+  notes String
+  payload Json
+  evidenceSnapshot Json
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+  resolvedBy String?
+  resolution String?
+  @@index([caseId, status, createdAt])
+  @@index([identityId, createdAt])
+}
+
+model ConstructionTaxRuleVersion {
+  id String @id @default(cuid())
+  kind String
+  version Int
+  taxId String
+  tax Tax @relation(fields: [taxId], references: [id], onDelete: Restrict)
+  startsAt DateTime @db.Date
+  endsAt DateTime? @db.Date
+  fixedAmount Decimal @db.Decimal(18, 2)
+  amountPerSquareMeter Decimal @db.Decimal(18, 4)
+  legalBasis String
+  guideInstructions String
+  demonstration Boolean @default(true)
+  publishedBy String
+  publishedAt DateTime @default(now())
+  fees ConstructionFee[]
+  @@unique([kind, version])
+}
+
+model ConstructionFee {
+  id String @id @default(cuid())
+  caseId String
+  case ConstructionCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  kind String
+  revision Int @default(0)
+  cycleKey String @default("INITIAL")
+  requestKey String @unique
+  ruleId String
+  rule ConstructionTaxRuleVersion @relation(fields: [ruleId], references: [id], onDelete: Restrict)
+  taxpayerId String
+  taxpayer Taxpayer @relation(fields: [taxpayerId], references: [id], onDelete: Restrict)
+  realEstateId String
+  realEstate RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Restrict)
+  assessmentId String? @unique
+  assessment TaxAssessment? @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  amount Decimal @db.Decimal(18, 2)
+  calculationSnapshot Json
+  exemptionReason String?
+  createdBy String
+  createdAt DateTime @default(now())
+  @@unique([caseId, kind, cycleKey, revision])
+}
+
+model ConstructionInspectionPlan {
+  id String @id @default(cuid())
+  caseId String @unique
+  case ConstructionCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  reviewId String
+  inspectionTypes Json
+  definitionSnapshot Json
+  createdBy String
+  createdAt DateTime @default(now())
+}
+
+model ConstructionLifecycleStart {
+  id String @id @default(cuid())
+  caseId String @unique
+  case ConstructionCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  startedAt DateTime @db.Date
+  notes String
+  evidenceSnapshot Json
+  createdBy String
+  createdAt DateTime @default(now())
+}
+
+model ConstructionInspection {
+  id String @id @default(cuid())
+  caseId String
+  case ConstructionCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  inspectionTypeId String
+  sequence Int
+  requestedAt DateTime @default(now())
+  scheduledAt DateTime? @db.Date
+  inspectedAt DateTime? @db.Date
+  status String @default("REQUESTED")
+  requestNotes String
+  resultNotes String?
+  definitionSnapshot Json
+  evidenceSnapshot Json @default("{}")
+  requestedBy String
+  inspectedBy String?
+  resultRequestKey String? @unique
+  correctionDeadline DateTime?
+  requirementNote String?
+  correctionSnapshot Json?
+  reinspectionOfId String?
+  deadlineExtensions ConstructionInspectionDeadlineExtension[]
+  @@unique([caseId, sequence])
+  @@index([caseId, inspectionTypeId, status])
+}
+
+model ConstructionInspectionDeadlineExtension {
+  id String @id @default(cuid())
+  requestKey String @unique
+  caseId String
+  inspectionId String
+  inspection ConstructionInspection @relation(fields: [inspectionId], references: [id], onDelete: Restrict)
+  previousDeadline DateTime?
+  newDeadline DateTime
+  reason String
+  createdBy String
+  createdAt DateTime @default(now())
+  @@index([inspectionId, createdAt])
+}
+
+model ConstructionCompletionSequence {
+  year Int @id
+  nextNumber Int
+}
+
+model ConstructionCompletion {
+  id String @id @default(cuid())
+  caseId String
+  case ConstructionCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  number String @unique
+  kind String
+  completedAt DateTime @db.Date
+  area Decimal @db.Decimal(14, 4)
+  cumulativeArea Decimal @db.Decimal(14, 4)
+  remainingArea Decimal @db.Decimal(14, 4)
+  notes String
+  evidenceSnapshot Json
+  debtSnapshot Json
+  occupancyDocumentId String? @unique
+  createdBy String
+  createdAt DateTime @default(now())
+  propertyUpdate ConstructionPropertyUpdate?
+  @@index([caseId, createdAt])
+}
+
+model ConstructionPropertyUpdate {
+  id String @id @default(cuid())
+  completionId String @unique
+  completion ConstructionCompletion @relation(fields: [completionId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  processId String @unique
+  status String @default("PENDING")
+  proposedSnapshot Json
+  beforeSnapshot Json?
+  afterSnapshot Json?
+  createdBy String
+  createdAt DateTime @default(now())
+  appliedBy String?
+  appliedAt DateTime?
 }
 
 model ObrasObra {

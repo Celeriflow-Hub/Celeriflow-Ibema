@@ -5,11 +5,10 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { getTenantContextForModuleOperation, getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
 import { writeAuditEvent, auditEventTypes } from "@/lib/platform/audit-evidence";
-import { constructionCatalogSchema, constructionConfigSchema, constructionStaffSchema, constructionCaseSchema, calculateConstructionArea } from "@/lib/obras/construction-policy";
+import { constructionCatalogSchema, constructionConfigSchema, constructionStaffSchema } from "@/lib/obras/construction-policy";
 import { resolveConstructionAccess } from "@/lib/obras/construction-access";
-import { createValidatedProcess } from "@/lib/protocols/service";
-import { definitionSchema, validateConstructionFields } from "@/lib/obras/construction-rules";
-import { assignConstructionCase } from "@/lib/obras/construction-distribution";
+import { constructionInternalOpeningSchema } from "@/lib/obras/construction-internal-documents";
+import { openConstructionInternalCase } from "@/lib/obras/construction-internal-opening";
 
 function errorMessage(error: unknown) {
   if (error instanceof z.ZodError) return error.issues[0].message;
@@ -77,54 +76,13 @@ export async function saveConstructionStaff(input: unknown) {
 
 export async function openConstructionCase(input: unknown) {
   try {
-    const data = constructionCaseSchema.parse(input);
+    const data = constructionInternalOpeningSchema.parse(input);
     const context = await getTenantContextForModuleOperation("OBRAS", "create");
     await getTenantContextForModuleOperation("PROCESSOS", "create");
     const access = await resolveConstructionAccess(context);
     if (!access.administrator && !access.roles.some((role) => ["MANAGER", "ANALYST"].includes(role))) return { error: "Abertura interna exige papel de analista ou gestor urbanístico vigente." };
     if (!context.user.employeeId) return { error: "Vincule seu usuário a um servidor para abrir o processo interno." };
-    const employeeId = context.user.employeeId;
-    const result = await context.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`CONSTRUCTION_OPEN:${data.requestKey}`}))`;
-      const existing = await tx.constructionCase.findUnique({ where: { requestKey: data.requestKey }, select: { id: true, createdBy: true } });
-      if (existing) {
-        if (existing.createdBy !== context.user.id) throw new Error("Referência de abertura indisponível.");
-        return existing.id;
-      }
-      const employee = await tx.employee.findFirst({ where: { id: employeeId, isActive: true, department: { isActive: true } }, select: { id: true, departmentId: true } });
-      if (!employee?.departmentId) throw new Error("Seu vínculo operacional não está ativo ou não possui setor.");
-      const config = await tx.constructionConfigVersion.findFirst({ orderBy: { version: "desc" } });
-      if (!config) throw new Error("Publique a configuração urbanística antes de abrir solicitações.");
-      if (config.version !== data.configurationVersion) throw new Error("A configuração mudou. Atualize a página e confira a nova regra antes de protocolar.");
-      if (!config.subjectIds.includes(data.subjectId)) throw new Error("O assunto não está habilitado para Construção Civil.");
-      const form = await tx.constructionDefinitionVersion.findFirst({ where: { kind: "FORM" }, orderBy: { version: "desc" } });
-      if ((form?.version || 0) !== data.formVersion) throw new Error("O formulário mudou. Atualize a página antes de protocolar.");
-      const definition = definitionSchema.parse(form?.definition || { fields: [], checks: [], documents: [] });
-      const additionalValues = validateConstructionFields(definition, data.additionalValues);
-      const properties = await tx.realEstate.findMany({ where: { id: { in: data.propertyIds } }, select: { id: true, municipalInsc: true, registration: true, streetName: true, number: true, lot: true, block: true, landArea: true, builtArea: true, propertyUse: true, fiscalZone: true, taxpayerId: true } });
-      if (properties.length !== data.propertyIds.length) throw new Error("Um ou mais imóveis não estão disponíveis.");
-      if (data.personId && !await tx.person.findFirst({ where: { id: data.personId, status: "Ativo" }, select: { id: true } })) throw new Error("Pessoa requerente inativa/inexistente.");
-      if (data.companyId && !await tx.company.findFirst({ where: { id: data.companyId, status: "Ativo" }, select: { id: true } })) throw new Error("Empresa requerente inativa/inexistente.");
-      const catalogs = await tx.constructionCatalogEntry.findMany({ where: { isActive: true, id: { in: [data.modalityId, data.purposeId, ...(data.constructionTypeId ? [data.constructionTypeId] : [])] } } });
-      const modality = catalogs.find((entry) => entry.id === data.modalityId && entry.kind === (data.category === "BUILDING" ? "PERMIT_TYPE" : "SUBDIVISION_TYPE"));
-      const purpose = catalogs.find((entry) => entry.id === data.purposeId && entry.kind === "PURPOSE");
-      const constructionType = catalogs.find((entry) => entry.id === data.constructionTypeId && entry.kind === "CONSTRUCTION_TYPE");
-      if (!modality || !purpose || (data.constructionTypeId && !constructionType)) throw new Error("Modalidade, finalidade ou tipo construtivo inválido/inativo.");
-      const calculation = calculateConstructionArea(data, config.areaWeights);
-      const process = await createValidatedProcess(tx, employee, context.user.id, { processTypeId: data.processTypeId, subjectId: data.subjectId, personId: data.personId || null, companyId: data.companyId || null, description: data.description });
-      const scope = await tx.process.findUniqueOrThrow({ where: { id: process.id }, select: { currentDepartmentId: true } });
-      if (!access.administrator && scope.currentDepartmentId !== employee.departmentId) throw new Error("O assunto encaminha para outro setor. Utilize um assunto urbanístico do seu setor.");
-      const caseRecord = await tx.constructionCase.create({ data: {
-        requestKey: data.requestKey, processId: process.id, configurationId: config.id, category: data.category, locationType: data.locationType, regularization: data.regularization,
-        catalogSnapshot: { modality: { id: modality.id, name: modality.name }, purpose: { id: purpose.id, name: purpose.name }, constructionType: constructionType ? { id: constructionType.id, name: constructionType.name } : null },
-        existingArea: data.existingArea, expandedArea: data.expandedArea, irregularArea: data.irregularArea, renovationArea: data.renovationArea, demolitionArea: data.demolitionArea, totalArea: calculation.total, calculationSnapshot: calculation.memory,
-        createdBy: context.user.id, properties: { create: properties.map((property) => ({ realEstateId: property.id, cadastralSnapshot: property })) },
-        additionalValues, formSnapshot: { version: form?.version || 0, definition },
-      } });
-      if (scope.currentDepartmentId) await assignConstructionCase(tx, { caseId: caseRecord.id, processId: process.id, departmentId: scope.currentDepartmentId, today: new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z") });
-      await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "ConstructionCase", targetId: caseRecord.id });
-      return caseRecord.id;
-    });
+    const result = await context.prisma.$transaction((tx) => openConstructionInternalCase(tx, access, context.user.id, data));
     refresh(); revalidatePath("/protocolos/processos");
     return { success: true, id: result };
   } catch (error) { return { error: errorMessage(error) }; }

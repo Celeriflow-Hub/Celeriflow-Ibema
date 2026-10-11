@@ -5,6 +5,9 @@ import { getAttendanceContext, getOmbudsmanReadContext, ombudsmanScope, ticketSc
 import { getProtocolContext, protocolScope } from "@/lib/protocols/access";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 import { assertSstClinicalAccess } from "@/lib/sst/access";
+import { assertConstructionGedSignature } from "@/lib/obras/construction-documents-service";
+import { readConstructionPdf } from "@/lib/obras/construction-document-storage";
+import { assertConstructionProjectStampDownload, findConstructionProjectStampByFile } from "@/lib/obras/construction-project-stamp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +22,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const context = await getCurrentTenantContext();
+    const constructionProjectStamp = await findConstructionProjectStampByFile(context.prisma, url);
+    if (constructionProjectStamp && !constructionProjectStamp.publishedAt) throw new AccessError("Cópia derivada urbanística ainda não publicada.", 403);
+    const constructionArtifact = await context.prisma.constructionIssuedDocument.findFirst({ where: { fileUrl: url } });
+    if (constructionArtifact) {
+      if (constructionArtifact.status !== "PUBLISHED") throw new AccessError("Documento urbanístico não publicado ou substituído.", 403);
+      await assertConstructionGedSignature(context.prisma, constructionArtifact.documentVersionId);
+    }
     // Check occupational ownership independently of generic copies of the same file URL.
     const occupational = await context.prisma.sstCertificateDocument.findFirst({
       where: { document: { fileUrl: url } },
@@ -97,6 +107,23 @@ export async function GET(request: NextRequest) {
     }
     if (document) auditTarget = { type: "DOCUMENT", id: document.id };
     if (!auditTarget) throw new AccessError("Documento nao encontrado", 404);
+    if (constructionProjectStamp) {
+      const bytes = await assertConstructionProjectStampDownload(context.prisma, constructionProjectStamp);
+      await writeAuditEvent(context.prisma, { actorUsuarioId: context.user.id, eventType: auditEventTypes.documentDownload, targetType: auditTarget.type, targetId: auditTarget.id });
+      return new NextResponse(Buffer.from(bytes), { headers: { "Content-Type": "application/pdf", "Content-Disposition": "inline; filename=projeto-aprovado-copia-derivada.pdf", "Cache-Control": "private, no-store" } });
+    }
+    if (constructionArtifact) {
+      const bytes = await readConstructionPdf(url, constructionArtifact.hashSha256);
+      await writeAuditEvent(context.prisma, { actorUsuarioId: context.user.id, eventType: auditEventTypes.documentDownload, targetType: auditTarget.type, targetId: auditTarget.id });
+      return new NextResponse(Buffer.from(bytes), { headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="${constructionArtifact.number.replaceAll("/", "-")}.pdf"`, "Cache-Control": "private, no-store" } });
+    }
+    if (document && url.startsWith("construction-local:")) {
+      const version = await context.prisma.documentVersion.findFirst({ where: { documentId: document.id, fileUrl: url, status: { in: ["FINAL", "SIGNED"] } }, orderBy: { versionNumber: "desc" }, select: { hashSha256: true } });
+      if (!version) throw new AccessError("Versão complementar indisponível.", 404);
+      const bytes = await readConstructionPdf(url, version.hashSha256);
+      await writeAuditEvent(context.prisma, { actorUsuarioId: context.user.id, eventType: auditEventTypes.documentDownload, targetType: auditTarget.type, targetId: auditTarget.id });
+      return new NextResponse(Buffer.from(bytes), { headers: { "Content-Type": "application/pdf", "Content-Disposition": "inline; filename=complemento-revisado.pdf", "Cache-Control": "private, no-store" } });
+    }
     const response = await getFile(url);
 
     if (!response || !response.stream) {

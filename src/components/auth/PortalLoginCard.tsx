@@ -19,12 +19,13 @@ import { Label } from "@/components/ui/label";
 type PortalLoginCardProps = {
   audience: "citizen" | "employee";
   destination: string;
+  sessionEndpoint?: "/api/auth/session" | "/api/auth/construcao-civil/session";
 };
 
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
-export function PortalLoginCard({ audience, destination }: PortalLoginCardProps) {
+export function PortalLoginCard({ audience, destination, sessionEndpoint = "/api/auth/session" }: PortalLoginCardProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -35,7 +36,7 @@ export function PortalLoginCard({ audience, destination }: PortalLoginCardProps)
 
   async function createLocalSession(credential: UserCredential) {
     const idToken = await credential.user.getIdToken();
-    const response = await fetch("/api/auth/session", {
+    const response = await fetch(sessionEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ idToken }),

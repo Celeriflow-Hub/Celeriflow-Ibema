@@ -154,7 +154,7 @@ A principal lacuna é o processo urbanístico completo: imóvel → requerente/p
 | 27 | 128 | Pró-análise com visualização e parecer unificado para readequação | B — documentos/fluxo genérico | Etapa própria de pró-análise; consolidar pareceres e apresentar anexos ao profissional | F4 |
 | 28 | 129 | Alvará no mesmo processo após deferimento, assinatura e disponibilização no portal | B — processos, GED e assinatura | Emissão idempotente, vínculo à decisão e portal restrito ao artefato assinado | F4/F5 |
 | 29 | 129 | Retornar automaticamente ao analista inicial após readequação | N | Manter analista de origem e regras de retorno com exceção justificada para indisponibilidade | F4 |
-| 30 | 129 | Assinar digitalmente projetos aprovados e inserir carimbos digitais | B — serviço A1 sobre hash | Carimbo em cópia derivada antes da assinatura; artefato PDF e validação apropriada | F5 |
+| 30 | 129 | Assinar digitalmente projetos aprovados e inserir carimbos digitais | B — serviço A1 sobre hash | Carimbo institucional versionado em **cópia derivada demonstrativa** do PDF vinculado ao deferimento PROJECT vigente; original e backup preservados. A cópia recebe assinatura interna GED própria antes da publicação/download. Sem homologação oficial ou PAdES; detalhes em `CONSTRUCAO_CIVIL_DOCUMENTOS_EVIDENCIAS.md` | F5 |
 | 31 | 129 | Disponibilizar viabilidade/alvará/habite-se somente assinados | B — versões/assinaturas GED | Gate no servidor para portal/download/API, incluindo emissão automática | F5 |
 | 32 | 129 | Solicitação automática de assinatura após emissão do habite-se | B — pedidos de assinatura GED | Evento/outbox e pedido aos signatários configurados, sem duplicação | F5/F6 |
 | 33 | 129 | Backup automático de originais antes da assinatura | B — snapshots/versionamento documental | Cópia física imutável, hash e política configurável de armazenamento/restauração | F5 |
@@ -416,3 +416,27 @@ Configurar a ordem e os bloqueios de taxas, análise e documentos conforme norma
 O planejamento dos 52 itens está consolidado em arquitetura, fases, integrações, dependências, cenários e critérios de aceite. A implementação integral do módulo não está concluída; as pendências acima fazem parte do escopo de execução.
 
 Este documento é o plano de execução para o EXE-18. A situação do módulo no checklist geral deve permanecer pendente até a homologação dos 52 requisitos.
+
+## 10. Execução integrada em ambiente demonstrativo — 10/10/2026
+
+Esta seção sucede o registro de planejamento da seção 9. O usuário autorizou parâmetros demonstrativos identificados e agentes em paralelo. As frentes foram implementadas e estão sendo integradas; não representam homologação legal nem comprovação visual dos 52 itens.
+
+| Frente | Entrega persistida | Evidência técnica / limite de aceite |
+|---|---|---|
+| F1 — profissionais/construtoras | Habilitação da construtora com início/validade, histórico antes/depois imutável e vínculos profissionais limitados à vigência | Teste PostgreSQL de referências, vigência, unicidade e ledger; identificação Firebase habilitada pelo master |
+| F2 — acesso/abertura externa | Autenticação própria, autorização explícita de requerente/imóveis/assuntos, documentos GED antes do protocolo, aceite versionado e abertura central sem funcionário fictício | Testes com Prisma/PostgreSQL de protocolo/etapas/sequência/escopo; motor de workflow genérico externo bloqueado por exigir ator interno |
+| F2 — pedidos/comunicação | Mensagens imutáveis, complementos GED, readequação idempotente, participação e pedidos de início/vistoria/conclusão/correção/renovação | Reenvio retorna ao analista e atos atendidos exigem registro municipal real; download mantém escopo |
+| F3 — taxas | Regras versionadas integradas à Tributação, contribuinte/imóvel/processo reais, franquia, guias, pagamento/isenção e ciclos próprios de correção/renovação | Não libera alteração com taxa inicial; FEBRABAN demonstrativo identificado, convênio bancário não homologado |
+| F4 — parecer/deferimento | Parecer e seleção de vistorias obrigatórias criados na mesma transação, retry sem duplicação e rollback conjunto | Testes PostgreSQL de falha do plano revertendo deferimento; análise/pró-análise e readequações preservadas |
+| F4/F5 — PDF/documentos | Anotações por página/coordenadas em cópia derivada, templates publicados, numeração, emissão GED, backup e gate de assinatura/publicação | PDF real testado; assinatura interna demonstrativa não comprova PAdES/assinatura oficial exigida |
+| F6 — ciclo/cadastro | Início, plano e resultados de vistorias, conclusões parciais/totais com saldo Decimal, débitos e processo cadastral com antes/depois | Nova vistoria pendente/reprovada bloqueia conclusão; campo legado `RealEstate.builtArea` permanece Float |
+| F7 — fiscalização | Processo próprio urbano/rural, inclusive sem alvará, fiscal designado, diligências/fotos, notificações, auto, embargo, ciência e levantamento | Testes Prisma/PostgreSQL de autorização, replay, vínculos GED e atos imutáveis; espelhos demonstrativos |
+| F8 — informação federal | Lotes versionados, validação, hash/download dos bytes exatos, retificação e recibo com evidência privada | Leiaute `MUNICIPAL_DEMO_JSON_V1`; transmissão/aceite federal oficial pendentes |
+| F9 — pranchas | Extração real da camada textual PDF, evidência por página/unidade, origem privada/hash e comparação com snapshot de zoneamento | `DEMO_RULES` é parser determinístico, não IA; adaptadores IA/OCR dependem de configuração e bloqueiam execução sem serviço |
+| Consultas setoriais | Questão/prazo/setor dirigido, notificação, resposta única imutável e retorno notificado | Setor consultado acessa a consulta dirigida, sem concessão de leitura geral dos processos civis |
+
+Roteiro reproduzível, preparação e natureza dos dados: `docs/CONSTRUCAO_CIVIL_AMBIENTE_DEMONSTRATIVO.md`. Configuração de IA/OCR e leiaute demonstrativo: `docs/construction-integrations.md`.
+
+**F10 em integração:** a bateria inicial executou 50 testes civis, com 49 aprovados e uma falha causada pelo client Prisma anterior ao campo de ciclo documental; após regeneração, os três testes de regras/revisões passaram. O upgrade completo do baseline municipal em PostgreSQL embarcado passou, incluindo as migrations presentes naquele momento. A última geração/lint/compilação definitiva e deploy das migrations posteriores à participação ainda devem ser registrados abaixo após estabilização das frentes.
+
+**Pendências de homologação:** navegador permanece desconectado; faltam percursos autenticados com contas operacionais/externas, impressão e evidências por requisito. IA externa/OCR e integrações federal/bancária/oficial não foram executadas. A matriz-base da seção 3 documenta o inventário original e não deve ser lida como homologação posterior.

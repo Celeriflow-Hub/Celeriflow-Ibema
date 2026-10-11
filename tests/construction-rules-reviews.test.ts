@@ -10,6 +10,7 @@ import { definitionSchema, evaluateConstructionViability, professionalSchema, va
 import { assignConstructionCase } from "../src/lib/obras/construction-distribution";
 import { reviewConstructionProject, resubmitConstructionProject } from "../src/lib/obras/construction-review";
 import { replaceConstructionAnalyst } from "../src/lib/obras/construction-assignment";
+import { appendConstructionMessage } from "../src/lib/obras/construction-conversation";
 
 test("campos configuráveis validam tipos, opções, obrigatoriedade e chaves", () => {
   const definition = { fields: [{ key: "use", label: "Uso", type: "CHOICE", required: true, options: ["Residencial"] }, { key: "date", label: "Data", type: "DATE", required: false, options: [] }], checks: [], documents: [] };
@@ -49,8 +50,13 @@ test("PostgreSQL: migrations, menor demanda, parecer idempotente, exigência e r
       CREATE TABLE "Document" (id TEXT PRIMARY KEY, title TEXT, status TEXT, "validUntil" TIMESTAMP(3));
       CREATE TABLE "DocumentVersion" (id TEXT PRIMARY KEY, "documentId" TEXT, "versionNumber" INTEGER, "hashSha256" TEXT, status TEXT);
       CREATE TABLE "ProcessDocument" (id TEXT PRIMARY KEY, "processId" TEXT, "documentId" TEXT);
+      CREATE TABLE "Tax" (id TEXT PRIMARY KEY);
+      CREATE TABLE "Taxpayer" (id TEXT PRIMARY KEY);
+      CREATE TABLE "TaxAssessment" (id TEXT PRIMARY KEY, status TEXT, "finalValueDecimal" DECIMAL(18,2), "originalValueDecimal" DECIMAL(18,2), "originalValue" DOUBLE PRECISION);
+      CREATE TABLE "TaxGuide" (id TEXT PRIMARY KEY, "assessmentId" TEXT, status TEXT, "totalValueDecimal" DECIMAL(18,2), "totalValue" DOUBLE PRECISION);
+      CREATE TABLE "TaxPayment" (id TEXT PRIMARY KEY, "guideId" TEXT, status TEXT, "amountPaidDecimal" DECIMAL(18,2), "amountPaid" DOUBLE PRECISION);
     `);
-    for (const migration of ["20261010160000_construction_foundation", "20261010170000_construction_rules_profiles", "20261010180000_construction_project_reviews", "20261010190000_construction_analyst_replacement"]) await db.exec(readFileSync(`prisma/migrations-ibema/${migration}/migration.sql`, "utf8"));
+    for (const migration of ["20261010160000_construction_foundation", "20261010170000_construction_rules_profiles", "20261010180000_construction_project_reviews", "20261010190000_construction_analyst_replacement", "20261010200000_construction_portal_participation", "20261010220000_construction_taxation"]) await db.exec(readFileSync(`prisma/migrations-ibema/${migration}/migration.sql`, "utf8"));
     await db.exec(`
       INSERT INTO "Department" (id) VALUES ('sector'); INSERT INTO "Employee" (id,"departmentId") VALUES ('analyst-a','sector'),('analyst-b','sector');
       INSERT INTO "ConstructionStaffRole" (id,"employeeId","departmentId",role,"startsAt","updatedAt") VALUES ('role-a','analyst-a','sector','ANALYST','2026-01-01',CURRENT_TIMESTAMP),('role-b','analyst-b','sector','ANALYST','2026-01-01',CURRENT_TIMESTAMP);
@@ -96,10 +102,21 @@ test("PostgreSQL: migrations, menor demanda, parecer idempotente, exigência e r
     await db.exec(`INSERT INTO "DocumentVersion" VALUES ('version-cancelled','doc',2,'hash-cancelled','CANCELLED')`);
     await assert.rejects(prisma.$transaction((tx) => reviewConstructionProject(tx, newAccess, "actor", { ...input, requestKey: randomUUID(), revision: 1, checks: { rule: true }, documentIds: { Projeto: "doc" } })), /versão GED atual válida/);
     await db.exec(`DELETE FROM "DocumentVersion" WHERE id='version-cancelled'; UPDATE "ConstructionCase" SET "revisionCount"=2 WHERE id='case-a'`);
-    await assert.rejects(prisma.$transaction((tx) => reviewConstructionProject(tx, newAccess, "actor", { ...input, requestKey: randomUUID(), revision: 2, checks: { rule: true }, documentIds: { Projeto: "doc" } })), /Franquia/);
+    await assert.rejects(prisma.$transaction((tx) => reviewConstructionProject(tx, newAccess, "actor", { ...input, requestKey: randomUUID(), revision: 2, checks: { rule: true }, documentIds: { Projeto: "doc" } })), /Taxa REANALYSIS/);
     assert.equal(await prisma.constructionReview.count(), 1);
     await db.exec(`UPDATE "ConstructionCase" SET "revisionCount"=1 WHERE id='case-a'`);
     await prisma.$transaction((tx) => reviewConstructionProject(tx, newAccess, "actor", { ...input, requestKey: randomUUID(), revision: 1, checks: { rule: true }, documentIds: { Projeto: "doc" } }));
     assert.equal((await prisma.constructionCase.findUniqueOrThrow({ where: { id: "case-a" } })).reviewStatus, "APPROVED");
+    await db.exec(`INSERT INTO "Person" VALUES ('person'); INSERT INTO "ConstructionProfessional" (id,"personId","professionalType",council,registration,"startsAt","updatedAt") VALUES ('professional','person','ENGINEER','CREA','PR123','2026-01-01',CURRENT_TIMESTAMP); INSERT INTO "ConstructionPortalIdentity" (id,"firebaseUid",email,"professionalId","createdBy","updatedAt") VALUES ('identity','uid','verified@example.com','professional','actor',CURRENT_TIMESTAMP); INSERT INTO "ConstructionParticipant" (id,"caseId","identityId",role,reason,"createdBy") VALUES ('participant','case-a','identity','TECHNICAL','Representação autorizada','actor'); INSERT INTO "ConstructionTermVersion" (id,version,text,"publishedBy") VALUES ('term',1,'Termo municipal de responsabilidade','actor')`);
+    const portalMessage = { caseId: "case-a", requestKey: randomUUID(), content: "Solicito esclarecimentos sobre o projeto." };
+    await assert.rejects(prisma.$transaction((tx) => appendConstructionMessage(tx, { identityId: "identity" }, portalMessage)), /Aceite o termo/);
+    await db.exec(`INSERT INTO "ConstructionTermAcceptance" (id,"caseId","identityId","termId") VALUES ('acceptance','case-a','identity','term')`);
+    const messageId = await prisma.$transaction((tx) => appendConstructionMessage(tx, { identityId: "identity" }, portalMessage));
+    assert.equal(await prisma.$transaction((tx) => appendConstructionMessage(tx, { identityId: "identity" }, portalMessage)), messageId);
+    await assert.rejects(prisma.$transaction((tx) => appendConstructionMessage(tx, { identityId: "identity" }, { ...portalMessage, requestKey: randomUUID(), caseId: "case-b" })), /indisponível/);
+    await assert.rejects(db.exec(`UPDATE "ConstructionMessage" SET content='alterado' WHERE id='${messageId}'`));
+    await assert.rejects(db.exec(`DELETE FROM "ConstructionTermAcceptance" WHERE id='acceptance'`));
+    await db.exec(`UPDATE "ConstructionParticipant" SET "isActive"=false,"endsAt"=CURRENT_TIMESTAMP WHERE id='participant'`);
+    await assert.rejects(prisma.$transaction((tx) => appendConstructionMessage(tx, { identityId: "identity" }, { ...portalMessage, requestKey: randomUUID() })), /indisponível/);
   } finally { await prisma?.$disconnect(); await server.stop(); await db.close(); }
 });

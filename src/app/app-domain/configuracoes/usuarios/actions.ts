@@ -14,7 +14,6 @@ export async function upsertUsuario(data: {
   perfilId: string;
   employeeId?: string;
   ativo: boolean;
-  permissoes: { moduloId: string; canView: boolean; canEdit: boolean }[];
 }) {
   try {
     const context = await getTenantContextForSystemAdministration();
@@ -96,7 +95,6 @@ export async function upsertUsuario(data: {
         : await tx.usuario.create({
           data: {
             nome: data.nome.trim(), email, firebaseUid, perfilId: data.perfilId, employeeId, ativo: data.ativo,
-            permissoesModulo: { create: data.permissoes.map((permission) => ({ moduloId: permission.moduloId, canView: permission.canView, canEdit: permission.canEdit })) },
           },
         });
       await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "USUARIO", targetId: user.id });

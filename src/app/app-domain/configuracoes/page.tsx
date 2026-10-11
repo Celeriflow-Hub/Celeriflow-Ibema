@@ -9,7 +9,7 @@ export default async function ConfiguracoesDashboard() {
   const { prisma, user } = await getTenantContextForModule("CONFIGURACOES");
   const [instancias, totalModulosAtivos, totalPerfis] = await Promise.all([
     prisma.configuracaoInstancia.count(),
-    prisma.configuracaoModulo.count({ where: { ativo: true } }),
+    prisma.configuracaoModulo.count({ where: { ativo: true, codigo: { not: "DOCUMENTOS" } } }),
     prisma.configuracaoPerfil.count()
   ]);
 

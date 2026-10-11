@@ -7,9 +7,9 @@ import { normalizeRestrictiveProfilePermissions, SYSTEM_ADMIN_PROFILE_CODE } fro
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 
 const MODULE_CODES = new Set([
-  "ADMINISTRACAO", "CADASTROS", "PROCESSOS", "DOCUMENTOS", "ATENDIMENTO", "TRANSPARENCIA", "TRIBUTACAO", "FINANCEIRO", "COMPRAS", "RH",
+  "ADMINISTRACAO", "CADASTROS", "PROCESSOS", "ATENDIMENTO", "TRANSPARENCIA", "TRIBUTACAO", "FINANCEIRO", "COMPRAS", "RH",
   "PORTAL_SERVIDOR", "PATRIMONIO", "EDUCACAO", "SAUDE", "SOCIAL", "MEIO_AMBIENTE", "SANEAMENTO", "OBRAS", "FROTAS", "CULTURA", "CAMARA",
-  "SEGURANCA", "CONFIGURACOES", "CEMITERIOS", "AUDITORIA", "SUPORTE_TECNICO", "PLANEJAMENTO", "SST",
+  "SEGURANCA", "CONFIGURACOES", "CEMITERIOS", "AUDITORIA", "SUPORTE_TECNICO", "PLANEJAMENTO", "SST", "ILUMINACAO_PUBLICA",
 ]);
 
 function normalizePermissions(value: string | undefined) {
@@ -54,6 +54,15 @@ export async function upsertPerfil(data: {
       if (!existing) return { error: "Perfil não encontrado." };
       if (existing.codigo === SYSTEM_ADMIN_PROFILE_CODE) {
         return { error: "O perfil técnico do administrador do sistema é gerenciado automaticamente." };
+      }
+      // GED is internal: preserve its existing ACL on the server, never accept
+      // grants for this hidden capability from the editable module matrix.
+      if (existing.permissoes) {
+        const previous = JSON.parse(existing.permissoes);
+        const next = JSON.parse(jsonPermissoes);
+        if (previous.modules?.DOCUMENTOS) next.modules.DOCUMENTOS = previous.modules.DOCUMENTOS;
+        if (previous.modulosBloqueados?.includes("DOCUMENTOS")) next.modulosBloqueados.push("DOCUMENTOS");
+        jsonPermissoes = JSON.stringify(next);
       }
       
       await prisma.$transaction(async (tx) => {

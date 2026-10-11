@@ -6,7 +6,7 @@ import {
   Building2, Users, FileText, HeadphonesIcon, ShoppingCart, DollarSign,
   Package, Receipt, Stethoscope, GraduationCap, HeartHandshake, HardHat, 
   Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, Lock, CheckSquare, Square, Trash2, Truck, BadgeCheck,
-  Church, ClipboardCheck, Headset
+   Church, ClipboardCheck, Headset, Lightbulb
 } from "lucide-react";
 import { deletePerfil, upsertPerfil, togglePerfilStatus } from "./actions";
 import { PageFrame } from "@/components/app-ui/PageFrame";
@@ -40,12 +40,12 @@ const MODULES_LIST = [
   { code: "COMPRAS", label: "Compras e Contratos", icon: ShoppingCart, color: "text-emerald-500" },
   { code: "CONFIGURACOES", label: "Configurações e Integrações", icon: Settings, color: "text-slate-600" },
   { code: "CULTURA", label: "Cultura e Lazer", icon: Palette, color: "text-fuchsia-500" },
-  { code: "DOCUMENTOS", label: "Documentos / GED", icon: FileText, color: "text-amber-500" },
   { code: "EDUCACAO", label: "Educação", icon: GraduationCap, color: "text-yellow-500" },
   { code: "FINANCEIRO", label: "Financeiro e Contábil", icon: DollarSign, color: "text-green-500" },
   { code: "FROTAS", label: "Frotas", icon: Truck, color: "text-teal-600" },
   { code: "MEIO_AMBIENTE", label: "Meio Ambiente", icon: Trees, color: "text-emerald-600" },
-  { code: "OBRAS", label: "Obras e Serviços Públicos", icon: HardHat, color: "text-lime-500" },
+  { code: "OBRAS", label: "Obras e Construção Civil", icon: HardHat, color: "text-lime-500" },
+  { code: "ILUMINACAO_PUBLICA", label: "Iluminação Pública (Iluminaflow)", icon: Lightbulb, color: "text-yellow-500" },
   { code: "PLANEJAMENTO", label: "Planejamento e Orçamento", icon: Landmark, color: "text-indigo-600" },
   { code: "PORTAL_SERVIDOR", label: "Portal do Servidor", icon: BadgeCheck, color: "text-sky-700" },
   { code: "TRANSPARENCIA", label: "Portal e Transparência", icon: Share2, color: "text-sky-500" },

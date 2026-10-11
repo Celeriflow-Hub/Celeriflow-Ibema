@@ -57,7 +57,7 @@ export function ObrasDocumentosClient({ documentos }: { documentos: DocumentoObr
       <div className="flex flex-col items-start justify-between gap-2 md:flex-row md:items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Documentos de Obras</h1>
-          <p className="text-slate-500 dark:text-slate-400">Documentos vinculados aos serviços de Obras e Serviços.</p>
+          <p className="text-slate-500 dark:text-slate-400">Documentos vinculados aos serviços de Obras e Construção Civil.</p>
         </div>
         <Link href="/documentos/ged" className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50">
           Abrir GED

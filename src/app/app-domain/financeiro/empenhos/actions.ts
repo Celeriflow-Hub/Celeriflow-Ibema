@@ -132,6 +132,8 @@ export async function createCommitment(data: {
     if (data.obrasServiceId) {
       revalidatePath("/obras");
       revalidatePath("/obras/ordens-servico");
+      revalidatePath("/iluminacao-publica/ordens-servico");
+      revalidatePath("/iluminacao-publica/iluminacao-energia");
     }
     revalidateProtocolProcess(commitment.processId);
     return {};

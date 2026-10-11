@@ -6,7 +6,7 @@ import {
   Building2, Users, FileText, ShoppingCart, DollarSign, 
   Package, Receipt, Stethoscope, GraduationCap, HeartHandshake, HardHat, 
   Trees, Shield, Droplets, Landmark, Palette, Share2, Settings, AlertCircle, RefreshCw, Truck, BadgeCheck,
-  Church, ClipboardCheck, Headset
+  Church, ClipboardCheck, Headset, Lightbulb
 } from "lucide-react";
 import { toggleModulo } from "../actions";
 import { PageFrame } from "@/components/app-ui/PageFrame";
@@ -25,7 +25,7 @@ const MODULE_ICONS: Record<string, { icon: React.ElementType; color: string; bg:
   ADMINISTRACAO: { icon: Building2, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-950/50" },
   CADASTROS: { icon: FileText, color: "text-slate-600 dark:text-slate-400", bg: "bg-slate-50 dark:bg-slate-900" },
   PROCESSOS: { icon: Share2, color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-50 dark:bg-cyan-950/50" },
-  DOCUMENTOS: { icon: FileText, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/50" },
+  ILUMINACAO_PUBLICA: { icon: Lightbulb, color: "text-yellow-600 dark:text-yellow-400", bg: "bg-yellow-50 dark:bg-yellow-950/50" },
   ATENDIMENTO: { icon: Users, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-950/50" },
   TRANSPARENCIA: { icon: Share2, color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-50 dark:bg-sky-950/50" },
   TRIBUTACAO: { icon: Receipt, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/50" },

@@ -8,6 +8,8 @@ import { assertSstClinicalAccess } from "@/lib/sst/access";
 import { assertConstructionGedSignature } from "@/lib/obras/construction-documents-service";
 import { readConstructionPdf } from "@/lib/obras/construction-document-storage";
 import { assertConstructionProjectStampDownload, findConstructionProjectStampByFile } from "@/lib/obras/construction-project-stamp";
+import { resolveConstructionAccess } from "@/lib/obras/construction-access";
+import { constructionCaseWhere } from "@/lib/obras/construction-policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,6 +52,12 @@ export async function GET(request: NextRequest) {
         healthStandardDocument: { select: { id: true } },
       },
     });
+    const civilCaseIds = constructionArtifact ? [constructionArtifact.caseId] : constructionProjectStamp ? [constructionProjectStamp.caseId] : document?.processDocuments.length ? (await context.prisma.constructionCase.findMany({ where: { processId: { in: document.processDocuments.map((link) => link.processId) } }, select: { id: true } })).map((item) => item.id) : [];
+    if (civilCaseIds.length) {
+      const civilContext = await getTenantContextForModule("OBRAS");
+      const civilAccess = await resolveConstructionAccess(civilContext);
+      if (!await civilContext.prisma.constructionCase.findFirst({ where: { AND: [{ id: { in: civilCaseIds } }, constructionCaseWhere(civilAccess)] }, select: { id: true } })) throw new AccessError("Sem habilitação urbanística no setor responsável pelo documento.", 403);
+    }
 
     if (document?.sstCertificateDocument) {
       const sst = await getTenantContextForModule("SST");

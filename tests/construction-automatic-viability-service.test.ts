@@ -90,11 +90,16 @@ test("Prisma/PGlite: portal autorizado, decisão automática, replay, GED penden
     const denied = await runConstructionAutomaticViability(prisma, "identity", { ...input, requestKey: randomUUID() });
     const [row] = (await db.query<{ outcome: string; signatureRoutingStatus: string }>('SELECT outcome,"signatureRoutingStatus" FROM "ConstructionAutomaticViabilityRun" WHERE id=$1', [denied])).rows;
     assert.equal(row.outcome, "DENIED"); assert.equal(row.signatureRoutingStatus, "AWAITING_SIGNER_CONFIGURATION");
+    await db.exec(`UPDATE "Process" SET "currentDepartmentId"=NULL`);
+    const withoutDepartment = await runConstructionAutomaticViability(prisma, "identity", { ...input, requestKey: randomUUID() });
+    const [withoutDepartmentRow] = (await db.query<{ signatureRoutingStatus: string }>('SELECT "signatureRoutingStatus" FROM "ConstructionAutomaticViabilityRun" WHERE id=$1', [withoutDepartment])).rows;
+    assert.equal(withoutDepartmentRow.signatureRoutingStatus, "AWAITING_SIGNER_CONFIGURATION");
+    await db.exec(`UPDATE "Process" SET "currentDepartmentId"='sector'`);
     await db.exec(`INSERT INTO "ConstructionDefinitionVersion" (id,kind,version,definition,"publishedBy","publishedAt") VALUES ('definition2','VIABILITY',2,'{"fields":[],"checks":[{"key":"environment","label":"Licença ambiental","required":true}],"documents":[]}','actor','2020-01-01')`);
     const manual = await runConstructionAutomaticViability(prisma, "identity", { ...input, requestKey: randomUUID() });
     const [manualRow] = (await db.query<{ outcome: string; documentId: string | null }>('SELECT outcome,"documentId" FROM "ConstructionAutomaticViabilityRun" WHERE id=$1', [manual])).rows;
     assert.equal(manualRow.outcome, "MANUAL"); assert.equal(manualRow.documentId, null);
-    assert.equal(await prisma.document.count(), 2);
+    assert.equal(await prisma.document.count(), 3);
     await db.exec(`INSERT INTO "ConstructionExternalApplication" (id,"caseId","identityId","personId","propertyIds","subjectIds","expiresAt") VALUES ('auth','case','identity','person',ARRAY['property'],ARRAY['subject'],'2020-01-01')`);
     await assert.rejects(runConstructionAutomaticViability(prisma, "identity", { ...input, requestKey: randomUUID() }), /vencida/);
     await db.exec(`DELETE FROM "ConstructionExternalApplication"`);

@@ -24,7 +24,7 @@ Referência: checklist POC, páginas 126–131. Esta matriz registra caminhos ve
 | 18 | Campos tipados configuráveis, validação servidor/snapshot | Editar publicações pela UI e testar cada tipo em ponta a ponta |
 | 19 | Conclusão parcial/total, sequência própria e saldo Decimal | Percurso com vistorias, datas e áreas reais autorizadas |
 | 20 | Template de habite-se versionado com dados da emissão | Composição/layout municipal completo, prévia/impressão e signatários |
-| 21 | Viabilidade automática demonstrativa em integração, com memória e gates | Automação institucional de assinatura e regras oficiais suficientes |
+| 21 | Decisão automática demonstrativa, memória, PDF/GED e pedidos de assinatura aos gestores reais | Assinatura final ainda humana; automação institucional de assinatura e regras oficiais suficientes pendentes |
 | 22 | Vínculo imóvel-zoneamento e snapshots cadastrais | Índices territoriais oficiais, inscrições e pesquisa autorizada |
 | 23 | Zoneamento publicado/vigência/flag automatic | Plano diretor validado e critérios completos de elegibilidade |
 | 24 | Texto PDF real, adaptadores OCR/IA e comparação rastreável | Provedor IA/OCR configurado e pranchas municipais; DEMO_RULES não é IA |
@@ -33,7 +33,7 @@ Referência: checklist POC, páginas 126–131. Esta matriz registra caminhos ve
 | 27 | Pró-análise e parecer consolidado preservados | Conferir apresentação externa das exigências/pranchas |
 | 28 | Emissão no Process original, assinatura GED e publicação | Contas signatárias/certificado, documento e download reais |
 | 29 | Analista inicial/substituição e reenvio idempotente testados | Repetir com troca de servidor/lotação e motivo formal |
-| 30 | Carimbo/assinatura de projeto aprovado em integração documental | PDF final assinado e formato oficial requerido; assinatura destacada não é PAdES |
+| 30 | Cópia derivada carimbada, ligada à versão aprovada; assinatura/publicação e negativos de download testados | Percurso visual e formato oficial requerido; assinatura destacada não é PAdES |
 | 31 | Gate de versão/hash/todas assinaturas obrigatórias em publicação/download | Negativas autenticadas em portal, API e GED genérico |
 | 32 | Pedidos GED gerados durante emissão | Signatários municipais configurados, notificação e conclusão do pedido |
 | 33 | Original/versão/hash e backup físico documental | Restauração do backup no ambiente de implantação e política de retenção |
@@ -44,7 +44,7 @@ Referência: checklist POC, páginas 126–131. Esta matriz registra caminhos ve
 | 38 | Participação autorizada, encerramento e histórico | Inclusão/substituição com contas reais e aceites necessários |
 | 39 | Complementos GED com versão/hash e comunicação | Upload autenticado/estado/arquivo e revisão anotada |
 | 40 | Pedidos externos e atendimento vinculado a inspeção/conclusão | Documento/checklist configurável e emissão final no mesmo processo |
-| 41 | Prazo de projeto; prazo de ajustes de vistoria em integração | Vencimento/notificações/regularização e políticas de viabilidade |
+| 41 | Prazos de projeto e vistoria, vencimento servidor/portal, reinspeção e regularização motivada com ledger | Notificações e percurso autenticado; política específica das exigências de viabilidade |
 | 42 | Plano de vistorias criado atomicamente com deferimento | UI de seleção e conclusão bloqueada em caso de pendência |
 | 43 | Catálogo de inspeções, plano e checklist versionado | Tipos específicos de obra/parcelamento homologados |
 | 44 | DAM central, guia civil, encargos e FEBRABAN demonstrativo | Layout aprovado, convênio/DVs/retorno bancário homologados |
@@ -64,5 +64,7 @@ Referência: checklist POC, páginas 126–131. Esta matriz registra caminhos ve
 - Adaptadores e limites: `construction-integrations.md`.
 - Migrations: `prisma/migrations-ibema/`, aplicadas pelo destino configurado em `prisma.config.ts`.
 - Planejamento e andamento: `PLANO_CONSTRUCAO_CIVIL_CHECKLIST_POC_126-131.md`.
+
+Execução integrada: **67 testes civis aprovados**, ESLint aprovado e 17 migrations civis aplicadas com checksums iguais aos arquivos locais. O teste de upgrade também confere que todas as tabelas/colunas civis do client gerado existem no histórico SQL. Após as correções finais, os testes de viabilidade foram repetidos e passaram, incluindo o cenário de processo sem setor. **TypeScript de produção e `npm run build` aprovados com código 0**, conforme registro no plano principal. Esses resultados não substituem a homologação visual/autenticada nem das integrações oficiais.
 
 Após executar cada cenário autenticado, registrar conta/papel, processo, versão, arquivo/hash, resultado e evidência de tela/PDF. Somente esses resultados podem promover um item a homologado.

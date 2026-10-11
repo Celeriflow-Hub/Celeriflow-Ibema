@@ -14282,6 +14282,12 @@ model FleetUnit {
   fuelType            String?
   expectedConsumption Decimal?           @db.Decimal(10, 3)
   costCenter          String?
+  species             String?
+  color               String?
+  tankCapacity        Decimal?           @db.Decimal(10, 2)
+  fipeCode            String?
+  acquisitionDate     DateTime?          @db.Date
+  machineFields       Json?
 }
 
 model FleetRoute {
@@ -14450,6 +14456,8 @@ model FleetOccurrence {
   description   String
   involvedValue Decimal?  @db.Decimal(18, 2)
   reference     String?
+  latitude      Decimal?  @db.Decimal(10, 7)
+  longitude     Decimal?  @db.Decimal(10, 7)
   createdById   String
   createdAt     DateTime  @default(now())
 
@@ -16389,6 +16397,8 @@ model FleetDriver {
   id           String   @id @default(cuid())
   name         String
   cpf          String   @unique
+  outsourced   Boolean  @default(false)
+  cnhPoints    Int      @default(0)
   employeeId   String?
   cnhNumber    String
   cnhCategory  String
@@ -16493,6 +16503,11 @@ model FleetFine {
   status      String    @default("PENDENTE")
   createdById String
   createdAt   DateTime  @default(now())
+  city        String?
+  ctbCode     String?
+  paidAt      DateTime? @db.Date
+  paidAmount  Decimal?  @db.Decimal(18, 2)
+  paymentReference String?
 }
 
 model FleetWorkshopReport {

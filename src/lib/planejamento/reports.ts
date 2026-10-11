@@ -9,6 +9,7 @@ import { planningDateSchema } from "./revisions";
 import { planningReportCatalog, type PlanningReportType } from "./report-catalog";
 import { readPlanningVersion } from "./versions";
 import { lockPlanningInstrument } from "./service";
+import { readPlanningFinancialExecution } from "./execution-bridge";
 
 export const planningReportFilters = z.object({
   instrumentIds: z.string().min(1), type: z.enum(planningReportCatalog.map((row) => row.type) as [PlanningReportType, ...PlanningReportType[]]),
@@ -25,6 +26,7 @@ type ReportLine = {
   id: string; instrumentId: string; kind: string; code: string; description: string; year: number; budgetUnitId: string; resourceSourceId: string;
   programId: string | null; actionId: string | null; functionCode: string | null; subfunctionCode: string | null; product: string | null; productUnit: string | null;
   originalValue: string; physicalTarget: string; physicalActual: string;
+  appropriationId?: string | null;
   destinationEntityId: string | null; destinationEntity: Named | null; transferDirection: string | null;
   originalPhysicalTarget: string | null; originalPhysicalActual: string | null;
   budgetUnit: Named & { secretariat: Named }; resourceSource: Named; revenueNature: Named | null; expenseNature: Named | null;
@@ -128,7 +130,11 @@ export async function generatePlanningReport(context: PlanningContext, raw: unkn
     case "PHYSICAL": case "EVALUATION":
       add("Metas físicas previstas e realizadas", expenses.map((line) => ({ entidade: line.entity, exercício: line.year, programa: line.program?.name ?? "", ação: line.action?.name ?? "", produto: line.product ?? "", unidade: line.productUnit ?? "", prevista: line.target.toFixed(4), realizada: line.actual.toFixed(4), alcancePercentual: line.target.isZero() ? "Sem base" : line.actual.div(line.target).mul(100).toFixed(2) })));
       add("Programação financeira", summarize(expenses, (line) => ({ entidade: line.entity, exercício: line.year, programa: line.program?.name ?? "", ação: line.action?.name ?? "" })));
-      if (definition.family === "EVALUATION") add("Execução financeira", [{ situação: "Conexão aos estágios financeiros preparada para F9; valores não inferidos de metas físicas ou empenhos." }]); break;
+      if (definition.family === "EVALUATION") {
+        const execution = await readPlanningFinancialExecution(context, expenses, new Date(`${input.asOf}T23:59:59.999Z`));
+        if (execution.status !== "CONNECTED") add("Execução financeira", [{ situação: execution.status === "RESTRICTED" ? "Consulta de execução exige autorização financeira." : "A estrutura financeira não está implantada nesta instância." }]);
+        else add("Execução financeira canônica", execution.rows.map((row) => { const line = expenses.find((line) => line.id === row.lineId)!; return { entidade: line.entity, exercício: line.year, programa: line.program?.name ?? "", ação: line.action?.name ?? "", dotação: line.code, empenhadoLíquido: row.committed, desembolsoLíquidoTesouraria: row.paidNet, origem: line.appropriationId ? "Financeiro · dotação implantada" : "Sem vínculo implantado — execução não apurada" }; }));
+      } break;
     case "PROGRAM": case "PROGRAM_DETAIL": {
       const programs = data.pieces.flatMap((piece) => (piece.programs ?? [...new Map(expenses.filter((line) => line.instrumentId === piece.id && line.program).map((line) => [line.programId, line.program!])).values()]).filter((program) => (!input.programId || program.id === input.programId) && (!input.actionId || expenses.some((line) => line.programId === program.id && line.actionId === input.actionId))).map((program) => ({ entity: piece.governmentEntity.name, program })));
       add("Programas", programs.map(({ entity, program }) => ({ entidade: entity, código: program.code ?? "", programa: program.name, origem: program.origin ?? "", gerente: program.managerName ?? "" })));
@@ -143,7 +149,7 @@ export async function generatePlanningReport(context: PlanningContext, raw: unkn
       add(definition.title, summarize(definition.family === "ECONOMIC" ? lines.filter((row) => row.kind !== "TRANSFER") : expenses, (line) => ({ entidade: line.entity, exercício: line.year, ...(definition.family === "ECONOMIC" ? { tipo: line.kind, categoria: (line.revenueNature?.code ?? line.expenseNature?.code ?? "").replace(/\D/g, "").slice(0, 1) } : definition.family === "NATURE" ? { unidade: line.budgetUnit.name, natureza: line.expenseNature?.code ?? "" } : definition.family === "PROGRAM_SOURCE" ? { programa: line.program?.name ?? "", fonte: line.resourceSource.name } : definition.family === "UNIT_FUNCTION" ? { órgão: line.budgetUnit.secretariat.name, unidade: line.budgetUnit.name, função: line.functionCode ?? "" } : { função: line.functionCode ?? "", subfunção: line.subfunctionCode ?? "", programa: line.program?.name ?? "" }) }))); break;
     case "CMD": case "REVENUE_TARGETS": case "QUOTA":
       add(definition.title, (definition.family === "REVENUE_TARGETS" ? revenues : expenses).flatMap((line) => line.quotas.map((quota) => ({ entidade: line.entity, exercício: line.year, dotação: line.code, fonte: line.resourceSource.name, mês: quota.month, período: `${Math.ceil(quota.month / quota.periodMonths)} (${quota.periodMonths} meses)`, previsto: definition.family === "CMD" ? quota.disbursementPlanned : quota.planned, realizado: definition.family === "CMD" ? quota.disbursementPaid : quota.consumed, contingenciado: quota.blocked, disponível: new Prisma.Decimal(quota.planned).minus(quota.consumed).minus(quota.blocked).toFixed(2), situação: quota.closedAt ? "Fechado" : "Aberto" }))));
-      if (definition.family === "CMD") add("Estágio de execução", [{ informação: "Desembolso pago é separado de empenhamento; consumo pelos módulos financeiros será conectado em F9." }]); break;
+      if (definition.family === "CMD") add("Estágio de execução", [{ informação: "Cronograma mede despesa paga bruta, separada do empenhamento. LOA com execução interna conectada recebe eventos transacionais do Financeiro; a avaliação financeira apresenta tesouraria líquida em coluna distinta." }]); break;
     case "CHANGES": {
       const credits = await context.prisma.planningCreditBatch.findMany({ where: { instrumentId: { in: data.pieces.map((piece) => piece.id) }, ...(input.creditId ? { id: input.creditId } : {}), ...(input.origin ? { origin: input.origin } : {}) }, include: { items: true } });
       const keys = new Set(credits.flatMap((batch) => batch.items.map((item) => `credit:${batch.id}:${item.id}`)));

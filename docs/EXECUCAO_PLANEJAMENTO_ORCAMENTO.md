@@ -41,6 +41,26 @@ Registro detalhado: [PLANEJAMENTO_F4_F8_EVIDENCIAS.md](PLANEJAMENTO_F4_F8_EVIDEN
 
 **Verificação:** 47 testes aprovados, lint/Prisma/TypeScript e build completo aprovados (55 páginas estáticas). Isso não certifica layouts oficiais, não comprova publicação e não substitui os 99 aceites independentes por ente. Avaliação financeira real/RCL executada, contabilidade, Compras, GED e publicação dependem das conexões F9; ensaio/homologação seguem em F10.
 
+### Continuação F9 — validação das conexões internas (11/10/2026)
+
+**Estado: em implementação; não encerra F9/F10 nem os 99 aceites de cada ente.**
+
+- Indicadores de Frotas passaram a ler exclusivamente a projeção canônica `FleetExpense`, com escopo de setor e cobertura de valores. A escrita legada `FleetOperation` foi retirada dos serviços/actions após conferência dos consumidores; a tabela histórica permanece preservada.
+- Ponte contábil de Planejamento adicionada para abertura e alterações de receita/despesa, condicionada às seis regras de eventos configuradas e ao responsável servidor. Configuração/sincronização bloqueiam a peça antes de ler seu estado e exigem acesso a todas as suas UGs; entrega bloqueia e relê o comando, verificando a UG de origem. O sucesso das partidas e o rollback contábil conectado ainda precisam de cenários específicos.
+- Ponte de execução adicionada aos consumidores financeiros: reservas/cotas, empenhamento, anulações, pagamentos e estornos. Cenários PostgreSQL isolados com `planningInternalExecution=true` comprovam consumo, realocação dentro do período, estorno parcial, replay de estorno e de pagamento estornado, conflito de valor e rollback por excesso de desembolso. Essa configuração é preparação explícita da fixture; não demonstra a ativação completa pela UI, a reserva futura em Compras nem toda a concorrência Financeiro/Planejamento.
+- Vínculo GED preserva `documentVersionId`; download usa essa versão e confere seu SHA-256. Nova versão GED não substitui automaticamente o anexo histórico; o replay de vinculação conserva a versão anterior. A solicitação de assinatura limita a seleção à versão vinculada dentro da transação GED. Recusa de audiência incompatível, leitura em outra jurisdição, alteração SQL do vínculo e assinatura da versão substituída foram verificadas em PostgreSQL isolado. Download via storage e navegador autenticado ainda não foram ensaiados.
+- Migration aditiva `20261011190000_planning_internal_connections`: configuração JSON da LOA e vínculos documentais com FK de versão, proteção de alteração e validação de audiência/documento/destino. Foi aplicada somente nas fixtures isoladas desta rodada; não houve implantação no banco configurado.
+
+**Verificações desta rodada:** Prisma validate/generate, TypeScript, lint direcionado e build completo aprovados; build com `VERCEL_ENV=development`, **57 páginas estáticas**. A suíte abaixo teve **43 testes aprovados, zero falhas**:
+
+```powershell
+node --conditions=react-server --import tsx --test --test-concurrency=1 --test-reporter=spec tests/fleet-indicators.test.ts tests/planning-domain.test.ts tests/planning-operations.test.ts tests/planning-postgres.test.ts tests/public-finance.test.ts tests/procurement-finance-bridge.test.ts tests/document-flow.test.ts tests/construction-documents-service.test.ts
+```
+
+Os testes com adaptador PostgreSQL emitiram aviso de depreciação de consultas simultâneas do `pg`; os cenários concluíram sem falhas.
+
+**Retomada:** comprovar abertura/alterações contábeis conectadas e falha com rollback; completar reservas futuras e concorrência dos consumidores; concluir Tributação/renúncia, tramitação Câmara e publicação/Transparência; completar pesquisa/paginação de seletores GED; registrar dependências oficiais por requisito e executar o ensaio autenticado dos dois entes. As migrations `170000`, `180000` e a nova `190000` exigem conferência/implantação antes do uso operacional destas conexões. A consulta de status anterior abaixo é histórica e não inclui a migration nova.
+
 ## Base municipal plausível
 
 - Dataset: `src/lib/planejamento/municipal-data.ts`.

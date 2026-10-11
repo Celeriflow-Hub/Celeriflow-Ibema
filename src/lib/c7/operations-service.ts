@@ -56,26 +56,3 @@ export async function resolveInternalControlFinding(db: PrismaClient, actor: Act
     return resolved;
   });
 }
-
-export async function registerFleetOperation(db: PrismaClient, actor: Actor, input: { assetId: string; type: "ABASTECIMENTO" | "MANUTENCAO" | "ORDEM_SERVICO"; occurredAt: Date; odometer?: number; quantity?: number; cost: number; description: string; supplierName?: string; evidenceDocumentId?: string }) {
-  const assetId = required(input.assetId, "Veículo");
-  const description = required(input.description, "Descrição");
-  const occurredAt = optionalDate(input.occurredAt)!;
-  if (!Number.isFinite(input.cost) || input.cost < 0) throw new C7OperationError("Custo inválido.");
-  if (input.odometer !== undefined && (!Number.isFinite(input.odometer) || input.odometer < 0)) throw new C7OperationError("Quilometragem inválida.");
-  if (input.quantity !== undefined && (!Number.isFinite(input.quantity) || input.quantity <= 0)) throw new C7OperationError("Quantidade inválida.");
-  if (!["ABASTECIMENTO", "MANUTENCAO", "ORDEM_SERVICO"].includes(input.type)) throw new C7OperationError("Tipo de operação de frota inválido.");
-  return db.$transaction(async (tx) => {
-    const [asset, evidence] = await Promise.all([
-      tx.asset.findFirst({ where: { id: assetId, status: { notIn: ["Baixado", "Inativo"] }, category: { OR: [{ code: { startsWith: "V" } }, { name: { contains: "veículo", mode: "insensitive" } }] } }, select: { id: true } }),
-      input.evidenceDocumentId?.trim() ? tx.document.findFirst({ where: { id: input.evidenceDocumentId.trim(), status: "Válido" }, select: { id: true } }) : null,
-    ]);
-    if (!asset) throw new C7OperationError("Selecione um bem patrimonial ativo classificado como veículo.");
-    if (input.evidenceDocumentId?.trim() && !evidence) throw new C7OperationError("A evidência deve apontar para um documento GED válido.");
-    const operation = await tx.fleetOperation.create({
-      data: { assetId, type: input.type, occurredAt, odometer: input.odometer, quantity: input.quantity, cost: input.cost, description, supplierName: input.supplierName?.trim() || undefined, evidenceDocumentId: evidence?.id, createdById: required(actor.usuarioId, "Usuário responsável") },
-    });
-    await writeAuditEvent(tx, { actorUsuarioId: required(actor.usuarioId, "Usuário responsável"), eventType: auditEventTypes.fleetOperationRegistered, targetType: "FLEET_OPERATION", targetId: operation.id });
-    return operation;
-  });
-}

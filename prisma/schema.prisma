@@ -824,6 +824,7 @@ model PlanningInstrument {
   reportSnapshots PlanningReportSnapshot[]
   fiscalRules PlanningFiscalRule[]
   plannedWorks PlanningPlannedWork[]
+  documentLinks PlanningDocumentLink[]
   implantedAt DateTime?
   implantedById String?
   @@unique([governmentEntityId, kind, code])
@@ -992,6 +993,24 @@ model PlanningImportBatch {
   @@index([targetInstrumentId, createdAt])
 }
 
+model PlanningDocumentLink {
+  id String @id @default(cuid())
+  instrumentId String
+  instrument PlanningInstrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  hearingId String?
+  hearing PlanningHearing? @relation(fields: [hearingId], references: [id], onDelete: Restrict)
+  documentId String
+  document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  documentVersionId String
+  documentVersion DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
+  purpose String
+  targetKey String
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([instrumentId, documentId, targetKey])
+  @@index([hearingId])
+}
+
 model PlanningBudgetLine {
   id String @id @default(cuid())
   instrumentId String
@@ -1068,6 +1087,7 @@ model PlanningHearing {
   createdById String
   createdAt DateTime @default(now())
   demands PlanningCommunityDemand[]
+  documentLinks PlanningDocumentLink[]
   @@index([instrumentId, heldAt])
 }
 
@@ -1538,6 +1558,7 @@ model DocumentClass {
 }
 
 model Document {
+  planningDocumentLinks PlanningDocumentLink[]
   constructionEnforcementEvidence ConstructionEnforcementEvidence[]
   id              String         @id @default(cuid())
   sstCertificateDocument SstCertificateDocument?
@@ -1620,6 +1641,7 @@ model DocumentVersion {
   signatures           DocumentSignature[]
   icpEvidence          DocumentIcpEvidence?
   certificateUseAudits CertificateUseAudit[]
+  planningDocumentLinks PlanningDocumentLink[]
 
   @@unique([documentId, versionNumber])
   @@index([documentId, status])
@@ -4027,6 +4049,7 @@ model BudgetGuidelineRisk {
 
 model AnnualBudgetLaw {
   planningInstrument PlanningInstrument?
+  metadata             Json?
   id                   String           @id @default(cuid())
   lawNumber            String
   publicationDate      DateTime?

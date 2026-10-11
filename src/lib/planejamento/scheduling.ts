@@ -61,6 +61,8 @@ export async function planningQuotaEvent(context: PlanningContext, raw: unknown)
   return context.prisma.$transaction(async (tx) => {
     const piece = await lockLegalInstrument(tx, context, input.instrumentId);
     const quota = await tx.planningQuota.findFirstOrThrow({ where: { id: input.quotaId, line: { AND: [planningLineWhere(context), { instrumentId: piece.id }] } }, include: { line: { select: { kind: true } } } });
+    const metadata = piece.annualBudgetLaw?.metadata;
+    if (metadata && typeof metadata === "object" && !Array.isArray(metadata) && metadata.planningInternalExecution === true && ["CONSUME", "REVERSE", "PAY", "REVERSE_PAYMENT"].includes(input.operation)) throw new Error("O realizado desta LOA é alimentado pelo Financeiro. Utilize a operação de origem para registrar ou estornar.");
     const value = new Prisma.Decimal(input.amount);
     const effectiveAt = new Date(input.effectiveAt ?? new Date().toISOString().slice(0, 10));
     if (effectiveAt.getUTCFullYear() !== piece.startYear || effectiveAt > new Date()) throw new Error("Data do evento deve pertencer ao exercício e não pode ser futura.");

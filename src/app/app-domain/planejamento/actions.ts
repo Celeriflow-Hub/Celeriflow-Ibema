@@ -18,6 +18,8 @@ import { createPlanningCreditPreview, transitionPlanningCredit } from "@/lib/pla
 import { addPlanningWork, configurePlanningFiscalReport } from "@/lib/planejamento/reports";
 import { reorderPlanningExpenseCodes, setPlanningReducedCode } from "@/lib/planejamento/reduced-codes";
 import { reconcilePlanningLegacyAppropriation } from "@/lib/planejamento/legacy-reconciliation";
+import { configurePlanningInternalAccounting, configurePlanningInternalExecution, synchronizePlanningAccounting } from "@/lib/planejamento/accounting-bridge";
+import { linkPlanningDocument, requestPlanningDocumentSignatures } from "@/lib/planejamento/documents";
 
 export async function savePlanningRecord(jurisdiction: string, operation: string, input: Record<string, string>): Promise<{ error?: string; id?: string }> {
   try {
@@ -58,12 +60,19 @@ export async function savePlanningRecord(jurisdiction: string, operation: string
       case "reducedCode": id = await setPlanningReducedCode(context, clean); break;
       case "reorderCodes": id = await reorderPlanningExpenseCodes(context, clean); break;
       case "legacyBind": id = await reconcilePlanningLegacyAppropriation(context, clean); break;
+      case "accountingConfigure": id = await configurePlanningInternalAccounting(context, clean); break;
+      case "accountingSynchronize": id = await synchronizePlanningAccounting(context, clean); break;
+      case "executionConfigure": id = await configurePlanningInternalExecution(context, clean); break;
+      case "documentLink": id = await linkPlanningDocument(context, clean); break;
+      case "documentSignatures": id = await requestPlanningDocumentSignatures(context, clean); break;
       case "memory": id = await addPlanningMemory(context, clean); break;
       case "waiver": id = await addPlanningWaiver(context, clean); break;
       case "scope": await configurePlanningEntity(context, clean.governmentEntityId, clean.budgetUnitId); break;
       default: return { error: "Operação inválida." };
     }
     revalidatePath(planningBasePath(sector), "layout");
+    revalidatePath("/financeiro", "layout");
+    revalidatePath("/compras", "layout");
     return { id };
   } catch (error) {
     if (error instanceof ZodError) return { error: error.issues.map((issue) => issue.message).join(" ") };

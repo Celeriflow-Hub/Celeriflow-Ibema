@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { AccessError, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { planningInstrumentWhere, planningLineWhere, type PlanningContext } from "./access";
+import { deliverPlanningAccountingCommand } from "./accounting-bridge";
 
 export type PlanningTx = Prisma.TransactionClient;
 export const jsonValue = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
@@ -50,7 +51,8 @@ export async function snapshotVersion(tx: PlanningTx, context: PlanningContext, 
   const lines = await tx.planningBudgetLine.findMany({ where: { instrumentId }, include: { budgetUnit: { include: { secretariat: true } }, resourceSource: true, revenueNature: true, expenseNature: true, program: { include: { objectives: { include: { indicators: true } } } }, action: true, movements: { orderBy: [{ effectiveAt: "asc" }, { createdAt: "asc" }, { id: "asc" }] }, physicalEvents: { orderBy: [{ effectiveAt: "asc" }, { createdAt: "asc" }, { id: "asc" }] }, quotas: { include: { events: true }, orderBy: { month: "asc" } } }, orderBy: [{ year: "asc" }, { code: "asc" }, { id: "asc" }] });
   const destinations = await tx.governmentEntity.findMany({ where: { id: { in: lines.flatMap((line) => line.destinationEntityId ? [line.destinationEntityId] : []) } }, select: { id: true, name: true } });
   const programs = await planningProgramCatalog(tx, piece);
-  const snapshot = jsonValue({ piece: { ...piece, programs }, lines: lines.map((line) => ({ ...line, destinationEntity: destinations.find((entity) => entity.id === line.destinationEntityId) ?? null })) });
+  const documentLinks = await tx.planningDocumentLink.findMany({ where: { instrumentId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+  const snapshot = jsonValue({ piece: { ...piece, programs, documentLinks }, lines: lines.map((line) => ({ ...line, destinationEntity: destinations.find((entity) => entity.id === line.destinationEntityId) ?? null })) });
   const version = await tx.planningVersion.create({ data: { instrumentId, number: piece.revision, effectiveAt, legalActNumber, reason, snapshot, hash: contentHash(snapshot), createdById: context.user.id } });
   return version.id;
 }
@@ -115,7 +117,10 @@ export async function applyLineDelta(tx: PlanningTx, context: PlanningContext, p
     if (updated.count !== 1) throw new Error("Previsão/fixação canônica da LOA ausente ou ambígua.");
     await tx.annualBudgetLaw.update({ where: { id: piece.annualBudgetLawId }, data: line.kind === "REVENUE" ? { totalRevenue: { increment: input.value } } : { totalExpense: { increment: input.value } } });
   }
-  await tx.planningIntegrationCommand.create({ data: { type: "ACCOUNTING_BUDGET_CHANGE", sourceId: movement.id, idempotencyKey: `accounting:${input.key}`, payload: jsonValue({ instrumentId: piece.id, governmentEntityId: piece.governmentEntityId, lineId: line.id, fiscalYear: line.year, kind: line.kind, value: input.value.toFixed(2), effectiveAt: input.effectiveAt, legalActNumber: input.legalActNumber }) } });
+  if (piece.annualBudgetLawId) {
+    const command = await tx.planningIntegrationCommand.create({ data: { type: "ACCOUNTING_BUDGET_CHANGE", sourceId: movement.id, idempotencyKey: `accounting:${input.key}`, payload: jsonValue({ instrumentId: piece.id, governmentEntityId: piece.governmentEntityId, lineId: line.id, fiscalYear: line.year, kind: line.kind, value: input.value.toFixed(2), effectiveAt: input.effectiveAt, legalActNumber: input.legalActNumber }) } });
+    await deliverPlanningAccountingCommand(tx, context, command.id);
+  }
   return movement.id;
 }
 

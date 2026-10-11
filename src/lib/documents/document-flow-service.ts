@@ -204,7 +204,7 @@ async function createInternalDocumentSignatures(
       id: true,
       documentClass: { select: { signaturePolicy: true } },
       versions: {
-        where: { status: "FINAL", lockedAt: null },
+        where: { status: "FINAL", lockedAt: null, ...(typeof metadata?.planningDocumentVersionId === "string" ? { id: metadata.planningDocumentVersionId } : {}) },
         orderBy: { versionNumber: "desc" },
         take: 1,
         select: { id: true, hashSha256: true, publicValidationCode: true },

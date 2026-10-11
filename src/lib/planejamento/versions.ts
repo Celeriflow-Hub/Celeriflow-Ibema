@@ -6,6 +6,7 @@ import { assertPlanningLegalAuthority, assertPlanningOperation, planningInstrume
 import { planningDateSchema } from "./revisions";
 import { applyLineDelta, assertWholePiece, canonicalPiece, contentHash, finalizeLegalRevision, jsonValue, linePosition, lockLegalInstrument, planningAppropriationCode, planningAudit, snapshotVersion, type PlanningTx } from "./operations-core";
 import { copyPlanningYearConfiguration } from "./year-rollover";
+import { deliverPlanningAccountingCommand } from "./accounting-bridge";
 
 export type PlanningCriticism = { code: string; severity: "ERROR" | "WARNING"; reference: string; message: string };
 export async function inspectPlanningPiece(tx: PlanningTx, context: PlanningContext, instrumentId: string, asOf = new Date()) {
@@ -92,7 +93,8 @@ export async function transitionPlanningPiece(context: PlanningContext, raw: unk
         newAppropriationIds.push(appropriation.id);
       }
       await tx.planningInstrument.update({ where: { id: piece.id }, data: { implantedAt: date, implantedById: context.user.id } });
-      await tx.planningIntegrationCommand.create({ data: { type: "BUDGET_OPENING", sourceId: piece.id, idempotencyKey: `implant:${piece.id}`, payload: jsonValue({ governmentEntityId: piece.governmentEntityId, instrumentId: piece.id, year: year.year, revision: piece.revision + 1, newAppropriationIds, reconciledAppropriationIds, accountingRule: "POST_NEW_ONLY_VERIFY_RECONCILED_OPENING_WITHOUT_DUPLICATION" }) } });
+      const command = await tx.planningIntegrationCommand.create({ data: { type: "BUDGET_OPENING", sourceId: piece.id, idempotencyKey: `implant:${piece.id}`, payload: jsonValue({ governmentEntityId: piece.governmentEntityId, instrumentId: piece.id, year: year.year, revision: piece.revision + 1, newAppropriationIds, reconciledAppropriationIds, accountingRule: "POST_NEW_ONLY_VERIFY_RECONCILED_OPENING_WITHOUT_DUPLICATION" }) } });
+      await deliverPlanningAccountingCommand(tx, context, command.id);
       await finalizeLegalRevision(tx, context, piece, date, canonical.legalActNumber ?? "Implantação orçamentária", "Implantação e cópia de configurações do exercício");
     } else {
       const data = { status, ...(input.stage === "SUBMIT" ? { submittedById: context.user.id, submittedAt: date } : input.stage === "APPROVE" ? { approvedById: context.user.id, approvedAt: date } : input.stage === "SANCTION" ? { sanctionedById: context.user.id, sanctionedAt: date, legalActNumber: input.legalActNumber, legalActDate: date } : { publishedById: context.user.id, publishedAt: date, publicationDate: date, publicationReference: input.publicationReference }) };

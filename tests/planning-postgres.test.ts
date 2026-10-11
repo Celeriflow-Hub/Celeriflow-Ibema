@@ -23,6 +23,8 @@ import { getImplantedPlanningBudget } from "../src/lib/planejamento/budget-avail
 import { reconcilePlanningLegacyAppropriation } from "../src/lib/planejamento/legacy-reconciliation";
 import { transitionPlanningLegalWorkflow as transitionFinancePlanning } from "../src/lib/financeiro/planejamento";
 import { createBudgetMovementInTransaction } from "../src/lib/financeiro";
+import { linkPlanningDocument, readPlanningDocument, requestPlanningDocumentSignatures } from "../src/lib/planejamento/documents";
+import { recordPlanningFinanceExecution } from "../src/lib/planejamento/execution-bridge";
 
 test("PostgreSQL Planejamento F4–F8: versões, emendas, cotas, créditos, implantação, relatórios e isolamento", async () => {
   const pg = new PGlite();
@@ -33,8 +35,9 @@ test("PostgreSQL Planejamento F4–F8: versões, emendas, cotas, créditos, impl
       ProgramPPA: ["origin", "guidelines", "targetAudience", "financing", "managerName"],
       ResourceSource: ["tceCode", "stnGroup", "stnSpecification", "stnDetail", "referenceYear"],
       RevenueNature: ["degree", "shortCode", "referenceYear"],
+      AnnualBudgetLaw: ["metadata"],
     };
-    for (const name of ["GovernmentEntity", "BudgetUnit", "Secretariat", "MultiYearPlan", "BudgetGuideline", "AnnualBudgetLaw", "AnnualBudgetRevenueForecast", "AnnualBudgetExpenseFixation", "BudgetGuidelinePriority", "BudgetGuidelineRisk", "BudgetAppropriation", "CreditRequest", "CreditRequestItem", "BudgetReservation", "BudgetMovement", "ProgramPPA", "ObjectivePPA", "IndicatorPPA", "ActionPPA", "GoalPPA", "FinancialYear", "ResourceSource", "RevenueNature", "ExpenseNature", "FinancialAuditLog", "CamVereador", "Person", "Employee", "CamGabinete"]) {
+    for (const name of ["GovernmentEntity", "BudgetUnit", "Secretariat", "MultiYearPlan", "BudgetGuideline", "AnnualBudgetLaw", "AnnualBudgetRevenueForecast", "AnnualBudgetExpenseFixation", "BudgetGuidelinePriority", "BudgetGuidelineRisk", "BudgetAppropriation", "CreditRequest", "CreditRequestItem", "BudgetReservation", "BudgetMovement", "ProgramPPA", "ObjectivePPA", "IndicatorPPA", "ActionPPA", "GoalPPA", "FinancialYear", "ResourceSource", "RevenueNature", "ExpenseNature", "FinancialAuditLog", "CamVereador", "Person", "Employee", "CamGabinete", "Document", "DocumentVersion", "DocumentClass", "HealthClinicalDocument", "SstCertificateDocument", "HealthLabReport"]) {
       const model = Prisma.dmmf.datamodel.models.find((item) => item.name === name)!;
       const columns = model.fields.filter((item) => item.kind !== "object" && !newColumns[name]?.includes(item.name)).map((item) => {
         const types: Record<string, string> = { Int: "INTEGER", Float: "DOUBLE PRECISION", Decimal: "NUMERIC(18,6)", DateTime: "TIMESTAMP(3)", Boolean: "BOOLEAN", Json: "JSONB" };
@@ -51,6 +54,7 @@ test("PostgreSQL Planejamento F4–F8: versões, emendas, cotas, créditos, impl
     await pg.exec(readFileSync("prisma/migrations-ibema/20261011160000_add_planning_import_batches/migration.sql", "utf8"));
     await pg.exec(readFileSync("prisma/migrations-ibema/20261011170000_planning_immutable_movements/migration.sql", "utf8"));
     await pg.exec(readFileSync("prisma/migrations-ibema/20261011180000_planning_legal_operations/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261011190000_planning_internal_connections/migration.sql", "utf8"));
     await pg.exec(`INSERT INTO "GovernmentEntity" (id,code,name,type,status) VALUES ('prefeitura','PMVA','Prefeitura Municipal de Vila das Araucárias','PREFEITURA','ATIVA'),('camara','CMVA','Câmara Municipal de Vila das Araucárias','CAMARA','ATIVA');
       INSERT INTO "Secretariat" (id,name) VALUES ('saude','Secretaria Municipal de Saúde'),('legislativo','Câmara Municipal');
       INSERT INTO "BudgetUnit" (id,code,name,"secretariatId") VALUES ('ug-exe','03.01','Fundo Municipal de Saúde','saude'),('ug-leg','01.01','Câmara Municipal','legislativo');
@@ -382,6 +386,44 @@ test("PostgreSQL Planejamento F4–F8: versões, emendas, cotas, créditos, impl
     await assert.rejects(db.$transaction((tx) => createBudgetMovementInTransaction(tx, financeActor, { appropriationId: legacy.id, type: "Suplementação", date: new Date("2026-10-01"), value: 1, justification: "Alteração financeira" })), /fluxo orçamentário/);
     const unwrapped = await db.multiYearPlan.create({ data: { code: "LEGACY-UNWRAPPED", name: "Plano municipal anterior", startYear: 2023, endYear: 2026, status: "DRAFT", draftedById: "outro-responsavel" } });
     assert.equal((await transitionFinancePlanning(db, financeActor, { entityType: "PPA", entityId: unwrapped.id, stage: "SUBMITTED" })).status, "SUBMITTED", "jornada financeira legada é preservada para peças ainda não adotadas pelo Planejamento");
+    await db.documentClass.create({ data: { id: "classe-planejamento", code: "PLANEJAMENTO_ATA", label: "Ata de audiência", signaturePolicy: "INTERNAL_ALLOWED" } });
+    await db.document.create({ data: { id: "ata-planejamento", title: "Ata das prioridades municipais", documentType: "PLANEJAMENTO:ATA", fileUrl: "https://arquivos.example.org/ata-v1.pdf", status: "Válido", documentClassId: "classe-planejamento" } });
+    await db.documentVersion.create({ data: { id: "ata-v1", documentId: "ata-planejamento", versionNumber: 1, fileUrl: "https://arquivos.example.org/ata-v1.pdf", hashSha256: "a".repeat(64), status: "FINAL" } });
+    const documentInput = { instrumentId: ppa, hearingId: hearing, documentId: "ata-planejamento", purpose: "HEARING_MINUTES" };
+    const documentLink = await linkPlanningDocument(ctx, documentInput);
+    await db.documentVersion.update({ where: { id: "ata-v1" }, data: { status: "SUPERSEDED" } });
+    await db.documentVersion.create({ data: { id: "ata-v2", documentId: "ata-planejamento", versionNumber: 2, fileUrl: "https://arquivos.example.org/ata-v2.pdf", hashSha256: "b".repeat(64), status: "FINAL" } });
+    assert.equal(await linkPlanningDocument(ctx, documentInput), documentLink, "replay preserva a versão originalmente vinculada");
+    assert.equal((await readPlanningDocument(ctx, documentLink)).version.id, "ata-v1", "nova versão GED não muda o anexo histórico");
+    const signingContext = { ...ctx, user: { ...ctx.user, permissions: JSON.stringify({ modules: { PLANEJAMENTO: { blocked: false, update: true }, DOCUMENTOS: { blocked: false, update: true } } }) } } as PlanningContext;
+    await assert.rejects(requestPlanningDocumentSignatures(signingContext, { linkId: documentLink, signerIds: "ana" }), /versao final disponivel/);
+    assert.equal((await db.documentVersion.findUniqueOrThrow({ where: { id: "ata-v2" } })).status, "FINAL", "solicitação vinculada à versão antiga não assina silenciosamente a versão nova");
+    await assert.rejects(readPlanningDocument(chamberContext, documentLink), /não encontrado/);
+    await assert.rejects(pg.query('UPDATE "PlanningDocumentLink" SET "documentVersionId"=$1 WHERE id=$2', ["ata-v2", documentLink]), /não pode ser alterado/);
+    await assert.rejects(linkPlanningDocument(ctx, { ...documentInput, instrumentId: loa }), /Audiência fora/);
+    await assert.rejects(linkPlanningDocument(ctx, { ...documentInput, hearingId: undefined }), /Selecione a audiência/);
+
+    await generatePlanningSchedule(admin, { instrumentId: fundLoa, lineId: fundExpense, method: "TWELFTHS", periodMonths: 2, reason: "Programação do fundo municipal" });
+    const connectedLaw = await db.annualBudgetLaw.findFirstOrThrow({ where: { planningInstrument: { is: { id: fundLoa } } } });
+    await db.annualBudgetLaw.update({ where: { id: connectedLaw.id }, data: { metadata: { planningInternalExecution: true } } });
+    const nativeExecution = { appropriationId: legacy.id, operation: "CONSUME" as const, date: new Date("2026-05-01"), value: new Prisma.Decimal("1.00"), key: "finance:commit:isolated:initial" };
+    await db.$transaction((tx) => recordPlanningFinanceExecution(tx, financeActor, nativeExecution));
+    const nativeReversal = { ...nativeExecution, operation: "REVERSE" as const, date: new Date("2026-05-10"), value: new Prisma.Decimal("0.40"), key: "finance:reversal:isolated", originPrefix: "finance:commit:isolated:" };
+    await db.$transaction((tx) => recordPlanningFinanceExecution(tx, financeActor, nativeReversal));
+    await db.$transaction((tx) => recordPlanningFinanceExecution(tx, financeActor, nativeReversal));
+    assert.equal((await db.planningQuota.aggregate({ where: { lineId: fundExpense }, _sum: { consumed: true } }))._sum.consumed?.toFixed(2), "0.60", "replay do estorno não consome a origem novamente");
+    await assert.rejects(db.$transaction((tx) => recordPlanningFinanceExecution(tx, financeActor, { ...nativeReversal, value: new Prisma.Decimal("0.41") })), /outros dados/);
+    const paymentQuota = await db.planningQuota.findFirstOrThrow({ where: { lineId: fundExpense, month: 5 } });
+    await db.planningQuota.update({ where: { id: paymentQuota.id }, data: { disbursementPlanned: new Prisma.Decimal("2.00") } });
+    const nativePayment = { ...nativeExecution, operation: "PAY" as const, key: "finance:payment:isolated:confirmed" };
+    await db.$transaction((tx) => recordPlanningFinanceExecution(tx, financeActor, nativePayment));
+    const paymentReversal = { ...nativeReversal, operation: "REVERSE_PAYMENT" as const, value: new Prisma.Decimal("1.00"), key: "finance:paymentReversal:isolated", originPrefix: "finance:payment:isolated:" };
+    await db.$transaction((tx) => recordPlanningFinanceExecution(tx, financeActor, paymentReversal));
+    await db.$transaction((tx) => recordPlanningFinanceExecution(tx, financeActor, paymentReversal));
+    assert.equal((await db.planningQuota.findUniqueOrThrow({ where: { id: paymentQuota.id } })).disbursementPaid.toFixed(2), "0.00");
+    const executionEventsBeforeFailure = await db.planningQuotaEvent.count();
+    await assert.rejects(db.$transaction((tx) => recordPlanningFinanceExecution(tx, financeActor, { ...nativePayment, key: "finance:payment:excess:confirmed", value: new Prisma.Decimal("2.01") })), /excede o cronograma/);
+    assert.equal(await db.planningQuotaEvent.count(), executionEventsBeforeFailure, "falha de desembolso reverte eventos e cotas");
   } finally {
     await db?.$disconnect();
     await server.stop();

@@ -10,8 +10,6 @@ import { auth } from "@/lib/firebase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { APP_VERSION } from "@/lib/version";
-import Link from "next/link";
-import { resolveLoginIdentifier } from "@/lib/portal-servidor/login-id";
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -171,7 +169,6 @@ export default function LoginPage() {
                     </div>
                   </div>
                 </div>
-              </div>
 
                 <Button
                   type="submit"

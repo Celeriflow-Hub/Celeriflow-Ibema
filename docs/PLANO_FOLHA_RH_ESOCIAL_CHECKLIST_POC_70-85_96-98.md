@@ -78,7 +78,7 @@ Este documento é **análise estática e planejamento**. As classificações nã
 | FOL-022 | 74 | Perdas/prorrogações de férias, licença prêmio e tempo de serviço por afastamento/regime. | N | — | Regras e ledger temporal com justificativa, fonte e recálculo compensatório. | F4 |
 | FOL-023 | 74 | Aquisitivos: direitos/perdas/prorrogações/pagos/a pagar/proporcional, fontes e gozos/cálculos. | P | E4 | Saldos reconciliáveis e detalhamento dos eventos que formam cada quantidade. | F4 |
 | FOL-024 | 74 | Programação de férias em dobro, janela em dias e filtros. | N | — | Data-base configurável, vencimentos e prévia individual/coletiva. | F4 |
-| FOL-025 | 74 | Cálculo férias individual/coletivo/programado; múltiplos aquisitivos/gozos/pecúnias e baixas. | N | E3 rótulo | Parcelas e consumos vinculados ao cálculo; transação impede baixa dupla e saldo negativo. | F3/F4 |
+| FOL-025 | 74 | Cálculo férias individual/coletivo/programado; múltiplos aquisitivos/gozos/pecúnias e baixas. | P | `vacation-rights.ts`, `vacation-multiple-periods.ts`, teste PostgreSQL RH | Reserva de gozo/pecúnia e grupo de múltiplos aquisitivos com saldo/fracionamento/replay/cancelamento compensatório integral disponíveis. Faltam cálculo financeiro oficial de férias, fluxos coletivos/programados e vínculo integral entre cálculo e baixas. | F3/F4 |
 | FOL-026 | 74 | Relatório aquisitivos vencidos/a vencer/em dobro/próximo mês/proporcionais/baixados. | P | E4 | Todos os filtros e respectivos gozos/pecúnias, relatório integral. | F4/F9 |
 | FOL-027 | 74 | Avisos e recibos de férias. | N | — | PDF/GED preenchido com período, verba, valor e versão de cálculo. | F4/F7 |
 | FOL-028 | 75 | Conflito férias/afastamento validado nos dois sentidos. | N | E4 | Mesma validação temporal em criação, alteração, importação e origem externa; impedir corrida concorrente. | F4 |
@@ -208,6 +208,8 @@ Este documento é **análise estática e planejamento**. As classificações nã
 | ESO-020 | 98 | Processos trabalhistas conforme leiautes e envio Produção. | N | — | Cadastro/processo/decisão/cálculo, eventos aplicáveis e retorno oficial por versão. | F5/F8 |
 
 ### 4.3 Catálogo inicial de eventos a projetar
+
+**Incremento interno de preparação F8 (11/10/2026):** `src/lib/rh/obligation-history.ts` e `/api/rh/obrigacoes/historico` oferecem exportação JSON integral por ano/escopo/acesso orçamentário, com identidade histórica, rubricas/bases/totais e hashes determinísticos. Teste PostgreSQL confere 501 demonstrativos em três lotes, totais Decimal, memória de identidade, repetição e isolamento dos filtros. Esse formato é evidência de conferência por competência, não layout específico de ESO-001/003/004/005/006, informe fiscal ESO-002 ou transmissão ESO-010/011; esses requisitos mantêm suas pendências.
 
 **Lista de trabalho, a validar por natureza do vínculo, empregador e leiaute vigente; não implica obrigatoriedade universal nem implementação atual.**
 

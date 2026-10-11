@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getTenantContextForModuleOperation, assertBudgetUnitAccess, canViewModule } from "@/lib/platform/tenant-context";
 import { calculatePayrollRun, cancelPayrollRun, closePayrollRun, publishPayrollStatements, recordHrRightEntry, saveEmploymentContract, savePayrollMovement } from "@/lib/rh/workforce-service";
 import { acquireVacationRights, cancelVacationReservation, reserveVacationRight } from "@/lib/rh/vacation-rights";
+import { reserveMultipleVacationPeriods, cancelMultipleVacationPeriods } from "@/lib/rh/vacation-multiple-periods";
 import { importPayrollMovements } from "@/lib/rh/movement-import";
 import { generateBenefitMovement } from "@/lib/rh/benefit-calculation";
 import { decideEmployeeHrRequest } from "@/lib/rh/portal-requests";
@@ -23,11 +24,20 @@ import { decideEmployeeCreditRequest } from "@/lib/rh/credit-requests";
 
 export async function executeWorkforceOperation(command: string, values: Record<string, string>) {
   const allowed = ["contrato", "movimento", "direito", "calcular", "fechar", "cancelar", "publicar", "vincular", "aquisitivos", "reservar-ferias", "importar", "beneficio", "decidir-solicitacao", "reajustar", "cancelar-ferias", "ponto-horas-extras", "decidir-recadastramento", "financeiro", "simular-especial", "consignacao-reservar", "consignacao-lancar", "consignacao-cancelar", "contratos-coletivos", "ponto-banco-horas", "estornar-banco-horas"];
-  if (![...allowed, "ocorrencia", "cancelar-ocorrencia", "decidir-credito", "transferir-banco-horas", "estornar-transferencia-horas", "pagar-banco-horas", "estornar-pagamento-horas"].includes(command)) return { error: "Operação inválida." };
-  const context = await getTenantContextForModuleOperation("RH", ["contrato", "movimento", "direito", "aquisitivos", "reservar-ferias", "importar", "beneficio", "ponto-horas-extras", "ponto-banco-horas", "consignacao-reservar", "ocorrencia", "transferir-banco-horas", "pagar-banco-horas"].includes(command) && !values.id ? "create" : "update");
+  if (![...allowed, "ocorrencia", "cancelar-ocorrencia", "decidir-credito", "transferir-banco-horas", "estornar-transferencia-horas", "pagar-banco-horas", "estornar-pagamento-horas", "ferias-multiplos", "cancelar-ferias-multiplos"].includes(command)) return { error: "Operação inválida." };
+  const context = await getTenantContextForModuleOperation("RH", ["contrato", "movimento", "direito", "aquisitivos", "reservar-ferias", "importar", "beneficio", "ponto-horas-extras", "ponto-banco-horas", "consignacao-reservar", "ocorrencia", "transferir-banco-horas", "pagar-banco-horas", "ferias-multiplos"].includes(command) && !values.id ? "create" : "update");
   try {
     let id = "";
     let message = "Operação registrada.";
+    if (command === "ferias-multiplos") {
+      const result = await reserveMultipleVacationPeriods(context.prisma, context.user.id, { ...values, allocations: JSON.parse(values.allocations || "[]") });
+      id = result.sourceKey;
+      message = `${result.entryIds.length} aquisitivos reservados integralmente no grupo ${result.sourceKey}.`;
+    }
+    if (command === "cancelar-ferias-multiplos") {
+      id = (await cancelMultipleVacationPeriods(context.prisma, context.user.id, values)).entryIds.join(", ");
+      message = "Grupo cancelado; todos os aquisitivos restaurados com histórico compensatório.";
+    }
     if (command === "pagar-banco-horas" || command === "estornar-pagamento-horas") {
       const payrollId = command === "pagar-banco-horas" ? values.payrollId : z.object({ input: z.object({ payrollId: z.string() }) }).parse((await context.prisma.hrIntegrationEvent.findUniqueOrThrow({ where: { sourceKey: values.conversionSourceKey } })).payload).input.payrollId;
       await assertPayrollBudgetScope(context, payrollId);

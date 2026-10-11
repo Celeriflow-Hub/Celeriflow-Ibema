@@ -3,6 +3,7 @@ import { z } from "zod";
 import PDFDocument from "pdfkit";
 import { consignmentMarginSchema } from "./consignment-margin";
 import { dependentAssessmentSchema, familyWageSnapshotSchema } from "./dependent-eligibility";
+import { receiptMessagesSnapshotSchema } from "./receipt-messages";
 
 const snapshotSchema = z.object({
   contract: z.object({ registration: z.string(), workLocation: z.string(), salary: z.string(), employee: z.object({ name: z.string() }) }),
@@ -12,6 +13,7 @@ const snapshotSchema = z.object({
   consignmentMargin: consignmentMarginSchema.nullable().optional().default(null),
   familyWage: familyWageSnapshotSchema.nullable().optional().default(null),
   irrfDependents: dependentAssessmentSchema.nullable().optional().default(null),
+  messages: receiptMessagesSnapshotSchema.optional().default([]),
 });
 
 export async function getPayrollStatement(db: PrismaClient, id: string, employeeId?: string) {
@@ -38,6 +40,7 @@ export async function renderPayrollStatementPdf(statement: Awaited<ReturnType<ty
   pdf.fontSize(9).text(`Bases: ${Object.entries(statement.bases).map(([key, value]) => `${key}: ${value}`).join(" · ")}`);
   pdf.text(`Versão do demonstrativo: ${statement.id}`);
   pdf.text("O demonstrativo não comprova quitação bancária.");
+  for (const message of statement.messages) pdf.moveDown().fontSize(9).text(message.text);
   if (statement.familyWage) {
     const family = statement.familyWage;
     pdf.moveDown().text(`Salário-família por PF: ${family.eligibleCount} dependentes elegíveis · renda apurada R$ ${family.income} · limite R$ ${family.policy.incomeLimit} · total agregado R$ ${family.amount}`);

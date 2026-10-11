@@ -2,6 +2,46 @@
 
 Configure regras JSON em **RH > Parametrizações**, dentro do conjunto do regime. Os exemplos são formatos; substitua IDs, fundamentos e valores por dados reais. Conjunto ativo e vigência não substituem homologação oficial.
 
+## Gozo de vários aquisitivos
+
+Em `/rh/operacoes`, aba Direitos, informe contrato, chave estável, início, fundamento e a distribuição JSON:
+
+```json
+[
+  {"periodStart":"2023-01-01","periodEnd":"2023-12-31","days":15},
+  {"periodStart":"2024-01-01","periodEnd":"2024-12-31","days":15}
+]
+```
+
+Formato demonstrativo: exige saldos já existentes e política de férias vigente do regime temporal. Ordena aquisitivos do mais antigo ao mais recente e cria gozos consecutivos com projeções distintas, respeitando mínimo e número máximo de parcelas de cada aquisitivo. O grupo admite 2–10 períodos não sobrepostos e até 90 dias ao todo. Aquisição/perda/prorrogação e concessão de pecúnia possuem fluxos próprios.
+
+Guarde a origem retornada `FERIAS:MULTIPLOS:<chave>`. Cancelamento é integral por essa origem e fundamento, com devolução compensatória de cada saldo. Gozo iniciado ou período com folha oficial fechada exige conciliação própria. Repetir a mesma operação não duplica reservas/devoluções.
+
+## Mensagens históricas de recibo (regra MENSAGENS_RECIBO)
+
+```json
+{
+  "origin": "MENSAGENS_RECIBO",
+  "messages": [{
+    "id": "AVISO_POC",
+    "text": "Demonstrativo sintético para conferência da POC.",
+    "startsAt": "2026-10-01",
+    "endsAt": "2026-10-31",
+    "contractIds": [],
+    "regimeIds": [],
+    "payrollTypes": ["Mensal"]
+  }]
+}
+```
+
+Cadastre como JSON no conjunto do regime. Listas vazias abrangem todos os contratos/regimes/tipos daquele conjunto; listas preenchidas se combinam por AND. A competência precisa intersectar a vigência da mensagem. IDs são únicos; máximo 100 mensagens, texto de até 2.000 caracteres. Mensagens são texto simples. Seleção é preservada no cálculo mensal ou cenário especial, exibida na conferência e PDF, inclusive no acesso próprio do titular. Política alterada após o cálculo só repercute em cálculos novos.
+
+## Histórico interno para preparação de obrigações
+
+Em `/rh/esocial`, escolha ano e escopo para baixar `RH_OBRIGACOES_HISTORICO_V1`. O arquivo traz todos os demonstrativos oficiais fechados no filtro e na UG acessível, com identidade histórica, rubricas/bases/totais e hashes SHA-256. `contentSha256` cobre o conteúdo sem o próprio campo, usando JSON com chaves ordenadas e arrays na ordem exportada; `recordSha256` segue a mesma convenção. Não há timestamp de download no conteúdo, permitindo comparar exportações repetidas. `snapshotSha256` identifica a memória integral de origem, não somente os campos expostos.
+
+Referência anual é pela competência calculada. Pagamentos, classificações fiscais, retificações e seleção da versão válida para cada obrigação requerem processamento próprio. O formato interno não é XML eSocial, DIRF, RAIS, GFIP nem comprovante anual de rendimentos.
+
 ## Horas extras reconhecidas (categoria CALCULO)
 
 ```json

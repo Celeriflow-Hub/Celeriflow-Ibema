@@ -95,7 +95,8 @@ export async function cancelVacationReservation(db: PrismaClient, actorId: strin
   const input = z.object({ entryId: z.string().min(1), reason: z.string().trim().min(3).max(2000) }).strict().parse(raw);
   return db.$transaction(async tx => {
     const original = await tx.hrRightEntry.findUniqueOrThrow({ where: { id: input.entryId } });
-    const details = original.details as { kind?: string; vacationId?: string };
+    const details = original.details as { kind?: string; vacationId?: string; groupSourceKey?: string };
+    if (details.groupSourceKey) throw new Error("Reserva de múltiplos aquisitivos exige cancelamento integral pelo fluxo do grupo.");
     if (original.kind !== "FERIAS" || !original.quantity.lt(0) || details.kind !== "GOZO" || !details.vacationId) throw new Error("Selecione uma reserva de gozo de férias com programação vinculada.");
     const contract = await tx.hrEmploymentContract.findUniqueOrThrow({ where: { id: original.contractId } });
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:employee:${contract.employeeId}`}))`;

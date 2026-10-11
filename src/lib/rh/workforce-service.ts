@@ -8,6 +8,7 @@ import { assertConsignmentSchedulePosted } from "./consignment-service";
 import { assessPayrollDependents, dependentAssessmentSchema, familyWagePolicySchema, familyWageSnapshotSchema } from "./dependent-eligibility";
 import { contractCustomFieldsPolicySchema, contractCustomFieldsPolicyHash, validateContractCustomFields } from "./contract-custom-fields";
 import { assertPositionPlanForContract, positionPlanSchema } from "./position-plan";
+import { selectReceiptMessages } from "./receipt-messages";
 
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
@@ -403,9 +404,10 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
       }
     }
     const sum = (key: "gross" | "deductions" | "net" | "employer") => calculated.reduce((total, row) => total.add(row.result[key]), D(0));
+    const messagesRule = ruleSet.rules.find(rule => rule.code === "MENSAGENS_RECIBO");
     if (canonicalItems.some(item => !contracts.some(c => c.employeeId === item.employeeId))) throw new Error("Inclua todos os servidores com origens lançadas nesta folha.");
     if (new Set(contracts.map(c => c.employeeId)).size !== contracts.length && canonicalItems.length) throw new Error("Origens por servidor exigem alocação explícita entre vínculos antes deste cálculo.");
-    return tx.hrPayrollRun.create({ data: { payrollId: input.payrollId, requestKey: input.requestKey, mode: input.mode, scope: input.scope, ruleSetId: ruleSet.id, actorId, snapshot: json({ payroll, ruleSet, contractIds: ids, canonicalItems, contractVersions: contracts.map(c => ({ id: c.id, version: c.version })) }), gross: sum("gross"), deductions: sum("deductions"), net: sum("net"), employer: sum("employer"), statements: { create: calculated.map(row => ({ contractId: row.contract.id, gross: row.result.gross, deductions: row.result.deductions, net: row.result.net, employer: row.result.employer, snapshot: json({ contract: row.contract, regime: row.regime, days: row.days, items: row.result.items, bases: row.result.bases, consignmentMargin: margins.get(row.contract.employee.personId!) ?? null, familyWage: familyMemory.get(row.contract.employee.personId!) ?? null, irrfDependents: irrfDependentMemory.get(row.contract.employee.personId!) ?? null }) })) } }, include: { statements: true } });
+    return tx.hrPayrollRun.create({ data: { payrollId: input.payrollId, requestKey: input.requestKey, mode: input.mode, scope: input.scope, ruleSetId: ruleSet.id, actorId, snapshot: json({ payroll, ruleSet, contractIds: ids, canonicalItems, contractVersions: contracts.map(c => ({ id: c.id, version: c.version })) }), gross: sum("gross"), deductions: sum("deductions"), net: sum("net"), employer: sum("employer"), statements: { create: calculated.map(row => ({ contractId: row.contract.id, gross: row.result.gross, deductions: row.result.deductions, net: row.result.net, employer: row.result.employer, snapshot: json({ contract: row.contract, regime: row.regime, days: row.days, items: row.result.items, bases: row.result.bases, messages: messagesRule ? selectReceiptMessages(messagesRule.value, messagesRule.id, { contractId: row.contract.id, regimeId: row.regime.id, payrollType: payroll.type, period }) : [], consignmentMargin: margins.get(row.contract.employee.personId!) ?? null, familyWage: familyMemory.get(row.contract.employee.personId!) ?? null, irrfDependents: irrfDependentMemory.get(row.contract.employee.personId!) ?? null }) })) } }, include: { statements: true } });
   }, { timeout: 60000 });
 }
 

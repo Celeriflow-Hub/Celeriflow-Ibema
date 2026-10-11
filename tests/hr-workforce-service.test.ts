@@ -8,6 +8,8 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { adjustContractSalaries, changeContractsCollectively, calculatePayrollRun, cancelPayrollRun, closePayrollRun, publishPayrollStatements, recordHrRightEntry, saveEmploymentContract, savePayrollMovement } from "../src/lib/rh/workforce-service";
 import { getPayrollStatement, renderPayrollStatementPdf } from "../src/lib/rh/statement-service";
 import { acquireVacationRights, cancelVacationReservation, reserveVacationRight } from "../src/lib/rh/vacation-rights";
+import { reserveMultipleVacationPeriods, cancelMultipleVacationPeriods } from "../src/lib/rh/vacation-multiple-periods";
+import { buildObligationHistory } from "../src/lib/rh/obligation-history";
 import { assertRhAbsenceDoesNotOverlap } from "../src/lib/rh/absence-conflicts";
 import { resolveEmployeePerson } from "../src/lib/rh/employee-person";
 import { buildHrReport, renderHrReport } from "../src/lib/rh/report-service";
@@ -91,7 +93,18 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
     await assert.rejects(decideEmployeeHrRequest(db, "rh-actor", { ...decision, status: "DEFERIDA" }), /já decidida/);
     await assert.rejects(saveEmploymentContract(db, "actor", { ...input, id: contract.id, version: 99 }), /outro operador/);
     const selection = { payrollId: "payroll", requestKey: "simulation", mode: "SIMULACAO", scope: "DEMONSTRACAO", contractIds: [contract.id, second.id] };
+    const receiptMessagePolicy = { origin: "MENSAGENS_RECIBO", messages: [
+      { id: "GERAL", text: "Mensagem sintética geral de outubro", startsAt: "2026-10-01", endsAt: "2026-10-31", contractIds: [], regimeIds: [], payrollTypes: ["Mensal"] },
+      { id: "INDIVIDUAL", text: "Mensagem apenas do primeiro vínculo", startsAt: "2026-10-01", endsAt: "2026-10-31", contractIds: [contract.id], regimeIds: ["regime"], payrollTypes: ["Mensal"] },
+      { id: "FUTURA", text: "Mensagem futura não deve aparecer", startsAt: "2027-01-01", endsAt: null, contractIds: [], regimeIds: [], payrollTypes: [] },
+    ] };
+    await db.hrPayrollRule.create({ data: { id: "receipt-messages", ruleSetId: "set", code: "MENSAGENS_RECIBO", name: "Mensagens sintéticas", category: "GERAL", valueType: "JSON", value: receiptMessagePolicy, isActive: true } });
     const simulated = await calculatePayrollRun(db, "actor", selection);
+    assert.equal((await getPayrollStatement(db, simulated.statements.find(row => row.contractId === contract.id)!.id)).messages.length, 2);
+    assert.equal((await getPayrollStatement(db, simulated.statements.find(row => row.contractId === second.id)!.id)).messages.length, 1);
+    receiptMessagePolicy.messages[0].text = "Mensagem modificada após o cálculo";
+    await db.hrPayrollRule.update({ where: { id: "receipt-messages" }, data: { value: receiptMessagePolicy } });
+    assert.equal((await getPayrollStatement(db, simulated.statements.find(row => row.contractId === contract.id)!.id)).messages[0].text, "Mensagem sintética geral de outubro", "editar a política não modifica recibo anterior");
     assert.equal(simulated.gross.toFixed(2), "3000.00");
     assert.equal(simulated.deductions.toFixed(2), "200.00", "teto é único para os dois contratos");
     assert.equal((await db.payroll.findUniqueOrThrow({ where: { id: "payroll" } })).status, "Aberta");
@@ -151,6 +164,36 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
     assert.equal((await cancelVacationReservation(db, "another-actor", { entryId: futureReservation.id, reason: "Cancelamento demonstrativo antes do gozo" })).id, compensation.id);
     await assert.rejects(cancelVacationReservation(db, "actor", { entryId: futureReservation.id, reason: "Outro motivo" }), /outro motivo/);
     await reserveVacationRight(db, "actor", { ...reservation, sourceKey: "replacement-vacation", start: futureStart });
+    await recordHrRightEntry(db, "actor", { contractId: historical.id, sourceKey: "multi-right-2024", kind: "FERIAS", periodStart: "2024-01-01", periodEnd: "2024-12-31", quantity: "30", amount: "0.00", details: { reason: "Averbação sintética de direito anterior" } });
+    const groupInput = { sourceKey: "vacation-group", contractId: historical.id, start: `${new Date().getUTCFullYear() + 1}-08-01`, reason: "Gozo sintético autorizado em múltiplos aquisitivos", allocations: [{ periodStart: "2024-01-01", periodEnd: "2024-12-31", days: 15 }, { periodStart: "2025-01-01", periodEnd: "2025-12-31", days: 15 }] };
+    await assert.rejects(reserveMultipleVacationPeriods(db, "actor", groupInput), /excedem saldo/, "segundo aquisitivo já totalmente reservado bloqueia o lote");
+    assert.equal(await db.hrIntegrationEvent.count({ where: { sourceKey: "FERIAS:MULTIPLOS:vacation-group" } }), 0);
+    await recordHrRightEntry(db, "actor", { contractId: historical.id, sourceKey: "multi-right-2023", kind: "FERIAS", periodStart: "2023-01-01", periodEnd: "2023-12-31", quantity: "30", amount: "0.00", details: { reason: "Averbação sintética de saldo anterior" } });
+    groupInput.allocations[1] = { periodStart: "2023-01-01", periodEnd: "2023-12-31", days: 15 };
+    const vacationCountBeforeGroup = await db.vacation.count();
+    const rightCountBeforeGroup = await db.hrRightEntry.count();
+    await pg.exec(`CREATE FUNCTION test_multiple_vacation_gate() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW."eventType" IN ('FERIAS_MULTIPLOS_RESERVADAS','FERIAS_MULTIPLOS_CANCELADAS') THEN RAISE EXCEPTION 'TEST_MULTIPLE_VACATION_GATE'; END IF; RETURN NEW; END $$; CREATE TRIGGER test_multiple_vacation_gate BEFORE INSERT ON "HrIntegrationEvent" FOR EACH ROW EXECUTE FUNCTION test_multiple_vacation_gate()`);
+    await assert.rejects(reserveMultipleVacationPeriods(db, "actor", groupInput), /TEST_MULTIPLE_VACATION_GATE/);
+    assert.equal(await db.vacation.count(), vacationCountBeforeGroup, "falha na auditoria reverte todas as programações");
+    assert.equal(await db.hrRightEntry.count(), rightCountBeforeGroup, "falha na auditoria reverte todas as reservas");
+    await pg.exec('DROP TRIGGER test_multiple_vacation_gate ON "HrIntegrationEvent"');
+    const multiReservation = await reserveMultipleVacationPeriods(db, "actor", groupInput);
+    assert.equal(multiReservation.entryIds.length, 2);
+    assert.deepEqual(await reserveMultipleVacationPeriods(db, "other-actor", { ...groupInput, allocations: [...groupInput.allocations].reverse() }), multiReservation, "ordem informada não muda origem do grupo");
+    await assert.rejects(cancelVacationReservation(db, "actor", { entryId: multiReservation.entryIds[0], reason: "Tentativa de cancelar apenas uma parcela" }), /cancelamento integral/);
+    const multiVacations = await db.vacation.findMany({ where: { id: { in: multiReservation.vacationIds } }, orderBy: { enjoymentStart: "asc" } });
+    assert.equal(multiVacations[1].enjoymentStart!.getTime() - multiVacations[0].enjoymentEnd!.getTime(), 86400000, "gozos consecutivos sem inventar aquisitivo único");
+    const multiCancelInput = { groupSourceKey: multiReservation.sourceKey, reason: "Cancelamento sintético integral dos dois aquisitivos" };
+    await pg.exec('CREATE TRIGGER test_multiple_vacation_gate BEFORE INSERT ON "HrIntegrationEvent" FOR EACH ROW EXECUTE FUNCTION test_multiple_vacation_gate()');
+    await assert.rejects(cancelMultipleVacationPeriods(db, "actor", multiCancelInput), /TEST_MULTIPLE_VACATION_GATE/);
+    assert.equal(await db.vacation.count({ where: { id: { in: multiReservation.vacationIds }, status: "Programada" } }), 2, "falha no cancelamento preserva o grupo inteiro");
+    assert.equal(await db.hrRightEntry.count(), rightCountBeforeGroup + 2, "falha no cancelamento não devolve saldo parcialmente");
+    await pg.exec('DROP TRIGGER test_multiple_vacation_gate ON "HrIntegrationEvent"');
+    const canceledGroup = await cancelMultipleVacationPeriods(db, "actor", multiCancelInput);
+    assert.equal(canceledGroup.entryIds.length, 2);
+    assert.deepEqual(await cancelMultipleVacationPeriods(db, "other-actor", multiCancelInput), canceledGroup);
+    assert.equal(await db.vacation.count({ where: { id: { in: multiReservation.vacationIds }, status: "Cancelada" } }), 2);
+    await assert.rejects(cancelMultipleVacationPeriods(db, "actor", { ...multiCancelInput, reason: "Outro fundamento de cancelamento integral" }), /outro fundamento/);
     await pg.exec(`
       INSERT INTO "HrPayrollRubricIncidence" (id,"rubricId","incidenceType","isIncluded") VALUES ('inc-irrf','rubric','IRRF',true),('inc-fgts','rubric','FGTS',true);
       INSERT INTO "HrPayrollRule" (id,"ruleSetId",code,name,category,"valueType",value,"isActive") VALUES
@@ -622,6 +665,16 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
     assert.equal(spreadsheet.worksheets[0].getCell("A502").value, "EXPORT-500");
     const reportPdf = await renderHrReport(report, "PDF");
     const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const statementPdfTask = getDocument({ data: new Uint8Array(pdf), useSystemFonts: true });
+    const statementPdfDocument = await statementPdfTask.promise;
+    const statementText = [];
+    for (let page = 1; page <= statementPdfDocument.numPages; page++) {
+      const content = await (await statementPdfDocument.getPage(page)).getTextContent();
+      statementText.push(content.items.map(item => "str" in item ? item.str : "").join(" "));
+    }
+    assert.match(statementText.join(" "), /Mensagem modificada após o cálculo/, "PDF liberado ao titular contém as mensagens de sua versão");
+    assert.doesNotMatch(statementText.join(" "), /Mensagem futura não deve aparecer/);
+    await statementPdfTask.destroy();
     const task = getDocument({ data: new Uint8Array(reportPdf.bytes), useSystemFonts: true });
     const pdfDocument = await task.promise;
     assert.ok(pdfDocument.numPages > 1);
@@ -632,5 +685,20 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
     }
     assert.equal(lastFound, true, "último registro existe no PDF multipágina");
     await task.destroy();
+    const exportContracts = await db.hrEmploymentContract.findMany({ where: { registration: { startsWith: "EXPORT-" } }, orderBy: { registration: "asc" } });
+    const historicalSnapshot = (await db.hrPayrollStatement.findUniqueOrThrow({ where: { id: statement.id } })).snapshot;
+    await db.payroll.create({ data: { id: "history-payroll", competence: "12/2026", type: "Mensal", status: "Fechada", totalValue: 5015.01 } });
+    await db.hrPayrollRun.create({ data: { id: "history-run", payrollId: "history-payroll", requestKey: "history-run", mode: "OFICIAL", scope: "DEMONSTRACAO", status: "FECHADA", ruleSetId: "set", actorId: "actor", snapshot: {}, gross: "5015.01", deductions: 0, net: "5015.01", employer: 0, approvedAt: new Date("2026-12-31") } });
+    await db.hrPayrollStatement.createMany({ data: exportContracts.map((contract, index) => ({ id: `history-statement-${String(index).padStart(3, "0")}`, runId: "history-run", contractId: contract.id, gross: "10.01", deductions: 0, net: "10.01", employer: 0, snapshot: { ...(historicalSnapshot as object), contract: { registration: contract.registration, workLocation: "Local histórico", costCenterId: null, employee: { name: "Nome histórico", personId: "person", person: { cpf: "12345678909" } } } } })) });
+    const history = await buildObligationHistory(db, { year: 2026, scope: "DEMONSTRACAO" }, { id: "history-payroll" });
+    assert.equal(history.count, 501, "exportação atravessa três lotes sem truncar o filtro");
+    assert.equal(history.totals.net, "5015.01");
+    assert.equal(history.records.at(-1)?.identity.registration, "EXPORT-500");
+    assert.equal(history.records[0].identity.name, "Nome histórico", "identidade provém da memória, não do cadastro atual");
+    assert.match(history.records[0].snapshotSha256, /^[a-f0-9]{64}$/);
+    assert.equal((await buildObligationHistory(db, { year: 2026, scope: "DEMONSTRACAO" }, { id: "history-payroll" })).contentSha256, history.contentSha256, "conteúdo idêntico mantém hash determinístico");
+    assert.equal((await buildObligationHistory(db, { year: 2026, scope: "PRODUCAO" }, { id: "history-payroll" })).count, 0, "escopos não se misturam");
+    assert.equal((await buildObligationHistory(db, { year: 2025, scope: "DEMONSTRACAO" }, { id: "history-payroll" })).count, 0);
+    assert.equal((await buildObligationHistory(db, { year: 2026, scope: "DEMONSTRACAO" }, { id: "inaccessible-payroll" })).count, 0, "exportação respeita restrição orçamentária");
   } finally { await db?.$disconnect(); await server.stop(); await pg.close(); }
 });

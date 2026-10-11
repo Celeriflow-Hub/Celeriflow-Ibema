@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { calculateContractRubrics, HR_PAYROLL_TYPES, payrollPeriod } from "./calculation-engine";
 import { resolveContractRevision } from "./contract-timeline";
+import { selectReceiptMessages } from "./receipt-messages";
 
 const parameterSchema = z.object({ value: z.string().regex(/^-?\d{1,16}(?:\.\d{1,6})?$/), sourceReference: z.string().trim().min(3).max(1000) }).strict();
 const policySchema = z.object({ origin: z.literal("SIMULACAO_FOLHA_ESPECIAL"), payrollType: z.enum(HR_PAYROLL_TYPES), rubricCodes: z.array(z.string().min(1)).min(1), inputNames: z.array(z.string().regex(/^[A-Z_][A-Z_0-9]*$/)), legalReference: z.string().min(3), premises: z.string().min(10) }).strict();
@@ -42,6 +43,7 @@ export async function simulateSpecialPayroll(db: PrismaClient, actorId: string, 
       rows.push({ contract, regime, result });
     }
     const sum = (key: "gross" | "deductions" | "net" | "employer") => rows.reduce((total, row) => total.add(row.result[key]), new Prisma.Decimal(0));
-    return tx.hrPayrollRun.create({ data: { payrollId: payroll.id, requestKey: input.requestKey, mode: "SIMULACAO", scope: input.scope, ruleSetId: rule.ruleSetId, actorId, gross: sum("gross"), deductions: sum("deductions"), net: sum("net"), employer: sum("employer"), snapshot: json({ fingerprint, payroll, policy, rule, contractIds: ids, parameters: input.parameters, officialReady: false, taxCalculation: "SOMENTE_RUBRICAS_EXPLICITAS_NA_POLITICA", rightsConsumed: false }), statements: { create: rows.map(row => ({ contractId: row.contract.id, gross: row.result.gross, deductions: row.result.deductions, net: row.result.net, employer: row.result.employer, snapshot: json({ contract: row.contract, regime: row.regime, days: input.referenceDays, items: row.result.items, bases: row.result.bases, policy, parameters: input.parameters, officialReady: false }) })) } }, include: { statements: true } });
+    const messagesRule = await tx.hrPayrollRule.findFirst({ where: { ruleSetId: rule.ruleSetId, code: "MENSAGENS_RECIBO", isActive: true } });
+    return tx.hrPayrollRun.create({ data: { payrollId: payroll.id, requestKey: input.requestKey, mode: "SIMULACAO", scope: input.scope, ruleSetId: rule.ruleSetId, actorId, gross: sum("gross"), deductions: sum("deductions"), net: sum("net"), employer: sum("employer"), snapshot: json({ fingerprint, payroll, policy, rule, contractIds: ids, parameters: input.parameters, officialReady: false, taxCalculation: "SOMENTE_RUBRICAS_EXPLICITAS_NA_POLITICA", rightsConsumed: false }), statements: { create: rows.map(row => ({ contractId: row.contract.id, gross: row.result.gross, deductions: row.result.deductions, net: row.result.net, employer: row.result.employer, snapshot: json({ contract: row.contract, regime: row.regime, days: input.referenceDays, items: row.result.items, bases: row.result.bases, messages: messagesRule ? selectReceiptMessages(messagesRule.value, messagesRule.id, { contractId: row.contract.id, regimeId: row.regime.id, payrollType: payroll.type, period }) : [], policy, parameters: input.parameters, officialReady: false }) })) } }, include: { statements: true } });
   }, { timeout: 60000 });
 }

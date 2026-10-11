@@ -1,6 +1,7 @@
 "use server";
 import { contractCustomFieldsPolicySchema } from "@/lib/rh/contract-custom-fields";
 import { positionPlanSchema } from "@/lib/rh/position-plan";
+import { receiptMessagesPolicySchema } from "@/lib/rh/receipt-messages";
 import { timeBankTransferPolicySchema } from "@/lib/rh/time-bank-transfer";
 import { timeBankPaymentPolicySchema } from "@/lib/rh/time-bank-payment";
 
@@ -260,6 +261,14 @@ export async function saveHrPayrollRule(
       if (input.code === "CAMPOS_CONTRATO") {
         if (input.valueType !== "JSON") throw new Error("Campos configuráveis exigem regra JSON.");
         contractCustomFieldsPolicySchema.parse(value);
+      }
+      if (input.code === "MENSAGENS_RECIBO") {
+        if (input.valueType !== "JSON") throw new Error("Mensagens de recibo exigem política JSON.");
+        const policy = receiptMessagesPolicySchema.parse(value);
+        const contractIds = [...new Set(policy.messages.flatMap(message => message.contractIds))];
+        const regimeIds = [...new Set(policy.messages.flatMap(message => message.regimeIds))];
+        if (contractIds.length && await tx.hrEmploymentContract.count({ where: { id: { in: contractIds } } }) !== contractIds.length) throw new Error("Mensagem referencia contrato inexistente.");
+        if (regimeIds.length && await tx.hrEmploymentRegime.count({ where: { id: { in: regimeIds } } }) !== regimeIds.length) throw new Error("Mensagem referencia regime inexistente.");
       }
       if (input.code === "BANCO_HORAS_PAGAMENTO") {
         if (input.valueType !== "JSON") throw new Error("Conversão de horas exige regra JSON.");

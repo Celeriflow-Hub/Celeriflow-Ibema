@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { allocatePayrollAmount, calculateContractRubrics, calculateContribution, payrollPeriod } from "./calculation-engine";
+import { resolveContractRevision } from "./contract-timeline";
 
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
@@ -25,6 +26,7 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).transform((value, ctx) => {
 const optionalDate = z.union([date, z.literal("")]).transform(value => value === "" ? null : value);
 export const hrContractInputSchema = z.object({
   id: z.string().optional(), version: z.coerce.number().int().positive().optional(),
+  effectiveFrom: z.union([date, z.literal("")]).optional().transform(value => value || undefined),
   employeeId: z.string().min(1), registration: z.string().trim().min(1).max(64),
   regimeId: z.string().min(1), roleId: z.string().min(1), departmentId: z.string().optional(),
   costCenterId: z.string().optional(), workLocation: z.string().trim().min(1).max(200), salaryLevel: z.string().optional(),
@@ -39,8 +41,11 @@ async function lock(tx: Tx, key: string) {
 
 export async function saveEmploymentContract(db: PrismaClient, actorId: string, raw: unknown) {
   const input = hrContractInputSchema.parse(raw);
+  return db.$transaction(tx => saveEmploymentContractInTransaction(tx, actorId, input));
+}
+
+async function saveEmploymentContractInTransaction(tx: Tx, actorId: string, input: z.infer<typeof hrContractInputSchema>) {
   if (input.endsAt && input.endsAt < input.admittedAt) throw new Error("Término anterior à admissão.");
-  return db.$transaction(async tx => {
     await lock(tx, `employee:${input.employeeId}`);
     if (input.id) await lock(tx, `contract:${input.id}`);
     const employee = await tx.employee.findUniqueOrThrow({ where: { id: input.employeeId }, include: { person: true } });
@@ -57,15 +62,58 @@ export async function saveEmploymentContract(db: PrismaClient, actorId: string, 
     }
     const previous = input.id ? await tx.hrEmploymentContract.findUniqueOrThrow({ where: { id: input.id } }) : null;
     if (previous && (previous.employeeId !== input.employeeId || previous.version !== input.version)) throw new Error("Contrato alterado por outro operador ou titular incompatível. Recarregue a ficha.");
-    if (previous && await tx.hrPayrollStatement.count({ where: { contractId: previous.id, run: { status: "FECHADA" } } })) throw new Error("Contrato com cálculo fechado exige alteração temporal; a ficha original foi preservada.");
-    const { id, version: _version, reason, ...fields } = input;
+    const effectiveFrom = input.effectiveFrom ?? input.admittedAt;
+    if (effectiveFrom < input.admittedAt) throw new Error("Vigência anterior à admissão.");
+    if (previous) {
+      if (!input.effectiveFrom) throw new Error("Informe a vigência da alteração contratual.");
+      if (previous.admittedAt.getTime() !== input.admittedAt.getTime()) throw new Error("Admissão original é preservada; correção exige saneamento próprio.");
+      const latest = await tx.hrEmploymentRevision.findFirst({ where: { contractId: previous.id }, orderBy: [{ effectiveFrom: "desc" }, { version: "desc" }] });
+      if (latest && effectiveFrom < latest.effectiveFrom) throw new Error("Alteração anterior à última vigência. Registre correção temporal sem sobrepor o histórico.");
+      const closed = await tx.hrPayrollStatement.findMany({ where: { contractId: previous.id, run: { status: "FECHADA" } }, select: { run: { select: { payroll: { select: { competence: true } } } } } });
+      if (closed.some(statement => effectiveFrom <= payrollPeriod(statement.run.payroll.competence).end)) throw new Error("Vigência alcança competência fechada. A alteração deve começar após o último fechamento.");
+    }
+    const { id, version: _version, effectiveFrom: _effectiveFrom, reason, ...fields } = input;
     void _version;
+    void _effectiveFrom;
     const data = { ...fields, salary: D(input.salary), details: json(input.details), departmentId: input.departmentId || null, costCenterId: input.costCenterId || null, salaryLevel: input.salaryLevel || null };
     const contract = id ? await tx.hrEmploymentContract.update({ where: { id }, data: { ...data, version: { increment: 1 } } }) : await tx.hrEmploymentContract.create({ data });
-    await tx.hrEmploymentRevision.create({ data: { contractId: contract.id, version: contract.version, snapshot: json(contract), actorId, reason } });
+    await tx.hrEmploymentRevision.create({ data: { contractId: contract.id, version: contract.version, effectiveFrom, snapshot: json(contract), actorId, reason } });
     if (!previous && !await tx.hrPortalRequest.findUnique({ where: { requestKey: `INVITE:${employee.id}` } })) await tx.hrPortalRequest.create({ data: { employeeId: employee.id, requestKey: `INVITE:${employee.id}`, kind: "ACESSO_PORTAL", payload: json({ personId: employee.personId, contractId: contract.id, email: employee.person.email }), actorId } });
     return contract;
-  });
+}
+
+export async function adjustContractSalaries(db: PrismaClient, actorId: string, raw: unknown) {
+  const input = z.object({ batchKey: z.string().min(1).max(160), contractIds: z.array(z.string().min(1)).min(1), effectiveFrom: date, rate: z.string().regex(/^-?\d+(?:\.\d{1,6})?$/), reason: z.string().trim().min(3).max(2000), mode: z.enum(["PREVIA", "APLICAR"]), previewHash: z.string().default("") }).strict().parse(raw);
+  const rate = D(input.rate);
+  if (rate.lt(-100)) throw new Error("Reajuste não pode reduzir o salário abaixo de zero.");
+  const ids = [...new Set(input.contractIds)].sort();
+  const request = { batchKey: input.batchKey, contractIds: ids, effectiveFrom: input.effectiveFrom, rate: rate.toString(), reason: input.reason };
+  const requestHash = createHash("sha256").update(stableJson(request)).digest("hex");
+  return db.$transaction(async tx => {
+    await lock(tx, `adjustment:${input.batchKey}`);
+    const existing = await tx.hrIntegrationEvent.findUnique({ where: { sourceKey: `REAJUSTE:${input.batchKey}` } });
+    if (existing) {
+      const payload = existing.payload as { requestHash: string; previewHash: string; rows: Prisma.JsonValue[] };
+      if (payload.requestHash !== requestHash) throw new Error("Lote de reajuste reutilizado com parâmetros diferentes.");
+      return { rows: payload.rows, previewHash: payload.previewHash, applied: true, reused: true };
+    }
+    const contracts = await tx.hrEmploymentContract.findMany({ where: { id: { in: ids } }, orderBy: { id: "asc" } });
+    if (contracts.length !== ids.length) throw new Error("Seleção de contratos inválida.");
+    for (const employeeId of [...new Set(contracts.map(contract => contract.employeeId))].sort()) await lock(tx, `employee:${employeeId}`);
+    for (const id of ids) await lock(tx, `contract:${id}`);
+    const current = await tx.hrEmploymentContract.findMany({ where: { id: { in: ids } }, orderBy: { id: "asc" } });
+    const rows = current.map(contract => ({ id: contract.id, registration: contract.registration, version: contract.version, before: contract.salary.toFixed(2), after: contract.salary.mul(D(1).add(rate.div(100))).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP).toFixed(2) }));
+    const previewHash = createHash("sha256").update(stableJson({ request, rows })).digest("hex");
+    if (input.mode === "PREVIA") return { rows: json(rows), previewHash, applied: false, reused: false };
+    if (input.previewHash !== previewHash) throw new Error("Confira uma prévia atualizada. Dados ou parâmetros mudaram desde a prévia.");
+    for (const contract of current) {
+      const row = rows.find(row => row.id === contract.id)!;
+      const day = (value: Date | null) => value?.toISOString().slice(0, 10) || "";
+      await saveEmploymentContractInTransaction(tx, actorId, hrContractInputSchema.parse({ id: contract.id, version: contract.version, employeeId: contract.employeeId, registration: contract.registration, regimeId: contract.regimeId, roleId: contract.roleId, departmentId: contract.departmentId || undefined, costCenterId: contract.costCenterId || undefined, workLocation: contract.workLocation, salaryLevel: contract.salaryLevel || undefined, admittedAt: day(contract.admittedAt), appointedAt: day(contract.appointedAt), swornAt: day(contract.swornAt), endsAt: day(contract.endsAt), monthlyHours: contract.monthlyHours, salary: row.after, details: contract.details, reason: input.reason, effectiveFrom: day(input.effectiveFrom) }));
+    }
+    await enqueueHrIntegration(tx, { sourceKey: `REAJUSTE:${input.batchKey}`, domain: "AUDITORIA", environment: "INTERNO", eventType: "REAJUSTE_CONTRATUAL", payload: { request, requestHash, previewHash, rows, actorId } });
+    return { rows: json(rows), previewHash, applied: true, reused: false };
+  }, { timeout: 60000 });
 }
 
 export async function savePayrollMovement(db: PrismaClient, actorId: string, raw: unknown) {
@@ -117,7 +165,12 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
     const canonicalItems = await tx.payrollItem.findMany({ where: { payrollId: payroll.id }, include: { event: true, sstBenefitOrigin: true, sstLeaveOrigin: { select: { id: true, rubricId: true, functionalPeriodId: true } } }, orderBy: { id: "asc" } });
     const ids = [...new Set(input.contractIds)].sort();
     for (const id of ids) await lock(tx, `contract:${id}`);
-    const contracts = await tx.hrEmploymentContract.findMany({ where: { id: { in: ids }, status: "ATIVO", admittedAt: { lte: period.end }, OR: [{ endsAt: null }, { endsAt: { gte: period.start } }] }, include: { employee: { include: { person: true } }, movements: { where: { startsAt: { lte: period.end }, OR: [{ endsAt: null }, { endsAt: { gte: period.start } }] } } }, orderBy: { id: "asc" } });
+    const storedContracts = await tx.hrEmploymentContract.findMany({ where: { id: { in: ids } }, include: { employee: { include: { person: true } }, revisions: true, movements: { where: { startsAt: { lte: period.end }, OR: [{ endsAt: null }, { endsAt: { gte: period.start } }] } } }, orderBy: { id: "asc" } });
+    const contracts = storedContracts.map(contract => {
+      const { revisions, ...record } = contract;
+      const resolved = resolveContractRevision(record, revisions, period);
+      return { ...resolved.contract, revisionId: resolved.revisionId };
+    }).filter(contract => contract.status === "ATIVO" && contract.admittedAt <= period.end && (!contract.endsAt || contract.endsAt >= period.start));
     if (contracts.length !== ids.length) throw new Error("Seleção contém vínculo inválido ou fora da competência.");
     const regimes = await tx.hrEmploymentRegime.findMany({ where: { id: { in: contracts.map(c => c.regimeId) }, isActive: true }, include: { socialSecurityScheme: { include: { bands: { orderBy: { sequence: "asc" } } } } } });
     const sets = new Set(regimes.map(r => r.ruleSetId));
@@ -149,7 +202,12 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
       return { contract, regime, result, days };
     });
     const samePersons = [...new Set(contracts.map(contract => contract.employee.personId).filter((id): id is string => Boolean(id)))];
-    const omitted = await tx.hrEmploymentContract.findFirst({ where: { id: { notIn: ids }, employee: { personId: { in: samePersons } }, status: "ATIVO", admittedAt: { lte: period.end }, OR: [{ endsAt: null }, { endsAt: { gte: period.start } }] } });
+    const otherContracts = await tx.hrEmploymentContract.findMany({ where: { id: { notIn: ids }, employee: { personId: { in: samePersons } } }, include: { revisions: true } });
+    const omitted = otherContracts.some(contract => {
+      if (!contract.revisions.some(revision => revision.effectiveFrom <= period.end)) return false;
+      const resolved = resolveContractRevision(contract, contract.revisions, period).contract;
+      return resolved.status === "ATIVO" && resolved.admittedAt <= period.end && (!resolved.endsAt || resolved.endsAt >= period.start);
+    });
     if (omitted) throw new Error("Inclua os demais contratos da mesma pessoa física para calcular tetos e retenções sem duplicar benefícios fiscais.");
     // Apply the social security ceiling once per PF and scheme, then reconcile residual cents.
     const groups = new Map<string, typeof calculated>();
@@ -244,7 +302,8 @@ export async function closePayrollRun(db: PrismaClient, actorId: string, runId: 
     if (stableJson(canonicalItems) !== stableJson(snapshot.canonicalItems)) throw new Error("Origens contratuais mudaram após o cálculo. Recalcule antes de fechar.");
     for (const version of snapshot.contractVersions ?? []) {
       await lock(tx, `contract:${version.id}`);
-      const contract = await tx.hrEmploymentContract.findUniqueOrThrow({ where: { id: version.id }, include: { employee: true } });
+      const storedContract = await tx.hrEmploymentContract.findUniqueOrThrow({ where: { id: version.id }, include: { employee: true, revisions: true } });
+      const contract = resolveContractRevision(storedContract, storedContract.revisions, payrollPeriod(payroll.competence)).contract;
       await tx.$queryRaw`SELECT id FROM "Employee" WHERE id=${contract.employeeId} FOR SHARE`;
       const employee = await tx.employee.findUniqueOrThrow({ where: { id: contract.employeeId } });
       if (!employee.isActive || contract.status !== "ATIVO") throw new Error("Servidor/contrato inativado após o cálculo. Recalcule a seleção antes de fechar.");

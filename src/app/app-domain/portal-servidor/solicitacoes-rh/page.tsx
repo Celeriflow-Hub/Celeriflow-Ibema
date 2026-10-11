@@ -19,6 +19,7 @@ export default async function MyHrRequests({ searchParams }: { searchParams: Pro
   return <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
     <ErpPageTitle title="Minhas solicitações ao RH" description="Acompanhe a análise e a decisão dos seus pedidos." action={<Link href="/portal-servidor">Voltar</Link>} />
     <HrRequestForm requestKey={randomUUID()} />
+    <Link href="/portal-servidor/recadastramento" className="text-xs underline">Campanhas de recadastramento</Link>
     <form className="flex gap-2 text-xs"><select name="status" defaultValue={status || ""} className="rounded border p-2"><option value="">Todas</option><option>EM_ANALISE</option><option>DEFERIDA</option><option>INDEFERIDA</option></select><button className="rounded border px-3">Filtrar</button></form>
     <p className="text-xs">{total} solicitações</p>
     {rows.map(row => <article key={row.id} className="rounded border bg-white p-3 text-xs"><strong>{row.kind} · {row.status}</strong><p className="whitespace-pre-wrap">{(row.payload as { description: string }).description}</p>{row.decision && <p className="mt-2 whitespace-pre-wrap">Decisão: {row.decision}</p>}<p className="text-slate-500">{row.id} · {row.createdAt.toISOString().slice(0, 10)}</p></article>)}

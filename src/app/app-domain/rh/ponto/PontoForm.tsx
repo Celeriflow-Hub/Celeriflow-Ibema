@@ -114,6 +114,11 @@ export function PontoForm({ data, employees = [] }: { data?: AttendanceRecord, e
             </div>
 
             <div className="space-y-2 max-w-sm">
+              <Label htmlFor="extraHours">Horas extras reconhecidas pelo RH</Label>
+              <Input id="extraHours" name="extraHours" type="number" min="0" max="24" step="0.0001" defaultValue={data?.extraHours || 0} />
+              <p className="text-xs text-muted-foreground">A integração usa a regra aprovada e o contrato escolhido. As horas extras não são inferidas dos horários de entrada/saída.</p>
+            </div>
+            <div className="space-y-2 max-w-sm">
               <Label htmlFor="status">Status</Label>
               <Select name="status" value={status} onValueChange={(v) => setStatus(v || "Presente")}>
                 <SelectTrigger>

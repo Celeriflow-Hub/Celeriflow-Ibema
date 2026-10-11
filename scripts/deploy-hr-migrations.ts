@@ -8,7 +8,7 @@ config({ path: ".env.local", quiet: true });
 config({ quiet: true });
 neonConfig.webSocketConstructor = ws;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL });
-const name = "20261011030000_hr_workforce_foundation";
+const name = process.argv.includes("--temporal") ? "20261011130000_hr_contract_temporal_revisions" : "20261011030000_hr_workforce_foundation";
 
 async function main() {
   const client = await pool.connect();
@@ -19,6 +19,7 @@ async function main() {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock(hashtext('RH_MIGRATIONS_DEPLOY'))");
     const requiredTables = ["Employee", "Payroll", "PayrollItem", "HrEmploymentRegime", "HrPayrollRuleSet", "SstBenefitPayrollScope", "SstBenefitPayrollOrigin", "SstLeavePayrollOrigin"];
+    if (process.argv.includes("--temporal")) requiredTables.push("HrEmploymentRevision");
     const missing: string[] = [];
     for (const table of requiredTables) {
       const result = await client.query('SELECT to_regclass($1) AS relation', [`"${table}"`]);

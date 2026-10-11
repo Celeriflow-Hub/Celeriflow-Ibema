@@ -5,7 +5,9 @@ import { buildHrReport, hrReportInputSchema, renderHrReport } from "@/lib/rh/rep
 
 export async function GET(request: NextRequest) {
   const context = await getTenantContextForModuleOperation("RH", "issueReports");
-  const input = hrReportInputSchema.parse(Object.fromEntries(request.nextUrl.searchParams));
+  const values = Object.fromEntries(request.nextUrl.searchParams);
+  if (!values.competence) delete values.competence;
+  const input = hrReportInputSchema.parse(values);
   const report = await buildHrReport(context.prisma, input, accessiblePayrollWhere(context.user));
   const output = await renderHrReport(report, input.format);
   return new NextResponse(new Uint8Array(output.bytes), { headers: { "Content-Type": output.contentType, "Content-Disposition": `attachment; filename="rh-${input.kind.toLowerCase()}.${output.extension}"`, "Cache-Control": "private, no-store" } });

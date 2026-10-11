@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { payrollPeriod } from "./calculation-engine";
 import { enqueueHrIntegration } from "./workforce-service";
+import { resolveContractRevision } from "./contract-timeline";
 
 export const hrBenefitRuleSchema = z.object({
   kind: z.enum(["TRANSPORTE", "ALIMENTACAO"]), benefitConfigId: z.string().min(1), rubricCode: z.string().min(1),
@@ -41,7 +42,8 @@ export async function generateBenefitMovement(db: PrismaClient, actorId: string,
     const contract = await tx.hrEmploymentContract.findUniqueOrThrow({ where: { id: input.contractId } });
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:employee:${contract.employeeId}`}))`;
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:contract:${contract.id}`}))`;
-    const currentContract = await tx.hrEmploymentContract.findUniqueOrThrow({ where: { id: contract.id } });
+    const storedContract = await tx.hrEmploymentContract.findUniqueOrThrow({ where: { id: contract.id }, include: { revisions: true } });
+    const currentContract = resolveContractRevision(storedContract, storedContract.revisions, period).contract;
     const regime = await tx.hrEmploymentRegime.findUniqueOrThrow({ where: { id: currentContract.regimeId } });
     const rule = await tx.hrPayrollRule.findUniqueOrThrow({ where: { id: input.ruleId }, include: { ruleSet: true } });
     const policy = hrBenefitRuleSchema.parse(rule.value);

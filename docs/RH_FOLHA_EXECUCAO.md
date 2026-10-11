@@ -24,6 +24,18 @@ Os arquivos do domínio SST recebidos permanecem preservados. O processamento de
 - Relatórios integrais de contratos, folha oficial fechada e saldos de direitos: CSV, XLSX real e PDF multipágina.
 - `/rh/esocial`: configurações independentes de Produção/Produção Restrita, referências protegidas de credencial e pacote XSD. Continua sem transmissão; origem JSON de conferência não é XML oficial.
 - Solicitações autenticadas do Portal e análise pelo RH, com decisão fundamentada, replay e preservação da decisão anterior.
+- Revisões contratuais por vigência: histórico paginado, salário/lotação/jornada selecionados pela competência e preservação das folhas fechadas diante de alterações futuras. Mudanças intramês exigem rateio ainda pendente.
+- Reajuste coletivo percentual assinado, prévia sem gravação, hash de conferência, detecção de revisão concorrente, aplicação transacional integral e replay entre operadores.
+- Conferência da memória por rubrica e das bases em `/rh/operacoes/demonstrativos/[id]`, com consulta a snapshots e PDF integral.
+- Cancelamento de reservas futuras de gozo com entrada compensatória e restauração do saldo; histórico e motivos preservados. Folha fechada no período impede a restauração automática.
+- Horas extras reconhecidas no ponto geram movimentos Decimal pela regra explícita, salário/jornada temporal e contrato escolhido; replay não duplica e a mesma origem não pode ser alocada a outro vínculo. Ponto integrado fica protegido contra edição/exclusão pela rotina RH.
+- Relatórios integrais de resumo por rubrica/regime/centro/local, bases e contribuições previdenciárias e contratos simultâneos. Dados de folhas fechadas usam identidade/lotação do snapshot.
+- Memória de médias por janela, rubricas explícitas, percentuais de seleção (incluindo 80%), arredondamento da quantidade, política de meses faltantes e fatores de atualização documentados.
+- Campanhas de recadastramento em `/rh/recadastramento` e `/portal-servidor/recadastramento`, com público definido, campos autorizados, vigência, acompanhamento paginado, diff e deferimento transacional no Cadastro Único. Conflito com atualização central posterior bloqueia o deferimento.
+- Adaptador interno de solicitações de despesa no Financeiro: classificação explícita por centro/componente, prévia, plano durável, controle de acesso à UG, recuperação de falha parcial e idempotência. Não cria empenho, liquidação nem pagamento.
+- Cenários persistidos de simulação dos oito tipos especiais mediante política de rubricas e parâmetros com fonte explícita. Sem fechamento oficial, tributos automáticos, consumo de direitos ou alteração do vínculo.
+
+Formatos de configuração e limites: `docs/RH_FOLHA_POLITICAS_OPERACIONAIS.md`.
 
 ## Configuração do motor
 
@@ -53,14 +65,14 @@ O plano usa **F0–F9**, totalizando dez fases. Esta execução ainda está em a
 
 | Fase | Estado deste incremento | Próximos desenvolvimentos internos |
 |---|---|---|
-| F0 Fundação | Parcial | Consolidar os consumidores, migração operacional e escopos/temporalidade com histórico canônico recebido. |
+| F0 Fundação | Parcial | Temporalidade mensal entregue; completar rateios intramês, transições de regime e consolidação dos demais consumidores. |
 | F1 Cadastro | Parcial | Cargos/vagas/níveis, multivínculo temporal completo, campos configuráveis, cessões/estágio, pasta funcional e consultas integrais. |
 | F2 Motor | Parcial | IRRF completo, múltiplos esquemas/competências, regras de arredondamento, alocação temporal e conferência completa. |
 | F3 Movimentos/benefícios | Parcial | Completar múltiplas linhas/calendários de VT, família/documentos, pensões/consignados e reflexos das demais origens. Importação transacional e VT/VA configurável já disponíveis. |
-| F4 Direitos/frequência | Parcial | Completar perdas/prorrogações/férias especiais, gozo consumindo múltiplos aquisitivos, licença prêmio/ATS/averbação, médias e ponto. Aquisição sem afastamento, reservas e conflitos nas actions de RH já disponíveis. |
-| F5 Folhas especiais | Pendente | Nove tipos exibidos; apenas Mensal processável neste incremento. Rescisão, RRA, 13º, reajustes/reintegração exigem seus fluxos próprios. |
-| F6 Contabilidade | Parcial | Outbox disponível; adaptadores de empenho, provisões, baixa, pagamentos, diárias e produtividade ainda pendentes. |
-| F7 Portal | Parcial | PDF próprio e publicação futura; faltam campanhas/deferimento, renda anual, solicitações e margem. |
+| F4 Direitos/frequência | Parcial | Médias, horas extras reconhecidas e cancelamento compensatório entregues; completar perdas/prorrogações/férias especiais, gozo de múltiplos aquisitivos, licença prêmio/ATS/averbação e banco de horas completo. |
+| F5 Folhas especiais | Parcial | Mensal oficial e cenários isolados dos oito tipos especiais disponíveis. Fluxos oficiais de rescisão/RRA/13º/férias, tributação, direitos e reintegração continuam pendentes. Reajuste contratual coletivo disponível. |
+| F6 Contabilidade | Parcial | Solicitações de despesa integradas ao Financeiro com retomada; completar empenho, provisões, retenções/repasses, baixa, pagamentos, diárias e produtividade. |
+| F7 Portal | Parcial | PDF próprio, publicação futura, solicitações e campanhas/deferimento disponíveis; faltam renda anual fiscal, margem e demais jornadas. |
 | F8 eSocial/obrigações | Parcial | Origens/outbox disponíveis; faltam layouts/validadores/cliente/worker e exportadores históricos. Configuração externa posterior não substitui esses desenvolvimentos internos. |
 | F9 POC | Parcial | Testes iniciais e regressão; ampliar casos ouro, relatórios e evidências item a item, além do percurso autenticado. |
 
@@ -79,6 +91,8 @@ O deploy dirigido aplica somente a migration de RH e verifica checksums, depend�
 
 O preview encontrou **zero dependências de runtime ausentes** no banco configurado. A migration `20261011030000_hr_workforce_foundation` foi aplicada pelo comando dirigido com resultado `APPLIED`. Nenhuma migration de SST foi executada por esta frente.
 
+A migration `20261011130000_hr_contract_temporal_revisions` foi aplicada por `npx tsx scripts/deploy-hr-migrations.ts --temporal --apply`, com resultado `APPLIED` e zero dependências ausentes. Acrescenta `effectiveFrom`, backfill e índice, restaurando o trigger imutável na mesma transação. Revisões legadas recebem baseline de admissão; a data histórica real de alterações antigas não é reconstruída. As folhas antigas continuam com seus snapshots.
+
 Seed preparado: `npx tsx scripts/seed-hr-engine-demo.ts` / `--apply`. Cria somente parâmetros sintéticos do motor, sem pessoas, servidores, usuários, permissões ou folhas. A tentativa de aplicação encontrou nome/município/UF ausentes em **Administração > Dados da Prefeitura**. A transação foi revertida; o conjunto não foi criado e nenhum dado institucional fictício foi preenchido.
 
 ## Verificações desta continuidade
@@ -92,6 +106,14 @@ Seed preparado: `npx tsx scripts/seed-hr-engine-demo.ts` / `--apply`. Cria somen
 - Uma repetição paralela dos testes encontrou falha nativa V8/JIT no processo do PGlite. A execução sequencial (`--test-concurrency=1`) passou, incluindo o teste PostgreSQL integral; não foi necessário alterar código funcional para contornar essa falha de runtime.
 - Dois builds foram interrompidos durante a checagem de tipos pelas interrupções/reinícios da sessão. Esses resultados não são aprovação do build. Uma nova execução foi iniciada sobre os arquivos atualizados.
 - Nova tentativa do navegador após o reinício manteve `[browser.disconnected]`; não há evidência de homologação visual autenticada.
+
+### Incremento temporal e operacional de 11/10/2026
+
+- Sete testes RH aprovados após inclusão de revisões futuras, reajuste coletivo/rollback, férias compensatórias, horas extras, relatórios agregados, médias, recadastramento e ponte Financeiro. O teste PostgreSQL inclui falha forçada no segundo lançamento financeiro, recuperação e ausência de duplicação.
+- Cenário sintético de 13º verifica salário temporal, parâmetros/fonte, persistência/replay, preservação da folha legada e bloqueio de fechamento/publicação oficial.
+- ESLint aprovado para os arquivos RH/Portal e scripts alterados. **Build completo atualizado aprovado** (`npm run build`), incluindo TypeScript e geração das rotas de recadastramento, Financeiro e cenários especiais. `git diff --check` aprovado.
+- Migration temporal novamente conferida: `APPLIED_CHECKSUM_VERIFIED`, sem dependências de runtime ausentes. Regressão SST→Folha repetida após o incremento: **14 testes aprovados**.
+- Todos os estados da tabela acima continuam parciais. As pendências internas não são tratadas como dependências do município ou de acesso externo.
 
 ## Cemitérios
 

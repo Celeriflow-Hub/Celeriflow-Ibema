@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { allocatePayrollAmount, calculateContractRubrics, calculateContribution, evaluatePayrollFormula, payrollPeriod, type PayrollRubricInput } from "../src/lib/rh/calculation-engine";
 import { parsePayrollMovementImport } from "../src/lib/rh/movement-import";
 import { calculateDailyBenefit, hrBenefitRuleSchema } from "../src/lib/rh/benefit-calculation";
+import { selectRemunerationAverage } from "../src/lib/rh/remuneration-average";
 
 test("fórmula Decimal preserva precisão, precedência e rejeita execução/ciclos", () => {
   const resolve = (name: string) => { if (name === "SALARIO_BASE") return new Prisma.Decimal("1000.01"); throw new Error("Base ausente"); };
@@ -49,4 +50,13 @@ test("VT diário exclui afastamentos sem duplicar dias e limita o desconto do se
   assert.equal(result.employee.toFixed(2), "60.00");
   assert.equal(result.entity.toFixed(2), "100.00");
   assert.throws(() => calculateDailyBenefit({ ...input, customValue: new Prisma.Decimal(1) }), /autorização/);
+});
+
+test("média das 80% maiores expõe seleção e arredondamento sem excluir períodos implicitamente", () => {
+  const values = [100, 500, 200, 400, 300].map((amount, index) => ({ month: `${index + 1}/2026`, amount: new Prisma.Decimal(amount) }));
+  const result = selectRemunerationAverage(values, new Prisma.Decimal(80), "CEIL");
+  assert.equal(result.average.toFixed(2), "350.00");
+  assert.equal(result.selected.length, 4);
+  assert.equal(result.excluded[0].amount.toFixed(2), "100.00");
+  assert.throws(() => selectRemunerationAverage(values, new Prisma.Decimal(0), "CEIL"));
 });

@@ -105,10 +105,16 @@ export function allocatePayrollAmount(total: Money, bases: Money[]): Money[] {
   return shares.map(share => share.whole.div(100));
 }
 
-export function calculateContractRubrics(input: { salary: Prisma.Decimal.Value; days: number; monthlyHours: number; rubrics: PayrollRubricInput[]; movements: Record<string, Prisma.Decimal.Value> }) {
+export function calculateContractRubrics(input: { salary: Prisma.Decimal.Value; days: number; monthlyHours: number; rubrics: PayrollRubricInput[]; movements: Record<string, Prisma.Decimal.Value>; parameters?: Record<string, Prisma.Decimal.Value> }) {
   const values = new Map<string, Money>();
   const visiting = new Set<string>();
   const builtins: Record<string, Money> = { SALARIO_BASE: D(input.salary), DIAS: D(input.days), JORNADA: D(input.monthlyHours) };
+  for (const [name, value] of Object.entries(input.parameters || {})) {
+    if (!/^[A-Z_][A-Z_0-9]*$/.test(name) || Object.hasOwn(builtins, name)) throw new Error("Parâmetro de fórmula inválido ou reservado.");
+    const decimal = D(value);
+    if (!decimal.isFinite()) throw new Error("Parâmetro de fórmula não finito.");
+    builtins[name] = decimal;
+  }
   const byCode = new Map(input.rubrics.map(r => [r.code, r]));
   if (byCode.size !== input.rubrics.length || input.rubrics.some(r => builtins[r.code])) throw new Error("Código duplicado ou reservado de rubrica.");
   for (const code of Object.keys(input.movements)) if (!byCode.has(code)) throw new Error(`Movimento sem rubrica ativa: ${code}.`);

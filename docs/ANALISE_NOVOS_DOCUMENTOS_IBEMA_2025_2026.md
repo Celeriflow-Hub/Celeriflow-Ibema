@@ -6,7 +6,7 @@ Data de referência: 11/10/2026. Originais: `docs/Novos docs/Novos docs/`.
 
 O conjunto fornece dados reais, classificações, modelos de documentos e evidências de processos municipais para orientar as implementações. Foram inventariados **141 arquivos-fonte**, com **7.805 páginas de PDF**, incluindo o PDF do ZIP do PPA e cópias repetidas. As duas partes binárias do PPA são transporte do mesmo documento, não novas fontes. A identificação foi feita por conteúdo, metadados, extração textual e OCR: o processamento principal concluiu **1.256 páginas com imagens**, em 38 fontes distintas, complementado por leituras direcionadas e conferência visual dos pontos críticos. Não se trata de uma transcrição certificada de cada lançamento dos relatórios de milhares de páginas.
 
-Há cinco cópias redundantes, em quatro grupos de SHA-256 idêntico: `2_rdaq_2025 (1).pdf`/`2_rdaq_2025.pdf`; os dois decretos 2726; as três despesas extra; os dois relatórios de gestão do segundo quadrimestre. São **136 conteúdos distintos**. Os originais foram preservados.
+Há cinco cópias redundantes, em quatro grupos de SHA-256 idêntico: `2_rdaq_2025 (1).pdf`/`2_rdaq_2025.pdf`; os dois decretos 2726; as três despesas extra; os dois relatórios de gestão do segundo quadrimestre. São **136 conteúdos distintos**. Após autorização do usuário, os hashes foram conferidos novamente e as cinco cópias com sufixo `(1)`/`(2)` foram excluídas, preservando uma fonte integral de cada grupo. Os IDs históricos 001–141 permanecem no catálogo, incluindo os registros de exclusão e seu destino.
 
 **Não é possível demonstrar cobertura de 90% dos dados necessários apenas pela quantidade de arquivos.** O material é especialmente forte em orçamento, execução financeira, relatórios fiscais, planejamento setorial e controle interno. RH recebeu relações funcionais e quantitativos, mas não recebeu neste conjunto ficha financeira analítica, tabela salarial completa vigente, cadastro de dependentes, regras de incidência por rubrica, assentamentos individuais e todos os atos que determinam direitos. As pendências incluem dados internos, além de integrações externas.
 
@@ -124,6 +124,8 @@ O TXT informa que adiantamento de despesas e verbas de gabinete não são adotad
 ## 7. Catálogo individual
 
 O catálogo complementar [CATALOGO_NOVOS_DOCUMENTOS_IBEMA.md](CATALOGO_NOVOS_DOCUMENTOS_IBEMA.md) referencia **cada um dos 141 arquivos**, identificando módulo, conteúdo/estrutura reaproveitável e limite de uso. Nomes grafados como no diretório original. A análise anterior dos 67 arquivos de RH permanece em [ANALISE_DOCUMENTAL_RH_FOLHA_IBEMA_2026.md](ANALISE_DOCUMENTAL_RH_FOLHA_IBEMA_2026.md).
+
+A [comparação dos IDs 001–141](COMPARACAO_DOCUMENTAL_IBEMA_001_141.md) aprofunda as relações entre fontes, estabelece importância por módulo e registra os hashes das cópias excluídas.
 
 ### Desdobramento do arquivo composto “Plano Diretor” (ID 108)
 

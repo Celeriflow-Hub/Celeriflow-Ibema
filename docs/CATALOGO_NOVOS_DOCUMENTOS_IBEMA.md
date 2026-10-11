@@ -4,13 +4,19 @@ Complemento de [ANALISE_NOVOS_DOCUMENTOS_IBEMA_2025_2026.md](ANALISE_NOVOS_DOCUM
 
 Todos os nomes abaixo são relativos a `docs/Novos docs/Novos docs/`. `p.` indica páginas do arquivo local, não necessariamente a numeração da edição completa do diário. Modelos e parâmetros propostos não significam carga realizada no banco. Relatórios financeiros grandes foram analisados pela estrutura e conteúdo extraído; cada lançamento ainda precisa de reconciliação antes de migração.
 
+## Numeração e comparação
+
+Os **IDs 001 a 141** identificam os arquivos recebidos originalmente e continuam estáveis. Após a autorização para excluir duplicados, foram removidas cinco cópias idênticas, confirmadas por SHA-256: **002, 027, 043, 044 e 117**. Restam **136 documentos-fonte distintos**; os cinco registros abaixo permanecem como memória da comparação, com indicação do documento mantido. As partes binárias do PPA são transporte do ID 081, não documentos adicionais.
+
+Para cada ID, a [comparação detalhada e importância por módulo](COMPARACAO_DOCUMENTAL_IBEMA_001_141.md) identifica documentos relacionados, diferenças de período/escopo, qual fonte priorizar e como combinar os dados.
+
 ## Saúde, gestão e fontes institucionais — 001 a 030
 
 | ID | Arquivo | Módulos e aplicação concreta | Campos/modelo e limites |
 |---|---|---|---|
 | 001 | `1_rdaq_-6.pdf` | Saúde/Planejamento/Financeiro: RDQA do 1º quadrimestre de 2026, 38 p. | Identificação, demografia, produção SUS, rede, profissionais, PAS/metas, execução/fontes e análise. Indicadores agregados não são prontuários. |
-| 002 | `2_rdaq_2025 (1).pdf` | Saúde/Indicadores: RDQA do 2º quadrimestre de 2025, 32 p. | Mesma família de estrutura, baseline 2025. Cópia byte a byte de 003; não duplicar indicadores. |
-| 003 | `2_rdaq_2025.pdf` | Saúde: fonte canônica equivalente a 002 | Série comparativa por período/fonte; não somar com RAG anual. |
+| 002 | `2_rdaq_2025 (1).pdf` — **excluído** | Saúde/Indicadores: conteúdo preservado no 003 | Cópia idêntica por SHA-256 ao 003; nenhuma informação exclusiva removida. |
+| 003 | `2_rdaq_2025.pdf` | Saúde/Indicadores: RDQA do 2º quadrimestre de 2025, 32 p. | Rede, produção, metas e execução; baseline para comparação por período/fonte. Não somar com RAG anual. Cópia 002 excluída. |
 | 004 | `5._LEVANTAMENTO_DE_PROBLEMAS_E_AREAS_CRITICAS_PARA_AUDITORIA_INTERNA_5.1_assinado.pdf` | Controle Interno: priorização de auditoria 2026, 3 p. | Riscos/áreas/processos, critérios e prioridades do PACI. Converter em objetos de auditoria e evidências, não achados já comprovados. |
 | 005 | `7c9ec788b259920d6d53329bca40ae12.pdf` | RH: referência comparativa de estatuto, 70 p. | Conteúdo de **Campina do Simão**, Lei 21/2025. Regimes/cargos/direitos podem orientar capacidades genéricas; não parametrizar Ibema com esta lei. |
 | 006 | `apresentacao_audiencia_2_2026.pdf` | Planejamento/Financeiro/Transparência: audiência LRF, 41 p. | Modelo de apresentação do 2º quadrimestre/2026, gráficos e resultados fiscais; confrontar com anexos contábeis da mesma competência. |
@@ -34,8 +40,8 @@ Todos os nomes abaixo são relativos a `docs/Novos docs/Novos docs/`. `p.` indic
 | 024 | `Dados Prefeitura- Fale Conosco 2026 atualizado.pdf` | Administração/Atendimento/Portal: contatos, 3 p. | Titulares, endereços, telefones, e-mails e horários por órgão. Fonte atualizada, manter histórico e confrontar atos de nomeação. |
 | 025 | `Declaração da Análise da Prestação de Contas Exercício 2025.pdf` | Controle Interno/Transparência: situação processual, 1 p. | Em abril/2026, contas em tramitação no TCE/PR; modelo de declaração/link. Não publicar aprovação definitiva. |
 | 026 | `Decreto Nº 2082-2023 GOVERNO DIGITAL.pdf` | Protocolos/Atendimento/Portal/GED: governo digital, 4 p. | Solicitação/acompanhamento e painel de desempenho, portal oficial e integração. Decreto de 2023, aplicabilidade/alterações devem ser versionadas. |
-| 027 | `DECRETO Nº 2726-2025 PAT (1).pdf` | Controle Interno: PAT/PACI/PAAI 2026, 19 p. | Plano, objetos, atividades, cronograma e responsáveis. OCR lê alguns 2026 como 2028; usar original. Duplicata de 028. |
-| 028 | `DECRETO Nº 2726-2025 PAT.pdf` | Controle Interno: equivalente canônico a 027 | Programa de controle/auditoria; plano não comprova execução nem conclusão dos trabalhos. |
+| 027 | `DECRETO Nº 2726-2025 PAT (1).pdf` — **excluído** | Controle Interno: conteúdo preservado no 028 | Cópia idêntica por SHA-256 ao 028. Plano, objetos, atividades e cronograma continuam disponíveis no arquivo mantido. |
+| 028 | `DECRETO Nº 2726-2025 PAT.pdf` | Controle Interno: PAT/PACI/PAAI 2026, 19 p. | Plano, objetos, atividades, cronograma e responsáveis. OCR lê alguns 2026 como 2028: conferir original. Plano não comprova execução nem conclusão dos trabalhos. Cópia 027 excluída. |
 | 029 | `Decreto Nº 2801-2026 CMAS.pdf` | Social/Conselhos: composição CMAS, 2 p. | Titulares/suplentes, representação governamental/não governamental e mandato. Não equiparar a vínculo de conselheiro tutelar remunerado. |
 | 030 | `Decreto Nº2840-2026.pdf` | Compras/Planejamento/RH: comissão PCA 2027, 2 p. | Designação intersetorial para elaborar/revisar o PCA. Nomeação da comissão não constitui PCA aprovado. |
 
@@ -55,9 +61,9 @@ Todos os nomes abaixo são relativos a `docs/Novos docs/Novos docs/`. `p.` indic
 | 040 | `DEMONSTRATIVO SIMPLIFICADO DO RELATORIO DE GESTÃO FISCAL.pdf` | Financeiro/Indicadores: RGF anexo VI, 1 p. | Até 2º quadrimestre/2026: RCL e ajustes, pessoal/dívida/garantias/crédito/caixa. Comparar somente à mesma referência temporal. |
 | 041 | `DEMONSTRATIVO SIMPLIFICADO DO RELATÓRIO RESUMIDO DA EXECUCAO ORCAMENTARIA.pdf` | Financeiro/Transparência: RREO anexo XIV, 5 p. | Janeiro–junho, receitas/despesas, resultados, saúde/ensino e resumos. Linhas-resumo não são novos lançamentos. |
 | 042 | `DEMOSTRATIVO DAS PARCERIAS PÚBLICO PRIVADAS.pdf` | Financeiro/Contratos: RREO anexo XIII, 1 p. | 1º bimestre/2026, saldos e impactos plurianuais de PPP. Modelo zerado não demonstra contrato ativo. |
-| 043 | `despesa extra (1).pdf` | Financeiro/RH: extra-orçamentário, 81 p. | Nota/data/credor/conta/vencimento/processo/valor/anulado/pago/estornado/saldo até julho. Inclui consignações. Duplicata de 044/045. |
-| 044 | `despesa extra (2).pdf` | Financeiro/RH: cópia de 043 | Não registrar repasse/consignação novamente; preservar original como referência. |
-| 045 | `despesa extra.pdf` | Financeiro/RH: equivalente a 043 | Conciliação desconto em folha→passivo→repasse; total pago não prova pagamento de salário. |
+| 043 | `despesa extra (1).pdf` — **excluído** | Financeiro/RH: conteúdo preservado no 045 | Cópia idêntica por SHA-256 ao 045; notas extra-orçamentárias e consignações permanecem no arquivo mantido. |
+| 044 | `despesa extra (2).pdf` — **excluído** | Financeiro/RH: conteúdo preservado no 045 | Segunda cópia idêntica por SHA-256 ao 045; não há repasse ou informação adicional nesta cópia. |
+| 045 | `despesa extra.pdf` | Financeiro/RH: extra-orçamentário, 81 p. | Nota/data/credor/conta/vencimento/processo/valor/anulado/pago/estornado/saldo até julho. Conciliação desconto em folha→passivo→repasse; total pago não prova pagamento de salário. Cópias 043/044 excluídas. |
 | 046 | `Despesa Orçada por Função - orçamento anual 2026.pdf` | Orçamento: catálogo/total por função, 1 p. | Código/descrição/valor inicial. Zero preservado, sem criar execução. |
 | 047 | `Despesa Orçada por Natureza - orçamento anual 2026.pdf` | Orçamento/RH: grupos de natureza, 1 p. | Pessoal/encargos R$ 21.008.750,00 e demais grupos. Não é tabela de salário nem lançamento analítico. |
 | 048 | `Despesa Orçada por orgao 2026.pdf` | Orçamento/Administração: órgãos, 1 p. | Código/descrição/valor fixado; referência inicial, diferente de orçamento atualizado do CSV. |
@@ -139,8 +145,8 @@ Todos os nomes abaixo são relativos a `docs/Novos docs/Novos docs/`. `p.` indic
 | 114 | `Receita Realizada - Julho 2026.pdf` | Financeiro/Tributação: receita julho, 20 p. | Mesma família de 113, inclui renúncia/deduções. Não somar acumulados entre relatórios. |
 | 115 | `Receitas.csv` | Financeiro/Tributação/Indicadores: 410 linhas | Código/descrição/previsto/atualizado/arrecadado, gerado 11/10/2026. Importar hierarquia sem dupla soma; preservar vírgula decimal/código textual. |
 | 116 | `REGIMENTO INTERNO CMAS.pdf` | Social/Conselhos/GED: governança, 8 p. | Natureza/paridade, atribuições, funcionamento/deliberação e controle do fundo. Confrontar com leis/alterações e nomeação 2801. |
-| 117 | `RELATORIO 2 QUADRIMESTRE DE GESTAO (1).pdf` | Social/Planejamento: gestão, 40 p. | Maio–agosto/2026: estrutura, conselhos, CRAS/PAIF/SCFV, CadÚnico, benefícios, acolhimento, carteiras, ações e atendimentos. Duplicata exata de 118; numeração interna anuncia 41 páginas, conferir recorte. |
-| 118 | `RELATORIO 2 QUADRIMESTRE DE GESTAO.pdf` | Social/Planejamento: equivalente a 117 | Modelo de narrativa, quadros e resultados; não duplicar produção/indicadores. |
+| 117 | `RELATORIO 2 QUADRIMESTRE DE GESTAO (1).pdf` — **excluído** | Social/Planejamento: conteúdo preservado no 118 | Cópia idêntica por SHA-256 ao 118; relatório de maio–agosto/2026 mantido integralmente no arquivo canônico. |
+| 118 | `RELATORIO 2 QUADRIMESTRE DE GESTAO.pdf` | Social/Planejamento: gestão, 40 p. | Maio–agosto/2026: estrutura, conselhos, CRAS/PAIF/SCFV, CadÚnico, benefícios, acolhimento, carteiras, ações e atendimentos; narrativa/quadros/resultados. Numeração interna anuncia 41 páginas: conferir recorte. Cópia 117 excluída. |
 | 119 | `RELATORIO FINAL AUDITORIA SAÚDE TERRITORIALIZAÇÃO E VÍNCULOS.pdf` | Saúde/Controle Interno: auditoria ESF, 3 p. | Objeto, período da auditoria 2025, conclusão 16/04/2026, cobertura/vínculos/território e recomendações. Evidência de processo, não cadastro nominal completo. |
 | 120 | `relatorio_estoque CAF 05-10-2026.pdf` | Saúde/Almoxarifado: CAF outubro, 8 p. | Competência 202610, unidade CAF(3)/CNES, material/apresentação/código/unidade/quantidade/conferência. Não informa lote/validade/custo de todas as unidades. |
 

@@ -10,6 +10,9 @@ const navigation: ModuleNavGroup[] = [
   { title: "Formulários clínicos", items: [{ title: "Questionários de anamnese", href: "/sst/questionarios", icon: "fileText" }] },
   { title: "Prontuários e profissionais", items: [{ title: "Profissionais", href: "/sst/profissionais", icon: "users" }, { title: "Prontuários por atuação", href: "/sst/prontuarios", icon: "fileHeart" }, { title: "Vacinação ocupacional", href: "/sst/vacinacao", icon: "fileHeart" }] },
   { title: "Exposição ocupacional", items: [{ title: "GHE", href: "/sst/ghe", icon: "hardHat" }, { title: "Programas e laudos", href: "/sst/programas", icon: "fileText" }] },
+  { title: "Vínculos e prevenção", items: [{ title: "Histórico funcional", href: "/sst/vinculos", icon: "users" }, { title: "Ordens de serviço", href: "/sst/ordens-servico", icon: "fileText" }, { title: "EPI e EPC", href: "/sst/equipamentos", icon: "hardHat" }, { title: "CIPA e prevenção", href: "/sst/prevencao", icon: "users" }] },
+  { title: "Acidentes e restrições", items: [{ title: "CAT e incidentes", href: "/sst/acidentes", icon: "fileText" }, { title: "Restrições", href: "/sst/restricoes", icon: "fileHeart" }] },
+  { title: "Integração e benefícios", items: [{ title: "Planos de saúde", href: "/sst/planos", icon: "fileHeart" }, { title: "PPP e prontuário funcional", href: "/sst/consolidado", icon: "fileText" }, { title: "eSocial", href: "/sst/integracoes", icon: "settings" }] },
 ];
 
 export default async function SstLayout({ children }: { children: React.ReactNode }) {

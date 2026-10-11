@@ -47,4 +47,13 @@ export const portalServidorNavigation: ModuleNavGroup[] = [
       },
     ],
   },
+  {
+    title: "Saúde e segurança ocupacional",
+    items: [
+      { title: "Comunicar acidente (CAT)", href: "/portal-servidor/sst/cat", icon: "fileHeart" },
+      { title: "Eleições da CIPA", href: "/portal-servidor/sst/cipa", icon: "users" },
+      { title: "Meus planos de saúde", href: "/portal-servidor/sst/planos", icon: "fileHeart" },
+      { title: "Meu histórico SST / PPP", href: "/portal-servidor/sst/relatorios", icon: "fileText" },
+    ],
+  },
 ];

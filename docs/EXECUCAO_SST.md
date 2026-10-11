@@ -1,8 +1,60 @@
 # Execução do plano SST
 
-## Estado em 10/10/2026
+## Estado atual — 11/10/2026
 
-O plano de 74 requisitos **ainda não está concluído**. Os incrementos implementam atestados/perícias, agenda, jornadas/relatórios, GHE, versões de programas, a primeira jornada de exames/ASO e anamnese médica versionada, com acesso clínico por UG. A matriz de `PLANO_IMPLEMENTACAO_SST.md` permanece referência de escopo; não marcar 74/74 nem mínimo POC atingido.
+As frentes de software F0–F8 estão presentes no incremento `7f28090 — sst4`, com hardening clínico e navegação adicionais no trabalho local. **A homologação dos 74 requisitos não está concluída.** A presença de rotinas e testes não comprova 74/74 nem o mínimo de 67 da POC. Escopo: `PLANO_IMPLEMENTACAO_SST.md`; rastreabilidade atual por item: `EVIDENCIAS_SST.md`.
+
+### Entregas incorporadas em SST4
+
+| Fase | Entrega disponível | Condição operacional / aceite restante |
+|---|---|---|
+| F0 | Cadastro Único, escopo UG, permissões clínicas gerais e por atuação, habilitação profissional e GED protegido. | Confirmar segregação Prefeitura/Câmara, perfis e downloads com usuários reais. |
+| F1 | Atestados, perícia, juntas, agenda, CID oficial, confirmação imediata, restrições por regime/cargo, retificação/revogação e relatórios históricos. | Reflexos monetários dependem de regra RH aprovada, competência aberta e rubricas canônicas. |
+| F2 | Períodos funcionais explícitos, entidade/UG verificada, cargo/função/local/centro de custo, GHE, ordens de serviço e responsabilidades; versões LTCAT/PGR/PCMSO. | Validar dados históricos e conteúdo técnico com responsáveis. |
+| F3 | ASO com anamnese pré-emissão, exames/anexos, candidato sem vínculo, impressão em branco/preenchida, GED, retificação/anulação, agenda/férias; prontuários especializados, solicitações e vacinação ocupacional. | Vacinação registra comprovante externo; não realiza aplicação nem baixa SUS. Conferir layouts, autoria e fontes documentais. |
+| F4 | EPI/EPC sobre Material, entregas individuais/coletivas, CA/validade/revisão, comprovantes, necessidade PGR e saída real de estoque transacional. | Biometria depende de leitor/SDK e integração física ainda indisponíveis. Baixa de uso não devolve estoque. |
+| F5 | CAT/incidentes, investigação revisada, pareceres técnico/médico, homologação, despesas/reembolsos, formulário oficial INSS, restrições por atribuição e fila de avisos. | CAT registrada exige recibo eSocial produção da versão exata. E-mail exige configuração real e recibo do provedor. |
+| F6 | CIPA, planos/inspeções/reuniões/atas/presenças/calendário, SIPAT/custos, eleições/voto único, visitas, brigada, extintores, ergonomia e PCA/audiometria. | Demonstrar fluxos com dados e perfis, incluindo sigilo do voto e acesso clínico PCA. |
+| F7 | Planos ANS, contratos/carteiras, titular/dependentes, lançamentos por competência, postagem Decimal em Folha e compensações rastreáveis. | Saída fiscal oficial permanece bloqueada; ver distinção DIRF/eSocial abaixo. |
+| F8 | Preparação S-2220/S-2210/S-2240 com proveniência, estados/ambientes/rejeições; PPP preparatório, consolidado PDF e serviços próprios do portal. | Transporte eSocial real não está instalado/homologado. Consolidado filtra disciplinas autorizadas; portal não libera prontuário integral. |
+
+### Hardening clínico local
+
+- Escrita exige profissional canônico vinculado ao usuário, atuação/UG e vigência compatíveis, inclusive para administrador. Habilitações e concessões são administradas tecnicamente.
+- Consultas e documentos aplicam grants por atuação, histórico funcional e auditoria; laudos usam template institucional canônico.
+- Retry idêntico de habilitação preserva ID; conflito é bloqueado. Vacinação distingue pessoa/vacina/dose/data, permitindo reforços anuais com a mesma numeração.
+- Migração aditiva `20261011120000_harden_sst_clinical_integrity`: datas finitas, unicidade da vacinação, autoria/atuação/UG/vigência no banco e lock compartilhado da habilitação.
+- A migração clínica original `20261011010000_add_sst_clinical_services` não tem alteração SQL no diff; Git sinaliza normalização de finais de linha. O verificador aceita somente variantes LF/CRLF das mesmas instruções.
+
+### Banco compartilhado — conferência desta continuação
+
+`npx prisma migrate status` encontrou 57 migrações locais, hardening SST pendente e **`20261011030000_hr_workforce_foundation` aplicada no banco, mas ausente neste checkout**. O deploy desta continuação não foi executado: integrar o arquivo original do notebook RH e reconciliar o histórico antes de aplicar o hardening. Não recriar essa migração, editar as aplicadas ou resetar o banco.
+
+`npx tsx scripts/verify-sst-migration-history.ts` retornou `{"checked":18,"mismatches":[],"missing":[]}`. A conferência é somente de migrações SST aplicadas, não certifica ausência de drift de schema nem o histórico de outros módulos.
+
+### Validação atual
+
+- Suíte SST, fundação dos módulos, acesso de Perfis e upgrade das migrações de Construção Civil passou nesta continuação: `node --conditions=react-server --import tsx --test --test-reporter=dot tests/sst-*.test.ts tests/planning-sst-modules.test.ts tests/system-administration-page-access.test.ts tests/construction-migration-upgrade.test.ts`.
+- Os 18 testes clínicos cobrem acesso/autoria, histórico funcional, concessões/revogação, documentos, idempotência, ciclos de vacinação e integridade PostgreSQL isolada.
+- TypeScript com heap 8192 MB e lint direcionado de SST, portal, API, testes e verificador de migrações passaram novamente nesta continuação. Na etapa imediatamente anterior, Prisma validate/generate e `npm run build` completo passaram. A documentação desta continuação não modifica código de aplicação.
+- `git diff --check` passou. Homologação em navegador, storage operacional, PDFs com profissionais e concorrência multi-sessão continuam pendentes.
+
+### Dependências e próximos passos
+
+1. Integrar a migração RH ausente; conferir novamente status/checksums e aplicar somente o incremento aditivo SST pendente após reconciliar o histórico.
+2. Preparar dados canônicos autorizados e executar a matriz `EVIDENCIAS_SST.md`, registrando perfil, entidade, versão, passos, resultados e arquivos emitidos.
+3. Configurar avisos conforme `src/app/app-domain/sst/restricoes/EMAIL-CRON.md`. `vercel.json` agenda a rota de hora em hora UTC; o ambiente precisa suportar essa frequência. Sem provedor/ator/escopo/segredo, a rota permanece `503 BLOCKED`. `SENT` é aceite do provedor, não confirmação de entrega/leitura.
+4. Biometria: obter leitor/SDK, implementar e homologar confirmação real (item 27).
+5. eSocial: implementar/instalar adaptador real XSD/XMLDSig/mTLS/SOAP, A1, autorização do empregador/procuração e validação da cadeia/revogação; comprovar recibos oficiais por ambiente. Certificado isolado não resolve a ausência do adaptador.
+6. Fiscal (item 67): obter pagamentos datados e conciliação por beneficiário e implementar o layout/obrigação aplicável. DIRF PGD foi substituída desde o ano-calendário 2025; preparação por competência não equivale a declaração ou comprovante oficial. `benefit-fiscal.ts` mantém essa saída bloqueada.
+
+## Histórico de execução até SST3
+
+As seções seguintes preservam o registro dos incrementos anteriores. Pendências e descrições de limitações abaixo correspondem à época de cada entrega; o estado atual é o da seção acima e da matriz de evidências.
+
+### Estado em 10/10/2026
+
+Os incrementos iniciais implementavam atestados/perícias, agenda, jornadas/relatórios, GHE, versões de programas, a primeira jornada de exames/ASO e anamnese médica versionada, com acesso clínico por UG.
 
 ### Implementado
 

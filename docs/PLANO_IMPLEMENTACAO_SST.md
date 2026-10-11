@@ -2,6 +2,8 @@
 
 Data da análise: 10/10/2026. Módulo: `SST`, rota `/sst`, referência EXE-10.
 
+Este documento preserva a análise inicial e o escopo contratual. Para o estado após `sst4` e o hardening local de 11/10/2026, consultar `EXECUCAO_SST.md` e `EVIDENCIAS_SST.md`. As lacunas iniciais abaixo não são a lista atual de funcionalidades ausentes.
+
 ## 1. Fonte e conclusão
 
 Fonte conferida: `docs/Termo de Referencia/Checklist real POC MÓDULOS EXECUTIVO e CAMARA.pdf`, páginas **86–96 do arquivo PDF**, requisitos **1 a 74**. A página 96 contém o último requisito SST e inicia Gestão e-Social; os itens seguintes pertencem a outro módulo. Os números abaixo são os do checklist, não números novos de requisitos. Não foi estabelecida equivalência com uma paginação impressa diferente.

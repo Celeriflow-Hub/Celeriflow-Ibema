@@ -6198,6 +6198,7 @@ model SstVaccination {
   createdById String
   createdAt DateTime @default(now())
   @@unique([budgetUnitId, submissionKey])
+  @@unique([personId, vaccineId, doseNumber, administeredAt], map: "SstVaccination_person_vaccine_dose_date_key")
   @@index([budgetUnitId, administeredAt, id])
 }
 

@@ -265,6 +265,7 @@ model Role {
 
 // Servidores BÃ¡sicos (Base para RH e vinculaÃ§Ã£o de responsÃ¡veis)
 model Employee {
+  legislativeAdvisor CamAdvisor?
   sstEquipmentItems SstEquipmentDeliveryItem[]
   sstElectionElectors SstElectionElector[]
   sstElectionCandidates SstElectionCandidate[]
@@ -443,6 +444,7 @@ model CalendarEvent {
 
 // Pessoas FÃ­sicas
 model Person {
+  legislativeAdvisors CamAdvisor[]
   sstEquipmentEvents SstEquipmentEvent[]
   sstElectionElectors SstElectionElector[]
   sstProfessionalRoles SstProfessionalRole[]
@@ -741,6 +743,248 @@ model FamilyMember {
   @@index([personId, status])
 }
 
+enum PlanningJurisdiction {
+  EXECUTIVE
+  LEGISLATIVE
+}
+
+enum PlanningInstrumentKind {
+  PPA
+  LDO
+  LOA
+}
+
+enum PlanningLineKind {
+  REVENUE
+  EXPENSE
+  TRANSFER
+}
+
+model PlanningRevenueAllocation {
+  id String @id @default(cuid())
+  revenueNatureId String
+  revenueNature RevenueNature @relation(fields: [revenueNatureId], references: [id], onDelete: Restrict)
+  resourceSourceId String
+  resourceSource ResourceSource @relation(fields: [resourceSourceId], references: [id], onDelete: Restrict)
+  percentage Decimal @db.Decimal(12, 6)
+  @@unique([revenueNatureId, resourceSourceId])
+}
+
+model PlanningEntityScope {
+  governmentEntityId String @id
+  governmentEntity GovernmentEntity @relation(fields: [governmentEntityId], references: [id], onDelete: Restrict)
+  jurisdiction PlanningJurisdiction
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+}
+
+model PlanningEntityUnit {
+  budgetUnitId String @id
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  governmentEntityId String
+  governmentEntity GovernmentEntity @relation(fields: [governmentEntityId], references: [id], onDelete: Restrict)
+  @@index([governmentEntityId])
+}
+
+model PlanningInstrument {
+  id String @id @default(cuid())
+  governmentEntityId String
+  governmentEntity GovernmentEntity @relation(fields: [governmentEntityId], references: [id], onDelete: Restrict)
+  kind PlanningInstrumentKind
+  code String
+  title String
+  startYear Int
+  endYear Int
+  revenueDegree Int @default(6)
+  expenseLevel String @default("ELEMENT_SOURCE")
+  projectNumber String?
+  legalText String?
+  parentId String?
+  parent PlanningInstrument? @relation("PlanningInstrumentChain", fields: [parentId], references: [id], onDelete: Restrict)
+  children PlanningInstrument[] @relation("PlanningInstrumentChain")
+  multiYearPlanId String? @unique
+  multiYearPlan MultiYearPlan? @relation(fields: [multiYearPlanId], references: [id], onDelete: Restrict)
+  budgetGuidelineId String? @unique
+  budgetGuideline BudgetGuideline? @relation(fields: [budgetGuidelineId], references: [id], onDelete: Restrict)
+  annualBudgetLawId String? @unique
+  annualBudgetLaw AnnualBudgetLaw? @relation(fields: [annualBudgetLawId], references: [id], onDelete: Restrict)
+  revision Int @default(1)
+  createdById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lines PlanningBudgetLine[]
+  hearings PlanningHearing[]
+  amendments PlanningLegislativeAmendment[]
+  memories PlanningCalculationMemory[]
+  waivers PlanningRevenueWaiver[]
+  importsFrom PlanningImportBatch[] @relation("PlanningImportSource")
+  importsTo PlanningImportBatch[] @relation("PlanningImportTarget")
+  @@unique([governmentEntityId, kind, code])
+  @@index([governmentEntityId, kind, startYear])
+}
+
+model PlanningImportBatch {
+  id String @id @default(cuid())
+  sourceInstrumentId String
+  sourceInstrument PlanningInstrument @relation("PlanningImportSource", fields: [sourceInstrumentId], references: [id], onDelete: Restrict)
+  targetInstrumentId String
+  targetInstrument PlanningInstrument @relation("PlanningImportTarget", fields: [targetInstrumentId], references: [id], onDelete: Restrict)
+  mode String
+  selectedLineIds String[]
+  targetYear Int
+  fingerprint String
+  submissionKey String @unique
+  importedCount Int
+  createdById String
+  createdAt DateTime @default(now())
+  @@index([targetInstrumentId, createdAt])
+}
+
+model PlanningBudgetLine {
+  id String @id @default(cuid())
+  instrumentId String
+  instrument PlanningInstrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  kind PlanningLineKind
+  code String
+  description String
+  year Int
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  resourceSourceId String
+  resourceSource ResourceSource @relation(fields: [resourceSourceId], references: [id], onDelete: Restrict)
+  revenueNatureId String?
+  revenueNature RevenueNature? @relation(fields: [revenueNatureId], references: [id], onDelete: Restrict)
+  expenseNatureId String?
+  expenseNature ExpenseNature? @relation(fields: [expenseNatureId], references: [id], onDelete: Restrict)
+  programId String?
+  program ProgramPPA? @relation(fields: [programId], references: [id], onDelete: Restrict)
+  actionId String?
+  action ActionPPA? @relation(fields: [actionId], references: [id], onDelete: Restrict)
+  functionCode String?
+  subfunctionCode String?
+  product String?
+  productUnit String?
+  physicalTarget Decimal @default(0) @db.Decimal(18, 4)
+  physicalActual Decimal @default(0) @db.Decimal(18, 4)
+  originalValue Decimal @db.Decimal(18, 2)
+  amendmentBlocked Boolean @default(false)
+  createdAt DateTime @default(now())
+  movements PlanningLineMovement[]
+  amendmentItems PlanningAmendmentItem[]
+  @@unique([instrumentId, code])
+  @@index([instrumentId, year, kind, budgetUnitId, resourceSourceId], map: "planning_line_scope_period")
+}
+
+model PlanningLineMovement {
+  id String @id @default(cuid())
+  lineId String
+  line PlanningBudgetLine @relation(fields: [lineId], references: [id], onDelete: Restrict)
+  effectiveAt DateTime @db.Date
+  value Decimal @db.Decimal(18, 2)
+  reason String
+  legalText String
+  legalActNumber String
+  createdById String
+  idempotencyKey String @unique
+  createdAt DateTime @default(now())
+  @@index([lineId, effectiveAt, createdAt])
+}
+
+model PlanningHearing {
+  id String @id @default(cuid())
+  instrumentId String
+  instrument PlanningInstrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  title String
+  heldAt DateTime
+  location String
+  minutes String?
+  createdById String
+  createdAt DateTime @default(now())
+  demands PlanningCommunityDemand[]
+  @@index([instrumentId, heldAt])
+}
+
+model PlanningCommunityDemand {
+  id String @id @default(cuid())
+  hearingId String
+  hearing PlanningHearing @relation(fields: [hearingId], references: [id], onDelete: Restrict)
+  requesterName String
+  email String?
+  phone String?
+  neighborhood String
+  request String
+  responsibleUnitId String
+  responsibleUnit BudgetUnit @relation(fields: [responsibleUnitId], references: [id], onDelete: Restrict)
+  status String @default("PENDING")
+  opinion String?
+  createdAt DateTime @default(now())
+  @@index([hearingId, status])
+}
+
+model PlanningLegislativeAmendment {
+  id String @id @default(cuid())
+  instrumentId String
+  instrument PlanningInstrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  number String
+  date DateTime @db.Date
+  objective String
+  justification String
+  councilorId String
+  councilor CamVereador @relation(fields: [councilorId], references: [id], onDelete: Restrict)
+  legalText String
+  status String @default("DRAFT")
+  decidedById String?
+  decidedAt DateTime?
+  createdById String
+  createdAt DateTime @default(now())
+  items PlanningAmendmentItem[]
+  @@unique([instrumentId, number])
+}
+
+model PlanningAmendmentItem {
+  id String @id @default(cuid())
+  amendmentId String
+  amendment PlanningLegislativeAmendment @relation(fields: [amendmentId], references: [id], onDelete: Restrict)
+  lineId String
+  line PlanningBudgetLine @relation(fields: [lineId], references: [id], onDelete: Restrict)
+  value Decimal @db.Decimal(18, 2)
+  sanctioned Boolean?
+  @@unique([amendmentId, lineId])
+}
+
+model PlanningCalculationMemory {
+  id String @id @default(cuid())
+  instrumentId String
+  instrument PlanningInstrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  title String
+  normativeReference String
+  methodology String
+  assumptions String
+  baseValue Decimal @db.Decimal(18, 2)
+  rate Decimal @db.Decimal(12, 6)
+  resultValue Decimal @db.Decimal(18, 2)
+  createdById String
+  createdAt DateTime @default(now())
+  @@index([instrumentId])
+}
+
+model PlanningRevenueWaiver {
+  id String @id @default(cuid())
+  instrumentId String
+  instrument PlanningInstrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  year Int
+  description String
+  legalReference String
+  modality String
+  estimatedValue Decimal @db.Decimal(18, 2)
+  compensation String
+  compensationValue Decimal @db.Decimal(18, 2)
+  methodology String
+  createdById String
+  createdAt DateTime @default(now())
+  @@index([instrumentId, year])
+}
+
 model GovernmentEntity {
   id        String             @id @default(cuid())
   code      String             @unique
@@ -759,6 +1003,9 @@ model GovernmentEntity {
   costCenters        CostCenter[]
   legalTexts         LegalText[]
   legalReportSigners LegalReportSigner[]
+  planningScope      PlanningEntityScope?
+  planningUnits      PlanningEntityUnit[]
+  planningInstruments PlanningInstrument[]
 
   @@index([parentId, status])
   @@index([type, status])
@@ -3429,6 +3676,7 @@ model FinancialYear {
 // --- Planejamento OrÃ§amentÃ¡rio: PPA, LDO, LOA, CMD, MBA, CrÃ©ditos Adicionais ---
 
 model MultiYearPlan {
+  planningInstrument PlanningInstrument?
   id                   String    @id @default(cuid())
   code                 String    @unique
   name                 String
@@ -3482,10 +3730,16 @@ model PlanningAmendment {
 }
 
 model ProgramPPA {
+  planningLines PlanningBudgetLine[]
   id              String        @id @default(cuid())
   code            String
   name            String
   type            String        @default("FinalÃ­stico") // FinalÃ­stico, GestÃ£o, ServiÃ§o ao Estado
+  origin          String?
+  guidelines      String?
+  targetAudience  String?
+  financing       String?
+  managerName     String?
   multiYearPlanId String
   multiYearPlan   MultiYearPlan @relation(fields: [multiYearPlanId], references: [id], onDelete: Cascade)
   createdAt       DateTime      @default(now())
@@ -3520,6 +3774,7 @@ model IndicatorPPA {
 }
 
 model ActionPPA {
+  planningLines PlanningBudgetLine[]
   id        String     @id @default(cuid())
   code      String
   name      String
@@ -3543,6 +3798,7 @@ model GoalPPA {
 }
 
 model BudgetGuideline {
+  planningInstrument PlanningInstrument?
   id                   String         @id @default(cuid())
   financialYearId      String
   financialYear        FinancialYear  @relation(fields: [financialYearId], references: [id])
@@ -3597,6 +3853,7 @@ model BudgetGuidelineRisk {
 }
 
 model AnnualBudgetLaw {
+  planningInstrument PlanningInstrument?
   id                   String           @id @default(cuid())
   lawNumber            String
   publicationDate      DateTime?
@@ -3730,6 +3987,8 @@ model CreditRequestItem {
 }
 
 model BudgetUnit {
+  planningLines PlanningBudgetLine[]
+  planningDemands PlanningCommunityDemand[]
   sstEquipment SstEquipment[]
   sstEquipmentPolicy SstEquipmentPolicy?
   sstEquipmentDeliveries SstEquipmentDelivery[]
@@ -3747,6 +4006,7 @@ model BudgetUnit {
   sstPlannedShifts SstPlannedShift[]
   sstBoards SstMedicalBoard[]
   sstAvailabilities SstScheduleAvailability[]
+  planningEntityUnit PlanningEntityUnit?
   id            String      @id @default(cuid())
   code          String      @unique
   name          String
@@ -3765,6 +4025,13 @@ model BudgetUnit {
 }
 
 model ResourceSource {
+  planningLines PlanningBudgetLine[]
+  planningAllocations PlanningRevenueAllocation[]
+  tceCode String?
+  stnGroup String?
+  stnSpecification String?
+  stnDetail String?
+  referenceYear Int?
   id        String   @id @default(cuid())
   code      String   @unique
   name      String
@@ -3781,6 +4048,11 @@ model ResourceSource {
 }
 
 model RevenueNature {
+  planningLines PlanningBudgetLine[]
+  planningAllocations PlanningRevenueAllocation[]
+  degree Int?
+  shortCode String? @unique
+  referenceYear Int?
   id        String   @id @default(cuid())
   code      String   @unique
   name      String
@@ -3798,6 +4070,7 @@ enum ProcurementOriginPolicy {
 }
 
 model ExpenseNature {
+  planningLines PlanningBudgetLine[]
   id                      String                  @id @default(cuid())
   code                    String                  @unique
   name                    String
@@ -11631,6 +11904,7 @@ model CamVereador {
   gabinete        CamGabinete?
   presencas       CamPresencaSessao[]
   votos           CamVoto[]
+  planningAmendments PlanningLegislativeAmendment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -11734,6 +12008,7 @@ model CamMesaDiretora {
 }
 
 model CamGabinete {
+  advisors CamAdvisor[]
   id       String  @id @default(cuid())
   sala     String
   andar    String?
@@ -11746,6 +12021,22 @@ model CamGabinete {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model CamAdvisor {
+  id String @id @default(cuid())
+  personId String
+  person Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+  employeeId String? @unique
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  cabinetId String
+  cabinet CamGabinete @relation(fields: [cabinetId], references: [id], onDelete: Restrict)
+  role String
+  startsAt DateTime @db.Date
+  endsAt DateTime? @db.Date
+  isActive Boolean @default(true)
+  @@unique([personId, cabinetId, startsAt])
+  @@index([cabinetId, isActive])
 }
 
 model CamPauta {

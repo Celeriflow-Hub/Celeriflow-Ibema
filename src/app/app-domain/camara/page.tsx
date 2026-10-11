@@ -83,7 +83,10 @@ export default async function CamaraDashboard() {
 
       <h3 className="pt-1 text-sm font-semibold text-gray-900 dark:text-white">Módulos do Sistema Legislativo</h3>
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        
+        <Link href="/camara/planejamento" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
+          <Landmark className="mb-2 h-6 w-6 text-[#9333EA]" />
+          <div><h4 className="font-medium text-gray-900 group-hover:text-[#9333EA] dark:text-white">Planejamento e Orçamento</h4><p className="mt-1 text-xs text-gray-500">PPA, LDO, LOA, previsões e metas</p></div>
+        </Link>
         <Link href="/camara/legislaturas" className="group flex h-32 flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
           <Landmark className="h-6 w-6 text-[#9333EA] mb-2" />
           <div>

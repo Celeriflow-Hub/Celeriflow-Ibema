@@ -184,3 +184,24 @@ Depois de sincronizar o commit no outro notebook, repita a conferência de atrib
 ## Limite desta entrega
 
 Este documento registra o diagnóstico e o procedimento de correção. Na investigação que o originou, foram feitas somente consultas ao banco e reconstrução em memória: nenhum registro de migration ou arquivo SQL foi alterado.
+
+## Execução da correção no notebook de Planejamento — 11/10/2026
+
+- Recebido este documento com `git pull --ff-only origin main`, até `17ff495`. O schema local de Planejamento foi preservado em stash específico e reaplicado sem conflitos; demais alterações locais foram mantidas.
+- Criada `.gitattributes`: foundation com `-text` e reconhecimento de CR como terminador (`whitespace=cr-at-eol`); revisões temporais e consignações com `text eol=lf`.
+- `scripts/restore-hr-foundation-bytes.mjs` verifica conteúdo/hash conhecido e o registro concluído do banco antes de restaurar **um único arquivo por execução**. Não executa SQL de migração nem escreve em `_prisma_migrations`.
+- Foundation restaurada ao hash original `b0da3ace2e59d743cd4584c983729dbc87d0b0ba26156e86b8f0226d99ffd1f2`, preservando os finais mistos.
+- As duas migrations posteriores estavam em CRLF no checkout. Seus bytes LF reproduziram exatamente os hashes registrados nesta investigação; foram restauradas individualmente e protegidas por atributos.
+- Os três previews de `deploy-hr-migrations.ts` retornaram `APPLIED_CHECKSUM_VERIFIED`, com `missingRuntimeDependencies: []`.
+- Conferência completa: `{"checked":59,"mismatches":[],"missing":[]}`. `git diff --ignore-space-at-eol` dos três arquivos ficou vazio. Isso confirma conteúdo SQL preservado, sem certificar ausência de drift.
+- `prisma migrate status`: hardening clínico SST e duas novas migrations de Planejamento ainda pendentes. A restauração não aplicou esses incrementos.
+
+Comandos reproduzíveis do restaurador (sem `--apply`, somente prévia):
+
+```powershell
+node scripts/restore-hr-foundation-bytes.mjs
+node scripts/restore-hr-foundation-bytes.mjs --temporal
+node scripts/restore-hr-foundation-bytes.mjs --consignments
+```
+
+O restaurador é restrito aos hashes comprovados acima. Qualquer mudança de SQL, BOM, conteúdo truncado ou registro divergente no banco aborta a gravação. Versionar a foundation restaurada junto com `.gitattributes`; não executar renormalização genérica dessa migration.

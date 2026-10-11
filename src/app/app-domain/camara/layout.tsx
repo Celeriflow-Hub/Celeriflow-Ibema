@@ -4,6 +4,7 @@ const navigation: ModuleNavGroup[] = [{
   title: "Legislativo",
   items: [
     { title: "Painel", href: "/camara", icon: "layoutDashboard", exact: true },
+    { title: "Planejamento e Orçamento", href: "/camara/planejamento", icon: "bookOpenCheck" },
     { title: "Legislaturas", href: "/camara/legislaturas", icon: "landmark" },
     { title: "Vereadores", href: "/camara/vereadores", icon: "users" },
     { title: "Comissões", href: "/camara/comissoes", icon: "users" },

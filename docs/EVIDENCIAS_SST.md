@@ -2,7 +2,7 @@
 
 ## Referência e critérios
 
-Conferência de código/documentação: 11/10/2026, base `7f28090 — sst4` e hardening clínico local ainda não publicado. Fonte contratual e texto integral: `PLANO_IMPLEMENTACAO_SST.md`, checklist PDF páginas 86–96; especificações 1.732–1.805.
+Conferência de código/documentação: 11/10/2026, base `7f28090 — sst4`, hardening publicado em `76728e5 — sst5` e integração `f78c851 — rh1`. Fonte contratual e texto integral: `PLANO_IMPLEMENTACAO_SST.md`, checklist PDF páginas 86–96; especificações 1.732–1.805. Pacote de providências/modelos para retomada: `SST_PENDENCIAS_E_RETOMADA.md`.
 
 Esta matriz identifica **onde demonstrar** cada requisito e o que falta verificar. Não é ata de aceite. Nenhum item recebe aqui status de homologado; não há contagem 74/74 ou mínimo de 67 atingido. Os testes de serviço/PGlite não substituem execução com usuários, dados, documentos e integrações reais.
 
@@ -121,4 +121,6 @@ Para cada item, registrar: commit e versão da migração; data; perfil/usuário
 
 Roteiro transversal obrigatório: base com mais de 40 registros, 20 por página, filtros/ordenação estáveis; nomes longos e viewports 1366/1440/1920 e estreito; ausência de rolagem interna da tabela; negativa de acesso cruzado, downloads e exportações; concorrência de agenda/estoque/folha/voto; impressão multipágina; GED privado operacional.
 
-O banco compartilhado contém `20261011030000_hr_workforce_foundation` sem arquivo local nesta conferência. Integrar sua versão original antes do deploy do hardening SST. O verificador de checksums SST retornou 18 migrações, sem divergências/arquivos ausentes; isso não valida o histórico RH ou drift de schema.
+O arquivo `20261011030000_hr_workforce_foundation` chegou em `rh1`, mas seu checksum diverge do registrado no banco. A conferência read-only `npx tsx scripts/verify-sst-migration-history.ts --all` encontrou 57 migrações aplicadas, essa única divergência e nenhum arquivo ausente. O modo SST conferiu 18 sem divergências. Recuperar a versão original e reconciliar o histórico antes do deploy do hardening SST; não alterar o checksum para mascarar diferenças. A suíte integrada após `rh1` passou com 142 testes e o build completo passou. Isso não equivale à homologação operacional nem verifica drift de schema.
+
+**Atualização de 11/10/2026 após `17ff495`:** o diagnóstico do notebook RH comprovou finais mistos LF/CRLF, sem mudança de SQL. Os bytes originais das três migrations RH foram restaurados e protegidos em `.gitattributes`; os três previews verificaram o checksum exato. A conferência completa passou com 59 migrations, nenhuma divergência e nenhum arquivo ausente. O hardening SST continua pendente; a correção não reaplicou SQL nem alterou o histórico do banco. Ver `RH_MIGRATION_FOUNDATION_CORRECAO_CHECKSUM.md`.

@@ -2,7 +2,7 @@
 
 ## Estado atual — 11/10/2026
 
-As frentes de software F0–F8 estão presentes no incremento `7f28090 — sst4`, com hardening clínico e navegação adicionais no trabalho local. **A homologação dos 74 requisitos não está concluída.** A presença de rotinas e testes não comprova 74/74 nem o mínimo de 67 da POC. Escopo: `PLANO_IMPLEMENTACAO_SST.md`; rastreabilidade atual por item: `EVIDENCIAS_SST.md`.
+As frentes de software F0–F8 estão presentes no incremento `7f28090 — sst4`; hardening clínico, navegação e matriz foram publicados em `76728e5 — sst5`. A integração do outro notebook chegou em `f78c851 — rh1`, com checkout sincronizado com `origin/main`. **A homologação dos 74 requisitos não está concluída.** A presença de rotinas e testes não comprova 74/74 nem o mínimo de 67 da POC. Escopo: `PLANO_IMPLEMENTACAO_SST.md`; rastreabilidade atual por item: `EVIDENCIAS_SST.md`. Providências, modelos e desenvolvimento restante: `SST_PENDENCIAS_E_RETOMADA.md`.
 
 ### Entregas incorporadas em SST4
 
@@ -18,30 +18,32 @@ As frentes de software F0–F8 estão presentes no incremento `7f28090 — sst4`
 | F7 | Planos ANS, contratos/carteiras, titular/dependentes, lançamentos por competência, postagem Decimal em Folha e compensações rastreáveis. | Saída fiscal oficial permanece bloqueada; ver distinção DIRF/eSocial abaixo. |
 | F8 | Preparação S-2220/S-2210/S-2240 com proveniência, estados/ambientes/rejeições; PPP preparatório, consolidado PDF e serviços próprios do portal. | Transporte eSocial real não está instalado/homologado. Consolidado filtra disciplinas autorizadas; portal não libera prontuário integral. |
 
-### Hardening clínico local
+### Hardening clínico publicado, implantação pendente
 
 - Escrita exige profissional canônico vinculado ao usuário, atuação/UG e vigência compatíveis, inclusive para administrador. Habilitações e concessões são administradas tecnicamente.
 - Consultas e documentos aplicam grants por atuação, histórico funcional e auditoria; laudos usam template institucional canônico.
 - Retry idêntico de habilitação preserva ID; conflito é bloqueado. Vacinação distingue pessoa/vacina/dose/data, permitindo reforços anuais com a mesma numeração.
 - Migração aditiva `20261011120000_harden_sst_clinical_integrity`: datas finitas, unicidade da vacinação, autoria/atuação/UG/vigência no banco e lock compartilhado da habilitação.
-- A migração clínica original `20261011010000_add_sst_clinical_services` não tem alteração SQL no diff; Git sinaliza normalização de finais de linha. O verificador aceita somente variantes LF/CRLF das mesmas instruções.
+- O checksum da migração clínica original `20261011010000_add_sst_clinical_services` confere. O verificador aceita somente variantes LF/CRLF das mesmas instruções.
 
-### Banco compartilhado — conferência desta continuação
+### Banco compartilhado — histórico da conferência após rh1
 
-`npx prisma migrate status` encontrou 57 migrações locais, hardening SST pendente e **`20261011030000_hr_workforce_foundation` aplicada no banco, mas ausente neste checkout**. O deploy desta continuação não foi executado: integrar o arquivo original do notebook RH e reconciliar o histórico antes de aplicar o hardening. Não recriar essa migração, editar as aplicadas ou resetar o banco.
+O arquivo `20261011030000_hr_workforce_foundation` foi recebido no commit `rh1`. `npx prisma migrate status` encontrou 58 migrações locais e somente o hardening SST pendente. Entretanto, a conferência completa de checksums identificou **divergência entre o arquivo RH recebido e o registro da sua aplicação no banco**, inclusive após considerar finais de linha LF/CRLF. Portanto, o histórico ainda precisa ser reconciliado; status de Prisma sozinho não detecta essa divergência.
 
-`npx tsx scripts/verify-sst-migration-history.ts` retornou `{"checked":18,"mismatches":[],"missing":[]}`. A conferência é somente de migrações SST aplicadas, não certifica ausência de drift de schema nem o histórico de outros módulos.
+`npx tsx scripts/verify-sst-migration-history.ts` retornou `{"checked":18,"mismatches":[],"missing":[]}`. O novo modo read-only `--all` retornou `{"checked":57,"mismatches":["20261011030000_hr_workforce_foundation"],"missing":[]}`. As outras 56 migrações aplicadas conferem. Esse verificador não certifica ausência de drift de schema. O deploy SST desta continuação não foi executado, nem foram modificados checksums, migrações aplicadas ou dados operacionais. Recuperar os bytes originais da migração RH e reconciliar diferenças por incremento aditivo quando necessário.
+
+**Estado posterior, após pull até `17ff495`:** restaurados os bytes originais mistos da foundation e os bytes LF de revisões temporais/consignações, conforme o diagnóstico RH, sem mudança de SQL ou registros do banco. Os três previews RH verificam o checksum exato e o checker geral retornou `{"checked":59,"mismatches":[],"missing":[]}`. Há três migrations pendentes: hardening SST e duas de Planejamento. A restauração foi exclusivamente de arquivos; nenhum desses incrementos foi implantado nessa correção.
 
 ### Validação atual
 
-- Suíte SST, fundação dos módulos, acesso de Perfis e upgrade das migrações de Construção Civil passou nesta continuação: `node --conditions=react-server --import tsx --test --test-reporter=dot tests/sst-*.test.ts tests/planning-sst-modules.test.ts tests/system-administration-page-access.test.ts tests/construction-migration-upgrade.test.ts`.
+- Após receber `rh1`, **142 testes passaram, zero falhas**, incluindo SST, novo motor RH, serviços RH, fundação dos módulos, acesso de Perfis e upgrade integral das migrações: `node --conditions=react-server --import tsx --test --test-concurrency=1 --test-reporter=spec tests/sst-*.test.ts tests/hr-calculation.test.ts tests/hr-workforce-service.test.ts tests/planning-sst-modules.test.ts tests/system-administration-page-access.test.ts tests/construction-migration-upgrade.test.ts`.
 - Os 18 testes clínicos cobrem acesso/autoria, histórico funcional, concessões/revogação, documentos, idempotência, ciclos de vacinação e integridade PostgreSQL isolada.
-- TypeScript com heap 8192 MB e lint direcionado de SST, portal, API, testes e verificador de migrações passaram novamente nesta continuação. Na etapa imediatamente anterior, Prisma validate/generate e `npm run build` completo passaram. A documentação desta continuação não modifica código de aplicação.
+- Prisma validate/generate, lint direcionado SST/portal/API/testes/verificador e **`npm run build` completo passaram após `rh1`** (53 páginas estáticas, checagem TypeScript aprovada). A nova opção do verificador apenas lê o banco e arquivos; os consumidores e contratos de aplicação permanecem preservados.
 - `git diff --check` passou. Homologação em navegador, storage operacional, PDFs com profissionais e concorrência multi-sessão continuam pendentes.
 
 ### Dependências e próximos passos
 
-1. Integrar a migração RH ausente; conferir novamente status/checksums e aplicar somente o incremento aditivo SST pendente após reconciliar o histórico.
+1. A divergência RH foi reconciliada pela restauração dos bytes originais, conforme `RH_MIGRATION_FOUNDATION_CORRECAO_CHECKSUM.md`. Conferir todos os incrementos pendentes antes de aplicar o hardening SST; agora há também duas migrations locais de Planejamento. Detalhes e comandos em `SST_PENDENCIAS_E_RETOMADA.md`.
 2. Preparar dados canônicos autorizados e executar a matriz `EVIDENCIAS_SST.md`, registrando perfil, entidade, versão, passos, resultados e arquivos emitidos.
 3. Configurar avisos conforme `src/app/app-domain/sst/restricoes/EMAIL-CRON.md`. `vercel.json` agenda a rota de hora em hora UTC; o ambiente precisa suportar essa frequência. Sem provedor/ator/escopo/segredo, a rota permanece `503 BLOCKED`. `SENT` é aceite do provedor, não confirmação de entrega/leitura.
 4. Biometria: obter leitor/SDK, implementar e homologar confirmação real (item 27).

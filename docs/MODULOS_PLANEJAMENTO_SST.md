@@ -41,6 +41,16 @@ Os links de integração só são habilitados quando o perfil possui acesso ao m
 
 As áreas indicadas nos novos painéis são o escopo de evolução, não funcionalidades ocupacionais já implementadas.
 
+## Plano detalhado de Planejamento e Orçamento
+
+O documento [PLANO_IMPLEMENTACAO_PLANEJAMENTO_ORCAMENTO.md](PLANO_IMPLEMENTACAO_PLANEJAMENTO_ORCAMENTO.md) compara os 99 requisitos de EXE-01 e os 99 de LEG-01 com o módulo novo, Financeiro e Tributação. Contém matriz integral, evidências, lacunas, fases de desenvolvimento, dependências e roteiro de demonstração por ente.
+
+Diretriz de evolução: **100% funcional por ente**, com domínio/telas de planejamento no módulo novo, retirada das rotinas transferidas dos menus financeiros/tributários e conexão das integrações na etapa final. Foram iniciadas as jornadas `/planejamento/*` e **Câmara → Planejamento e Orçamento** em `/camara/planejamento/*`, com padrão ERP compartilhado e escopo legislativo explícito. A transferência integral, integrações e conclusão dos requisitos ainda estão em desenvolvimento.
+
+Controles separados: [Prefeitura — EXE-01](PLANEJAMENTO_ORCAMENTO_PREFEITURA.md) e [Câmara — LEG-01](PLANEJAMENTO_ORCAMENTO_CAMARA.md), com 99 itens individuais em cada um.
+
+Implementação iniciada: [EXECUCAO_PLANEJAMENTO_ORCAMENTO.md](EXECUCAO_PLANEJAMENTO_ORCAMENTO.md) registra as jornadas próprias, peças/cadastros/receitas/metas/audiências/importações já implementadas, migrations pendentes, dados municipais plausíveis, checks e trabalho restante para atingir 100%.
+
 ## Plano detalhado de SST
 
 O documento [PLANO_IMPLEMENTACAO_SST.md](PLANO_IMPLEMENTACAO_SST.md) registra os 74 requisitos das páginas 86–96 do checklist, evidências de reaproveitamento, lacunas, etapas, integrações e padrão de listas com 20 registros sem rolagem interna da tabela.

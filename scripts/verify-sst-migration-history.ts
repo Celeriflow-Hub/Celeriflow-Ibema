@@ -7,6 +7,9 @@ config({ path: ".env.local", quiet: true });
 config({ quiet: true });
 
 async function main() {
+  const args = process.argv.slice(2);
+  if (args.some((arg) => arg !== "--all")) throw new Error("Argumento inválido: use --all para conferir todos os módulos.");
+  const allModules = args.includes("--all");
   const { prisma } = await import("../src/lib/prisma");
   try {
     const migrations = await prisma.$queryRaw<{ migration_name: string; checksum: string }[]>`
@@ -15,7 +18,7 @@ async function main() {
     let checked = 0;
     const mismatches: string[] = [];
     const missing: string[] = [];
-    for (const migration of migrations.filter((item) => item.migration_name.includes("sst"))) {
+    for (const migration of migrations.filter((item) => allModules || item.migration_name.includes("sst"))) {
       const path = join("prisma", "migrations-ibema", migration.migration_name, "migration.sql");
       if (!existsSync(path)) { missing.push(migration.migration_name); continue; }
       const sql = readFileSync(path, "utf8");
@@ -29,4 +32,4 @@ async function main() {
     if (mismatches.length || missing.length) process.exitCode = 1;
   } finally { await prisma.$disconnect(); }
 }
-void main().catch(() => { console.error("Não foi possível conferir o histórico de migrações SST."); process.exitCode = 1; });
+void main().catch(() => { console.error("Não foi possível conferir o histórico de migrações. Use somente --all ou nenhum argumento e verifique a conexão."); process.exitCode = 1; });

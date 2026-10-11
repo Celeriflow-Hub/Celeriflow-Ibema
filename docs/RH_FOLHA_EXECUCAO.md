@@ -38,7 +38,7 @@ Os arquivos do domínio SST recebidos permanecem preservados. O processamento de
 - `/rh/consignacoes`: contratos imutáveis vinculados ao credor central, cronograma de parcelas iguais, reserva de margem por competência, lançamento único e cancelamento compensatório de parcelas não lançadas. `/portal-servidor/consignacoes`: consulta do próprio titular, a partir de referências liberadas.
 - Dependentes vinculados a `Person`, com nome/CPF/nascimento projetados do Cadastro Único, flags de candidatura e proteção contra duplicidade/troca de titular. Elegibilidade de IRRF e salário-família por parentesco/idade/documentos vigentes; quotas e renda agregadas por PF, rateio entre vínculos e memória em tela/PDF. Fechamento rejeita elegibilidade alterada após o cálculo.
 - Alteração coletiva de cargo/regime/lotação/centro/nível/salário/jornada/término com prévia, hash, revisão temporal e rollback integral. Matrícula/identidade/admissão não são modificadas por esse lote.
-- Banco de horas reconhecido no ponto: créditos/débitos Decimal por origem, limites de saldo e somatórios diários, rejeição de déficit anterior financiado por crédito futuro, política de coexistência com horas extras pagas e preservação da origem integrada. Extrato próprio por escopo em `/portal-servidor/banco-horas`.
+- Banco de horas reconhecido no ponto: créditos/débitos Decimal por origem, limites de saldo e somatórios diários, rejeição de déficit anterior financiado por crédito futuro, política de coexistência com horas extras pagas e preservação da origem integrada. Estorno compensatório único valida saldos posteriores e mantém entrada original. Extrato próprio por escopo em `/portal-servidor/banco-horas`.
 
 Formatos de configuração e limites: `docs/RH_FOLHA_POLITICAS_OPERACIONAIS.md`.
 
@@ -135,7 +135,7 @@ Seed preparado: `npx tsx scripts/seed-hr-engine-demo.ts` / `--apply`. Cria somen
 - Parcelas gerenciadas já presentes na referência são identificadas pelos movimentos preservados no snapshot para evitar desconto duplicado da margem futura. Descontos não gerenciados da referência permanecem como ocupação conservadora.
 - Cálculo e fechamento verificam parcelas reservadas pendentes de lançamento. Parcela lançada não aceita cancelamento automático; exige conciliação/compensação própria, ainda pendente. Cancelar parcela não lançada cria entrada negativa e preserva a reserva original.
 - Testes PostgreSQL aprovados para reserva/replay/excesso sem gravação parcial, lançamento/replay, cancelamento, cronograma pendente, recência da referência, margem gerenciada e triggers imutáveis. TypeScript e ESLint aprovados; build atualizado ainda em validação.
-- Migration aplicada pelo deploy dirigido e reconferida com `APPLIED_CHECKSUM_VERIFIED`, sem dependências de runtime ausentes. `git diff --check` aprovado. O build foi interrompido e retomado em segundo plano; sua aprovação ainda depende do resultado final. A nova tentativa de navegador retornou `[browser.disconnected]`.
+- Migration aplicada pelo deploy dirigido e reconferida com `APPLIED_CHECKSUM_VERIFIED`, sem dependências de runtime ausentes. `git diff --check` aprovado. O build foi interrompido e retomado em segundo plano, posteriormente aprovado conforme registro abaixo. A nova tentativa de navegador retornou `[browser.disconnected]`.
 - O build retomado concluiu com sucesso, incluindo as rotas RH/Portal de contratos e cronogramas consignados.
 
 ### Continuidade — dependentes, alterações coletivas e banco de horas
@@ -143,7 +143,9 @@ Seed preparado: `npx tsx scripts/seed-hr-engine-demo.ts` / `--apply`. Cria somen
 - Testes RH ampliados para vínculo central/projeções/duplicidade, idade civil/validade documental, quota única entre contratos, cessação futura, histórico preservado e fechamento bloqueado após alteração de elegibilidade.
 - Testes de alteração coletiva verificam hash invalidado por revisão concorrente, aplicação/replay e rollback do lote diante de limite de prazo em outro contrato.
 - Banco de horas exercita quatro casas decimais, replay entre operadores, alocação única, déficit sem gravação parcial e limites diários agregados. O extrato do Portal não mistura demonstração/homologação/produção, nem presume escopo de entradas legadas.
-- Dez testes RH passaram antes do último ajuste de somatório diário; checagens atualizadas e build integrado em andamento. As dez fases permanecem parciais conforme a tabela, com pendências internas explícitas.
+- Dez testes RH aprovados após os ajustes de somatório diário e estorno compensatório. O teste PostgreSQL verifica bloqueio de estorno de crédito consumido, estorno de débito/crédito, replay sem duplicação, divergência de fundamento e preservação da entrada original.
+- ESLint aprovado nos serviços RH, operações, dependentes, ponto alterado, nova rota Portal e testes. `npm run build` completo aprovado, incluindo TypeScript, coleta de dados e geração das rotas. As dez fases permanecem parciais conforme a tabela, com pendências internas explícitas.
+- Regressão SST→Folha reexecutada neste incremento: 14 testes aprovados em `sst-functional-payroll-origin`, `sst-functional-leave-posting` e `sst-benefits-posting`. `git diff --check` aprovado após atualização documental.
 
 ## Cemitérios
 

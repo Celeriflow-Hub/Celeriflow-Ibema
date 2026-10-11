@@ -233,4 +233,6 @@ No ponto, informe banco reconhecido positivo (crédito) ou negativo (compensaç�
 
 Origem única do ponto impede duplicação/alocação em outro vínculo. Replay preserva a entrada; falha reverte lote e auditoria. Ponto integrado não aceita edição/exclusão pelas actions RH. Produção exige conjunto oficial aprovado. Saldo e extrato são separados por escopo; entradas legadas sem escopo precisam de saneamento explícito. O titular consulta `/portal-servidor/banco-horas`.
 
-Expiração, transferência entre vínculos, compensação/estorno de entrada integrada e conversão em pagamento continuam pendentes. Não usar o extrato como prova de pagamento.
+Em Operações > Direitos, o estorno recebe ID da entrada original e fundamento. Gera quantidade oposta na mesma data civil e preserva ponto/entrada/auditoria. A retirada de crédito é bloqueada se algum débito posterior ficar sem cobertura; primeiro concilie os débitos. Repetição com mesmo fundamento retorna o estorno existente; fundamento diferente e estorno de estorno são rejeitados. Estorno não libera a origem do ponto para novo lançamento.
+
+Expiração, transferência entre vínculos e conversão em pagamento continuam pendentes. Não usar o extrato como prova de pagamento.

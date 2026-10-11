@@ -28,6 +28,8 @@ function errorMessage(error: unknown, fallback: string) {
 function revalidate(path: string) {
   revalidatePath(path);
   revalidatePath("/obras");
+  revalidatePath("/iluminacao-publica/iluminacao-energia");
+  revalidatePath("/iluminacao-publica/ordens-servico");
 }
 
 export async function createObra(data: { numero: string; nome: string; descricao?: string; local?: string; tipo: string; valorEstimado: number }): Promise<ActionResult> {

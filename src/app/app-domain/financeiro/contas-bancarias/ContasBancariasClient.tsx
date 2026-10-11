@@ -25,6 +25,8 @@ type BankAccount = {
   id: string;
   bankName: string;
   agency: string;
+  bankId: string | null;
+  bankBranchId: string | null;
   accountNumber: string;
   accountType: string;
   currentBalance: number;
@@ -42,11 +44,13 @@ export default function ContasBancariasClient({
   resourceSources,
   budgetUnits,
   accountingPlans,
+  banks,
 }: {
   accounts: BankAccount[];
   resourceSources: { id: string; name: string }[];
   budgetUnits: { id: string; code: string; name: string }[];
   accountingPlans: { id: string; code: string; name: string }[];
+  banks: { id: string; compe: string; name: string; shortName: string; branches: { id: string; code: string; name: string }[] }[];
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(1);
@@ -57,6 +61,8 @@ export default function ContasBancariasClient({
   const [formData, setFormData] = useState({
     bankName: "",
     agency: "",
+    bankId: "",
+    bankBranchId: "",
     accountNumber: "",
     accountType: "Movimento",
     currentBalance: 0,
@@ -81,6 +87,8 @@ export default function ContasBancariasClient({
     setFormData({
       bankName: "",
       agency: "",
+      bankId: "",
+      bankBranchId: "",
       accountNumber: "",
       accountType: "Movimento",
       currentBalance: 0,
@@ -97,6 +105,8 @@ export default function ContasBancariasClient({
     setFormData({
       bankName: account.bankName,
       agency: account.agency,
+      bankId: account.bankId || "",
+      bankBranchId: account.bankBranchId || "",
       accountNumber: account.accountNumber,
       accountType: account.accountType,
       currentBalance: 0,
@@ -132,6 +142,8 @@ export default function ContasBancariasClient({
     }
   };
 
+  const selectedBank = banks.find((bank) => bank.id === formData.bankId);
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden px-1 py-1 sm:px-2">
       <div className="flex flex-col gap-2 border-b border-slate-300 bg-white px-3 py-2 shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -152,7 +164,7 @@ export default function ContasBancariasClient({
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>Listagem de Contas</CardTitle>
-              <CardDescription>As contas da POC são segregadas por finalidade operacional, como saúde, educação, convênios, arrecadação e aplicações.</CardDescription>
+              <CardDescription>Contas segregadas por finalidade operacional, como saúde, educação, convênios, arrecadação e aplicações.</CardDescription>
             </div>
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -231,14 +243,44 @@ export default function ContasBancariasClient({
             <DialogDescription>O saldo é derivado dos movimentos. O saldo de abertura só pode ser informado na inclusão e fica auditado.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="bankId">Banco do Cadastro Único</Label>
+                <Select value={formData.bankId || "legacy"} onValueChange={(value) => {
+                  const bankId = value === "legacy" ? "" : String(value);
+                  const bank = banks.find((item) => item.id === bankId);
+                  setFormData({ ...formData, bankId, bankBranchId: "", bankName: bank?.name || formData.bankName, agency: "" });
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o banco" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="legacy">Sem vínculo canônico</SelectItem>
+                    {banks.map((bank) => <SelectItem key={bank.id} value={bank.id}>{bank.compe} - {bank.shortName}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bankBranchId">Agência do Cadastro Único</Label>
+                <Select value={formData.bankBranchId || "legacy"} onValueChange={(value) => {
+                  const bankBranchId = value === "legacy" ? "" : String(value);
+                  const branch = selectedBank?.branches.find((item) => item.id === bankBranchId);
+                  setFormData({ ...formData, bankBranchId, agency: branch?.code || formData.agency });
+                }} disabled={!selectedBank}>
+                  <SelectTrigger><SelectValue placeholder="Selecione a agência" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="legacy">Sem vínculo canônico</SelectItem>
+                    {selectedBank?.branches.map((branch) => <SelectItem key={branch.id} value={branch.id}>{branch.code} - {branch.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <div className="space-y-2">
-              <Label htmlFor="bankName">Nome do Banco</Label>
-              <Input id="bankName" required value={formData.bankName} onChange={e => setFormData({...formData, bankName: e.target.value})} />
+              <Label htmlFor="bankName">Nome do Banco (snapshot)</Label>
+              <Input id="bankName" required value={formData.bankName} onChange={e => setFormData({...formData, bankName: e.target.value})} readOnly={Boolean(selectedBank)} />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="agency">Agência</Label>
-                <Input id="agency" required value={formData.agency} onChange={e => setFormData({...formData, agency: e.target.value})} />
+                <Label htmlFor="agency">Agência (snapshot)</Label>
+                <Input id="agency" required value={formData.agency} onChange={e => setFormData({...formData, agency: e.target.value})} readOnly={Boolean(formData.bankBranchId)} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="accountNumber">Conta</Label>

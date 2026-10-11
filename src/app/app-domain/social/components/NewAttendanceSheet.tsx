@@ -96,7 +96,7 @@ export function NewAttendanceSheet({
             <Label htmlFor="secrecyLevel">Nível de Sigilo</Label>
             <select id="secrecyLevel" name="secrecyLevel" required className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
               <option value="Normal">Normal (Visível no Prontuário Geral)</option>
-              <option value="Restrito">Restrito (Apenas CREAS / Gestão)</option>
+              <option value="Restrito">Restrito (Profissionais envolvidos)</option>
             </select>
           </div>
           <div className="flex flex-col gap-2">

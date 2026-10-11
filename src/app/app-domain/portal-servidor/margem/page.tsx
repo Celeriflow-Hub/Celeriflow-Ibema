@@ -1,60 +1,36 @@
-import { HandCoins } from "lucide-react";
-import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
+import Link from "next/link";
+import type { Prisma } from "@prisma/client";
+import { z } from "zod";
 import { getEmployeePortalAccess } from "@/lib/portal-servidor/access";
-import { listEmployeePayrolls, loadPayslip } from "@/lib/portal-servidor/document-service";
-import { brl, consignableMargin } from "@/lib/portal-servidor/documents";
+import { arePortalPayrollStatementsEnabled } from "@/lib/rh/payroll-configuration";
+import { consignmentMarginSchema } from "@/lib/rh/consignment-margin";
+import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
+import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
 
 export const dynamic = "force-dynamic";
-
-export default async function MargemPage() {
+export default async function MyConsignmentMargin({ searchParams }: { searchParams: Promise<{ competence?: string; page?: string }> }) {
   const access = await getEmployeePortalAccess();
-  const title = <ErpPageTitle title="Margem consignável e histórico funcional" description="Calculada sobre o último contracheque fechado" icon={<HandCoins className="size-5 text-emerald-700" />} />;
-  if (access.status !== "AVAILABLE") return <div className="flex flex-1 flex-col">{title}<p className="m-3 border bg-white p-4 text-sm text-slate-600">Seu usuário ainda não possui vínculo funcional ativo.</p></div>;
-  const db = access.context.prisma;
-  const id = access.employee.id;
-  const [payrolls, vacations, leaves, requests, employee] = await Promise.all([
-    listEmployeePayrolls(db, id),
-    db.vacation.findMany({ where: { employeeId: id }, orderBy: { acquisitionStart: "desc" }, take: 20 }),
-    db.leave.findMany({ where: { employeeId: id }, orderBy: { startDate: "desc" }, take: 20 }),
-    db.employeePortalRequest.findMany({ where: { employeeId: id, status: { in: ["APROVADA", "INDEFERIDA"] } }, orderBy: { decidedAt: "desc" }, take: 20 }),
-    db.employee.findUnique({ where: { id }, select: { admissionDate: true, employmentNature: true, socialSecurityRegime: true } }),
-  ]);
-  const latest = payrolls.find((p) => p.type === "Mensal") ?? payrolls[0];
-  const slip = latest ? await loadPayslip(db, id, latest.id) : null;
-  const m = slip ? consignableMargin(slip.lines) : null;
-
-  const events = [
-    ...(employee?.admissionDate ? [{ date: employee.admissionDate, text: `Admissão (${employee.employmentNature ?? "vínculo não informado"}, ${employee.socialSecurityRegime})` }] : []),
-    ...vacations.map((v) => ({ date: v.enjoymentStart ?? v.acquisitionStart, text: `Férias — ${v.days} dias · ${v.status}` })),
-    ...leaves.map((l) => ({ date: l.startDate, text: `${l.type} até ${l.endDate.toLocaleDateString("pt-BR", { timeZone: "UTC" })} · ${l.status}` })),
-    ...requests.map((r) => ({ date: r.decidedAt ?? r.createdAt, text: `Solicitação ${r.kind.toLowerCase().replace("_", " ")} ${r.status.toLowerCase()}` })),
-  ].sort((a, b) => b.date.getTime() - a.date.getTime());
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-      {title}
-      <div className="grid gap-3 p-3 lg:grid-cols-2">
-        <section className="border border-slate-300 bg-white p-3 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">Margem consignável {latest ? `— ${latest.competence}` : ""}</h2>
-          {!m ? <p className="mt-2 text-xs text-slate-500">Sem contracheque fechado para calcular a margem.</p> : (
-            <dl className="mt-2 grid grid-cols-2 gap-2 text-xs">
-              <div className="rounded bg-slate-50 p-2"><dt className="text-slate-500">Base (bruto − previdência − IRRF)</dt><dd className="text-sm font-semibold">{brl(m.base)}</dd></div>
-              <div className="rounded bg-slate-50 p-2"><dt className="text-slate-500">Limite ({(m.rate * 100).toFixed(0)}%)</dt><dd className="text-sm font-semibold">{brl(m.limit)}</dd></div>
-              <div className="rounded bg-slate-50 p-2"><dt className="text-slate-500">Consignados em folha</dt><dd className="text-sm font-semibold">{brl(m.used)}</dd></div>
-              <div className="rounded bg-emerald-50 p-2"><dt className="text-emerald-800">Margem disponível</dt><dd className="text-sm font-semibold text-emerald-900">{brl(m.available)}</dd></div>
-            </dl>
-          )}
-          <p className="mt-2 text-[11px] text-slate-500">Valor informativo. A averbação de novo consignado depende de confirmação do RH.</p>
-        </section>
-        <section className="border border-slate-300 bg-white p-3 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">Histórico funcional</h2>
-          {!events.length ? <p className="mt-2 text-xs text-slate-500">Sem registros.</p> : (
-            <ol className="mt-2 space-y-1.5 border-l border-slate-200 pl-3 text-xs">
-              {events.map((e, i) => <li key={i}><span className="font-semibold">{e.date.toLocaleDateString("pt-BR", { timeZone: "UTC" })}</span> — {e.text}</li>)}
-            </ol>
-          )}
-        </section>
-      </div>
-    </div>
-  );
+  if (access.status !== "AVAILABLE") return <p className="p-4">Cadastro funcional indisponível.</p>;
+  const { context, employee } = access;
+  if (!await arePortalPayrollStatementsEnabled(context.prisma)) return <p className="p-4">Demonstrativos desabilitados pelo RH.</p>;
+  const params = await searchParams;
+  const competence = /^(0[1-9]|1[0-2])\/\d{4}$/.test(params.competence || "") ? params.competence : undefined;
+  const ownStatement: Prisma.HrPayrollStatementWhereInput = { contract: { employeeId: employee.id }, releaseAt: { lte: new Date() }, revokedAt: null };
+  const where: Prisma.HrPayrollRunWhereInput = { mode: "OFICIAL", status: "FECHADA", payroll: { type: "Mensal", ...(competence ? { competence } : {}) }, statements: { some: ownStatement } };
+  const total = await context.prisma.hrPayrollRun.count({ where });
+  const page = Math.min(Math.max(1, Number.parseInt(params.page || "1") || 1), Math.max(1, Math.ceil(total / 20)));
+  const rows = await context.prisma.hrPayrollRun.findMany({ where, select: { id: true, scope: true, createdAt: true, payroll: { select: { competence: true } }, statements: { where: ownStatement, take: 1, orderBy: { id: "asc" }, select: { snapshot: true } } }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: 20, skip: (page - 1) * 20 });
+  const href = (value: number) => `?${new URLSearchParams({ page: String(value), competence: competence || "" })}`;
+  return <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
+    <ErpPageTitle title="Minha margem consignável" description="Memória histórica das folhas oficiais liberadas, com limite compartilhado entre os vínculos." action={<Link href="/portal-servidor/demonstrativos">Demonstrativos</Link>} />
+    <form className="flex gap-2 text-xs"><input name="competence" placeholder="MM/AAAA" defaultValue={competence} className="h-8 rounded border px-2" /><button className="rounded border px-3">Filtrar</button></form>
+    <p className="text-xs">{total} cálculos · valores históricos não constituem reserva de margem ou autorização de crédito.</p>
+    <Link href="/portal-servidor/consignacoes" className="text-xs underline">Consultar contratos e parcelas reservadas</Link>
+    {rows.map(row => {
+      const margin = z.object({ consignmentMargin: consignmentMarginSchema.nullable().optional() }).parse(row.statements[0].snapshot).consignmentMargin;
+      return <section key={row.id} className="rounded border bg-white p-3 text-xs"><strong>{row.payroll.competence} · {row.scope}</strong>{margin ? <><p>Remuneração selecionada R$ {margin.remuneration} · descontos obrigatórios R$ {margin.compulsoryDeductions} · base R$ {margin.base}</p><p>Limite {margin.rate}%: R$ {margin.limit} · utilizado R$ {margin.used} · disponível R$ {margin.available}</p><p>Fundamento: {margin.policy.legalReference}</p><p>{margin.contractIds.length} vínculos no cálculo agregado · versão {row.id}</p></> : <p>Esta versão não contém política e memória de margem consignável. Solicite configuração ao RH para cálculos futuros.</p>}</section>;
+    })}
+    {!total && <p className="text-sm">Nenhuma folha mensal liberada neste filtro.</p>}
+    <ErpPagination page={page} total={total} pageSize={20} label="cálculos" previousHref={href(page - 1)} nextHref={href(page + 1)} />
+  </div>;
 }

@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 export interface CadUnicoQueryResult {
   nis: string;
@@ -19,31 +19,13 @@ export async function queryCadUnicoMds(
 ): Promise<CadUnicoQueryResult> {
   const cleanSearch = searchNisOrCpf.replace(/\D/g, "");
 
-  let record = await prisma.cadUnicoRecord.findFirst({
+  const record = await prisma.cadUnicoRecord.findFirst({
     where: {
       OR: [{ nis: cleanSearch }, { cpf: cleanSearch }, { nis: searchNisOrCpf }, { cpf: searchNisOrCpf }],
     },
   });
 
-  if (!record) {
-    // Seed automático de demonstração se não encontrar no mock local
-    const nisVal = cleanSearch.length === 11 ? cleanSearch : `123${Math.floor(10000000 + Math.random() * 90000000)}`;
-    const cpfVal = cleanSearch.length === 11 ? cleanSearch : `089${Math.floor(10000000 + Math.random() * 90000000)}`;
-
-    record = await prisma.cadUnicoRecord.create({
-      data: {
-        nis: nisVal,
-        cpf: cpfVal,
-        nomeCompleto: "MARIA DAS DORES DA SILVA",
-        rendaPerCapita: new Prisma.Decimal(218.0),
-        composicaoFamiliar: 4,
-        endereco: "RUA PRINCIPAL, 100 - CENTRO",
-        municipio: "MUNICÍPIO MODELO",
-        uf: "PB",
-        statusCadastral: "ATUALIZADO",
-      },
-    });
-  }
+  if (!record) throw new Error("Registro do CadÚnico não encontrado.");
 
   const renda = Number(record.rendaPerCapita);
 

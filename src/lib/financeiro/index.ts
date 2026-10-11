@@ -1587,19 +1587,32 @@ export async function getBankAccountLedgerBalance(tx: Db, bankAccountId: string,
 export async function createBankAccountWithOpeningBalance(
   db: PrismaClient,
   actor: FinanceActor,
-  input: { bankName: string; agency: string; accountNumber: string; accountType: string; openingBalance?: Prisma.Decimal | string | number; resourceSourceId: string; budgetUnitId: string; accountingPlanId: string; isActive: boolean; openingDate?: Date },
+  input: { bankName: string; agency: string; bankId?: string | null; bankBranchId?: string | null; accountNumber: string; accountType: string; openingBalance?: Prisma.Decimal | string | number; resourceSourceId: string; budgetUnitId: string; accountingPlanId: string; isActive: boolean; openingDate?: Date },
 ) {
   const openingBalance = input.openingBalance === undefined ? new Prisma.Decimal(0) : new Prisma.Decimal(String(input.openingBalance)).toDecimalPlaces(2);
   if (!openingBalance.isFinite() || openingBalance.lessThan(0)) throw new FinanceError("O saldo de abertura não pode ser negativo.");
   if (!input.resourceSourceId.trim() || !input.budgetUnitId.trim() || !input.accountingPlanId.trim()) throw new FinanceError("Conta bancária exige fonte de recursos, Unidade Gestora e conta analítica.");
   const openingDate = input.openingDate ?? new Date();
   return db.$transaction(async (tx) => {
-    const accountingPlan = await tx.accountingPlan.findUnique({ where: { id: input.accountingPlanId.trim() }, select: { id: true } });
+    const bankId = input.bankId?.trim() || null;
+    const bankBranchId = input.bankBranchId?.trim() || null;
+    const [accountingPlan, bank, branch] = await Promise.all([
+      tx.accountingPlan.findUnique({ where: { id: input.accountingPlanId.trim() }, select: { id: true } }),
+      bankId ? tx.bank.findFirst({ where: { id: bankId, status: "ATIVO" }, select: { id: true, name: true } }) : null,
+      bankBranchId ? tx.bankBranch.findFirst({ where: { id: bankBranchId, status: "ATIVA" }, select: { id: true, bankId: true, code: true } }) : null,
+    ]);
     if (!accountingPlan) throw new FinanceError("A conta analítica vinculada não foi encontrada.");
+    if (bankId && !bank) throw new FinanceError("O banco selecionado não foi encontrado ou está inativo.");
+    if (bankBranchId && (!branch || branch.bankId !== bankId)) throw new FinanceError("A agência não pertence ao banco selecionado ou está inativa.");
+    const bankName = bank?.name || input.bankName.trim();
+    const agency = branch?.code || input.agency.trim();
+    if (!bankName || !agency) throw new FinanceError("Informe banco e agência da conta.");
     const account = await tx.bankAccount.create({
       data: {
-        bankName: input.bankName.trim(),
-        agency: input.agency.trim(),
+        bankName,
+        agency,
+        bankId,
+        bankBranchId,
         accountNumber: input.accountNumber.trim(),
         accountType: input.accountType.trim(),
         currentBalance: 0,
@@ -1655,7 +1668,7 @@ export async function updateBankAccountDetails(
   db: PrismaClient,
   actor: FinanceActor,
   id: string,
-  input: { bankName?: string; agency?: string; accountNumber?: string; accountType?: string; resourceSourceId?: string; budgetUnitId?: string; accountingPlanId?: string; isActive?: boolean },
+  input: { bankName?: string; agency?: string; bankId?: string | null; bankBranchId?: string | null; accountNumber?: string; accountType?: string; resourceSourceId?: string; budgetUnitId?: string; accountingPlanId?: string; isActive?: boolean },
 ) {
   return db.$transaction(async (tx) => {
     if (input.accountingPlanId) {
@@ -1669,11 +1682,26 @@ export async function updateBankAccountDetails(
         if (postings > 0) throw new FinanceError("A conta analítica não pode ser alterada após receber lançamentos contábeis.");
       }
     }
+    const bankId = input.bankId === undefined ? undefined : input.bankId?.trim() || null;
+    const bankBranchId = input.bankBranchId === undefined ? undefined : input.bankBranchId?.trim() || null;
+    const current = bankId === undefined || bankBranchId === undefined
+      ? await tx.bankAccount.findUnique({ where: { id }, select: { bankId: true, bankBranchId: true } })
+      : null;
+    const resolvedBankId = bankId === undefined ? current?.bankId || null : bankId;
+    const resolvedBranchId = bankBranchId === undefined ? current?.bankBranchId || null : bankBranchId;
+    const [bank, branch] = await Promise.all([
+      resolvedBankId ? tx.bank.findFirst({ where: { id: resolvedBankId, status: "ATIVO" }, select: { id: true, name: true } }) : null,
+      resolvedBranchId ? tx.bankBranch.findFirst({ where: { id: resolvedBranchId, status: "ATIVA" }, select: { id: true, bankId: true, code: true } }) : null,
+    ]);
+    if (resolvedBankId && !bank) throw new FinanceError("O banco selecionado não foi encontrado ou está inativo.");
+    if (resolvedBranchId && (!branch || branch.bankId !== resolvedBankId)) throw new FinanceError("A agência não pertence ao banco selecionado ou está inativa.");
     const account = await tx.bankAccount.update({
       where: { id },
       data: {
-        bankName: input.bankName?.trim(),
-        agency: input.agency?.trim(),
+        bankName: bank?.name || input.bankName?.trim(),
+        agency: branch?.code || input.agency?.trim(),
+        bankId,
+        bankBranchId,
         accountNumber: input.accountNumber?.trim(),
         accountType: input.accountType?.trim(),
         resourceSourceId: input.resourceSourceId?.trim() || undefined,

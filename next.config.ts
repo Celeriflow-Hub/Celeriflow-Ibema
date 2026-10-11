@@ -1,8 +1,7 @@
 import type { NextConfig } from "next";
 
 const isProductionBuild = process.env.NODE_ENV === "production";
-const frameAncestors = "'self' https://lovable.dev https://*.lovable.dev https://*.lovable.app https://*.lovableproject.com";
-const minimumBuildWorkerHeapMegabytes = 4096;
+const minimumBuildWorkerHeapMegabytes = 8192;
 const heapOptionPattern = /--max[-_]old[-_]space[-_]size(?:=(\d+)|\s+(\d+))?/g;
 
 function ensureMinimumBuildWorkerHeap() {
@@ -53,6 +52,9 @@ const nextConfig: NextConfig = {
     "/api/financeiro/relatorios": ["./node_modules/pdfkit/js/data/**/*"],
     "/api/frotas/relatorios": ["./node_modules/pdfkit/js/data/**/*"],
     "/api/saude/relatorios": ["./node_modules/pdfkit/js/data/**/*"],
+    "/api/rh/demonstrativos/*": ["./node_modules/pdfkit/js/data/**/*"],
+    "/api/rh/relatorios": ["./node_modules/pdfkit/js/data/**/*"],
+    "/api/portal-servidor/demonstrativos/*": ["./node_modules/pdfkit/js/data/**/*"],
   },
   async headers() {
     return [{
@@ -60,12 +62,10 @@ const nextConfig: NextConfig = {
       headers: [
         { key: "X-Content-Type-Options", value: "nosniff" },
         { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-        // X-Frame-Options cannot allow-list origins; frame-ancestors restricts embedding
-        // to the app itself and the Lovable editor preview.
-        { key: "Content-Security-Policy", value: `frame-ancestors ${frameAncestors}` },
-        { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(self), payment=(), usb=()" },
+        { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
         { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
-        { key: "Content-Security-Policy-Report-Only", value: `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors ${frameAncestors}; form-action 'self'; upgrade-insecure-requests` },
+        { key: "Content-Security-Policy-Report-Only", value: "default-src 'self'; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; upgrade-insecure-requests" },
       ],
     }];
   },

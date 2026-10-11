@@ -155,7 +155,7 @@ export default async function FolhaPortalPage({ searchParams }: { searchParams: 
         title="Demonstrativo de folha"
         description="Lançamentos de competências fechadas ou pagas vinculados exclusivamente ao seu cadastro funcional."
         icon={<WalletCards className="size-5 shrink-0 text-emerald-700" />}
-        action={<Link href="/portal-servidor/ponto" className="inline-flex h-8 items-center gap-1.5 rounded border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">Meu ponto</Link>}
+        action={<Link href="/portal-servidor/demonstrativos" className="inline-flex h-8 items-center gap-1.5 rounded border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">Demonstrativos completos</Link>}
       />
 
       <ErpListFrame

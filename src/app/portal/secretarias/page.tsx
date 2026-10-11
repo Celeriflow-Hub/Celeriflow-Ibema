@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PortalBreadcrumb } from "@/components/portal-institucional/PortalShell";
-import { municipality, fullAddress } from "@/lib/platform/municipality";
+import { MUNICIPALITY_INSTITUTION_NAME } from "@/lib/municipality-identity";
 
 export const metadata: Metadata = {
-  title: `Secretarias | ${municipality.cityHallShort}`,
-  description: `Secretarias municipais da ${municipality.prefectureName}.`,
+  title: `Secretarias | ${MUNICIPALITY_INSTITUTION_NAME}`,
+  description: `Secretarias municipais de ${MUNICIPALITY_INSTITUTION_NAME}.`,
 };
 
 const SECRETARIAS = [
@@ -19,7 +19,7 @@ const SECRETARIAS = [
   { id: "meio-ambiente", name: "Secretaria de Meio Ambiente", description: "Licenciamento, Mata Atlântica e saneamento básico." },
   { id: "cultura", name: "Secretaria de Cultura", description: "Patrimônio cultural, eventos e ações comunitárias." },
   { id: "esportes", name: "Secretaria de Esportes", description: "Esporte educacional, lazer e eventos esportivos." },
-  { id: "turismo", name: "Secretaria de Turismo", description: "Turismo rural, cultural e desenvolvimento local." },
+  { id: "turismo", name: "Secretaria de Turismo", description: "Turismo de natureza, Caparaó e desenvolvimento local." },
   { id: "planejamento", name: "Secretaria de Planejamento", description: "Planejamento, PPA, LDO, LOA e controle interno." },
   { id: "gabinete", name: "Chefe do Gabinete do Prefeito", description: "Assessoramento direto ao Prefeito e articulação institucional." },
   { id: "controle-interno", name: "Controle Interno", description: "Auditoria, transparência e integridade administrativa." },
@@ -30,7 +30,7 @@ export default function SecretariasPage() {
     <main className="mx-auto max-w-6xl px-4 py-9 sm:px-6">
       <PortalBreadcrumb current="Secretarias" />
       <h1 className="mt-5 text-3xl font-bold tracking-tight text-slate-900">Secretarias municipais</h1>
-      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Estrutura administrativa da {municipality.prefectureName}. Para atendimento, utilize o <Link href="/portal/contato" className="font-bold text-[#0e4c7e] hover:underline">Fale Conosco</Link> ou a <Link href="/portal/ouvidoria" className="font-bold text-[#0e4c7e] hover:underline">Ouvidoria</Link>.</p>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Estrutura administrativa de {MUNICIPALITY_INSTITUTION_NAME}. Para atendimento, utilize o <Link href="/portal/contato" className="font-bold text-[#0e4c7e] hover:underline">Fale Conosco</Link> ou a <Link href="/portal/ouvidoria" className="font-bold text-[#0e4c7e] hover:underline">Ouvidoria</Link>.</p>
       <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {SECRETARIAS.map((item) => (
           <article key={item.id} id={item.id} className="scroll-mt-28 rounded-lg border border-slate-200 bg-white p-5">

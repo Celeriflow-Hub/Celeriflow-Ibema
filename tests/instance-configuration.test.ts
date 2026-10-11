@@ -9,6 +9,7 @@ test("returns reusable defaults for every supported instance parameter", () => {
     DOCUMENT_DEFAULT_RETENTION_MONTHS: 60,
     NOTIFICATION_DEFAULT_PRIORITY: "NORMAL",
     REPORT_INCLUDE_EMISSION_METADATA: true,
+    WORKFLOW_INSTANCE_TIME_ZONE: "America/Sao_Paulo",
   });
 });
 
@@ -19,12 +20,14 @@ test("accepts only valid operational instance parameter values", () => {
     DOCUMENT_DEFAULT_RETENTION_MONTHS: "120",
     NOTIFICATION_DEFAULT_PRIORITY: "ALTA",
     REPORT_INCLUDE_EMISSION_METADATA: false,
+    WORKFLOW_INSTANCE_TIME_ZONE: "America/Sao_Paulo",
   }), {
     WORKFLOW_DEFAULT_SLA_DAYS: 15,
     WORKFLOW_INSTANCE_TIME_ZONE: "America/Manaus",
     DOCUMENT_DEFAULT_RETENTION_MONTHS: 120,
     NOTIFICATION_DEFAULT_PRIORITY: "ALTA",
     REPORT_INCLUDE_EMISSION_METADATA: false,
+    WORKFLOW_INSTANCE_TIME_ZONE: "America/Sao_Paulo",
   });
 });
 

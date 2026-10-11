@@ -35,6 +35,7 @@ export default async function CadastrosDashboardPage() {
   let companiesCount = 0;
   let suppliersCount = 0;
   let realEstatesCount = 0;
+  let masterCounts = { geral: 0, estrutura: 0, referencias: 0, qualidade: 0 };
 
   try {
     const { prisma } = await getTenantContextForModule("CADASTROS");
@@ -48,6 +49,16 @@ export default async function CadastrosDashboardPage() {
     companiesCount = companies;
     suppliersCount = suppliers;
     realEstatesCount = realEstates;
+    const [families, entities, costCenters, cities, legalTexts, banks, currencies, catalogItems, latestConsistencyRun] = await Promise.all([
+      prisma.family.count(), prisma.governmentEntity.count(), prisma.costCenter.count(), prisma.city.count(),
+      prisma.legalText.count(), prisma.bank.count(), prisma.currency.count(), prisma.catalogItem.count(),
+      prisma.masterDataConsistencyRun.findFirst({
+        where: { area: "CADASTROS", status: "CONCLUIDA" },
+        orderBy: { startedAt: "desc" },
+        select: { _count: { select: { issues: { where: { status: "ABERTA" } } } } },
+      }),
+    ]);
+    masterCounts = { geral: families + entities, estrutura: costCenters + cities, referencias: legalTexts + banks + currencies + catalogItems, qualidade: latestConsistencyRun?._count.issues || 0 };
   } catch (error) {
     if (error instanceof AccessError) {
       if (error.status === 401) {
@@ -62,7 +73,7 @@ export default async function CadastrosDashboardPage() {
     return (
       <CadastrosUnavailable
         title="Não foi possível carregar Cadastros"
-        message={error instanceof Error && error.message ? `Falha técnica (diagnóstico): ${error.message}` : "Falha técnica ao carregar os dados do módulo. Verifique os logs do servidor com esta referência de horário e tente novamente."}
+        message="Falha técnica ao carregar os dados do módulo. Verifique os logs do servidor e tente novamente."
       />
     );
   }
@@ -93,6 +104,16 @@ export default async function CadastrosDashboardPage() {
           </Link>
         ))}
       </div>
+
+      <section className="rounded-md border border-slate-200 bg-white px-3 py-2 shadow-sm">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+          <span className="font-bold text-slate-700">Cadastro único</span>
+          <Link href="/cadastros/familias" className="text-slate-600 hover:text-emerald-700">Geral <strong className="ml-1 text-slate-800">{masterCounts.geral}</strong></Link>
+          <Link href="/cadastros/centros-custo" className="text-slate-600 hover:text-emerald-700">Estrutura <strong className="ml-1 text-slate-800">{masterCounts.estrutura}</strong></Link>
+          <Link href="/cadastros/textos-juridicos" className="text-slate-600 hover:text-emerald-700">Referências <strong className="ml-1 text-slate-800">{masterCounts.referencias}</strong></Link>
+          <Link href="/cadastros/qualidade" className="text-slate-600 hover:text-emerald-700">Achados abertos <strong className="ml-1 text-slate-800">{masterCounts.qualidade}</strong></Link>
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
         <div className="rounded-md border border-slate-200 bg-white p-3 shadow-sm">

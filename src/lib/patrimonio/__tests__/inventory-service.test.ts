@@ -65,18 +65,13 @@ test("rejeita encerramento de inventário quando aprovador é o mesmo inventoria
   };
   const database = { $transaction: async (callback: (tx: typeof transaction) => Promise<unknown>) => callback(transaction) };
 
-  try {
-    await assert.rejects(
-      () =>
-        closeApprovedInventory(database as never, {
-          sessionId: "inventory-1",
-          approvalEvidence: "Tentativa do próprio inventoriante",
-          actor: { usuarioId: "user-same", employeeId: "emp-same" },
-        }),
-      /Segregação de Funções/,
-    );
-  } finally {
-    if (previousStrictSegregation === undefined) delete process.env.STRICT_SEGREGATION;
-    else process.env.STRICT_SEGREGATION = previousStrictSegregation;
-  }
+  await assert.rejects(
+    () =>
+      closeApprovedInventory(database as never, {
+        sessionId: "inventory-1",
+        approvalEvidence: "Tentativa do próprio inventoriante",
+        actor: { usuarioId: "user-same", employeeId: "emp-same" },
+      }),
+    /Segregação de Funções/,
+  );
 });

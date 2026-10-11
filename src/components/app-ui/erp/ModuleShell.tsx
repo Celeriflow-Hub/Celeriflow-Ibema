@@ -303,7 +303,7 @@ export function ModuleShell({
       data-module-shell
       className="relative -my-2 flex h-full min-h-0 w-[calc(100%+1rem)] max-w-[calc(1600px+1rem)] flex-1 flex-col overflow-hidden bg-slate-100 sm:-my-3 sm:w-[calc(100%+1.5rem)] sm:max-w-[calc(1600px+1.5rem)] lg:flex-row"
     >
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-300 bg-white px-3 lg:hidden">
+      <header className="flex h-10 shrink-0 items-center justify-between border-b border-slate-300 bg-white px-3 lg:hidden">
         <div className="min-w-0">
           <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-emerald-700">Módulo operacional</p>
           <h2 className="truncate text-sm font-bold leading-tight text-slate-800">{moduleTitle}</h2>
@@ -380,7 +380,7 @@ export function ModuleShell({
           </button>
         </div>
 
-        <nav className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1 lg:overflow-hidden" aria-label={"Navegação de " + moduleTitle}>
+        <nav className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1" aria-label={"Navegação de " + moduleTitle}>
           {navigation.map((group) => (
             <section key={group.title} className={cn("border-b pb-1.5 last:border-0", isLightSidebar ? "border-slate-200" : "border-slate-800")}>
               <p className={cn("px-2 pb-0.5 text-[9px] font-bold uppercase tracking-[0.14em]", isLightSidebar ? "text-slate-500" : "text-slate-500", isCollapsed && "lg:sr-only")}>{group.title}</p>
@@ -396,7 +396,7 @@ export function ModuleShell({
                       onClick={() => setIsMobileMenuOpen(false)}
                       aria-current={current ? "page" : undefined}
                       className={cn(
-                        "flex min-h-10 items-center gap-2.5 rounded-md px-2.5 py-1 text-[13px] font-medium outline-none transition-colors lg:min-h-7 lg:text-[11px]",
+                        "flex min-h-7 items-center gap-2.5 rounded-md px-2.5 py-1 text-[11px] font-medium outline-none transition-colors",
                         isCollapsed && "lg:justify-center lg:px-1",
                         current
                           ? "bg-emerald-700 text-white"

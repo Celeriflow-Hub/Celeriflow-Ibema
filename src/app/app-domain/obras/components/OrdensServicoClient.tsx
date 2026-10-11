@@ -91,7 +91,7 @@ function Relation({ label, children }: { label: string; children: React.ReactNod
   return <div className="min-w-0 rounded-lg bg-slate-50 p-3 dark:bg-slate-900/40"><dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</dt><dd className="mt-1 text-sm text-slate-700 dark:text-slate-200">{children}</dd></div>;
 }
 
-export function OrdensServicoClient({ ordens }: { ordens: OrdemServico[] }) {
+export function OrdensServicoClient({ ordens, canManageBase }: { ordens: OrdemServico[]; canManageBase: boolean }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeFilter, setActiveFilter] = useState("all");
@@ -112,10 +112,10 @@ export function OrdensServicoClient({ ordens }: { ordens: OrdemServico[] }) {
           <h1 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">Ordens de Serviço</h1>
           <p className="mt-2 max-w-3xl text-slate-600 dark:text-slate-400">Acompanhe a execução das ordens e suas vinculações operacionais, patrimoniais, financeiras, de materiais, documentos e compras.</p>
         </div>
-        <Link href="/obras/servicos-urbanos" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700">
+        {canManageBase && <Link href="/obras/servicos-urbanos" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700">
           Gerenciar ordem base
           <ExternalLink className="h-4 w-4" />
-        </Link>
+        </Link>}
       </header>
 
       <section className="overflow-hidden rounded-md border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800" aria-label="Ordens de serviço">
@@ -197,7 +197,7 @@ export function OrdensServicoClient({ ordens }: { ordens: OrdemServico[] }) {
               </article>
             );
           })}
-          {filteredOrdens.length === 0 && <div className="px-6 py-14 text-center"><Package className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 font-medium text-slate-700 dark:text-slate-300">Nenhuma ordem encontrada</p><p className="mt-1 text-sm text-slate-500">Ajuste os filtros ou gerencie as ordens base em Serviços Urbanos.</p></div>}
+          {filteredOrdens.length === 0 && <div className="px-6 py-14 text-center"><Package className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 font-medium text-slate-700 dark:text-slate-300">Nenhuma ordem encontrada</p><p className="mt-1 text-sm text-slate-500">Ajuste os filtros para consultar as ordens de serviço.</p></div>}
         </div>
       </section>
     </main>

@@ -6,7 +6,7 @@ export interface PocConfig {
   lastResetAt: string | null;
 }
 
-// The Cacimba de Dentro demonstration uses only this external test bank.
+// The São João do Ivaí demonstration uses only this external test bank.
 export const pocVirtualBank = {
   name: "001 - Banco Virtual Robonuvem",
   agency: "0001",

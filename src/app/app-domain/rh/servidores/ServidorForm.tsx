@@ -16,6 +16,7 @@ import { MoneyInput } from "@/components/ui/MoneyInput";
 import type { BenefitConfig, Department, Dependent, Employee, PayrollBenefit, Role, Secretariat } from "@prisma/client";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { ErpPageTitle as PageHeader } from "@/components/app-ui/erp/ErpPageTitle";
+import { ReferenceLookup } from "../operacoes/ReferenceLookup";
 
 // Formata CPF: 000.000.000-00
 const formatCPF = (value: string) => {
@@ -102,11 +103,12 @@ export function ServidorForm({
           <CardContent className="pt-3">
             <form action={handleSubmit} className="space-y-4">
               {data && <input type="hidden" name="id" value={data.id} />}
+              <div className="space-y-2"><Label>Pessoa física do Cadastro Único</Label><ReferenceLookup kind="person" name="personId" initialValue={data?.personId || ""} required /><p className="text-xs text-muted-foreground">Nome, CPF e contatos são obtidos do cadastro central. Salário e vigência para cálculo são registrados nos contratos.</p></div>
               
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="name">Nome Completo <span className="text-red-500">*</span></Label>
-                  <Input id="name" name="name" defaultValue={data?.name || ""} placeholder="Ex: João da Silva" required />
+                  <Input id="name" name="name" defaultValue={data?.name || ""} placeholder="Obtido da pessoa física selecionada" readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="cpf">CPF <span className="text-red-500">*</span></Label>
@@ -116,7 +118,8 @@ export function ServidorForm({
                     value={cpf} 
                     onChange={(e) => setCpf(formatCPF(e.target.value))}
                     placeholder="000.000.000-00" 
-                    required 
+                    aria-label="CPF legado; o cadastro central prevalece"
+                    readOnly
                   />
                 </div>
               </div>
@@ -128,7 +131,7 @@ export function ServidorForm({
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email <span className="text-red-500">*</span></Label>
-                  <Input id="email" name="email" type="email" defaultValue={data?.email || ""} placeholder="email@exemplo.com" required />
+                  <Input id="email" name="email" type="email" defaultValue={data?.email || ""} placeholder="Obtido do cadastro central" readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">Telefone <span className="text-red-500">*</span></Label>
@@ -138,7 +141,8 @@ export function ServidorForm({
                     value={phone} 
                     onChange={(e) => setPhone(formatPhone(e.target.value))}
                     placeholder="(00) 00000-0000" 
-                    required
+                    aria-label="Telefone legado; o cadastro central prevalece"
+                    readOnly
                   />
                 </div>
               </div>

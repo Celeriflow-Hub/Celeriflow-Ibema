@@ -2,15 +2,15 @@ import Link from "next/link";
 import { Search } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { PortalBreadcrumb } from "@/components/portal-institucional/PortalShell";
-import { municipality, fullAddress } from "@/lib/platform/municipality";
+import { MUNICIPALITY_INSTITUTION_NAME } from "@/lib/municipality-identity";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q } = await searchParams;
   return {
-    title: q ? `Busca por “${q}” | ${municipality.cityHallShort}` : `Busca | ${municipality.cityHallShort}`,
-    description: `Pesquisa institucional no portal oficial da ${municipality.prefectureName}.`,
+    title: q ? `Busca por “${q}” | ${MUNICIPALITY_INSTITUTION_NAME}` : `Busca | ${MUNICIPALITY_INSTITUTION_NAME}`,
+    description: `Pesquisa institucional no portal oficial de ${MUNICIPALITY_INSTITUTION_NAME}.`,
   };
 }
 

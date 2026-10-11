@@ -44,6 +44,14 @@ type SupplierUpdateData = {
   secondaryCnaes?: string | null;
 };
 
+type SupplierMutationData = {
+  category?: string | null;
+  businessBranch?: string | null;
+  certificationsValidUntil?: Date | null;
+  bankData?: string | null;
+  notes?: string | null;
+};
+
 type DocumentUpdateData = {
   title?: string;
   documentType?: string;
@@ -250,14 +258,17 @@ export async function createSupplier(formData: FormData): Promise<void> {
     }
   }
 
-  const result = await createSupplierWithSiaficEvent(context.prisma, { usuarioId: context.user.id }, {
-    personId: selection.personId,
-    companyId: selection.companyId,
-    category: formText(formData, "category") || null,
-    businessBranch: formText(formData, "businessBranch") || null,
-    certificationsValidUntil: parseSupplierDate(formText(formData, "certificationsValidUntil")),
-    bankData: formText(formData, "bankData") || null,
-    notes: formText(formData, "notes") || null,
+  await context.prisma.supplier.create({
+    data: {
+      personId: selection.personId,
+      companyId: selection.companyId,
+      category: formText(formData, "category") || null,
+      businessBranch: formText(formData, "businessBranch") || null,
+      certificationsValidUntil: parseSupplierDate(formText(formData, "certificationsValidUntil")),
+      bankData: formText(formData, "bankData") || null,
+      notes: formText(formData, "notes") || null,
+      status: "Ativo",
+    },
   });
   await dispatchSiaficEvents(context.prisma, result.eventIds);
   revalidatePath("/cadastros/fornecedores");
@@ -267,14 +278,14 @@ export async function createSupplier(formData: FormData): Promise<void> {
 export async function updateSupplier(id: string, data: SupplierUpdateData): Promise<SupplierActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("CADASTROS", "update");
-    const update: SupplierUpdateInput = {};
+    const update: SupplierMutationData = {};
     if (hasField(data, "category")) update.category = optionalSupplierText(data.category);
     if (hasField(data, "businessBranch")) update.businessBranch = optionalSupplierText(data.businessBranch);
     if (hasField(data, "certificationsValidUntil")) update.certificationsValidUntil = parseSupplierDate(data.certificationsValidUntil);
     if (hasField(data, "bankData")) update.bankData = optionalSupplierText(data.bankData);
     if (hasField(data, "notes")) update.notes = optionalSupplierText(data.notes);
 
-    const result = await context.prisma.$transaction(async (tx) => {
+    await context.prisma.$transaction(async (tx) => {
       const supplier = await tx.supplier.findUnique({ where: { id }, select: { companyId: true } });
       if (!supplier) throw new Error("Fornecedor não encontrado.");
 
@@ -290,10 +301,7 @@ export async function updateSupplier(id: string, data: SupplierUpdateData): Prom
         });
       }
 
-      const updatedSupplier = await tx.supplier.update({ where: { id }, data: update });
-      // Queue the existing SIAFIC snapshot only after all canonical supplier fields are written.
-      const eventIds = await queueSupplierSnapshot(tx, { usuarioId: context.user.id }, updatedSupplier.id, "UPDATE");
-      return { eventIds };
+      await tx.supplier.update({ where: { id }, data: update });
     });
     await dispatchSiaficEvents(context.prisma, result.eventIds);
     revalidatePath("/cadastros/fornecedores");
@@ -305,8 +313,7 @@ export async function updateSupplier(id: string, data: SupplierUpdateData): Prom
 export async function deactivateSupplier(id: string): Promise<SupplierActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("CADASTROS", "update");
-    const result = await setSupplierStatusWithSiaficEvent(context.prisma, { usuarioId: context.user.id }, id, "Inativo");
-    await dispatchSiaficEvents(context.prisma, result.eventIds);
+    await context.prisma.supplier.update({ where: { id }, data: { status: "Inativo" } });
     revalidatePath("/cadastros/fornecedores");
     return {};
   } catch (error) {
@@ -316,8 +323,7 @@ export async function deactivateSupplier(id: string): Promise<SupplierActionResu
 export async function activateSupplier(id: string): Promise<SupplierActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("CADASTROS", "update");
-    const result = await setSupplierStatusWithSiaficEvent(context.prisma, { usuarioId: context.user.id }, id, "Ativo");
-    await dispatchSiaficEvents(context.prisma, result.eventIds);
+    await context.prisma.supplier.update({ where: { id }, data: { status: "Ativo" } });
     revalidatePath("/cadastros/fornecedores");
     return {};
   } catch (error) {

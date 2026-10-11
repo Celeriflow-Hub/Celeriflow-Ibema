@@ -49,8 +49,7 @@ function parsePublicJson(value: string | undefined, field: string): Prisma.Input
     throw new Error(`${field} deve conter JSON válido.`);
   }
 }
-
-function validateConnectionInput(input: z.infer<typeof connectionSchema>, configuration: Prisma.InputJsonValue | undefined) {
+function validateConnectionInput(input: z.infer<typeof connectionSchema>) {
   const definition = getIntegrationDefinition(input.code);
   if (!definition) throw new Error("Conector externo inválido.");
   assertIntegrationEnvironmentPolicy(definition.code, input.environment);
@@ -80,7 +79,7 @@ export async function saveIntegrationConnection(rawInput: unknown): Promise<Acti
     const input = connectionSchema.parse(rawInput);
     const configuration = parsePublicJson(input.configurationJson, "Parâmetros públicos");
     const mockScenario = parsePublicJson(input.mockScenarioJson, "Cenário mock");
-    const definition = validateConnectionInput(input, configuration);
+    const definition = validateConnectionInput(input);
     const procurementConfiguration = getProcurementExportConfigurationStatus({
       code: definition.code,
       credentialReference: input.credentialReference,
@@ -139,9 +138,7 @@ export async function testIntegrationConnection(connectionId: string): Promise<A
       throw new Error(`A conexão permanece bloqueada até informar credencial, leiaute e operações: ${procurementConfiguration.issues.join(" ")}`);
     }
 
-    const result = connection.code === "SIAFIC_DEMO"
-      ? await testSiaficDemoConnection(connection)
-      : await executeConfiguredHealthCheck(context.prisma, connection.code, true);
+    const result = await executeConfiguredHealthCheck(context.prisma, connection.code, true);
 
     await context.prisma.integrationConnection.update({
       where: { id: connection.id },

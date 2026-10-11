@@ -84,7 +84,7 @@ export async function saveCovenant(formData: FormData): Promise<CovenantActionRe
         if (existingEvent.entityType !== "COVENANT" || existingEvent.sourceType !== "COVENANT") {
           throw new ContractLifecycleError("A chave de repetição já foi usada em outro ato.");
         }
-        return { id: existingEvent.sourceId ?? existingEvent.entityId, eventIds: [] as string[] };
+        return { id: existingEvent.sourceId ?? existingEvent.entityId };
       }
 
       const data = { number, grantor, description, totalValueDecimal, startDate, endDate, status };
@@ -101,10 +101,7 @@ export async function saveCovenant(formData: FormData): Promise<CovenantActionRe
             idempotencyKey: key,
           },
         });
-        return {
-          id: created.id,
-          eventIds: await queueCovenantSnapshot(tx, { usuarioId: context.user.id }, created.id, "CREATE"),
-        };
+        return { id: created.id };
       }
 
       const existing = await tx.covenant.findUnique({ where: { id }, select: { id: true, status: true, updatedAt: true } });
@@ -142,10 +139,7 @@ export async function saveCovenant(formData: FormData): Promise<CovenantActionRe
           idempotencyKey: key,
         },
       });
-      return {
-        id: existing.id,
-        eventIds: await queueCovenantSnapshot(tx, { usuarioId: context.user.id }, existing.id, "UPDATE"),
-      };
+      return { id: existing.id };
     });
 
     await dispatchSiaficEvents(context.prisma, result.eventIds);

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Cable, FlaskConical, Save, ShieldCheck, Eye, Layers, RotateCcw } from "lucide-react";
+import { Cable, FlaskConical, Save, ShieldCheck, Eye, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,7 @@ import {
   getProcurementExportConfigurationTemplate,
   parseProcurementExportConfigurationJson,
 } from "@/lib/integrations/procurement-export-contract";
-import { retrySiaficDelivery, testIntegrationConnection, saveIntegrationConnection } from "./actions";
+import { testIntegrationConnection, saveIntegrationConnection } from "./actions";
 import IntegrationRunModal from "./IntegrationRunModal";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
@@ -91,11 +91,11 @@ function formFor(connection: Connection | undefined, code: string): FormState {
     code,
     environment: configuredEnvironment && isIntegrationEnvironment(configuredEnvironment)
       ? configuredEnvironment
-      : code === "BANCO_API" ? "SANDBOX" : code === "SIAFIC_DEMO" ? "DEMO" : "MOCK",
+      : code === "BANCO_API" ? "SANDBOX" : "MOCK",
     baseUrl: connection?.baseUrl ?? "",
     credentialReference: connection?.credentialReference ?? "",
     configurationJson: connection?.configuration ?? getProcurementExportConfigurationTemplate(code),
-    mockScenarioJson: connection?.mockScenario ?? (code === "SIAFIC_DEMO" ? "" : '{\n  "scenario": "success"\n}'),
+    mockScenarioJson: connection?.mockScenario ?? '{\n  "scenario": "success"\n}',
     enabled: connection?.status !== "DESATIVADA",
   };
 }
@@ -209,7 +209,7 @@ export default function IntegrationConnectionsClient({ catalog, connections }: {
                   {integrationEnvironments.map((environment) => (
                     <option key={environment} value={environment} disabled={!isEnvironmentAllowedForIntegration(selectedCode, environment)}>
                        {environment === "MOCK" ? "Mock Local (Simulação POC)" : null}
-                       {environment === "DEMO" ? "Receptor SIAFIC - Robonuvem DEMO" : null}
+                       {environment === "DEMO" ? "Demonstração controlada" : null}
                       {environment === "SANDBOX" ? "Sandbox Banco Virtual Robonuvem" : null}
                       {environment === "HOMOLOGACAO" ? "Homologação Órgão Externo (bloqueada)" : null}
                       {environment === "PRODUCAO" ? "Produção Real (bloqueada)" : null}

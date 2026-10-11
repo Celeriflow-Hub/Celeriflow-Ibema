@@ -34,6 +34,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -54,6 +55,7 @@ docs/doc.zip
 !tsconfig.json
 !tsconfig.build.json
 !components.json
+!vercel.json
 
 .vercel
 .env*

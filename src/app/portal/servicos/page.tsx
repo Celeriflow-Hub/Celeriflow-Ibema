@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PortalBreadcrumb } from "@/components/portal-institucional/PortalShell";
-import { municipality, fullAddress } from "@/lib/platform/municipality";
+import { MUNICIPALITY_INSTITUTION_NAME } from "@/lib/municipality-identity";
 
 export const metadata: Metadata = {
-  title: `Serviços | ${municipality.cityHallShort}`,
-  description: `Todos os serviços do portal oficial da ${municipality.prefectureName}.`,
+  title: `Serviços | ${MUNICIPALITY_INSTITUTION_NAME}`,
+  description: `Todos os serviços do portal oficial de ${MUNICIPALITY_INSTITUTION_NAME}.`,
 };
 
 const GROUPS: { id: string; title: string; items: { label: string; href: string; external?: boolean }[] }[] = [
@@ -33,28 +33,23 @@ const GROUPS: { id: string; title: string; items: { label: string; href: string;
     id: "certidoes",
     title: "Certidões e documentos",
     items: [
-      { label: "Certidão Negativa", href: "/portal/servicos#certidoes" },
-      { label: "Diário Oficial", href: municipality.officialGazetteUrl, external: true },
-      { label: "Código de Ética dos Servidores", href: "https://pmdsl.s3.sa-east-1.amazonaws.com/diversos/Lei-1.122-de-2025-Codigo-de-etica.pdf", external: true },
+      { label: "Avisos de processos", href: "/portal-protocolos" },
+      { label: "Leis municipais", href: "/portal/leis-municipais" },
     ],
   },
   {
     id: "tributos",
     title: "Tributos e empresas",
     items: [
-      { label: "Alvará e IPTU", href: "/portal/servicos#tributos" },
-      { label: "Nota Fiscal Eletrônica", href: "/portal/nfse" },
-      { label: "Cadastro de Fornecedores", href: "https://forms.gle/MSEqRMo9DUhaPU4L7", external: true },
+      { label: "Portal Tributário", href: "/portal/tributario" },
+      { label: "Atendimento ao contribuinte", href: "/portal/contato" },
     ],
   },
   {
     id: "servidor",
     title: "Servidor municipal",
     items: [
-      { label: "Contracheque PM", href: "/portal-servidor" },
-      { label: "Contracheque Saúde", href: "/portal-servidor" },
-      { label: "Contracheque Assistência Social", href: "/portal-servidor" },
-      { label: "Portal do Servidor", href: "/portal-servidor" },
+      { label: "Atendimento ao servidor", href: "/portal/contato" },
     ],
   },
 ];
@@ -64,7 +59,7 @@ export default function ServicosPage() {
     <main className="mx-auto max-w-6xl px-4 py-9 sm:px-6">
       <PortalBreadcrumb current="Todos Serviços" />
       <h1 className="mt-5 text-3xl font-bold tracking-tight text-slate-900">Todos os serviços</h1>
-      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Acesso rápido aos serviços e sistemas utilizados pela {municipality.prefectureName}.</p>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Acesso rápido aos serviços e sistemas de {MUNICIPALITY_INSTITUTION_NAME}.</p>
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         {GROUPS.map((group) => (
           <section key={group.id} id={group.id} className="scroll-mt-28 rounded-lg border border-slate-200 bg-white p-5">

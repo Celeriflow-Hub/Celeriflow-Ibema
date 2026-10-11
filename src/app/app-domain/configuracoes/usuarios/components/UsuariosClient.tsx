@@ -22,13 +22,13 @@ type Usuario = {
   perfilId: string;
   perfil: { nome: string };
   employeeId: string | null;
-  employee?: { department: { name: string } | null } | null;
-  permissoesModulo: UsuarioModulo[];
+  employee?: { department: { name: string } | null; secretariat: { name: string } | null } | null;
 };
 type Servidor = {
   id: string;
   name: string;
   department: { name: string } | null;
+  secretariat: { name: string } | null;
 };
 
 export default function UsuariosClient({
@@ -99,8 +99,7 @@ export default function UsuariosClient({
       email: usuario.email,
       perfilId: usuario.perfilId,
       employeeId: usuario.employeeId || "",
-      ativo: usuario.ativo,
-      permissoes: permMap
+      ativo: usuario.ativo
     });
     setIsModalOpen(true);
   }
@@ -121,8 +120,7 @@ export default function UsuariosClient({
       email: formData.email,
       perfilId: formData.perfilId,
       employeeId: formData.employeeId || undefined,
-      ativo: formData.ativo,
-      permissoes: permissoesArray
+      ativo: formData.ativo
     });
 
     if (result.error) {
@@ -152,7 +150,7 @@ export default function UsuariosClient({
       <PageHeader
         title="Gestão de Usuários"
         icon={<UserCog className="size-4 shrink-0 text-slate-700 dark:text-slate-300" />}
-        action={<button onClick={openNewModal} className="flex h-8 items-center gap-2 rounded-md bg-slate-900 px-3 text-sm font-medium text-white transition-colors hover:bg-slate-800 dark:bg-white dark:text-slate-900"><Plus className="h-4 w-4" />Novo Usuário</button>}
+        action={<button onClick={openNewModal} disabled={!perfis.length} className="flex h-8 items-center gap-2 rounded-md bg-slate-900 px-3 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900"><Plus className="h-4 w-4" />Novo Usuário</button>}
         className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white"
       />
       <ErpListFrame toolbar={
@@ -189,7 +187,7 @@ export default function UsuariosClient({
                       {u.perfil.nome}
                     </span>
                   </td>
-                  <td className="hidden max-w-0 truncate px-2.5 py-1.5 text-slate-600 md:table-cell" title={u.employee?.department?.name || undefined}>{u.employee?.department?.name || "-"}</td>
+                  <td className="hidden max-w-0 truncate px-2.5 py-1.5 text-slate-600 md:table-cell" title={u.employee?.secretariat?.name || u.employee?.department?.name || undefined}>{u.employee?.secretariat?.name || u.employee?.department?.name || "-"}</td>
                   <td className="px-2.5 py-1.5">
                     <button
                       onClick={() => handleToggleStatus(u.id, !u.ativo)}
@@ -268,11 +266,13 @@ export default function UsuariosClient({
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Perfil de Acesso</label>
                   <select
+                    required
                     value={formData.perfilId}
-                    onChange={e => setFormData({...formData, perfilId: e.target.value, permissoes: {}})}
+                    onChange={e => setFormData({...formData, perfilId: e.target.value})}
                     className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-gray-900 outline-none"
                   >
-                    {perfis.map(p => (
+                    {!perfis.length && <option value="">Crie um perfil antes de cadastrar usuários</option>}
+                    {perfis.filter(p => p.codigo !== "SYSTEM_ADMINISTRATOR").map(p => (
                       <option key={p.id} value={p.id}>{p.nome}</option>
                     ))}
                   </select>
@@ -284,14 +284,14 @@ export default function UsuariosClient({
                     onChange={e => setFormData({...formData, employeeId: e.target.value})}
                     className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-gray-900 outline-none"
                   >
-                    <option value="">Sem vinculo operacional</option>
-                    {servidores.map(servidor => (
-                      <option key={servidor.id} value={servidor.id}>
-                        {servidor.name}{servidor.department ? ` - ${servidor.department.name}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-1 text-xs text-gray-500">Obrigatorio para operar Protocolos e Processos.</p>
+                      <option value="">Sem vinculo operacional</option>
+                      {servidores.map(servidor => (
+                        <option key={servidor.id} value={servidor.id}>
+                          {servidor.name}{servidor.secretariat ? ` - ${servidor.secretariat.name}` : ""}{servidor.department ? ` / ${servidor.department.name}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  <p className="mt-1 text-xs text-gray-500">Obrigatório para perfis por área/secretaria e para operar Protocolos e Processos.</p>
                 </div>
                 <div className="flex items-center mt-6">
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -306,79 +306,9 @@ export default function UsuariosClient({
                 </div>
               </div>
 
-              {!isAdmin && (
-                <div>
-                  <h3 className="mb-3 border-b border-slate-200 pb-2 text-base font-semibold text-slate-900 dark:border-slate-700 dark:text-white">Permissões por Módulo</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {modulos.map(modulo => {
-                      const perm = formData.permissoes[modulo.id] || { canView: false, canEdit: false };
-                      return (
-                        <Card key={modulo.id} className="shadow-sm">
-                          <CardContent className="p-4">
-                            <h4 className="font-bold text-sm text-gray-900 mb-3 truncate" title={modulo.nome}>
-                              {modulo.nome}
-                            </h4>
-                            <div className="space-y-2">
-                              <label className="flex items-center justify-between text-sm text-gray-600 cursor-pointer">
-                                <span>Pode Ver</span>
-                                <input 
-                                  type="checkbox"
-                                  checked={perm.canView || perm.canEdit}
-                                  onChange={e => {
-                                    const checked = e.target.checked;
-                                    setFormData(prev => ({
-                                      ...prev,
-                                      permissoes: {
-                                        ...prev.permissoes,
-                                        [modulo.id]: { 
-                                          canView: checked, 
-                                          canEdit: checked ? perm.canEdit : false 
-                                        }
-                                      }
-                                    }));
-                                  }}
-                                  className="w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
-                                />
-                              </label>
-                              <label className="flex items-center justify-between text-sm text-gray-600 cursor-pointer">
-                                <span>Pode Editar</span>
-                                <input 
-                                  type="checkbox"
-                                  checked={perm.canEdit}
-                                  onChange={e => {
-                                    const checked = e.target.checked;
-                                    setFormData(prev => ({
-                                      ...prev,
-                                      permissoes: {
-                                        ...prev.permissoes,
-                                        [modulo.id]: { 
-                                          canView: checked ? true : perm.canView, 
-                                          canEdit: checked 
-                                        }
-                                      }
-                                    }));
-                                  }}
-                                  className="w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
-                                />
-                              </label>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {isAdmin && (
-                <div className="bg-blue-50 text-blue-800 p-4 rounded-lg flex items-start gap-3">
-                  <Shield className="h-5 w-5 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-semibold">Acesso Total</h4>
-                    <p className="text-sm mt-1">Este perfil de Administrador possui acesso irrestrito de visualização e edição em todos os módulos do sistema. Não é necessário configurar permissões individuais.</p>
-                  </div>
-                </div>
-              )}
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                Os acessos a módulos e operações são definidos exclusivamente pelas permissões do perfil selecionado.
+              </div>
             </form>
 
             <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">

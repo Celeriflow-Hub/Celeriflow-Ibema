@@ -4,12 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { validateEmployeeRelations } from "@/lib/administration/employee-lifecycle";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
+import { resolveEmployeePerson } from "@/lib/rh/employee-person";
 
 export async function createEmployee(formData: FormData) {
   const name = formData.get("name") as string;
   const cpf = formData.get("cpf") as string;
-  const email = formData.get("email") as string;
-  const phone = formData.get("phone") as string;
+  const personId = String(formData.get("personId") || "");
   const registration = formData.get("registration") as string;
   
   const roleId = formData.get("roleId") as string || null;
@@ -17,23 +17,14 @@ export async function createEmployee(formData: FormData) {
   const departmentId = formData.get("departmentId") as string || null;
   const unitId = formData.get("unitId") as string || null;
 
-  if (!name || !cpf) return { error: "Nome e CPF são obrigatórios" };
+  if (!personId && !cpf) return { error: "Selecione a pessoa física ou informe seu CPF do Cadastro Único." };
 
   try {
     const context = await getTenantContextForSystemAdministration();
     const hierarchy = await validateEmployeeRelations(context.prisma, { secretariatId, departmentId, unitId });
     await context.prisma.$transaction(async (tx) => {
-      const text = (key: string) => ((formData.get(key) as string) || "").trim() || null;
-      const admission = text("admissionDate");
-      const salary = Number(text("salaryBase") ?? 0);
-      const regime = text("socialSecurityRegime") === "RPPS" ? "RPPS" : "RGPS";
-      const employee = await tx.employee.create({ data: {
-        name, cpf, email, phone, registration, roleId, secretariatId: hierarchy.secretariatId, departmentId, unitId,
-        admissionDate: admission ? new Date(`${admission}T12:00:00`) : null,
-        salaryBase: Number.isFinite(salary) && salary > 0 ? salary : 0,
-        employmentNature: text("employmentNature"), socialSecurityRegime: regime,
-        pisPasep: text("pisPasep"), bankCode: text("bankCode"), bankAgency: text("bankAgency"), bankAccount: text("bankAccount"),
-      } });
+      const canonical = await resolveEmployeePerson(tx, { personId, cpf });
+      const employee = await tx.employee.create({ data: { ...canonical, registration, roleId, secretariatId: hierarchy.secretariatId, departmentId, unitId } });
       await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "EMPLOYEE", targetId: employee.id });
     });
   } catch (error: unknown) {

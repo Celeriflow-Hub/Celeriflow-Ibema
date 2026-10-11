@@ -36,23 +36,7 @@ export default function LoginPage() {
     setErrorMsg("");
     
     try {
-      const login = resolveLoginIdentifier(email);
-      // Login de testes (sem Firebase): validado no servidor contra ADM_USER_EMAIL/ADM_USER_PASSKEY.
-      const testResponse = await fetch("/api/auth/test-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: login.email, password }),
-      });
-      if (testResponse.ok) {
-        router.push(returnTo);
-        return;
-      }
-      if (testResponse.status === 429 || testResponse.status === 500) {
-        const data = await testResponse.json().catch(() => ({}));
-        setErrorMsg(data.error || "Erro ao validar sessão com o servidor.");
-        return;
-      }
-      const credential = await signInWithEmailAndPassword(auth, login.email, password);
+      const credential = await signInWithEmailAndPassword(auth, email, password);
       const idToken = await credential.user.getIdToken();
       
       const response = await fetch("/api/auth/session", {
@@ -67,7 +51,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push(login.isCpf && !searchParams.get("returnTo") ? "/portal-servidor" : returnTo);
+      router.push(returnTo);
     } catch (error) {
       console.error(error);
       const errorMessage = error instanceof Error ? error.message : "E-mail ou senha incorretos. Tente novamente.";
@@ -127,86 +111,99 @@ export default function LoginPage() {
           )}
 
           {view === "login" && (
-            <form onSubmit={handleLogin} className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="email" className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-                    E-mail institucional ou CPF
-                  </Label>
-                  <div className="relative group">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
-                    <Input
-                      id="email"
-                      type="text"
-                      autoComplete="username"
-                      placeholder="voce@prefeitura.gov.br ou CPF"
-                      className="pl-9 h-11 bg-muted/50 border-transparent transition-all focus:bg-background focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-sm"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="password" className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-                      Senha
+            <div className="animate-in space-y-5 fade-in slide-in-from-bottom-4 duration-500">
+              <form onSubmit={handleLogin} className="space-y-5">
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email" className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+                      E-mail Institucional
                     </Label>
-                    <Button 
-                      type="button"
-                      variant="link" 
-                      onClick={() => { setView("reset"); setErrorMsg(""); }}
-                      className="px-0 font-normal h-auto text-[11px] text-primary/70 hover:text-primary"
-                    >
-                      Esqueceu a senha?
-                    </Button>
+                    <div className="relative group">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="voce@prefeitura.gov.br"
+                        className="pl-9 h-11 bg-muted/50 border-transparent transition-all focus:bg-background focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-sm"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                      />
+                    </div>
                   </div>
-                  <div className="relative group">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
-                    <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="••••••••"
-                      className="pl-9 pr-9 h-11 bg-muted/50 border-transparent transition-all focus:bg-background focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-sm"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors focus:outline-none"
-                    >
-                      {showPassword ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
-                    </button>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="password" className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+                        Senha
+                      </Label>
+                      <Button
+                        type="button"
+                        variant="link"
+                        onClick={() => { setView("reset"); setErrorMsg(""); }}
+                        className="px-0 font-normal h-auto text-[11px] text-primary/70 hover:text-primary"
+                      >
+                        Esqueceu a senha?
+                      </Button>
+                    </div>
+                    <div className="relative group">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        className="pl-9 pr-9 h-11 bg-muted/50 border-transparent transition-all focus:bg-background focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-sm"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors focus:outline-none"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <Button
-                type="submit"
-                className="w-full h-11 text-sm font-medium transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-md shadow-primary/20"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    Entrar no Sistema
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </>
-                )}
-              </Button>
-              <p className="text-center text-[11px] text-muted-foreground">
-                Servidor municipal?{" "}
-                <Link href="/login/servidor" className="font-semibold text-primary hover:underline">Primeiro acesso ou nova senha pelo CPF</Link>
-              </p>
-            </form>
+                <Button
+                  type="submit"
+                  className="w-full h-11 text-sm font-medium transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-md shadow-primary/20"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      Entrar no Sistema
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </>
+                  )}
+                </Button>
+              </form>
+              <div className="flex items-center gap-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                <span className="h-px flex-1 bg-border" />
+                Outros acessos
+                <span className="h-px flex-1 bg-border" />
+              </div>
+              <div className="space-y-2">
+                <Button type="button" variant="outline" className="h-11 w-full justify-between" disabled>
+                  <span>Microsoft</span>
+                  <span className="text-xs font-normal">Em configuração</span>
+                </Button>
+                <Button type="button" variant="outline" className="h-11 w-full justify-between" disabled>
+                  <span>LDAP</span>
+                  <span className="text-xs font-normal">Em configuração</span>
+                </Button>
+              </div>
+            </div>
           )}
 
           {view === "reset" && (

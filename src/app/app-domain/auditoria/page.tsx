@@ -54,6 +54,10 @@ const eventLabels: Record<AuditEventType, string> = {
   ASSET_ACQUIRED_FROM_RECEIPT: "Aquisição patrimonial por recebimento",
   INTERNAL_CONTROL_FINDING_REGISTERED: "Registro de apontamento de controle",
   FLEET_OPERATION_REGISTERED: "Registro de operação de frota",
+  SIAFIC_DELIVERY_CONFIRMED: "Entrega SIAFIC confirmada",
+  SIAFIC_DELIVERY_FAILED: "Falha na entrega SIAFIC",
+  SIAFIC_DELIVERY_RETRY_REQUESTED: "Reenvio SIAFIC solicitado",
+  SIAFIC_OUTBOX_QUEUED: "Envio SIAFIC enfileirado",
 };
 
 const targetLabels: Record<string, string> = {

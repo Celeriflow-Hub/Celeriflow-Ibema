@@ -2,6 +2,7 @@
 
 import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
+import { assertPersonnelActNotIntegrated } from "@/lib/rh/functional-occurrences";
 
 async function getTenantPrisma(operation: "create" | "update" | "delete") {
   return (await getTenantContextForModuleOperation("RH", operation)).prisma;
@@ -30,9 +31,9 @@ export async function saveAtoPessoal(formData: FormData) {
     };
 
     if (id) {
-      await prisma.personnelAct.update({
-        where: { id },
-        data,
+      await prisma.$transaction(async tx => {
+        await assertPersonnelActNotIntegrated(tx, id);
+        await tx.personnelAct.update({ where: { id }, data });
       });
     } else {
       await prisma.personnelAct.create({
@@ -44,20 +45,21 @@ export async function saveAtoPessoal(formData: FormData) {
     return { success: true };
   } catch (error) {
     console.error("Erro ao salvar ato de pessoal:", error);
-    return { success: false, error: "Falha ao salvar o ato de pessoal." };
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao salvar o ato de pessoal." };
   }
 }
 
 export async function deleteAtoPessoal(id: string) {
   const prisma = await getTenantPrisma("delete");
   try {
-    await prisma.personnelAct.delete({
-      where: { id },
+    await prisma.$transaction(async tx => {
+      await assertPersonnelActNotIntegrated(tx, id);
+      await tx.personnelAct.delete({ where: { id } });
     });
     revalidatePath("/rh/atos");
     return { success: true };
   } catch (error) {
     console.error("Erro ao excluir ato de pessoal:", error);
-    return { success: false, error: "Falha ao excluir o ato de pessoal." };
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao excluir o ato de pessoal." };
   }
 }

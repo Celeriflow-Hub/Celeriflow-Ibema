@@ -24,13 +24,16 @@ import { simulateSpecialPayroll } from "../src/lib/rh/special-simulation";
 import { reserveConsignmentAgreement, postConsignmentInstallment, cancelConsignmentInstallment } from "../src/lib/rh/consignment-service";
 import { saveCanonicalDependent } from "../src/lib/rh/dependent-service";
 import { generateAttendanceTimeBank, reverseAttendanceTimeBank } from "../src/lib/rh/time-bank";
+import { contractCustomFieldsPolicyHash } from "../src/lib/rh/contract-custom-fields";
+import { inspectPositionPlan } from "../src/lib/rh/position-plan";
+import { registerFunctionalOccurrence, cancelFunctionalOccurrence, assertPersonnelActNotIntegrated } from "../src/lib/rh/functional-occurrences";
 
 test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamento, Portal e saldos", async () => {
   const pg = new PGlite();
   const server = new PGLiteSocketServer({ db: pg, port: 0, host: "127.0.0.1" });
   let db: PrismaClient | undefined;
   try {
-    for (const name of ["Person", "Document", "Employee", "Role", "Department", "CostCenter", "Dependent", "Vacation", "Leave", "AttendanceRecord", "HrVacationPolicy", "BenefitConfig", "PayrollBenefit", "FinancialYear", "BudgetUnit", "BudgetAppropriation", "ExpenseNature", "Supplier", "Expense", "FinancialAuditLog", "SstBenefitPayrollScope", "Payroll", "PayrollItem", "PayrollEvent", "HrEmploymentRegime", "HrPayrollRuleSet", "HrPayrollRule", "HrPayrollRubric", "HrPayrollRubricIncidence", "HrCalculationPolicy", "HrSocialSecurityScheme", "HrSocialSecurityBand", "SstBenefitPayrollOrigin", "SstLeavePayrollOrigin"]) {
+    for (const name of ["Person", "Document", "PersonnelAct", "HealthClinicalDocument", "HealthStandardDocument", "SstCertificateDocument", "Employee", "Role", "Department", "CostCenter", "Dependent", "Vacation", "Leave", "AttendanceRecord", "HrVacationPolicy", "BenefitConfig", "PayrollBenefit", "FinancialYear", "BudgetUnit", "BudgetAppropriation", "ExpenseNature", "Supplier", "Expense", "FinancialAuditLog", "SstBenefitPayrollScope", "Payroll", "PayrollItem", "PayrollEvent", "HrEmploymentRegime", "HrPayrollRuleSet", "HrPayrollRule", "HrPayrollRubric", "HrPayrollRubricIncidence", "HrCalculationPolicy", "HrSocialSecurityScheme", "HrSocialSecurityBand", "SstBenefitPayrollOrigin", "SstLeavePayrollOrigin"]) {
       const model = Prisma.dmmf.datamodel.models.find(m => m.name === name)!;
       const columns = model.fields.filter(f => f.kind !== "object" && f.type !== "Unsupported").map(f => {
         const types: Record<string, string> = { Int: "INTEGER", Float: "DOUBLE PRECISION", Decimal: "NUMERIC(24,6)", DateTime: "TIMESTAMP(3)", Boolean: "BOOLEAN", Json: "JSONB" };
@@ -431,6 +434,85 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
     await reverseAttendanceTimeBank(db, "actor", { entryId: originalCredit.id, reason: "Estorno sintético" });
     assert.equal((await db.hrRightEntry.aggregate({ where: { contractId: contract.id, kind: "BANCO_HORAS" }, _sum: { quantity: true } }))._sum.quantity?.toString(), "0");
     assert.equal((await db.hrRightEntry.findUniqueOrThrow({ where: { id: originalCredit.id } })).quantity.toString(), "2.0001", "estorno preserva crédito original");
+    await db.hrPayrollRule.update({ where: { id: "contract-limit" }, data: { isActive: false } });
+    const customPolicy = { origin: "CAMPOS_CONTRATO", legalReference: "Política sintética de campos", fields: [
+      { code: "ATO", label: "Ato de nomeação", type: "TEXTO", required: true, maxLength: 60 },
+      { code: "CLASSE", label: "Classe", type: "OPCAO", required: true, options: [{ value: "A", label: "Classe A" }, { value: "B", label: "Classe B" }] },
+    ] };
+    await db.hrPayrollRule.create({ data: { id: "custom-rule", ruleSetId: "set", code: "CAMPOS_CONTRATO", name: "Campos sintéticos", category: "GERAL", valueType: "JSON", value: customPolicy, isActive: true } });
+    const customInput = { ...input, registration: "CUSTOM-1", details: { annotation: "Informação preservada", customFieldsPolicy: { forged: true } }, customFields: { ATO: "Portaria sintética", CLASSE: "A" }, customFieldsPolicyHash: contractCustomFieldsPolicyHash(customPolicy) };
+    const customContract = await saveEmploymentContract(db, "actor", customInput);
+    const customDetails = customContract.details as { annotation: string; customFields: { ATO: string; CLASSE: string }; customFieldsPolicy: { ruleId: string; hash: string } };
+    assert.equal(customDetails.annotation, "Informação preservada");
+    assert.equal(customDetails.customFieldsPolicy.ruleId, "custom-rule", "definição é obtida da política, não do JSON do cliente");
+    assert.deepEqual(customDetails.customFields, customInput.customFields);
+    await assert.rejects(saveEmploymentContract(db, "actor", { ...customInput, registration: "CUSTOM-INVALID", customFields: { ATO: "Portaria", CLASSE: "C" } }), /Opção inválida/);
+    assert.equal(await db.hrEmploymentContract.count({ where: { registration: "CUSTOM-INVALID" } }), 0);
+    const customBatch = { batchKey: "custom-adjustment", contractIds: [customContract.id], effectiveFrom: "2026-02-01", rate: "5", reason: "Reajuste sintético com campos preservados", mode: "PREVIA" };
+    const customPreview = await adjustContractSalaries(db, "actor", customBatch);
+    await adjustContractSalaries(db, "actor", { ...customBatch, mode: "APLICAR", previewHash: customPreview.previewHash });
+    const customAdjusted = await db.hrEmploymentContract.findUniqueOrThrow({ where: { id: customContract.id } });
+    assert.deepEqual((customAdjusted.details as typeof customDetails).customFields, customInput.customFields);
+    const changedCustomPolicy = { ...customPolicy, legalReference: "Novo fundamento sintético" };
+    await db.hrPayrollRule.update({ where: { id: "custom-rule" }, data: { value: changedCustomPolicy } });
+    await assert.rejects(saveEmploymentContract(db, "actor", { ...customInput, id: customContract.id, version: customAdjusted.version, effectiveFrom: "2026-03-01" }), /Definição.*mudou/);
+    const latestCustom = await saveEmploymentContract(db, "actor", { ...customInput, id: customContract.id, version: customAdjusted.version, effectiveFrom: "2026-03-01", customFields: { ...customInput.customFields, CLASSE: "B" }, customFieldsPolicyHash: contractCustomFieldsPolicyHash(changedCustomPolicy) });
+    const initialCustomRevision = await db.hrEmploymentRevision.findFirstOrThrow({ where: { contractId: customContract.id, version: 1 } });
+    assert.equal((initialCustomRevision.snapshot as { details: typeof customDetails }).details.customFields.CLASSE, "A", "revisão anterior conserva valores e definição");
+    assert.equal((latestCustom.details as typeof customDetails).customFields.CLASSE, "B");
+    const customReport = await buildHrReport(db, { kind: "CONTRATOS", format: "CSV", q: "CUSTOM-", customCode: "CLASSE", customValue: "B", customType: "TEXTO" });
+    assert.equal(customReport.rows.length, 1);
+    assert.equal(customReport.rows[0][0], "CUSTOM-1");
+    assert.match(customReport.rows[0].at(-1)!, /"CLASSE":"B"/);
+    assert.equal((await buildHrReport(db, { kind: "CONTRATOS", format: "CSV", q: "CUSTOM-", customCode: "CLASSE", customValue: "A", customType: "TEXTO" })).rows.length, 0, "filtro usa valores atuais; histórico permanece na revisão");
+    await db.hrPayrollRule.update({ where: { id: "custom-rule" }, data: { value: { ...changedCustomPolicy, fields: [customPolicy.fields[0]] } } });
+    await assert.rejects(saveEmploymentContract(db, "actor", { ...input, id: customContract.id, registration: "CUSTOM-1", version: latestCustom.version, effectiveFrom: "2026-04-01", details: latestCustom.details }), /Campo histórico retirado/);
+    await db.hrPayrollRule.update({ where: { id: "custom-rule" }, data: { isActive: false } });
+    await assert.rejects(saveEmploymentContract(db, "actor", { ...input, id: customContract.id, registration: "CUSTOM-1", version: latestCustom.version, effectiveFrom: "2026-04-01", details: {} }), /campos configuráveis históricos/);
+    await db.hrPayrollRuleSet.create({ data: { id: "position-set", configuracaoInstanciaId: "instance", code: "POSITION", name: "Quadro sintético", status: "ATIVA", scope: "DEMONSTRACAO", effectiveFrom: new Date("2026-01-01"), isDemo: true } });
+    await db.hrEmploymentRegime.create({ data: { id: "position-regime", ruleSetId: "position-set", code: "CLT", name: "Regime de vagas", employmentNature: "CLT", isActive: true } });
+    const positionRole = { roleId: "role", authorizedSeats: 1, classification: "Efetivo", cbo: "411005", education: "Ensino médio", legalReference: "Lei sintética do cargo", duties: "Atribuições sintéticas", competencies: "Competências sintéticas", documentIds: [], levels: [{ code: "A", vertical: 0, horizontal: 0, salary: "1000.00", monthlyHours: 200 }], initialLevel: "A", finalLevel: "A" };
+    const positionPlan = { origin: "QUADRO_CARGOS", legalReference: "Lei sintética do quadro", periods: [{ startsAt: "2026-01-01", endsAt: "2026-12-31", roles: [positionRole] }, { startsAt: "2027-01-01", endsAt: null, roles: [{ ...positionRole, levels: [{ ...positionRole.levels[0], salary: "1200.00" }] }] }] };
+    await db.hrPayrollRule.create({ data: { id: "position-rule", ruleSetId: "position-set", code: "QUADRO_CARGOS", name: "Quadro sintético", category: "GERAL", valueType: "JSON", value: positionPlan, isActive: true } });
+    const positionInput = { ...input, registration: "POSITION-1", regimeId: "position-regime", salaryLevel: "A", salary: "1000.00", monthlyHours: 200, endsAt: "2026-12-31" };
+    const occupiedPosition = await saveEmploymentContract(db, "actor", positionInput);
+    await assert.rejects(saveEmploymentContract(db, "actor", { ...positionInput, registration: "POSITION-DUP" }), /Vagas autorizadas/);
+    assert.equal(await db.hrEmploymentContract.count({ where: { registration: "POSITION-DUP" } }), 0, "excesso de vaga reverte contrato e revisão");
+    await assert.rejects(saveEmploymentContract(db, "actor", { ...positionInput, registration: "POSITION-SALARY", salary: "1000.01" }), /nível\/salário\/jornada/);
+    const nextPosition = await saveEmploymentContract(db, "actor", { ...positionInput, registration: "POSITION-2", admittedAt: "2027-01-01", endsAt: "", salary: "1200.00" });
+    assert.equal((await inspectPositionPlan(db, "position-rule")).rows.length, 2);
+    await assert.rejects(saveEmploymentContract(db, "actor", { ...positionInput, id: occupiedPosition.id, version: occupiedPosition.version, effectiveFrom: "2026-02-01", endsAt: "2027-01-01" }), /nível\/salário\/jornada|Vagas autorizadas/);
+    assert.equal((await db.hrEmploymentContract.findUniqueOrThrow({ where: { id: occupiedPosition.id } })).endsAt?.toISOString().slice(0, 10), "2026-12-31");
+    assert.equal((nextPosition.details as { positionPlan: { ruleId: string } }).positionPlan.ruleId, "position-rule");
+    const twoSeatPlan = { ...positionPlan, periods: [positionPlan.periods[0], { ...positionPlan.periods[1], roles: [{ ...positionPlan.periods[1].roles[0], authorizedSeats: 2 }] }] };
+    await db.hrPayrollRule.update({ where: { id: "position-rule" }, data: { value: twoSeatPlan } });
+    const thirdPosition = await saveEmploymentContract(db, "actor", { ...positionInput, registration: "POSITION-3", admittedAt: "2027-01-01", endsAt: "", salary: "1200.00" });
+    const futurePlan = { ...twoSeatPlan, periods: [twoSeatPlan.periods[0], { ...twoSeatPlan.periods[1], endsAt: "2027-12-31" }, { startsAt: "2028-01-01", endsAt: null, roles: [{ ...twoSeatPlan.periods[1].roles[0], levels: [{ ...positionRole.levels[0], salary: "1320.00" }] }] }] };
+    await db.hrPayrollRule.update({ where: { id: "position-rule" }, data: { value: futurePlan } });
+    const positionBatch = { batchKey: "position-level-adjustment", contractIds: [nextPosition.id, thirdPosition.id], effectiveFrom: "2028-01-01", rate: "10", reason: "Nova tabela salarial sintética", mode: "PREVIA" };
+    const positionPreview = await adjustContractSalaries(db, "actor", positionBatch);
+    await adjustContractSalaries(db, "actor", { ...positionBatch, mode: "APLICAR", previewHash: positionPreview.previewHash });
+    assert.equal((await db.hrEmploymentContract.findUniqueOrThrow({ where: { id: thirdPosition.id } })).salary.toFixed(2), "1320.00", "lote valida o quadro após todas as revisões, sem rejeitar estado intermediário");
+    assert.equal((await inspectPositionPlan(db, "position-rule")).rows.at(-1)?.peakOccupied, 2);
+    await db.hrPayrollRule.update({ where: { id: "position-rule" }, data: { isActive: false } });
+    const currentPosition = await db.hrEmploymentContract.findUniqueOrThrow({ where: { id: nextPosition.id } });
+    await assert.rejects(saveEmploymentContract(db, "actor", { ...positionInput, id: nextPosition.id, registration: "POSITION-2", admittedAt: "2027-01-01", salary: "1320.00", endsAt: "", version: currentPosition.version, effectiveFrom: "2028-02-01" }), /quadro de cargos histórico/);
+    const occurrenceAct = await db.personnelAct.create({ data: { employeeId: "employee", type: "Advertência", actNumber: "ATO-SINTETICO", date: new Date("2026-10-15") } });
+    const occurrenceDocument = await db.document.create({ data: { personId: "person", title: "Documento funcional sintético", documentType: "ATO", fileUrl: "test://functional", status: "Válido" } });
+    const occurrenceInput = { sourceKey: "occurrence-1", contractId: contract.id, type: "ADVERTENCIA", date: "2026-10-15", reason: "Ocorrência sintética fundamentada", notes: "Observação sintética", personnelActId: occurrenceAct.id, documentIds: [occurrenceDocument.id] };
+    const occurrence = await registerFunctionalOccurrence(db, "actor", occurrenceInput);
+    assert.equal((await registerFunctionalOccurrence(db, "another-actor", occurrenceInput)).id, occurrence.id);
+    await assert.rejects(registerFunctionalOccurrence(db, "actor", { ...occurrenceInput, reason: "Fundamento diferente" }), /outros dados/);
+    await assert.rejects(registerFunctionalOccurrence(db, "actor", { ...occurrenceInput, sourceKey: "occurrence-invalid", date: "2026-02-30" }), /Data civil/);
+    await assert.rejects(registerFunctionalOccurrence(db, "actor", { ...occurrenceInput, sourceKey: "occurrence-missing", documentIds: ["missing-document"] }), /Anexo ausente/);
+    await assert.rejects(db.$transaction(tx => assertPersonnelActNotIntegrated(tx, occurrenceAct.id)), /correção compensatória/);
+    await db.healthClinicalDocument.create({ data: { documentId: occurrenceDocument.id, medicalRecordId: "synthetic-record", kind: "CLINICAL", addedByUsuarioId: "actor" } });
+    await assert.rejects(registerFunctionalOccurrence(db, "actor", { ...occurrenceInput, sourceKey: "occurrence-clinical" }), /origem clínica protegida/);
+    const occurrenceCancel = await cancelFunctionalOccurrence(db, "actor", { occurrenceId: occurrence.id, reason: "Cancelamento sintético fundamentado" });
+    assert.equal((await cancelFunctionalOccurrence(db, "another-actor", { occurrenceId: occurrence.id, reason: "Cancelamento sintético fundamentado" })).id, occurrenceCancel.id);
+    await assert.rejects(cancelFunctionalOccurrence(db, "actor", { occurrenceId: occurrence.id, reason: "Outro fundamento" }), /outro fundamento/);
+    await assert.rejects(cancelFunctionalOccurrence(db, "actor", { occurrenceId: occurrenceCancel.id, reason: "Cancelamento de cancelamento" }), /original/);
+    assert.equal((await db.hrIntegrationEvent.findUniqueOrThrow({ where: { id: occurrence.id } })).eventType, "OCORRENCIA_FUNCIONAL_REGISTRADA", "cancelamento mantém a ocorrência original");
     await db.hrEmploymentContract.createMany({ data: Array.from({ length: 501 }, (_, index) => ({ employeeId: "employee", registration: `EXPORT-${String(index).padStart(3, "0")}`, regimeId: "regime", roleId: "role", workLocation: "Local demonstrativo", admittedAt: new Date("2026-01-01"), salary: "10.01", monthlyHours: 220, details: {} })) });
     const report = await buildHrReport(db, { kind: "CONTRATOS", format: "CSV", q: "EXPORT-" });
     assert.equal(report.rows.length, 501);

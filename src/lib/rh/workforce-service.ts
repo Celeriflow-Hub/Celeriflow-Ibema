@@ -6,6 +6,8 @@ import { resolveContractRevision } from "./contract-timeline";
 import { calculateConsignmentMargin } from "./consignment-margin";
 import { assertConsignmentSchedulePosted } from "./consignment-service";
 import { assessPayrollDependents, dependentAssessmentSchema, familyWagePolicySchema, familyWageSnapshotSchema } from "./dependent-eligibility";
+import { contractCustomFieldsPolicySchema, contractCustomFieldsPolicyHash, validateContractCustomFields } from "./contract-custom-fields";
+import { assertPositionPlanForContract, positionPlanSchema } from "./position-plan";
 
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
@@ -36,10 +38,16 @@ export const hrContractInputSchema = z.object({
   admittedAt: date, appointedAt: optionalDate, swornAt: optionalDate, endsAt: optionalDate,
   monthlyHours: z.coerce.number().int().min(1).max(744), salary: money.refine(v => D(v).gte(0)),
   details: z.record(z.string(), z.unknown()).default({}), reason: z.string().trim().min(3).max(2000),
+  customFields: z.record(z.string(), z.unknown()).optional(), customFieldsPolicyHash: z.string().optional(),
 }).strict();
 
 async function lock(tx: Tx, key: string) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:${key}`}))`;
+}
+
+async function lockPositionPlans(tx: Tx, regimeIds: string[]) {
+  const regimes = await tx.hrEmploymentRegime.findMany({ where: { id: { in: [...new Set(regimeIds)] } }, select: { ruleSetId: true } });
+  for (const ruleSetId of [...new Set(regimes.map(regime => regime.ruleSetId))].sort()) await lock(tx, `POSITION_PLAN:${ruleSetId}`);
 }
 
 export async function saveEmploymentContract(db: PrismaClient, actorId: string, raw: unknown) {
@@ -47,13 +55,14 @@ export async function saveEmploymentContract(db: PrismaClient, actorId: string, 
   return db.$transaction(tx => saveEmploymentContractInTransaction(tx, actorId, input));
 }
 
-async function saveEmploymentContractInTransaction(tx: Tx, actorId: string, input: z.infer<typeof hrContractInputSchema>) {
+async function saveEmploymentContractInTransaction(tx: Tx, actorId: string, input: z.infer<typeof hrContractInputSchema>, deferPositionPlan = false) {
   if (input.endsAt && input.endsAt < input.admittedAt) throw new Error("Término anterior à admissão.");
     await lock(tx, `employee:${input.employeeId}`);
     if (input.id) await lock(tx, `contract:${input.id}`);
     const employee = await tx.employee.findUniqueOrThrow({ where: { id: input.employeeId }, include: { person: true } });
     if (!employee.person || !employee.isActive || employee.person.status !== "Ativo") throw new Error("Servidor deve estar ativo e vinculado à pessoa física do Cadastro Único.");
     const regime = await tx.hrEmploymentRegime.findUniqueOrThrow({ where: { id: input.regimeId }, include: { ruleSet: true } });
+    await lockPositionPlans(tx, [input.regimeId]);
     const role = await tx.role.findUniqueOrThrow({ where: { id: input.roleId } });
     if (!regime.isActive || !role.isActive) throw new Error("Regime/cargo inativo.");
     if (input.departmentId) await tx.department.findUniqueOrThrow({ where: { id: input.departmentId } });
@@ -68,6 +77,30 @@ async function saveEmploymentContractInTransaction(tx: Tx, actorId: string, inpu
     if (previous && (previous.employeeId !== input.employeeId || previous.version !== input.version)) throw new Error("Contrato alterado por outro operador ou titular incompatível. Recarregue a ficha.");
     const effectiveFrom = input.effectiveFrom ?? input.admittedAt;
     if (effectiveFrom < input.admittedAt) throw new Error("Vigência anterior à admissão.");
+    const customRule = await tx.hrPayrollRule.findFirst({ where: { ruleSetId: regime.ruleSetId, code: "CAMPOS_CONTRATO", isActive: true } });
+    const details = { ...input.details };
+    const positionRule = await tx.hrPayrollRule.findFirst({ where: { ruleSetId: regime.ruleSetId, code: "QUADRO_CARGOS", isActive: true } });
+    if (positionRule) details.positionPlan = { ruleId: positionRule.id, definition: positionPlanSchema.parse(positionRule.value) };
+    else {
+      if ((previous?.details as { positionPlan?: unknown } | undefined)?.positionPlan) throw new Error("Contrato possui quadro de cargos histórico; preserve uma política ativa antes de alterá-lo.");
+      delete details.positionPlan;
+    }
+    if (customRule) {
+      if (regime.ruleSet.effectiveFrom > effectiveFrom || (regime.ruleSet.effectiveUntil && regime.ruleSet.effectiveUntil < effectiveFrom)) throw new Error("Política de campos configuráveis não cobre a vigência contratual.");
+      const policy = contractCustomFieldsPolicySchema.parse(customRule.value);
+      const policyHash = contractCustomFieldsPolicyHash(policy);
+      if (input.customFields !== undefined && input.customFieldsPolicyHash !== policyHash) throw new Error("Definição dos campos configuráveis mudou. Recarregue a ficha antes de salvar.");
+      const previousValues = (previous?.details as { customFields?: Record<string, unknown> } | undefined)?.customFields || {};
+      if (Object.keys(previousValues).some(code => !policy.fields.some(field => field.code === code))) throw new Error("Campo histórico retirado da política exige saneamento explícito; preserve a definição antes de alterar o contrato.");
+      details.customFields = validateContractCustomFields(policy, input.customFields ?? details.customFields ?? {});
+      details.customFieldsPolicy = { ruleId: customRule.id, hash: policyHash, definition: policy };
+    } else if (input.customFields !== undefined || input.customFieldsPolicyHash !== undefined) {
+      throw new Error("Regime sem política ativa de campos configuráveis. Recarregue a ficha.");
+    } else if (previous && (previous.details as { customFieldsPolicy?: unknown }).customFieldsPolicy) {
+      throw new Error("Contrato possui campos configuráveis históricos; preserve a política ativa antes de alterá-lo.");
+    } else if (details.customFields !== undefined || details.customFieldsPolicy !== undefined) {
+      throw new Error("Campos configuráveis exigem política ativa do regime.");
+    }
     if (previous) {
       if (!input.effectiveFrom) throw new Error("Informe a vigência da alteração contratual.");
       if (previous.admittedAt.getTime() !== input.admittedAt.getTime()) throw new Error("Admissão original é preservada; correção exige saneamento próprio.");
@@ -76,12 +109,15 @@ async function saveEmploymentContractInTransaction(tx: Tx, actorId: string, inpu
       const closed = await tx.hrPayrollStatement.findMany({ where: { contractId: previous.id, run: { status: "FECHADA" } }, select: { run: { select: { payroll: { select: { competence: true } } } } } });
       if (closed.some(statement => effectiveFrom <= payrollPeriod(statement.run.payroll.competence).end)) throw new Error("Vigência alcança competência fechada. A alteração deve começar após o último fechamento.");
     }
-    const { id, version: _version, effectiveFrom: _effectiveFrom, reason, ...fields } = input;
+    const { id, version: _version, effectiveFrom: _effectiveFrom, reason, customFields: _customFields, customFieldsPolicyHash: _customFieldsPolicyHash, ...fields } = input;
     void _version;
     void _effectiveFrom;
-    const data = { ...fields, salary: D(input.salary), details: json(input.details), departmentId: input.departmentId || null, costCenterId: input.costCenterId || null, salaryLevel: input.salaryLevel || null };
+    void _customFields;
+    void _customFieldsPolicyHash;
+    const data = { ...fields, salary: D(input.salary), details: json(details), departmentId: input.departmentId || null, costCenterId: input.costCenterId || null, salaryLevel: input.salaryLevel || null };
     const contract = id ? await tx.hrEmploymentContract.update({ where: { id }, data: { ...data, version: { increment: 1 } } }) : await tx.hrEmploymentContract.create({ data });
     await tx.hrEmploymentRevision.create({ data: { contractId: contract.id, version: contract.version, effectiveFrom, snapshot: json(contract), actorId, reason } });
+    if (!deferPositionPlan) await assertPositionPlanForContract(tx, contract, effectiveFrom);
     if (!previous && !await tx.hrPortalRequest.findUnique({ where: { requestKey: `INVITE:${employee.id}` } })) await tx.hrPortalRequest.create({ data: { employeeId: employee.id, requestKey: `INVITE:${employee.id}`, kind: "ACESSO_PORTAL", payload: json({ personId: employee.personId, contractId: contract.id, email: employee.person.email }), actorId } });
     return contract;
 }
@@ -110,11 +146,14 @@ export async function adjustContractSalaries(db: PrismaClient, actorId: string, 
     const previewHash = createHash("sha256").update(stableJson({ request, rows })).digest("hex");
     if (input.mode === "PREVIA") return { rows: json(rows), previewHash, applied: false, reused: false };
     if (input.previewHash !== previewHash) throw new Error("Confira uma prévia atualizada. Dados ou parâmetros mudaram desde a prévia.");
+    const updatedContracts: Awaited<ReturnType<typeof saveEmploymentContractInTransaction>>[] = [];
+    await lockPositionPlans(tx, current.map(contract => contract.regimeId));
     for (const contract of current) {
       const row = rows.find(row => row.id === contract.id)!;
       const day = (value: Date | null) => value?.toISOString().slice(0, 10) || "";
-      await saveEmploymentContractInTransaction(tx, actorId, hrContractInputSchema.parse({ id: contract.id, version: contract.version, employeeId: contract.employeeId, registration: contract.registration, regimeId: contract.regimeId, roleId: contract.roleId, departmentId: contract.departmentId || undefined, costCenterId: contract.costCenterId || undefined, workLocation: contract.workLocation, salaryLevel: contract.salaryLevel || undefined, admittedAt: day(contract.admittedAt), appointedAt: day(contract.appointedAt), swornAt: day(contract.swornAt), endsAt: day(contract.endsAt), monthlyHours: contract.monthlyHours, salary: row.after, details: contract.details, reason: input.reason, effectiveFrom: day(input.effectiveFrom) }));
+      updatedContracts.push(await saveEmploymentContractInTransaction(tx, actorId, hrContractInputSchema.parse({ id: contract.id, version: contract.version, employeeId: contract.employeeId, registration: contract.registration, regimeId: contract.regimeId, roleId: contract.roleId, departmentId: contract.departmentId || undefined, costCenterId: contract.costCenterId || undefined, workLocation: contract.workLocation, salaryLevel: contract.salaryLevel || undefined, admittedAt: day(contract.admittedAt), appointedAt: day(contract.appointedAt), swornAt: day(contract.swornAt), endsAt: day(contract.endsAt), monthlyHours: contract.monthlyHours, salary: row.after, details: contract.details, reason: input.reason, effectiveFrom: day(input.effectiveFrom) }), true));
     }
+    for (const contract of updatedContracts) await assertPositionPlanForContract(tx, contract, input.effectiveFrom);
     await enqueueHrIntegration(tx, { sourceKey: `REAJUSTE:${input.batchKey}`, domain: "AUDITORIA", environment: "INTERNO", eventType: "REAJUSTE_CONTRATUAL", payload: { request, requestHash, previewHash, rows, actorId } });
     return { rows: json(rows), previewHash, applied: true, reused: false };
   }, { timeout: 60000 });
@@ -144,10 +183,13 @@ export async function changeContractsCollectively(db: PrismaClient, actorId: str
     if (input.mode === "PREVIA") return { rows: json(rows), previewHash, applied: false, reused: false };
     if (input.previewHash !== previewHash) throw new Error("Confira uma prévia atualizada; seleção, vigência ou dados foram alterados.");
     const day = (value: Date | null) => value?.toISOString().slice(0, 10) || "";
+    const updatedContracts: Awaited<ReturnType<typeof saveEmploymentContractInTransaction>>[] = [];
+    await lockPositionPlans(tx, [...contracts.map(contract => contract.regimeId), ...(input.changes.regimeId ? [input.changes.regimeId] : [])]);
     for (const contract of contracts) {
       const updated = { ...contract, ...input.changes };
-      await saveEmploymentContractInTransaction(tx, actorId, hrContractInputSchema.parse({ id: contract.id, version: contract.version, employeeId: contract.employeeId, registration: contract.registration, admittedAt: day(contract.admittedAt), appointedAt: day(contract.appointedAt), swornAt: day(contract.swornAt), endsAt: day(updated.endsAt), regimeId: updated.regimeId, roleId: updated.roleId, departmentId: updated.departmentId || undefined, costCenterId: updated.costCenterId || undefined, workLocation: updated.workLocation, salaryLevel: updated.salaryLevel || undefined, monthlyHours: updated.monthlyHours, salary: D(updated.salary).toFixed(2), details: contract.details, effectiveFrom: day(input.effectiveFrom), reason: input.reason }));
+      updatedContracts.push(await saveEmploymentContractInTransaction(tx, actorId, hrContractInputSchema.parse({ id: contract.id, version: contract.version, employeeId: contract.employeeId, registration: contract.registration, admittedAt: day(contract.admittedAt), appointedAt: day(contract.appointedAt), swornAt: day(contract.swornAt), endsAt: day(updated.endsAt), regimeId: updated.regimeId, roleId: updated.roleId, departmentId: updated.departmentId || undefined, costCenterId: updated.costCenterId || undefined, workLocation: updated.workLocation, salaryLevel: updated.salaryLevel || undefined, monthlyHours: updated.monthlyHours, salary: D(updated.salary).toFixed(2), details: contract.details, effectiveFrom: day(input.effectiveFrom), reason: input.reason }), true));
     }
+    for (const contract of updatedContracts) await assertPositionPlanForContract(tx, contract, input.effectiveFrom);
     await enqueueHrIntegration(tx, { sourceKey: `CONTRATOS:LOTE:${input.batchKey}`, domain: "AUDITORIA", environment: "INTERNO", eventType: "ALTERACAO_CONTRATUAL_COLETIVA", payload: { request, requestHash, previewHash, rows, actorId } });
     return { rows: json(rows), previewHash, applied: true, reused: false };
   }, { timeout: 60000 });

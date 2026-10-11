@@ -8,6 +8,8 @@ import { selectRemunerationAverage } from "../src/lib/rh/remuneration-average";
 import { calculateConsignmentMargin } from "../src/lib/rh/consignment-margin";
 import { dependentEligibilityPolicySchema, evaluateDependentEligibility } from "../src/lib/rh/dependent-eligibility";
 import { validateTimeBankBalances } from "../src/lib/rh/time-bank";
+import { contractCustomFieldsPolicySchema, validateContractCustomFields } from "../src/lib/rh/contract-custom-fields";
+import { assessPositionPlan, positionPlanSchema } from "../src/lib/rh/position-plan";
 
 test("fórmula Decimal preserva precisão, precedência e rejeita execução/ciclos", () => {
   const resolve = (name: string) => { if (name === "SALARIO_BASE") return new Prisma.Decimal("1000.01"); throw new Error("Base ausente"); };
@@ -99,4 +101,37 @@ test("banco de horas preserva precisão e não financia débito com crédito fut
   assert.equal(validateTimeBankBalances([debit, credit], "10").toString(), "1");
   assert.throws(() => validateTimeBankBalances([{ ...debit, date: new Date("2026-09-30") }, credit], "10"), /créditos futuros/);
   assert.throws(() => validateTimeBankBalances([credit], "1"), /limite da política/);
+});
+
+test("campos configuráveis validam tipos, limites exatos, opções e datas civis", () => {
+  const policy = { origin: "CAMPOS_CONTRATO", legalReference: "Ato sintético de cadastro", fields: [
+    { code: "ATO", label: "Ato", type: "TEXTO", required: true, maxLength: 20 },
+    { code: "FATOR", label: "Fator", type: "DECIMAL", required: true, minimum: "999999999999999.0001", maximum: "999999999999999.0002" },
+    { code: "DATA", label: "Data", type: "DATA", required: true },
+    { code: "ATIVO", label: "Ativo", type: "BOOLEANO", required: true },
+    { code: "CLASSE", label: "Classe", type: "OPCAO", required: false, options: [{ value: "A", label: "Classe A" }] },
+    { code: "ORDEM", label: "Ordem", type: "INTEIRO", required: false, minimum: "0", maximum: "10" },
+  ] };
+  const values = { ATO: "  PORTARIA 1  ", FATOR: "999999999999999.0001", DATA: "2028-02-29", ATIVO: "false", CLASSE: "A", ORDEM: "10" };
+  assert.deepEqual(validateContractCustomFields(policy, values), { ...values, ATO: "PORTARIA 1", ATIVO: false });
+  assert.throws(() => validateContractCustomFields(policy, { ...values, FATOR: "999999999999999.0003" }), /intervalo/);
+  assert.throws(() => validateContractCustomFields(policy, { ...values, DATA: "2027-02-29" }), /Data civil/);
+  assert.throws(() => validateContractCustomFields(policy, { ...values, ATIVO: "sim" }), /booleano/);
+  assert.throws(() => validateContractCustomFields(policy, { ...values, CLASSE: "B" }), /Opção inválida/);
+  assert.throws(() => validateContractCustomFields(policy, { ...values, ORDEM: "1.5" }), /Número inválido/);
+  assert.throws(() => validateContractCustomFields(policy, { ...values, ATO: " " }), /obrigatório/);
+  assert.throws(() => validateContractCustomFields(policy, { ...values, EXTRA: "não definido" }), /não pertence/);
+  assert.equal(contractCustomFieldsPolicySchema.safeParse({ ...policy, fields: [policy.fields[0], policy.fields[0]] }).success, false);
+});
+
+test("quadro de cargos conta contratos futuros e troca de ocupante sem duplicar a vaga", () => {
+  const role = { roleId: "role", authorizedSeats: 1, classification: "Efetivo", cbo: "411005", education: "Ensino médio", legalReference: "Lei sintética", duties: "Atribuições sintéticas", competencies: "Competências sintéticas", documentIds: [], levels: [{ code: "A", vertical: 0, horizontal: 0, salary: "1000.00", monthlyHours: 200 }], initialLevel: "A", finalLevel: "A" };
+  const plan = { origin: "QUADRO_CARGOS", legalReference: "Lei sintética", periods: [{ startsAt: "2026-01-01", endsAt: null, roles: [role] }] };
+  const segment = { contractId: "first", regimeId: "regime", roleId: "role", salaryLevel: "A", salary: new Prisma.Decimal("1000.00"), monthlyHours: 200, start: new Date("2026-01-01").getTime(), end: new Date("2026-02-01").getTime() };
+  const successor = { ...segment, contractId: "second", start: segment.end, end: Infinity };
+  assert.equal(assessPositionPlan(plan, [segment, successor], ["regime"])[0].peakOccupied, 1);
+  assert.throws(() => assessPositionPlan(plan, [segment, { ...successor, start: new Date("2026-01-31").getTime() }], ["regime"]), /Vagas autorizadas/);
+  assert.throws(() => assessPositionPlan(plan, [{ ...successor, salary: new Prisma.Decimal("1000.01") }], ["regime"]), /nível\/salário\/jornada/);
+  assert.equal(assessPositionPlan(plan, [{ ...successor, regimeId: "outro-conjunto" }], ["regime"])[0].peakOccupied, 0);
+  assert.equal(positionPlanSchema.safeParse({ ...plan, periods: [plan.periods[0], plan.periods[0]] }).success, false);
 });

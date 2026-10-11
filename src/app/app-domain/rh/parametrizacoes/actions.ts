@@ -1,4 +1,6 @@
 "use server";
+import { contractCustomFieldsPolicySchema } from "@/lib/rh/contract-custom-fields";
+import { positionPlanSchema } from "@/lib/rh/position-plan";
 
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
@@ -252,13 +254,26 @@ export async function saveHrPayrollRule(
     await context.prisma.$transaction(async (tx) => {
       const ruleSet = await getManagedRuleSet(tx, input.ruleSetId);
       assertRuleSetCanChange(ruleSet);
+      const value = parseRuleValue(input.valueType, input.value);
+      if (input.code === "CAMPOS_CONTRATO") {
+        if (input.valueType !== "JSON") throw new Error("Campos configuráveis exigem regra JSON.");
+        contractCustomFieldsPolicySchema.parse(value);
+      }
+      if (input.code === "QUADRO_CARGOS") {
+        if (input.valueType !== "JSON") throw new Error("Quadro de cargos exige regra JSON.");
+        const plan = positionPlanSchema.parse(value);
+        const roleIds = [...new Set(plan.periods.flatMap(period => period.roles.map(role => role.roleId)))];
+        if (await tx.role.count({ where: { id: { in: roleIds }, isActive: true } }) !== roleIds.length) throw new Error("Quadro exige cargos ativos do cadastro central.");
+        const documentIds = [...new Set(plan.periods.flatMap(period => period.roles.flatMap(role => role.documentIds)))];
+        if (documentIds.length && await tx.document.count({ where: { id: { in: documentIds } } }) !== documentIds.length) throw new Error("Documento GED do quadro não encontrado.");
+      }
       const data = {
         category: input.category,
         code: input.code,
         name: input.name,
         description: input.description,
         valueType: input.valueType,
-        value: parseRuleValue(input.valueType, input.value),
+        value,
         unit: input.unit,
         sortOrder: input.sortOrder,
         legalReference: input.legalReference,

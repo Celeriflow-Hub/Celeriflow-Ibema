@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getTenantContextForModuleOperation, assertBudgetUnitAccess } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, assertBudgetUnitAccess, canViewModule } from "@/lib/platform/tenant-context";
 import { calculatePayrollRun, cancelPayrollRun, closePayrollRun, publishPayrollStatements, recordHrRightEntry, saveEmploymentContract, savePayrollMovement } from "@/lib/rh/workforce-service";
 import { acquireVacationRights, cancelVacationReservation, reserveVacationRight } from "@/lib/rh/vacation-rights";
 import { importPayrollMovements } from "@/lib/rh/movement-import";
@@ -16,14 +16,25 @@ import { simulateSpecialPayroll } from "@/lib/rh/special-simulation";
 import { reserveConsignmentAgreement, postConsignmentInstallment, cancelConsignmentInstallment } from "@/lib/rh/consignment-service";
 import { assertPayrollBudgetScope } from "@/lib/rh/payroll-access";
 import { generateAttendanceTimeBank, reverseAttendanceTimeBank } from "@/lib/rh/time-bank";
+import { registerFunctionalOccurrence, cancelFunctionalOccurrence } from "@/lib/rh/functional-occurrences";
 
 export async function executeWorkforceOperation(command: string, values: Record<string, string>) {
   const allowed = ["contrato", "movimento", "direito", "calcular", "fechar", "cancelar", "publicar", "vincular", "aquisitivos", "reservar-ferias", "importar", "beneficio", "decidir-solicitacao", "reajustar", "cancelar-ferias", "ponto-horas-extras", "decidir-recadastramento", "financeiro", "simular-especial", "consignacao-reservar", "consignacao-lancar", "consignacao-cancelar", "contratos-coletivos", "ponto-banco-horas", "estornar-banco-horas"];
-  if (!allowed.includes(command)) return { error: "Operação inválida." };
-  const context = await getTenantContextForModuleOperation("RH", ["contrato", "movimento", "direito", "aquisitivos", "reservar-ferias", "importar", "beneficio", "ponto-horas-extras", "ponto-banco-horas", "consignacao-reservar"].includes(command) && !values.id ? "create" : "update");
+  if (![...allowed, "ocorrencia", "cancelar-ocorrencia"].includes(command)) return { error: "Operação inválida." };
+  const context = await getTenantContextForModuleOperation("RH", ["contrato", "movimento", "direito", "aquisitivos", "reservar-ferias", "importar", "beneficio", "ponto-horas-extras", "ponto-banco-horas", "consignacao-reservar", "ocorrencia"].includes(command) && !values.id ? "create" : "update");
   try {
     let id = "";
     let message = "Operação registrada.";
+    if (command === "ocorrencia") {
+      const documentIds = (values.documentIds || "").split(/[\s,;]+/).filter(Boolean);
+      if (documentIds.length && !canViewModule(context.user, "DOCUMENTOS")) throw new Error("Vinculação de anexos exige acesso ao GED.");
+      id = (await registerFunctionalOccurrence(context.prisma, context.user.id, { ...values, documentIds, amount: values.amount || undefined })).id;
+      revalidatePath("/rh/ocorrencias");
+    }
+    if (command === "cancelar-ocorrencia") {
+      id = (await cancelFunctionalOccurrence(context.prisma, context.user.id, values)).id;
+      revalidatePath("/rh/ocorrencias");
+    }
     if (command.startsWith("consignacao-")) {
       const sourceRunId = command === "consignacao-reservar" ? values.sourceRunId : (await context.prisma.hrConsignmentInstallment.findUniqueOrThrow({ where: { id: values.installmentId }, include: { agreement: true } })).agreement.sourceRunId;
       const sourceRun = await context.prisma.hrPayrollRun.findUniqueOrThrow({ where: { id: sourceRunId } });
@@ -42,7 +53,12 @@ export async function executeWorkforceOperation(command: string, values: Record<
       const scope = await context.prisma.sstBenefitPayrollScope.findUnique({ where: { payrollId } });
       if (scope) assertBudgetUnitAccess(context.user, scope.budgetUnitId);
     }
-    if (command === "contrato") id = (await saveEmploymentContract(context.prisma, context.user.id, { ...values, id: values.id || undefined, version: values.version || undefined, details: JSON.parse(values.details || "{}") })).id;
+    if (command === "contrato") {
+      const entries = Object.entries(values);
+      const customFields = Object.fromEntries(entries.filter(([key]) => key.startsWith("custom:")).map(([key, value]) => [key.slice(7), value]));
+      const standard = Object.fromEntries(entries.filter(([key]) => !key.startsWith("custom:")));
+      id = (await saveEmploymentContract(context.prisma, context.user.id, { ...standard, id: values.id || undefined, version: values.version || undefined, details: JSON.parse(values.details || "{}"), ...(values.customFieldsPolicyHash || Object.keys(customFields).length ? { customFields } : {}) })).id;
+    }
     if (command === "movimento") id = (await savePayrollMovement(context.prisma, context.user.id, values)).id;
     if (command === "direito") id = (await recordHrRightEntry(context.prisma, context.user.id, { ...values, details: JSON.parse(values.details || "{}") })).id;
     if (command === "aquisitivos") id = (await acquireVacationRights(context.prisma, context.user.id, values.contractId, values.asOf)).join(", ");

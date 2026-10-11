@@ -236,3 +236,99 @@ Origem única do ponto impede duplicação/alocação em outro vínculo. Replay 
 Em Operações > Direitos, o estorno recebe ID da entrada original e fundamento. Gera quantidade oposta na mesma data civil e preserva ponto/entrada/auditoria. A retirada de crédito é bloqueada se algum débito posterior ficar sem cobertura; primeiro concilie os débitos. Repetição com mesmo fundamento retorna o estorno existente; fundamento diferente e estorno de estorno são rejeitados. Estorno não libera a origem do ponto para novo lançamento.
 
 Expiração, transferência entre vínculos e conversão em pagamento continuam pendentes. Não usar o extrato como prova de pagamento.
+
+## Campos configuráveis de contratos funcionais
+
+Em RH > Parametrizações, cadastre uma regra ativa `CAMPOS_CONTRATO`, categoria GERAL e tipo JSON, no conjunto associado ao regime funcional. A definição passa pelo controle de alteração/aprovação já existente de Parametrizações. Exemplo sintético:
+
+```json
+{
+  "origin": "CAMPOS_CONTRATO",
+  "legalReference": "Ato municipal que define os dados adicionais",
+  "fields": [
+    {"code":"ATO_NOMEACAO","label":"Ato de nomeação","type":"TEXTO","required":true,"maxLength":160},
+    {"code":"ORDEM","label":"Ordem","type":"INTEIRO","required":false,"minimum":"0","maximum":"999"},
+    {"code":"INDICE","label":"Índice cadastral","type":"DECIMAL","required":false,"minimum":"0.0000","maximum":"100.0000"},
+    {"code":"DATA_REFERENCIA","label":"Data de referência","type":"DATA","required":false},
+    {"code":"DEDICACAO","label":"Dedicação exclusiva declarada","type":"BOOLEANO","required":true},
+    {"code":"CLASSE","label":"Classe cadastral","type":"OPCAO","required":true,"options":[{"value":"A","label":"Classe A"},{"value":"B","label":"Classe B"}]}
+  ]
+}
+```
+
+Até 50 campos por política. Código estável com letra inicial maiúscula e letras/números/sublinhado; até 64 caracteres. Códigos/opções duplicados e limites invertidos são rejeitados.
+
+- TEXTO exige `maxLength`, entre 1 e 4000. Valores são aparados nas extremidades.
+- INTEIRO aceita strings com até 15 dígitos, sinal opcional e sem fração. `minimum`/`maximum` são strings inteiras opcionais.
+- DECIMAL aceita strings com até 15 dígitos inteiros e até quatro casas, usando ponto decimal. Limites também são strings decimais; a comparação é exata.
+- DATA exige data civil válida AAAA-MM-DD.
+- BOOLEANO usa escolha explícita Sim/Não. `false` é um valor válido, inclusive em campo obrigatório.
+- OPCAO aceita somente um dos valores explícitos em `options`, até 100 opções.
+
+Em Operações > Contratos, os campos aparecem ao selecionar o regime. O hash da definição apresentada é conferido no servidor. Se a regra mudar, recarregue a ficha e confira os campos antes de salvar.
+
+O serviço grava valores normalizados em `details.customFields` e memória de definição em `details.customFieldsPolicy` (`ruleId`, `hash`, `definition`). A memória da definição vem do servidor e substitui qualquer metadata enviada no JSON de informações adicionais. As revisões preservam valores e definição para consulta histórica. Reajustes e alterações coletivas mantêm os valores e reaplicam a validação do regime de destino.
+
+Ao introduzir campo obrigatório, preencha-o na próxima revisão de cada contrato. Não retire definições usadas por contratos existentes nem desative sua política antes do saneamento: alterações que perderiam campos históricos são bloqueadas. As definições e os valores anteriores permanecem nos snapshots das revisões.
+
+O filtro de contratos aceita código e valor exato. Número/data/opção são armazenados como strings; booleano usa `true` ou `false` e o tipo BOOLEANO do filtro. A exportação integral respeita o filtro e inclui coluna de valores configuráveis em JSON. A consulta usa a última revisão cadastrada, que pode ter vigência futura.
+
+Esses campos são extensões cadastrais do contrato; sua definição não cria rubricas, incidências, cargos, designações ou regras fiscais automaticamente. Extensões próprias de funções/designações continuam no planejamento de F1.
+
+## Quadro temporal de cargos, vagas e níveis
+
+Cadastre regra JSON `QUADRO_CARGOS` (categoria GERAL) no conjunto compartilhado pelos regimes do quadro. Os cargos são IDs de `Role` do cadastro central; não se cria cargo paralelo em RH. Exemplo sintético:
+
+```json
+{
+  "origin": "QUADRO_CARGOS",
+  "legalReference": "Lei municipal de criação do quadro",
+  "periods": [{
+    "startsAt": "2026-01-01",
+    "endsAt": null,
+    "roles": [{
+      "roleId": "ID_CARGO_CENTRAL",
+      "authorizedSeats": 10,
+      "classification": "Efetivo",
+      "cbo": "411005",
+      "education": "Ensino médio",
+      "legalReference": "Lei de criação e enquadramento do cargo",
+      "duties": "Atribuições previstas na norma",
+      "competencies": "Competências previstas na norma",
+      "documentIds": [],
+      "levels": [
+        {"code":"A1","vertical":0,"horizontal":0,"salary":"1500.00","monthlyHours":200},
+        {"code":"A2","vertical":0,"horizontal":1,"salary":"1600.00","monthlyHours":200}
+      ],
+      "initialLevel":"A1",
+      "finalLevel":"A2"
+    }]
+  }]
+}
+```
+
+Cada período tem início e término civil inclusivo, sem sobreposição. Para contratos indeterminados, o quadro precisa de cobertura futura sem término, e o conjunto não pode expirar antes do período contratual. Lacunas de cobertura são bloqueadas. Quando há quadro ativo, o cargo deve estar previsto e o contrato deve informar nível com salário/jornada exatamente iguais à escala vigente.
+
+`authorizedSeats` admite zero. Cargos, níveis e coordenadas não podem se repetir na mesma vigência. Níveis inicial/final precisam existir na escala. `documentIds` referencia documentos já existentes no GED; as referências legais e os valores do exemplo devem ser substituídos pelos oficiais.
+
+A ocupação é contada por contrato ativo, não apenas por pessoa: dois vínculos ocupam duas vagas. Todos os regimes do mesmo conjunto são agregados. Conjuntos distintos têm quadros separados; não use conjuntos separados para representar o mesmo limite legal sem configuração específica de agregação.
+
+Revisões definem os intervalos reais de ocupação, incluindo mudanças futuras de cargo/regime e término contratual. O término libera a vaga no dia seguinte. Dois ocupantes que se sucedem na fronteira do período não duplicam a vaga. Inativar apenas a identidade funcional não apaga intervalos históricos do contrato.
+
+Em `/rh/quadro-cargos`, confira ocupação máxima e disponibilidade mínima de toda a vigência. Estas métricas incluem contratos futuros; não representam apenas a ocupação de hoje. Incompatibilidade cadastral interrompe a conferência com o motivo, em vez de presumir vagas disponíveis.
+
+Para nova tabela salarial, prepare a vigência no quadro e aplique as revisões coletivas correspondentes. O lote valida todos os contratos após preparar as revisões na mesma transação, mantendo rollback integral. Reajuste que difere da escala é rejeitado. Progressões automáticas, critérios de avaliação/tempo e anexos específicos de designações permanecem pendentes.
+
+## Ocorrências funcionais e pasta agregada
+
+Em `/rh/ocorrencias`, registre chave estável, contrato, tipo, data civil, ato de pessoal, fundamento, observação e IDs de documentos GED. Tipos: ADVERTENCIA, ELOGIO, MULTA, OUTRA. MULTA exige valor positivo decimal; os demais tipos não recebem valor.
+
+O ato precisa pertencer ao titular e ter data não posterior à ocorrência. O contrato deve estar ativo na data, conforme sua revisão temporal. Anexos são referências a documentos do GED, com titularidade conferida; documentos clínicos de Saúde/SST são rejeitados. A action exige permissão de consulta ao GED quando há anexos. A memória conserva o ato, a versão contratual e metadata dos documentos na data do registro.
+
+Replay de mesma origem/dados retorna o registro existente, mesmo com outro operador. Correção é feita por cancelamento fundamentado e novo registro, preservando o original. O cancelamento tem origem única, rejeita fundamento divergente e não admite cancelamento de cancelamento. Atos com ocorrências integradas ficam protegidos contra edição/exclusão pelas actions de RH, inclusive após cancelamento da ocorrência.
+
+Ocorrência de multa não gera desconto automaticamente. Reflexo financeiro exige apuração própria, rubrica/origem de movimento e validação na folha. Referência GED não substitui preservação/versionamento do arquivo pela rotina de documentos.
+
+Na ficha histórica do contrato, o link Pasta funcional abre `/rh/pasta-funcional/<employeeId>`. A pasta agrega contratos, atos, documentos cadastrais da pessoa central, ocorrências e entradas assinadas de direitos, com filtros e paginação de 20 em cada seção. Consulta de documentos respeita acesso ao GED e não expõe documentos clínicos/atestados ou URLs brutas de arquivos. Contratos e ocorrências mantêm links para suas rotinas de origem.
+
+Upload/vinculação específica de anexos ao contrato, progressões e demais jornadas de designação/estágio/cessão continuam no planejamento de F1.

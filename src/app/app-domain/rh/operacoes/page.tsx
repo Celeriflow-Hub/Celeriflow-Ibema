@@ -7,6 +7,7 @@ import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
 import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
 import { OperationForm, type OperationField } from "./OperationForm";
 import { accessiblePayrollWhere } from "@/lib/rh/payroll-access";
+import { contractCustomFieldsPolicySchema, contractCustomFieldsPolicyHash, type ContractCustomFieldValues } from "@/lib/rh/contract-custom-fields";
 
 export const dynamic = "force-dynamic";
 type Params = Record<string, string | string[] | undefined>;
@@ -22,7 +23,15 @@ export default async function WorkforcePage({ searchParams }: { searchParams: Pr
   const params = await searchParams;
   const tab = ["contratos", "movimentos", "direitos", "calculos", "integracoes"].includes(first(params.tab)) ? first(params.tab) : "contratos";
   const q = first(params.q).trim();
+  const customCode = first(params.customCode).trim();
+  const customValue = first(params.customValue).trim();
+  const customType = first(params.customType) === "BOOLEANO" ? "BOOLEANO" : "TEXTO";
+  const customFilterError = customCode && (!/^[A-Z][A-Z0-9_]{0,63}$/.test(customCode) || (customType === "BOOLEANO" && !["true", "false"].includes(customValue))) ? "Informe código válido e valor booleano true/false quando aplicável." : "";
   const contractWhere: Prisma.HrEmploymentContractWhereInput = q ? { OR: [{ registration: { contains: q, mode: "insensitive" } }, { employee: { name: { contains: q, mode: "insensitive" } } }] } : {};
+  if (customCode && tab === "contratos") {
+    if (customFilterError) contractWhere.id = { in: [] };
+    else contractWhere.details = { path: ["customFields", customCode], equals: customType === "BOOLEANO" ? customValue === "true" : customValue };
+  }
   const movementWhere: Prisma.HrMovementWhereInput = { contract: contractWhere };
   const rightWhere: Prisma.HrRightEntryWhereInput = { contract: contractWhere };
   const runWhere: Prisma.HrPayrollRunWhereInput = { ...(first(params.payrollId) ? { payrollId: first(params.payrollId) } : {}), payroll: { AND: [accessiblePayrollWhere(user), ...(q ? [{ competence: { contains: q } }] : [])] } };
@@ -30,14 +39,24 @@ export default async function WorkforcePage({ searchParams }: { searchParams: Pr
   const total = tab === "contratos" ? await prisma.hrEmploymentContract.count({ where: contractWhere }) : tab === "movimentos" ? await prisma.hrMovement.count({ where: movementWhere }) : tab === "direitos" ? await prisma.hrRightEntry.count({ where: rightWhere }) : tab === "calculos" ? await prisma.hrPayrollRun.count({ where: runWhere }) : await prisma.hrIntegrationEvent.count({ where: eventWhere });
   const page = Math.min(Math.max(1, Number.parseInt(first(params.page)) || 1), Math.max(1, Math.ceil(total / 20)));
   const paging = { skip: (page - 1) * 20, take: 20 };
-  const href = (value: number) => `/rh/operacoes?${new URLSearchParams({ tab, q, page: String(value), ...(first(params.payrollId) ? { payrollId: first(params.payrollId) } : {}) })}`;
+  const href = (value: number) => `/rh/operacoes?${new URLSearchParams({ tab, q, page: String(value), ...(customCode ? { customCode, customValue, customType } : {}), ...(first(params.payrollId) ? { payrollId: first(params.payrollId) } : {}) })}`;
   const selected = first(params.id) ? await prisma.hrEmploymentContract.findUnique({ where: { id: first(params.id) } }) : null;
   const contracts = tab === "contratos" ? await prisma.hrEmploymentContract.findMany({ where: contractWhere, ...paging, include: { employee: true }, orderBy: [{ registration: "asc" }, { id: "asc" }] }) : [];
   const movements = tab === "movimentos" ? await prisma.hrMovement.findMany({ where: movementWhere, ...paging, include: { contract: true }, orderBy: [{ createdAt: "desc" }, { id: "asc" }] }) : [];
   const rights = tab === "direitos" ? await prisma.hrRightEntry.findMany({ where: rightWhere, ...paging, include: { contract: true }, orderBy: [{ createdAt: "desc" }, { id: "asc" }] }) : [];
   const runs = tab === "calculos" ? await prisma.hrPayrollRun.findMany({ where: runWhere, ...paging, include: { payroll: true }, orderBy: [{ createdAt: "desc" }, { id: "asc" }] }) : [];
   const events = tab === "integracoes" ? await prisma.hrIntegrationEvent.findMany({ where: eventWhere, ...paging, orderBy: [{ createdAt: "desc" }, { id: "asc" }] }) : [];
-  const regimes = tab === "contratos" ? await prisma.hrEmploymentRegime.findMany({ where: { isActive: true }, include: { ruleSet: true }, orderBy: { code: "asc" } }) : [];
+  const regimes = tab === "contratos" ? await prisma.hrEmploymentRegime.findMany({ where: { isActive: true }, include: { ruleSet: { include: { rules: { where: { code: "CAMPOS_CONTRATO", isActive: true } } } } }, orderBy: { code: "asc" } }) : [];
+  const customPolicyErrors: string[] = [];
+  const customPolicies = Object.fromEntries(regimes.flatMap(regime => {
+    const rule = regime.ruleSet.rules[0];
+    if (!rule) return [];
+    const parsed = contractCustomFieldsPolicySchema.safeParse(rule.value);
+    if (!parsed.success) { customPolicyErrors.push(regime.name); return []; }
+    const policy = parsed.data;
+    return [[regime.id, { policy, hash: contractCustomFieldsPolicyHash(policy) }]];
+  }));
+  const customValues = (selected?.details as { customFields?: ContractCustomFieldValues } | undefined)?.customFields || {};
   const roles = tab === "contratos" ? await prisma.role.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }) : [];
   const dt = (value: Date | null | undefined) => value?.toISOString().slice(0, 10) || "";
   const contractFields: OperationField[] = [field("id", "ID", selected?.id, "hidden", false), field("version", "Versão", selected?.version.toString(), "hidden", false), field("employeeId", "ID do servidor (Cadastro funcional)", selected?.employeeId), field("registration", "Matrícula do contrato", selected?.registration), { ...field("regimeId", "Regime", selected?.regimeId), options: [{ value: "", label: "Selecione" }, ...regimes.map(r => ({ value: r.id, label: `${r.name} · ${r.ruleSet.scope}` }))] }, { ...field("roleId", "Cargo", selected?.roleId), options: [{ value: "", label: "Selecione" }, ...roles.map(r => ({ value: r.id, label: r.name }))] }, field("departmentId", "ID do departamento", selected?.departmentId || "", "text", false), field("costCenterId", "ID do centro de custo", selected?.costCenterId || "", "text", false), field("workLocation", "Local de trabalho", selected?.workLocation), field("salaryLevel", "Nível salarial", selected?.salaryLevel || "", "text", false), field("admittedAt", "Admissão", dt(selected?.admittedAt), "date"), field("appointedAt", "Nomeação", dt(selected?.appointedAt), "date", false), field("swornAt", "Posse", dt(selected?.swornAt), "date", false), field("endsAt", "Término", dt(selected?.endsAt), "date", false), field("monthlyHours", "Jornada mensal", selected?.monthlyHours.toString() || "220", "number"), field("salary", "Salário (decimal)", selected?.salary.toFixed(2) || "0.00", "number"), field("details", "Informações adicionais (JSON)", JSON.stringify(selected?.details || {}), "textarea"), field("reason", "Motivo / ato", "", "textarea")];
@@ -49,6 +68,11 @@ export default async function WorkforcePage({ searchParams }: { searchParams: Pr
     <Link href="/rh/operacoes/medias" className="text-xs underline">Médias e seleção das maiores remunerações</Link>
     <Link href="/rh/recadastramento" className="text-xs underline">Campanhas e pendências de recadastramento</Link>
     <Link href="/rh/consignacoes" className="text-xs underline">Contratos, reservas e parcelas de consignação</Link>
+    <Link href="/rh/quadro-cargos" className="text-xs underline">Quadro de cargos, vagas autorizadas e níveis salariais</Link>
+    <Link href="/rh/ocorrencias" className="text-xs underline">Ocorrências funcionais, atos e anexos GED</Link>
+    {customPolicyErrors.length > 0 && <p role="alert" className="rounded border border-amber-300 p-2 text-xs">Política de campos configuráveis inválida nos regimes: {customPolicyErrors.join(", ")}. Corrija a regra CAMPOS_CONTRATO em <Link href="/rh/parametrizacoes" className="underline">Parametrizações</Link> antes de salvar contratos nesses regimes.</p>}
+    {customFilterError && <p role="alert" className="text-xs text-red-700">{customFilterError}</p>}
+    {tab === "contratos" && <form className="flex flex-wrap gap-2 text-xs"><input type="hidden" name="tab" value="contratos" /><input type="hidden" name="q" value={q} /><input name="customCode" defaultValue={customCode} placeholder="Código do campo configurável" className="h-8 rounded border px-2" /><input name="customValue" defaultValue={customValue} placeholder="Valor exato" className="h-8 rounded border px-2" /><select name="customType" defaultValue={customType} className="rounded border px-2"><option value="TEXTO">Texto, número, data ou opção</option><option value="BOOLEANO">Booleano (true / false)</option></select><button className="rounded border px-3">Filtrar campo configurável</button></form>}
     {tab === "direitos" && <OperationForm command="ponto-banco-horas" title="Reconhecer créditos/débitos do ponto no banco de horas" fields={[field("contractId", "Contrato de alocação"), field("ruleId", "Política JSON de banco de horas"), field("competence", "Competência MM/AAAA")]} />}
     {tab === "direitos" && <OperationForm command="estornar-banco-horas" title="Estorno compensatório de banco de horas" fields={[field("entryId", "ID da entrada original"), field("reason", "Fundamento / motivo", "", "textarea")]} />}
     {tab === "contratos" && <OperationForm command="contratos-coletivos" title="Alteração coletiva de dados funcionais com prévia" fields={[field("batchKey", "Chave estável do lote", randomUUID()), field("contractIds", "Contratos"), field("effectiveFrom", "Vigência", "", "date"), field("reason", "Fundamento / ato", "", "textarea"), field("changes", "Campos e valores (JSON): local, cargo, regime, centro, departamento, nível, salário, jornada ou término", '{"workLocation":"Novo local"}', "textarea"), { ...field("mode", "Operação"), options: [{ value: "PREVIA", label: "Conferir prévia" }, { value: "APLICAR", label: "Aplicar lote" }] }, field("previewHash", "Hash da prévia conferida", "", "text", false)]} />}
@@ -60,11 +84,12 @@ export default async function WorkforcePage({ searchParams }: { searchParams: Pr
     </form>
     {["contratos", "direitos", "calculos"].includes(tab) && <div className="flex gap-2 text-xs"><span>{tab === "calculos" ? "Exportar oficiais fechadas:" : "Exportar filtro integral:"}</span>{["CSV", "XLSX", "PDF"].map(format => {
       const args = new URLSearchParams({ kind: tab === "contratos" ? "CONTRATOS" : tab === "direitos" ? "DIREITOS" : "FOLHA", format, q: tab === "calculos" ? "" : q });
+      if (tab === "contratos" && customCode) { args.set("customCode", customCode); args.set("customValue", customValue); args.set("customType", customType); }
       if (tab === "calculos" && /^(0[1-9]|1[0-2])\/\d{4}$/.test(q)) args.set("competence", q);
       if (tab === "calculos" && first(params.payrollId)) args.set("payrollId", first(params.payrollId));
       return <Link key={format} href={`/api/rh/relatorios?${args}`} className="underline">{format}</Link>;
     })}</div>}
-    {tab === "contratos" && <><OperationForm command="contrato" title={selected ? "Salvar revisão do contrato" : "Cadastrar contrato"} fields={contractFields} /><OperationForm command="vincular" title="Vincular servidor à pessoa física existente" fields={[field("employeeId", "ID servidor"), field("personId", "ID pessoa física")]} /></>}
+    {tab === "contratos" && <><OperationForm key={`${selected?.id || "new"}:${selected?.version || 0}`} command="contrato" title={selected ? "Salvar revisão do contrato" : "Cadastrar contrato"} fields={contractFields} customPolicies={customPolicies} customValues={customValues} /><OperationForm command="vincular" title="Vincular servidor à pessoa física existente" fields={[field("employeeId", "ID servidor"), field("personId", "ID pessoa física")]} /></>}
     {tab === "contratos" && <OperationForm command="reajustar" title="Reajuste salarial coletivo com prévia" fields={[field("batchKey", "Chave estável do lote", randomUUID()), field("contractIds", "Contratos"), field("effectiveFrom", "Vigência", "", "date"), field("rate", "Percentual assinado (ex.: 5 ou -2)", "0"), field("reason", "Ato / fundamento", "", "textarea"), { ...field("mode", "Operação"), options: [{ value: "PREVIA", label: "Conferir prévia" }, { value: "APLICAR", label: "Aplicar lote" }] }, field("previewHash", "Hash da prévia conferida", "", "text", false)]} />}
     {tab === "movimentos" && <OperationForm command="movimento" title="Registrar movimento fixo/variável" fields={[field("contractId", "ID contrato"), field("sourceKey", "Chave única da origem", randomUUID()), field("rubricCode", "Código da rubrica"), field("startsAt", "Início", "", "date"), field("endsAt", "Fim", "", "date", false), field("amount", "Valor (BRL)", "0.00", "number"), field("reference", "Referência", "", "text", false), field("notes", "Observação / ato", "", "textarea")]} />}
     {tab === "movimentos" && <OperationForm command="importar" title="Validar / importar lote CSV de verbas fixas ou variáveis" fields={[field("batchKey", "Identificador estável do lote", randomUUID()), { ...field("mode", "Operação"), options: [{ value: "PREVIA", label: "Validar sem gravar" }, { value: "APLICAR", label: "Aplicar lote inteiro" }] }, field("csv", "CSV com cabeçalho e datas AAAA-MM-DD", "matricula;rubrica;valor;inicio;fim;referencia;observacao\n", "textarea")]} />}

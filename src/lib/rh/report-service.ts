@@ -9,6 +9,7 @@ export const hrReportInputSchema = z.object({
   kind: z.enum(["CONTRATOS", "FOLHA", "DIREITOS", "RESUMO_CONTABIL", "PREVIDENCIA", "CONTRATOS_MULTIPLOS"]), format: z.enum(["CSV", "XLSX", "PDF"]),
   q: z.string().max(200).default(""), competence: z.string().regex(/^(0[1-9]|1[0-2])\/\d{4}$/).optional(),
   payrollId: z.string().min(1).optional(),
+  customCode: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/).optional(), customValue: z.string().max(4000).optional(), customType: z.enum(["TEXTO", "BOOLEANO"]).optional(),
 });
 type Report = { title: string; headers: string[]; rows: string[][] };
 const payrollSnapshot = z.object({
@@ -20,9 +21,14 @@ const payrollSnapshot = z.object({
 
 export async function buildHrReport(db: PrismaClient, input: z.infer<typeof hrReportInputSchema>, payrollScope: Prisma.PayrollWhereInput = {}): Promise<Report> {
   const contractWhere: Prisma.HrEmploymentContractWhereInput = input.q ? { OR: [{ registration: { contains: input.q, mode: "insensitive" } }, { employee: { name: { contains: input.q, mode: "insensitive" } } }] } : {};
+  if (input.customCode) {
+    if (input.kind !== "CONTRATOS") throw new Error("Filtro de campo configurável disponível no relatório de contratos atuais.");
+    if (!/^[A-Z][A-Z0-9_]{0,63}$/.test(input.customCode) || input.customValue === undefined || (input.customType === "BOOLEANO" && !["true", "false"].includes(input.customValue))) throw new Error("Filtro de campo configurável inválido.");
+    contractWhere.details = { path: ["customFields", input.customCode], equals: input.customType === "BOOLEANO" ? input.customValue === "true" : input.customValue };
+  }
   if (input.kind === "CONTRATOS") {
     const rows = await db.hrEmploymentContract.findMany({ where: contractWhere, include: { employee: { select: { name: true } } }, orderBy: [{ registration: "asc" }, { id: "asc" }] });
-    return { title: "Contratos funcionais", headers: ["Matrícula", "Servidor", "Admissão", "Término", "Local", "Jornada", "Salário BRL", "Situação", "Versão"], rows: rows.map(row => [row.registration, row.employee.name, row.admittedAt.toISOString().slice(0, 10), row.endsAt?.toISOString().slice(0, 10) || "", row.workLocation, String(row.monthlyHours), row.salary.toFixed(2), row.status, String(row.version)]) };
+    return { title: "Contratos funcionais — última revisão cadastrada", headers: ["Matrícula", "Servidor", "Admissão", "Término", "Local", "Jornada", "Salário BRL", "Situação", "Versão", "Campos configuráveis (JSON)"], rows: rows.map(row => [row.registration, row.employee.name, row.admittedAt.toISOString().slice(0, 10), row.endsAt?.toISOString().slice(0, 10) || "", row.workLocation, String(row.monthlyHours), row.salary.toFixed(2), row.status, String(row.version), JSON.stringify((row.details as { customFields?: unknown })?.customFields || {})]) };
   }
   if (input.kind === "CONTRATOS_MULTIPLOS") {
     const reference = input.competence ? payrollPeriod(input.competence).start : new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");

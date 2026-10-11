@@ -4,12 +4,14 @@ import PDFDocument from "pdfkit";
 import { z } from "zod";
 import { resolveContractRevision } from "./contract-timeline";
 import { payrollPeriod } from "./calculation-engine";
+import { buildPocAnnualIncomeReport } from "./poc-payment";
 
 export const hrReportInputSchema = z.object({
-  kind: z.enum(["CONTRATOS", "FOLHA", "DIREITOS", "RESUMO_CONTABIL", "PREVIDENCIA", "CONTRATOS_MULTIPLOS", "SERVIDORES_ATIVOS", "QUANTIDADE_SERVIDORES"]), format: z.enum(["CSV", "XLSX", "PDF"]),
+  kind: z.enum(["CONTRATOS", "FOLHA", "DIREITOS", "RESUMO_CONTABIL", "PREVIDENCIA", "IRRF", "REMESSA_SALARIAL_POC", "INFORME_ANUAL_POC", "CONTRATOS_MULTIPLOS", "SERVIDORES_ATIVOS", "QUANTIDADE_SERVIDORES"]), format: z.enum(["CSV", "XLSX", "PDF"]),
   q: z.string().max(200).default(""), competence: z.string().regex(/^(0[1-9]|1[0-2])\/\d{4}$/).optional(),
   referenceDate: z.iso.date().optional(),
   payrollId: z.string().min(1).optional(),
+  year: z.coerce.number().int().min(1900).max(2200).optional(),
   customCode: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/).optional(), customValue: z.string().max(4000).optional(), customType: z.enum(["TEXTO", "BOOLEANO"]).optional(),
 });
 type Report = { title: string; headers: string[]; rows: string[][] };
@@ -21,6 +23,10 @@ const payrollSnapshot = z.object({
 });
 
 export async function buildHrReport(db: PrismaClient, input: z.infer<typeof hrReportInputSchema>, payrollScope: Prisma.PayrollWhereInput = {}): Promise<Report> {
+  if (input.kind === "INFORME_ANUAL_POC") {
+    if (input.q || input.competence || input.payrollId || input.customCode || input.referenceDate) throw new Error("Informe anual POC usa ano de pagamento e acesso orçamentário; remova os demais filtros.");
+    return buildPocAnnualIncomeReport(db, input.year ?? new Date().getUTCFullYear(), payrollScope);
+  }
   const contractWhere: Prisma.HrEmploymentContractWhereInput = input.q ? { OR: [{ registration: { contains: input.q, mode: "insensitive" } }, { employee: { name: { contains: input.q, mode: "insensitive" } } }] } : {};
   if (input.customCode) {
     if (input.kind !== "CONTRATOS") throw new Error("Filtro de campo configurável disponível no relatório de contratos atuais.");
@@ -72,8 +78,23 @@ export async function buildHrReport(db: PrismaClient, input: z.infer<typeof hrRe
     const roleNames = new Map(roles.map(role => [role.id, role.name]));
     return { title: "Relação de servidores/vínculos ativos — referência documental Ibema; nomes de cargo/regime do cadastro atual", headers: ["Referência", "Matrícula", "Nome", "Cargo/Função", "Lotação", "Situação", "Regime", "Admissão", "Faixa salarial", "Jornada mensal (horas)", "Versão contratual"], rows: active.map(contract => [date, contract.registration, contract.employee.name, roleNames.get(contract.roleId) || contract.roleId, contract.workLocation, contract.status, regimeNames.get(contract.regimeId) || contract.regimeId, contract.admittedAt.toISOString().slice(0, 10), contract.salaryLevel || "", String(contract.monthlyHours), String(contract.version)]) };
   }
-  if (["FOLHA", "RESUMO_CONTABIL", "PREVIDENCIA"].includes(input.kind)) {
+  if (["FOLHA", "RESUMO_CONTABIL", "PREVIDENCIA", "IRRF", "REMESSA_SALARIAL_POC"].includes(input.kind)) {
     const rows = await db.hrPayrollStatement.findMany({ where: { contract: contractWhere, run: { mode: "OFICIAL", status: "FECHADA", ...(input.payrollId ? { payrollId: input.payrollId } : {}), payroll: { AND: [payrollScope, ...(input.competence ? [{ competence: input.competence }] : [])] } } }, include: { contract: { select: { registration: true, employee: { select: { name: true } } } }, run: { select: { payroll: { select: { competence: true, type: true } }, scope: true } } }, orderBy: [{ run: { createdAt: "asc" } }, { id: "asc" }] });
+    if (input.kind === "IRRF") {
+      const taxSchema = z.object({ incomeTax: z.object({ income: z.string(), deduction: z.string(), base: z.string(), preliminary: z.string(), reduction: z.string(), tax: z.string(), deductionMethod: z.string(), rraMonths: z.number().nullable() }).nullable().optional() });
+      return { title: "IRRF — memória agregada por PF repetida nos vínculos; somar somente o imposto alocado", headers: ["Competência", "Tipo", "Escopo", "Matrícula", "Servidor", "Renda PF BRL", "Dedução PF BRL", "Método", "Base PF BRL", "Preliminar PF BRL", "Redução PF BRL", "Imposto PF BRL", "IRRF alocado BRL", "Meses RRA", "Versão"], rows: rows.map(row => {
+        const snapshot = payrollSnapshot.parse(row.snapshot), tax = taxSchema.parse(row.snapshot).incomeTax;
+        return [row.run.payroll.competence, row.run.payroll.type, row.run.scope, snapshot.contract.registration, snapshot.contract.employee.name, tax?.income || "", tax?.deduction || "", tax?.deductionMethod || "", tax?.base || "", tax?.preliminary || "", tax?.reduction || "", tax?.tax || "", snapshot.items.find(item => item.code === "IRRF")?.value || "0.00", tax?.rraMonths?.toString() || "", row.id];
+      }) };
+    }
+    if (input.kind === "REMESSA_SALARIAL_POC") {
+      const bankSchema = z.object({ contract: z.object({ employee: z.object({ person: z.object({ cpf: z.string() }) }), details: z.object({ pocBankAccount: z.object({ bank: z.string().regex(/^\d{3}$/), agency: z.string(), account: z.string(), accountType: z.string(), estimated: z.literal(true) }) }) }) });
+      if (rows.some(row => row.run.scope !== "DEMONSTRACAO")) throw new Error("Modelo de remessa POC exige filtrar somente folhas demonstrativas.");
+      return { title: "Remessa salarial — MODELO CSV POC, contas fictícias; sem transmissão ou baixa", headers: ["Competência", "Tipo folha", "Banco", "Agência", "Conta", "Tipo conta", "CPF", "Matrícula", "Favorecido", "Líquido BRL", "Demonstrativo", "Modelo"], rows: rows.map(row => {
+        const snapshot = payrollSnapshot.parse(row.snapshot), bankData = bankSchema.parse(row.snapshot).contract, bank = bankData.details.pocBankAccount;
+        return [row.run.payroll.competence, row.run.payroll.type, bank.bank, bank.agency, bank.account, bank.accountType, bankData.employee.person.cpf, snapshot.contract.registration, snapshot.contract.employee.name, row.net.toFixed(2), row.id, "REMESSA_SALARIAL_CSV_POC_V1"];
+      }) };
+    }
     if (input.kind === "PREVIDENCIA") return { title: "Bases e contribuições calculadas — não comprova recolhimento", headers: ["Competência", "Escopo", "Matrícula", "Servidor", "Previdência", "Base BRL", "Segurado BRL", "Patronal BRL", "FGTS BRL", "Versão"], rows: rows.map(row => {
       const snapshot = payrollSnapshot.parse(row.snapshot); const scheme = snapshot.regime.socialSecurityScheme;
       const social = scheme ? snapshot.items.find(item => item.code === `PREVIDENCIA_${scheme.code}`)?.value || "0.00" : "0.00";

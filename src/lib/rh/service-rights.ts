@@ -3,6 +3,7 @@ import { z } from "zod";
 import { resolveContractRevision } from "./contract-timeline";
 import { enqueueHrIntegration } from "./workforce-service";
 import { assertRhAbsenceDoesNotOverlap } from "./absence-conflicts";
+import { civilAnniversary } from "./civil-service-calendar";
 
 const day = 86400000;
 const civil = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
@@ -14,6 +15,7 @@ const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringif
 const fingerprint = (value: unknown) => JSON.stringify(Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)));
 export const serviceRightPolicySchema = z.object({
   origin: z.literal("LICENCA_PREMIO"), acquisitionDays: z.number().int().min(1).max(36500), entitlementDays: z.number().int().min(1).max(365),
+  acquisitionYears: z.number().int().min(1).max(100).optional(),
   minSplitDays: z.number().int().min(1).max(365), maxSplits: z.number().int().min(1).max(100), allowsCash: z.boolean(), maxCashDays: z.number().int().min(0).max(365),
   absences: z.array(z.object({ type: z.string().trim().min(1), effect: z.enum(["CONTAR", "SUSPENDER", "REINICIAR"]) }).strict()).max(100), legalReference: z.string().trim().min(3),
 }).strict().superRefine((policy, ctx) => {
@@ -22,7 +24,8 @@ export const serviceRightPolicySchema = z.object({
 
 /** Count civil days once even when approved absences overlap. Reset has priority
  * over suspension; a suspended day extends the acquisition rather than creating
- * a credit. Rules use explicit day counts, never an assumed municipal quinquennium. */
+ * a credit. Policies select explicit days or civil years; the POC anniversary
+ * convention is preserved in the policy and must be confirmed for production. */
 export function calculateServiceAcquisitions(start: Date, through: Date, rawPolicy: unknown, absences: { type: string; startDate: Date; endDate: Date }[]) {
   const policy = serviceRightPolicySchema.parse(rawPolicy);
   if (through < start || (through.getTime() - start.getTime()) / day > 55000) throw new Error("Intervalo de aquisição inválido ou superior a 150 anos.");
@@ -31,12 +34,13 @@ export function calculateServiceAcquisitions(start: Date, through: Date, rawPoli
   for (const absence of relevant) if (absence.endDate < absence.startDate || !effects.has(absence.type)) throw new Error(`Defina o efeito do afastamento ${absence.type} na política de licença-prêmio.`);
   const periods: { periodStart: Date; periodEnd: Date; suspendedDays: number; countedDays: number }[] = [];
   let periodStart = start; let countedDays = 0; let suspendedDays = 0;
+  const targetDays = () => policy.acquisitionYears ? Math.round((civilAnniversary(periodStart, policy.acquisitionYears).getTime() - periodStart.getTime()) / day) : policy.acquisitionDays;
   for (let current = start; current <= through; current = new Date(current.getTime() + day)) {
     const applicable = relevant.filter(row => row.startDate <= current && row.endDate >= current).map(row => effects.get(row.type));
     if (applicable.includes("REINICIAR")) { periodStart = new Date(current.getTime() + day); countedDays = 0; suspendedDays = 0; continue; }
     if (applicable.includes("SUSPENDER")) { suspendedDays++; continue; }
     countedDays++;
-    if (countedDays === policy.acquisitionDays) {
+    if (countedDays === targetDays()) {
       periods.push({ periodStart, periodEnd: current, suspendedDays, countedDays });
       periodStart = new Date(current.getTime() + day); countedDays = 0; suspendedDays = 0;
     }

@@ -26,14 +26,40 @@ import { registerFunctionalOccurrence, cancelFunctionalOccurrence } from "@/lib/
 import { transferTimeBank, reverseTimeBankTransfer } from "@/lib/rh/time-bank-transfer";
 import { convertTimeBankToPayroll, reverseTimeBankPayment } from "@/lib/rh/time-bank-payment";
 import { decideEmployeeCreditRequest } from "@/lib/rh/credit-requests";
+import { installDocumentaryPocParameters, prepareDocumentaryPocDataset } from "@/lib/rh/poc-bootstrap";
+import { requestTravelAllowance, decideTravelAllowance, accountForTravelAllowance } from "@/lib/rh/travel-allowance";
+import { registerPocPayment } from "@/lib/rh/poc-payment";
 
 export async function executeWorkforceOperation(command: string, values: Record<string, string>) {
   const allowed = ["contrato", "movimento", "direito", "calcular", "fechar", "cancelar", "publicar", "vincular", "aquisitivos", "reservar-ferias", "importar", "beneficio", "decidir-solicitacao", "reajustar", "cancelar-ferias", "ponto-horas-extras", "decidir-recadastramento", "financeiro", "simular-especial", "consignacao-reservar", "consignacao-lancar", "consignacao-cancelar", "contratos-coletivos", "ponto-banco-horas", "estornar-banco-horas"];
-  if (![...allowed, "ocorrencia", "cancelar-ocorrencia", "decidir-credito", "transferir-banco-horas", "estornar-transferencia-horas", "pagar-banco-horas", "estornar-pagamento-horas", "ferias-multiplos", "cancelar-ferias-multiplos", "licenca-adquirir", "licenca-reservar", "licenca-cancelar", "averbar-tempo", "estornar-averbacao", "apurar-ats", "estornar-ats", "provisionar", "estornar-provisao", "expirar-banco-horas", "baixar-provisao-empenho", "estornar-baixa-provisao"].includes(command)) return { error: "Operação inválida." };
+  if (![...allowed, "poc-pagamento", "diaria-solicitar", "diaria-decidir", "diaria-prestar", "poc-parametros", "poc-preparar", "calcular-poc", "ocorrencia", "cancelar-ocorrencia", "decidir-credito", "transferir-banco-horas", "estornar-transferencia-horas", "pagar-banco-horas", "estornar-pagamento-horas", "ferias-multiplos", "cancelar-ferias-multiplos", "licenca-adquirir", "licenca-reservar", "licenca-cancelar", "averbar-tempo", "estornar-averbacao", "apurar-ats", "estornar-ats", "provisionar", "estornar-provisao", "expirar-banco-horas", "baixar-provisao-empenho", "estornar-baixa-provisao"].includes(command)) return { error: "Operação inválida." };
   const context = await getTenantContextForModuleOperation("RH", ["contrato", "movimento", "direito", "aquisitivos", "reservar-ferias", "importar", "beneficio", "ponto-horas-extras", "ponto-banco-horas", "consignacao-reservar", "ocorrencia", "transferir-banco-horas", "pagar-banco-horas", "ferias-multiplos", "licenca-adquirir", "licenca-reservar", "averbar-tempo", "apurar-ats"].includes(command) && !values.id ? "create" : "update");
   try {
     let id = "";
     let message = "Operação registrada.";
+    if (command === "poc-pagamento") {
+      const run = await context.prisma.hrPayrollRun.findUniqueOrThrow({ where: { id: values.runId } });
+      await assertPayrollBudgetScope(context, run.payrollId);
+      id = (await registerPocPayment(context.prisma, context.user.id, values)).id;
+      message = "Pagamento demonstrativo registrado por data, disponível no informe anual POC.";
+    }
+    if (command === "diaria-solicitar") id = (await requestTravelAllowance(context.prisma, context.user.id, values)).id;
+    if (command === "diaria-decidir") id = (await decideTravelAllowance(context.prisma, context.user.id, values)).id;
+    if (command === "diaria-prestar") id = (await accountForTravelAllowance(context.prisma, context.user.id, values)).id;
+    if (command === "poc-parametros") {
+      const result = await installDocumentaryPocParameters(context.prisma, context.user.id);
+      id = result.ruleSetId; message = "Parâmetros documentais POC instalados. Valores e origens disponíveis em Parametrizações.";
+    }
+    if (command === "poc-preparar") {
+      const result = await prepareDocumentaryPocDataset(context.prisma, context.user.id, values.competence);
+      id = result.contractIds.join(", "); message = "Base preparada: três titulares fictícios, contratos temporais e nove tipos de folha. Repetição preserva cadastros e cálculos.";
+    }
+    if (command === "calcular-poc") {
+      await assertPayrollBudgetScope(context, values.payrollId);
+      const payroll = await context.prisma.payroll.findUniqueOrThrow({ where: { id: values.payrollId } });
+      const result = await calculatePayrollRun(context.prisma, context.user.id, { payrollId: values.payrollId, requestKey: values.requestKey, mode: values.mode, scope: "DEMONSTRACAO", contractIds: values.contractIds.split(/[\s,;]+/).filter(Boolean), ...(payroll.type !== "Mensal" ? { specialParameters: JSON.parse(values.parameters || "{}") } : {}) });
+      id = result.id; message = "Cálculo POC persistido com memória. Abra o cálculo para conferir, fechar e publicar os demonstrativos.";
+    }
     if (command === "baixar-provisao-empenho") {
       id = (await consumeProvisionsAtCommitment(context, { ...values, allocations: JSON.parse(values.allocations || "[]") })).entryIds.join(", ");
       message = "Provisões baixadas e vinculadas ao empenho nativo com histórico preservado.";
@@ -198,6 +224,9 @@ export async function executeWorkforceOperation(command: string, values: Record<
       id = input.employeeId;
     }
     revalidatePath("/rh/operacoes");
+    revalidatePath("/rh/poc");
+    revalidatePath("/rh/diarias");
+    revalidatePath("/rh/parametrizacoes");
     revalidatePath("/rh/folha");
     revalidatePath("/portal-servidor/folha");
     revalidatePath("/rh/solicitacoes");

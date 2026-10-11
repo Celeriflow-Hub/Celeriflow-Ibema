@@ -14,6 +14,8 @@ const snapshotSchema = z.object({
   familyWage: familyWageSnapshotSchema.nullable().optional().default(null),
   irrfDependents: dependentAssessmentSchema.nullable().optional().default(null),
   messages: receiptMessagesSnapshotSchema.optional().default([]),
+  incomeTax: z.object({ income: z.string(), legalDeductions: z.string(), simplifiedDeduction: z.string(), deduction: z.string(), deductionMethod: z.string(), base: z.string(), preliminary: z.string(), reduction: z.string(), tax: z.string(), rraMonths: z.number().nullable(), referenceDate: z.string() }).nullable().optional().default(null),
+  specialPayroll: z.record(z.string(), z.unknown()).nullable().optional().default(null),
 });
 
 export async function getPayrollStatement(db: PrismaClient, id: string, employeeId?: string) {
@@ -47,6 +49,12 @@ export async function renderPayrollStatementPdf(statement: Awaited<ReturnType<ty
     pdf.text(`Fundamento: ${family.policy.eligibility.legalReference}`);
   }
   if (statement.irrfDependents) pdf.text(`Dependentes elegíveis de IRRF na versão: ${statement.irrfDependents.eligibleCount} · ${statement.irrfDependents.policy.legalReference}`);
+  if (statement.incomeTax) {
+    const tax = statement.incomeTax;
+    pdf.moveDown().text(`IRRF agregado por PF: renda R$ ${tax.income} · dedução ${tax.deductionMethod} R$ ${tax.deduction} · base R$ ${tax.base}`);
+    pdf.text(`Imposto preliminar R$ ${tax.preliminary} · redução R$ ${tax.reduction} · imposto R$ ${tax.tax}${tax.rraMonths ? ` · RRA ${tax.rraMonths} meses` : ""}`);
+  }
+  if (statement.specialPayroll) pdf.moveDown().text(`Folha especial POC — premissas e fórmulas: ${JSON.stringify(statement.specialPayroll)}`);
   if (statement.consignmentMargin) {
     const margin = statement.consignmentMargin;
     pdf.moveDown().text(`Margem consignável agregada: base R$ ${margin.base} · limite ${margin.rate}% = R$ ${margin.limit} · utilizado R$ ${margin.used} · disponível R$ ${margin.available}`);

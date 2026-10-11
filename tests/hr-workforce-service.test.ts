@@ -39,6 +39,9 @@ import { convertTimeBankToPayroll, reverseTimeBankPayment } from "../src/lib/rh/
 import { contractCustomFieldsPolicyHash } from "../src/lib/rh/contract-custom-fields";
 import { inspectPositionPlan } from "../src/lib/rh/position-plan";
 import { registerFunctionalOccurrence, cancelFunctionalOccurrence, assertPersonnelActNotIntegrated } from "../src/lib/rh/functional-occurrences";
+import { installDocumentaryPocParameters, prepareDocumentaryPocDataset } from "../src/lib/rh/poc-bootstrap";
+import { requestTravelAllowance, decideTravelAllowance, accountForTravelAllowance, buildTravelAllowanceDocument } from "../src/lib/rh/travel-allowance";
+import { registerPocPayment } from "../src/lib/rh/poc-payment";
 
 test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamento, Portal e saldos", async () => {
   const pg = new PGlite();
@@ -816,5 +819,77 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
     assert.equal(expired.entryIds.length, 2);
     assert.deepEqual(await expireTimeBankLots(db, "other-actor", { ...expiryInput, mode: "APLICAR" }), expired);
     assert.equal((await db.hrRightEntry.aggregate({ where: { kind: "BANCO_HORAS", details: { path: ["scope"], equals: "DEMONSTRACAO" } }, _sum: { quantity: true } }))._sum.quantity?.toString(), "0");
+    await pg.exec(`CREATE TABLE "ConfiguracaoInstancia" (id TEXT PRIMARY KEY,"nomePrefeitura" TEXT,"municipio" TEXT,"uf" TEXT,"cnpj" TEXT,"dominio" TEXT,status TEXT DEFAULT 'Ativa',"createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+      CREATE UNIQUE INDEX poc_ruleset_key ON "HrPayrollRuleSet" ("configuracaoInstanciaId",code,"effectiveFrom");
+      CREATE UNIQUE INDEX poc_policy_key ON "HrCalculationPolicy" ("ruleSetId");
+      CREATE UNIQUE INDEX poc_scheme_key ON "HrSocialSecurityScheme" ("ruleSetId",code);
+      CREATE UNIQUE INDEX poc_band_key ON "HrSocialSecurityBand" ("socialSecuritySchemeId",sequence);
+      CREATE UNIQUE INDEX poc_vacation_key ON "HrVacationPolicy" ("ruleSetId",code);
+      CREATE UNIQUE INDEX poc_regime_key ON "HrEmploymentRegime" ("ruleSetId",code);
+      CREATE UNIQUE INDEX poc_rubric_key ON "HrPayrollRubric" ("ruleSetId",code);
+      CREATE UNIQUE INDEX poc_incidence_key ON "HrPayrollRubricIncidence" ("rubricId","incidenceType");
+      CREATE UNIQUE INDEX poc_rule_key ON "HrPayrollRule" ("ruleSetId",code);
+      CREATE UNIQUE INDEX poc_event_key ON "PayrollEvent" (code);`);
+    const poc = await prepareDocumentaryPocDataset(db, "actor", "10/2026");
+    assert.equal(poc.contractIds.length, 3); assert.equal(poc.payrollIds.length, 9);
+    const samePoc = await prepareDocumentaryPocDataset(db, "another-actor", "10/2026");
+    assert.deepEqual(samePoc, poc, "repetir preparação não duplica pessoas, vínculos, regras ou folhas");
+    assert.equal((await installDocumentaryPocParameters(db, "actor")).ruleSetId, poc.ruleSetId);
+    for (const payrollId of poc.payrollIds) {
+      const payroll = await db.payroll.findUniqueOrThrow({ where: { id: payrollId } });
+      const raw = { payrollId, contractIds: poc.contractIds, requestKey: `poc-test:${payrollId}`, mode: "OFICIAL", scope: "DEMONSTRACAO", ...(payroll.type !== "Mensal" ? { specialParameters: { avos: 8, reason: "Parâmetros de referência para a POC", days: 30, vacationDays: 30, variableAmount: "150.00", previousAdvance: "0.00", rraMonths: 6, rraAmount: "18000.00" } } : {}) };
+      const run = await calculatePayrollRun(db, "actor", raw);
+      assert.equal((await calculatePayrollRun(db, "another-actor", raw)).id, run.id);
+      if (payroll.type !== "Mensal") await assert.rejects(calculatePayrollRun(db, "actor", { ...raw, specialParameters: { ...raw.specialParameters, avos: 7 } }), /seleção diferente/);
+      await closePayrollRun(db, "actor", run.id);
+      await publishPayrollStatements(db, "actor", run.id, new Date("2026-01-01"));
+      assert.equal((await db.payroll.findUniqueOrThrow({ where: { id: payrollId } })).status, "Fechada");
+      const statement = await getPayrollStatement(db, run.statements.find(row => row.contractId === poc.contractIds[0])!.id, "rh-poc-employee-v1-0");
+      assert.equal(statement.scope, "DEMONSTRACAO");
+      assert.equal((await renderPayrollStatementPdf(statement)).subarray(0, 4).toString(), "%PDF");
+      const report = await buildHrReport(db, { kind: "FOLHA", format: "CSV", q: "", payrollId });
+      assert.equal(report.rows.length, 3);
+      assert.equal(report.rows.reduce((sum, row) => sum.add(row[7]), new Prisma.Decimal(0)).toFixed(2), run.net.toFixed(2));
+      const bankReport = await buildHrReport(db, { kind: "REMESSA_SALARIAL_POC", format: "CSV", q: "", payrollId });
+      assert.equal(bankReport.rows.length, 3);
+      assert.equal(bankReport.rows.reduce((sum, row) => sum.add(row[9]), new Prisma.Decimal(0)).toFixed(2), run.net.toFixed(2));
+      if (payroll.type === "Mensal") {
+        const tax = (run.statements.find(row => row.contractId === poc.contractIds[1])!.snapshot as { incomeTax: { tax: string; reduction: string } }).incomeTax;
+        assert.equal(tax.tax, "0.00"); assert.equal(tax.reduction, "312.89");
+      }
+      const paymentInput = { runId: run.id, paymentDate: "2026-11-05", reference: "Liquidação demonstrativa POC" };
+      const paidModel = await registerPocPayment(db, "actor", paymentInput);
+      assert.equal((await registerPocPayment(db, "other-actor", paymentInput)).id, paidModel.id);
+      await assert.rejects(registerPocPayment(db, "actor", { ...paymentInput, paymentDate: "2026-11-06" }), /outra data/);
+      assert.equal((await db.payroll.findUniqueOrThrow({ where: { id: payrollId } })).status, "Fechada", "pagamento POC não fabrica quitação bancária nativa");
+    }
+    const annualPoc = await buildHrReport(db, { kind: "INFORME_ANUAL_POC", format: "XLSX", q: "", year: 2026 });
+    assert.equal(annualPoc.rows.length, 3);
+    assert.equal((await buildHrReport(db, { kind: "INFORME_ANUAL_POC", format: "CSV", q: "", year: 2025 })).rows.length, 0);
+    assert.equal((await buildHrReport(db, { kind: "INFORME_ANUAL_POC", format: "CSV", q: "", year: 2026 }, { id: "inaccessible-payroll" })).rows.length, 0);
+    await assert.rejects(calculatePayrollRun(db, "actor", { payrollId: poc.payrollIds[1], requestKey: "special-production", mode: "OFICIAL", scope: "PRODUCAO", contractIds: poc.contractIds, specialParameters: { reason: "Teste de isolamento da POC" } }), /fechada|DEMONSTRACAO/);
+    const travelRule = await db.hrPayrollRule.findUniqueOrThrow({ where: { ruleSetId_code: { ruleSetId: poc.ruleSetId, code: "DIARIAS_POC" } } });
+    const travelInput = { requestKey: "travel-poc-test", contractId: poc.contractIds[0], ruleId: travelRule.id, destination: "Cascavel", destinationType: "INTERIOR", departureAt: "2026-10-20T07:00:00-03:00", returnAt: "2026-10-20T18:00:00-03:00", distanceKm: "100", overnight: "NAO", exchangeRate: "1", purpose: "Capacitação fictícia demonstrativa", vehiclePlate: "POC-0001" };
+    const travel = await requestTravelAllowance(db, "actor", travelInput);
+    assert.equal((await requestTravelAllowance(db, "other-actor", travelInput)).id, travel.id);
+    assert.equal((travel.payload as { assessment: { amountBRL: string } }).assessment.amountBRL, "168.91");
+    await assert.rejects(buildTravelAllowanceDocument(db, travel.id, "AUTORIZACAO"), /deferimento/);
+    const travelDecision = { requestId: travel.id, status: "DEFERIDA", decision: "Autorização demonstrativa conforme cartilha", authorizationNumber: "POC-001/2026" };
+    await decideTravelAllowance(db, "actor", travelDecision);
+    await decideTravelAllowance(db, "other-actor", travelDecision);
+    await assert.rejects(decideTravelAllowance(db, "actor", { ...travelDecision, authorizationNumber: "POC-002/2026" }), /já decidida/);
+    const travelReport = { requestId: travel.id, activities: "Atividades fictícias concluídas na capacitação", returnedAmount: "10.00", reportDate: "2026-10-21" };
+    await accountForTravelAllowance(db, "actor", travelReport);
+    await accountForTravelAllowance(db, "other-actor", travelReport);
+    await assert.rejects(accountForTravelAllowance(db, "actor", { ...travelReport, returnedAmount: "200.00" }), /incompatíveis/);
+    const travelDocument = await buildTravelAllowanceDocument(db, travel.id, "PRESTACAO");
+    assert.ok(travelDocument.rows.some(row => row[0] === "Valor utilizado BRL" && row[1] === "158.91"));
+    assert.equal((await renderHrReport(travelDocument, "PDF")).bytes.subarray(0, 4).toString(), "%PDF");
+    await db.attendanceRecord.createMany({ data: Array.from({ length: 6 }, (_, i) => ({ employeeId: "rh-poc-employee-v1-0", date: new Date(Date.UTC(2020, 5, i + 1)), status: "Falta" })) });
+    const reducedVacation = await acquireVacationRights(db, "actor", poc.contractIds[0], "2020-12-31");
+    assert.equal((await db.hrRightEntry.findUniqueOrThrow({ where: { id: reducedVacation[0] } })).quantity.toString(), "24");
+    assert.deepEqual(await acquireVacationRights(db, "actor", poc.contractIds[0], "2020-12-31"), reducedVacation);
+    await db.attendanceRecord.createMany({ data: Array.from({ length: 9 }, (_, i) => ({ employeeId: "rh-poc-employee-v1-0", date: new Date(Date.UTC(2020, 6, i + 1)), status: "Falta" })) });
+    await assert.rejects(acquireVacationRights(db, "actor", poc.contractIds[0], "2020-12-31"), /mudaram após aquisição/);
   } finally { await db?.$disconnect(); await server.stop(); await pg.close(); }
 });

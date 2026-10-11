@@ -3,11 +3,13 @@ import { z } from "zod";
 import { payrollPeriod } from "./calculation-engine";
 import { resolveContractRevision } from "./contract-timeline";
 import { enqueueHrIntegration } from "./workforce-service";
+import { completedCivilServiceYears } from "./civil-service-calendar";
 
 const day = 86400000;
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
-export const serviceTimeAllowancePolicySchema = z.object({ origin: z.literal("ATS"), rubricCode: z.string().min(1), legalReference: z.string().trim().min(3), basis: z.literal("SALARIO_TEMPORAL"), tiers: z.array(z.object({ minimumDays: z.number().int().min(0).max(55000), rate: z.string().regex(/^\d+(?:\.\d{1,4})?$/).refine(value => new Prisma.Decimal(value).lte(100)) }).strict()).min(1).max(100), absences: z.array(z.object({ type: z.string().trim().min(1), counts: z.boolean() }).strict()).max(100) }).strict().superRefine((policy, ctx) => {
+export const serviceTimeAllowancePolicySchema = z.object({ origin: z.literal("ATS"), rubricCode: z.string().min(1), legalReference: z.string().trim().min(3), basis: z.literal("SALARIO_TEMPORAL"), tiers: z.array(z.object({ minimumDays: z.number().int().min(0).max(55000), minimumYears: z.number().int().min(0).max(150).optional(), rate: z.string().regex(/^\d+(?:\.\d{1,4})?$/).refine(value => new Prisma.Decimal(value).lte(100)) }).strict()).min(1).max(100), absences: z.array(z.object({ type: z.string().trim().min(1), counts: z.boolean() }).strict()).max(100) }).strict().superRefine((policy, ctx) => {
   if (new Set(policy.tiers.map(row => row.minimumDays)).size !== policy.tiers.length || new Set(policy.absences.map(row => row.type)).size !== policy.absences.length) ctx.addIssue({ code: "custom", message: "Faixas ou tipos de afastamento duplicados." });
+  if (policy.tiers.some(row => row.minimumYears !== undefined) && (policy.tiers.some(row => row.minimumYears === undefined) || new Set(policy.tiers.map(row => row.minimumYears)).size !== policy.tiers.length)) ctx.addIssue({ code: "custom", message: "Faixas civis exigem anos mínimos únicos em todas as linhas." });
 });
 
 export function calculateServiceTimeAllowance(rawPolicy: unknown, input: { admittedAt: Date; through: Date; salary: Prisma.Decimal.Value; creditedDays: number; absences: { type: string; startDate: Date; endDate: Date }[] }) {
@@ -24,11 +26,12 @@ export function calculateServiceTimeAllowance(rawPolicy: unknown, input: { admit
     for (let date = new Date(Math.max(absence.startDate.getTime(), input.admittedAt.getTime())); date <= input.through && date <= absence.endDate; date = new Date(date.getTime() + day)) deductions.add(date.toISOString().slice(0, 10));
   }
   const countedDays = calendarDays - deductions.size + input.creditedDays;
-  const tier = [...policy.tiers].sort((a, b) => b.minimumDays - a.minimumDays).find(row => row.minimumDays <= countedDays);
+  const civilYears = policy.tiers[0].minimumYears !== undefined ? completedCivilServiceYears(input.admittedAt, new Date(input.through.getTime() + (input.creditedDays - deductions.size) * day)) : null;
+  const tier = civilYears === null ? [...policy.tiers].sort((a, b) => b.minimumDays - a.minimumDays).find(row => row.minimumDays <= countedDays) : [...policy.tiers].sort((a, b) => b.minimumYears! - a.minimumYears!).find(row => row.minimumYears! <= civilYears);
   const rate = tier?.rate ?? "0";
   const salary = new Prisma.Decimal(input.salary);
   if (!salary.isFinite() || salary.lt(0)) throw new Error("Salário inválido para ATS.");
-  return { calendarDays, excludedDays: deductions.size, creditedDays: input.creditedDays, countedDays, rate, amount: salary.mul(rate).div(100).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP).toFixed(2), policy };
+  return { calendarDays, excludedDays: deductions.size, creditedDays: input.creditedDays, countedDays, civilYears, rate, amount: salary.mul(rate).div(100).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP).toFixed(2), policy };
 }
 
 export async function registerServiceTimeCredit(db: PrismaClient, actorId: string, raw: unknown) {

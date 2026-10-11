@@ -2,6 +2,8 @@
 
 > **Execução iniciada após aprovação deste plano.** Esta matriz preserva o diagnóstico original. Consulte `RH_FOLHA_EXECUCAO.md` para entregas, migrations, integração recebida de SST, testes e pendências. As dez fases ainda não estão concluídas.
 
+> **Incremento POC documental:** referências antigas/novas e estimativas autorizadas alimentam `/rh/poc`, o motor IRRF 2026, folhas especiais fecháveis no escopo demonstrativo, mescla de férias, calendários civis, diárias e modelos de remessa/informe anual. Fórmulas, fontes e limites estão em [RH_FOLHA_PARAMETROS_ESTIMADOS_POC.md](RH_FOLHA_PARAMETROS_ESTIMADOS_POC.md). A classificação histórica abaixo não foi promovida a atendimento integral por existência de modelos ou dados fictícios.
+
 ## 1. Fonte, escopo e conclusão
 
 **Data:** 11/10/2026. **Base analisada:** `a9a6b11` (`main`, `cemiterio`), diretório limpo no início da análise.

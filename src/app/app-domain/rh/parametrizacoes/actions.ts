@@ -9,6 +9,10 @@ import { obligationExportPolicySchema } from "@/lib/rh/obligation-export";
 import { timeBankExpirationPolicySchema } from "@/lib/rh/time-bank-expiration";
 import { timeBankTransferPolicySchema } from "@/lib/rh/time-bank-transfer";
 import { timeBankPaymentPolicySchema } from "@/lib/rh/time-bank-payment";
+import { incomeTaxBandSchema, incomeTaxReductionSchema } from "@/lib/rh/income-tax";
+import { pocSpecialPolicySchema } from "@/lib/rh/poc-special-payroll";
+import { travelAllowancePolicySchema } from "@/lib/rh/travel-allowance";
+import { vacationEntitlementPolicySchema } from "@/lib/rh/vacation-entitlement";
 
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
@@ -263,6 +267,26 @@ export async function saveHrPayrollRule(
       const ruleSet = await getManagedRuleSet(tx, input.ruleSetId);
       assertRuleSetCanChange(ruleSet);
       const value = parseRuleValue(input.valueType, input.value);
+      if (input.code === "IRRF_FAIXAS") {
+        if (input.valueType !== "JSON" || !Array.isArray(value) || !value.length) throw new Error("IRRF exige faixas em lista JSON.");
+        value.forEach(band => incomeTaxBandSchema.parse(band));
+      }
+      if (input.code === "IRRF_REDUCAO_MENSAL") {
+        if (input.valueType !== "JSON") throw new Error("Redução IRRF exige política JSON.");
+        incomeTaxReductionSchema.parse(value);
+      }
+      if (input.code === "FOLHAS_ESPECIAIS_POC") {
+        if (input.valueType !== "JSON") throw new Error("Folhas especiais POC exigem política JSON.");
+        pocSpecialPolicySchema.parse(value);
+      }
+      if (input.code === "DIARIAS_POC") {
+        if (input.valueType !== "JSON") throw new Error("Diárias POC exigem política JSON.");
+        travelAllowancePolicySchema.parse(value);
+      }
+      if (input.code === "FALTAS_FERIAS_POC") {
+        if (input.valueType !== "JSON") throw new Error("Faixas de faltas/férias exigem política JSON.");
+        vacationEntitlementPolicySchema.parse(value);
+      }
       if (input.code === "CAMPOS_CONTRATO") {
         if (input.valueType !== "JSON") throw new Error("Campos configuráveis exigem regra JSON.");
         contractCustomFieldsPolicySchema.parse(value);

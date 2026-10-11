@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { resolveContractRevision } from "./contract-timeline";
+import { vacationEntitlementPolicySchema, vacationDaysForAbsences } from "./vacation-entitlement";
 
 function civilDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("Data deve ser AAAA-MM-DD.");
@@ -28,6 +29,9 @@ export async function acquireVacationRights(db: PrismaClient, actorId: string, c
     const policy = regime.vacationPolicy;
     if (!policy?.isActive || !regime.isActive || regime.ruleSet.status !== "ATIVA") throw new Error("Política de férias/regime ativo obrigatório.");
     if (through < contract.admittedAt || through > new Date()) throw new Error("Data de aquisição anterior à admissão ou futura.");
+    const absenceRule = await tx.hrPayrollRule.findFirst({ where: { ruleSetId: regime.ruleSetId, code: "FALTAS_FERIAS_POC", isActive: true } });
+    if (absenceRule && (!regime.ruleSet.isDemo || regime.ruleSet.scope !== "DEMONSTRACAO")) throw new Error("Mescla estimada de faltas/férias exige escopo de demonstração.");
+    const absencePolicy = absenceRule ? vacationEntitlementPolicySchema.parse(absenceRule.value) : null;
     const result: string[] = [];
     for (let cycle = 0; cycle < 1000; cycle++) {
       const start = addMonths(contract.admittedAt, cycle * policy.acquisitionMonths);
@@ -36,11 +40,17 @@ export async function acquireVacationRights(db: PrismaClient, actorId: string, c
       if (end > through || (terminal.endsAt && end > terminal.endsAt)) break;
       const sourceKey = `FERIAS:AQUISICAO:${contractId}:${start.toISOString().slice(0, 10)}`;
       const existing = await tx.hrRightEntry.findUnique({ where: { sourceKey } });
-      if (existing) { result.push(existing.id); continue; }
+      const attendance = absencePolicy ? await tx.attendanceRecord.findMany({ where: { employeeId: contract.employeeId, status: { in: absencePolicy.attendanceStatuses }, date: { gte: start, lt: next } }, select: { id: true, date: true }, orderBy: { id: "asc" } }) : [];
+      const absenceCount = new Set(attendance.map(record => record.date.toISOString().slice(0, 10))).size;
+      const entitlement = absencePolicy ? vacationDaysForAbsences(absencePolicy, absenceCount) : policy.entitlementDays;
+      if (existing) {
+        if (absencePolicy && (!existing.quantity.eq(entitlement) || (existing.details as { absenceCount?: number }).absenceCount !== absenceCount)) throw new Error("Faltas/política mudaram após aquisição de férias. Concilie o ledger antes de apurar novamente.");
+        result.push(existing.id); continue;
+      }
       const leave = await tx.leave.findFirst({ where: { employeeId: contract.employeeId, status: "Ativa", startDate: { lte: end }, endDate: { gte: start } } });
       if (leave) throw new Error("Aquisitivo com afastamento exige regra de perda/prorrogação aprovada antes da aquisição automática.");
       if (regime.ruleSet.effectiveFrom > start || (regime.ruleSet.effectiveUntil && regime.ruleSet.effectiveUntil < end)) throw new Error("Política deve cobrir todo o aquisitivo.");
-      const entry = await tx.hrRightEntry.create({ data: { contractId, sourceKey, kind: "FERIAS", periodStart: start, periodEnd: end, quantity: policy.entitlementDays, amount: 0, actorId, details: JSON.parse(JSON.stringify({ policy, contractVersion: contract.version, concessionEndsAt: addMonths(next, policy.concessionMonths), reason: "Aquisição por política vigente" })) } });
+      const entry = await tx.hrRightEntry.create({ data: { contractId, sourceKey, kind: "FERIAS", periodStart: start, periodEnd: end, quantity: entitlement, amount: 0, actorId, details: JSON.parse(JSON.stringify({ policy, contractVersion: contract.version, concessionEndsAt: addMonths(next, policy.concessionMonths), reason: "Aquisição por política vigente", scope: regime.ruleSet.scope, ...(absencePolicy ? { absencePolicy, absenceCount, attendanceIds: attendance.map(record => record.id), nominalDays: policy.entitlementDays, lostDays: policy.entitlementDays - entitlement } : {}) })) } });
       result.push(entry.id);
     }
     return result;

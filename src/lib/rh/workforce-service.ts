@@ -10,6 +10,8 @@ import { contractCustomFieldsPolicySchema, contractCustomFieldsPolicyHash, valid
 import { assertPositionPlanForContract, positionPlanSchema } from "./position-plan";
 import { selectReceiptMessages } from "./receipt-messages";
 import { assertServiceTimeAllowanceCurrent } from "./service-time-allowance";
+import { calculateIncomeTax, incomeTaxBandSchema } from "./income-tax";
+import { pocSpecialParametersSchema, pocSpecialPolicySchema, preparePocSpecialRubrics } from "./poc-special-payroll";
 
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
@@ -57,7 +59,7 @@ export async function saveEmploymentContract(db: PrismaClient, actorId: string, 
   return db.$transaction(tx => saveEmploymentContractInTransaction(tx, actorId, input));
 }
 
-async function saveEmploymentContractInTransaction(tx: Tx, actorId: string, input: z.infer<typeof hrContractInputSchema>, deferPositionPlan = false) {
+export async function saveEmploymentContractInTransaction(tx: Tx, actorId: string, input: z.infer<typeof hrContractInputSchema>, deferPositionPlan = false) {
   if (input.endsAt && input.endsAt < input.admittedAt) throw new Error("Término anterior à admissão.");
     await lock(tx, `employee:${input.employeeId}`);
     if (input.id) await lock(tx, `contract:${input.id}`);
@@ -229,7 +231,7 @@ export async function enqueueHrIntegration(tx: Tx, input: { sourceKey: string; d
 }
 
 export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw: unknown) {
-  const input = z.object({ payrollId: z.string().min(1), requestKey: z.string().min(1).max(160), mode: z.enum(["SIMULACAO", "OFICIAL"]), scope: z.enum(["DEMONSTRACAO", "HOMOLOGACAO", "PRODUCAO"]), contractIds: z.array(z.string().min(1)).min(1) }).strict().parse(raw);
+  const input = z.object({ payrollId: z.string().min(1), requestKey: z.string().min(1).max(160), mode: z.enum(["SIMULACAO", "OFICIAL"]), scope: z.enum(["DEMONSTRACAO", "HOMOLOGACAO", "PRODUCAO"]), contractIds: z.array(z.string().min(1)).min(1), specialParameters: pocSpecialParametersSchema.optional() }).strict().parse(raw);
   return db.$transaction(async tx => {
     await lock(tx, `payroll:${input.payrollId}`);
     await tx.$queryRaw`SELECT id FROM "Payroll" WHERE id=${input.payrollId} FOR UPDATE`;
@@ -237,11 +239,13 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
     const replay = await tx.hrPayrollRun.findUnique({ where: { requestKey: input.requestKey }, include: { statements: true } });
     if (replay) {
       const selection = (replay.snapshot as { contractIds?: string[] }).contractIds ?? [];
-      if (replay.payrollId !== input.payrollId || replay.mode !== input.mode || replay.scope !== input.scope || selection.slice().sort().join() !== input.contractIds.slice().sort().join()) throw new Error("Solicitação de cálculo repetida com seleção diferente.");
+      if (replay.payrollId !== input.payrollId || replay.mode !== input.mode || replay.scope !== input.scope || selection.slice().sort().join() !== [...new Set(input.contractIds)].sort().join() || stableJson((replay.snapshot as { specialParameters?: unknown }).specialParameters ?? null) !== stableJson(input.specialParameters ?? null)) throw new Error("Solicitação de cálculo repetida com seleção diferente.");
       return replay;
     }
     if (["Fechada", "Paga"].includes(payroll.status) && input.mode === "OFICIAL") throw new Error("Folha fechada/paga não pode ser recalculada.");
-    if (payroll.type !== "Mensal") throw new Error("Este motor exige folha Mensal. Folhas especiais precisam de políticas e fluxos próprios.");
+    const special = payroll.type !== "Mensal";
+    if (special && (!input.specialParameters || input.scope !== "DEMONSTRACAO")) throw new Error("Folha especial neste fluxo exige parâmetros POC e escopo DEMONSTRACAO.");
+    if (!special && input.specialParameters) throw new Error("Parâmetros especiais não se aplicam à folha Mensal.");
     const period = payrollPeriod(payroll.competence);
     const canonicalItems = await tx.payrollItem.findMany({ where: { payrollId: payroll.id }, include: { event: true, sstBenefitOrigin: true, sstLeaveOrigin: { select: { id: true, rubricId: true, functionalPeriodId: true } } }, orderBy: { id: "asc" } });
     const ids = [...new Set(input.contractIds)].sort();
@@ -260,8 +264,13 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
     const ruleSet = await tx.hrPayrollRuleSet.findUniqueOrThrow({ where: { id: [...sets][0] }, include: { calculationPolicy: true, rubrics: { where: { isActive: true }, include: { incidences: true }, orderBy: [{ priority: "asc" }, { code: "asc" }] }, rules: { where: { isActive: true } } } });
     if (ruleSet.status !== "ATIVA" || ruleSet.scope !== input.scope || ruleSet.effectiveFrom > period.start || (ruleSet.effectiveUntil && ruleSet.effectiveUntil < period.end) || !ruleSet.calculationPolicy || !ruleSet.rubrics.length) throw new Error("Regras ativas e política devem cobrir toda a competência e o escopo selecionado.");
     if (input.scope === "PRODUCAO" && (ruleSet.isDemo || !ruleSet.approvedAt || ruleSet.approvedAt > new Date() || !ruleSet.legalReference)) throw new Error("Produção exige regras oficiais aprovadas, com fundamento legal.");
+    if (special) {
+      if (!ruleSet.isDemo) throw new Error("Folhas especiais POC exigem conjunto demonstrativo.");
+      pocSpecialPolicySchema.parse(ruleSet.rules.find(rule => rule.code === "FOLHAS_ESPECIAIS_POC")?.value);
+      if (canonicalItems.length) throw new Error("Folha especial POC deve usar folha própria sem origens legadas/SST.");
+    }
     if (ruleSet.calculationPolicy.roundingMode !== "HALF_UP" || ruleSet.calculationPolicy.roundingScale !== 2) throw new Error("Este motor requer arredondamento HALF_UP com duas casas; publique política compatível.");
-    await assertConsignmentSchedulePosted(tx, ids, period.start, input.scope, ruleSet.rules.some(rule => rule.code === "MARGEM_CONSIGNAVEL"));
+    if (!special) await assertConsignmentSchedulePosted(tx, ids, period.start, input.scope, ruleSet.rules.some(rule => rule.code === "MARGEM_CONSIGNAVEL"));
     const calculated = contracts.map(contract => {
       if (!contract.employee.person || !contract.employee.isActive) throw new Error("Vínculo sem pessoa física/servidor ativo.");
       const regime = regimes.find(r => r.id === contract.regimeId);
@@ -281,8 +290,10 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
         if (!rubric || rubric.calculationMethod !== "MANUAL") throw new Error("Origem SST exige rubrica MANUAL ativa do mesmo conjunto.");
         movements[rubric.code] = (movements[rubric.code] ?? D(0)).add(item.valueDecimal);
       }
-      const result = calculateContractRubrics({ salary: contract.salary, monthlyHours: contract.monthlyHours, days, movements, rubrics: ruleSet.rubrics });
-      return { contract, regime, result, days };
+      const prepared = special ? preparePocSpecialRubrics({ payrollType: payroll.type, competence: payroll.competence, salary: contract.salary, admittedAt: contract.admittedAt, endsAt: contract.endsAt, parameters: input.specialParameters!, rubrics: ruleSet.rubrics }) : null;
+      const result = calculateContractRubrics({ salary: contract.salary, monthlyHours: contract.monthlyHours, days, movements: prepared?.movements ?? movements, rubrics: prepared?.rubrics ?? ruleSet.rubrics });
+      if (prepared) for (const item of result.items) item.formula = prepared.memory.formulas[item.code];
+      return { contract, regime, result, days, specialMemory: prepared?.memory ?? null };
     });
     const samePersons = [...new Set(contracts.map(contract => contract.employee.personId).filter((id): id is string => Boolean(id)))];
     const otherContracts = await tx.hrEmploymentContract.findMany({ where: { id: { notIn: ids }, employee: { personId: { in: samePersons } } }, include: { revisions: true } });
@@ -295,7 +306,8 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
     const familyRule = ruleSet.rules.find(rule => rule.code === "SALARIO_FAMILIA");
     const familyMemory = new Map<string, unknown>();
     const irrfDependentMemory = new Map<string, unknown>();
-    if (familyRule) {
+    const incomeTaxMemory = new Map<string, ReturnType<typeof calculateIncomeTax>>();
+    if (familyRule && !special) {
       const policy = familyWagePolicySchema.parse(familyRule.value);
       const rubric = ruleSet.rubrics.find(rubric => rubric.code === policy.rubricCode);
       if (!rubric || rubric.type !== "PROVENTO" || rubric.calculationMethod !== "MANUAL" || rubric.incidences.some(incidence => incidence.isIncluded)) throw new Error("Salário-família exige rubrica MANUAL de provento sem incidências; configure a política explicitamente.");
@@ -350,7 +362,7 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
     const irrfBases = calculated.map(row => row.result.bases.IRRF ?? D(0));
     if (irrfBases.some(base => base.gt(0))) {
       if (!irrfRule || !Array.isArray(irrfRule.value)) throw new Error("Configure IRRF_FAIXAS antes de calcular bases sujeitas ao IRRF.");
-      const bands = z.array(z.object({ lowerLimit: z.string(), upperLimit: z.string().nullable(), employeeRate: z.string() }).strict()).parse(irrfRule.value);
+      const bands = z.array(incomeTaxBandSchema).parse(irrfRule.value);
       const persons = new Set(calculated.map(row => row.contract.employee.personId));
       for (const person of persons) {
         const rows = calculated.filter(row => row.contract.employee.personId === person);
@@ -368,10 +380,13 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
         const simplifiedRule = ruleSet.rules.find(rule => rule.code === "IRRF_DEDUCAO_SIMPLIFICADA");
         const simplified = simplifiedRule ? D(z.union([z.string(), z.number()]).parse(simplifiedRule.value)) : D(0);
         if (dependentDeduction.lt(0) || simplified.lt(0)) throw new Error("Deduções IRRF negativas na configuração.");
-        const deduction = Prisma.Decimal.max(dependentDeduction.add(socialDeduction), simplified);
-        const taxable = Prisma.Decimal.max(D(0), originalBase.sub(deduction));
+        const reductionRule = ruleSet.rules.find(rule => rule.code === "IRRF_REDUCAO_MENSAL");
+        const rra = payroll.type === "RRA" ? input.specialParameters!.rraMonths : undefined;
+        const taxMemory = calculateIncomeTax({ income: originalBase, legalDeductions: dependentDeduction.add(socialDeduction), simplifiedDeduction: rra ? "0" : simplified, bands, referenceDate: period.end.toISOString().slice(0, 10), reductionPolicy: ["Mensal", "Complementar", "Férias"].includes(payroll.type) ? reductionRule?.value : undefined, rraMonths: rra });
+        if (person) incomeTaxMemory.set(person, taxMemory);
+        const taxable = D(taxMemory.base);
         const bases = allocatePayrollAmount(taxable, originalBases);
-        const tax = calculateContribution(bases.reduce((a, b) => a.add(b), D(0)), bands, "PROGRESSIVA", null);
+        const tax = D(taxMemory.tax);
         const shares = allocatePayrollAmount(tax, bases);
         rows.forEach((row, index) => {
           row.result.deductions = row.result.deductions.add(shares[index]);
@@ -395,7 +410,7 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
     }
     const marginRule = ruleSet.rules.find(rule => rule.code === "MARGEM_CONSIGNAVEL");
     const margins = new Map<string, ReturnType<typeof calculateConsignmentMargin>>();
-    if (marginRule) {
+    if (marginRule && !special) {
       const rate = ruleSet.calculationPolicy.maxConsignmentMarginRate;
       if (rate === null) throw new Error("Configure o percentual máximo da margem consignável na política de cálculo.");
       for (const personId of samePersons) {
@@ -409,7 +424,7 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
     const messagesRule = ruleSet.rules.find(rule => rule.code === "MENSAGENS_RECIBO");
     if (canonicalItems.some(item => !contracts.some(c => c.employeeId === item.employeeId))) throw new Error("Inclua todos os servidores com origens lançadas nesta folha.");
     if (new Set(contracts.map(c => c.employeeId)).size !== contracts.length && canonicalItems.length) throw new Error("Origens por servidor exigem alocação explícita entre vínculos antes deste cálculo.");
-    return tx.hrPayrollRun.create({ data: { payrollId: input.payrollId, requestKey: input.requestKey, mode: input.mode, scope: input.scope, ruleSetId: ruleSet.id, actorId, snapshot: json({ payroll, ruleSet, contractIds: ids, canonicalItems, contractVersions: contracts.map(c => ({ id: c.id, version: c.version })) }), gross: sum("gross"), deductions: sum("deductions"), net: sum("net"), employer: sum("employer"), statements: { create: calculated.map(row => ({ contractId: row.contract.id, gross: row.result.gross, deductions: row.result.deductions, net: row.result.net, employer: row.result.employer, snapshot: json({ contract: row.contract, regime: row.regime, days: row.days, items: row.result.items, bases: row.result.bases, messages: messagesRule ? selectReceiptMessages(messagesRule.value, messagesRule.id, { contractId: row.contract.id, regimeId: row.regime.id, payrollType: payroll.type, period }) : [], consignmentMargin: margins.get(row.contract.employee.personId!) ?? null, familyWage: familyMemory.get(row.contract.employee.personId!) ?? null, irrfDependents: irrfDependentMemory.get(row.contract.employee.personId!) ?? null }) })) } }, include: { statements: true } });
+    return tx.hrPayrollRun.create({ data: { payrollId: input.payrollId, requestKey: input.requestKey, mode: input.mode, scope: input.scope, ruleSetId: ruleSet.id, actorId, snapshot: json({ payroll, ruleSet, contractIds: ids, canonicalItems, specialParameters: input.specialParameters ?? null, contractVersions: contracts.map(c => ({ id: c.id, version: c.version })) }), gross: sum("gross"), deductions: sum("deductions"), net: sum("net"), employer: sum("employer"), statements: { create: calculated.map(row => ({ contractId: row.contract.id, gross: row.result.gross, deductions: row.result.deductions, net: row.result.net, employer: row.result.employer, snapshot: json({ contract: row.contract, regime: row.regime, days: row.days, items: row.result.items, bases: row.result.bases, incomeTax: incomeTaxMemory.get(row.contract.employee.personId!) ?? null, specialPayroll: row.specialMemory, messages: messagesRule ? selectReceiptMessages(messagesRule.value, messagesRule.id, { contractId: row.contract.id, regimeId: row.regime.id, payrollType: payroll.type, period }) : [], consignmentMargin: margins.get(row.contract.employee.personId!) ?? null, familyWage: familyMemory.get(row.contract.employee.personId!) ?? null, irrfDependents: irrfDependentMemory.get(row.contract.employee.personId!) ?? null }) })) } }, include: { statements: true } });
   }, { timeout: 60000 });
 }
 
@@ -454,7 +469,7 @@ export async function closePayrollRun(db: PrismaClient, actorId: string, runId: 
       if (normalize(movements) !== normalize(contractSnapshot.movements)) throw new Error("Movimentos mudaram após o cálculo. Recalcule antes de fechar.");
     }
     const ruleSnapshot = (current.snapshot as { ruleSet: { rules: { code: string; value: unknown }[] } }).ruleSet;
-    await assertConsignmentSchedulePosted(tx, (snapshot.contractVersions ?? []).map(version => version.id), payrollPeriod(payroll.competence).start, current.scope, ruleSnapshot.rules.some(rule => rule.code === "MARGEM_CONSIGNAVEL"));
+    if (payroll.type === "Mensal") await assertConsignmentSchedulePosted(tx, (snapshot.contractVersions ?? []).map(version => version.id), payrollPeriod(payroll.competence).start, current.scope, ruleSnapshot.rules.some(rule => rule.code === "MARGEM_CONSIGNAVEL"));
     const mapping = z.record(z.string(), z.string().min(1)).parse(ruleSnapshot.rules.find(rule => rule.code === "FOLHA_EVENTOS")?.value);
     const statements = await tx.hrPayrollStatement.findMany({ where: { runId }, include: { contract: true }, orderBy: { id: "asc" } });
     for (const statement of statements) {

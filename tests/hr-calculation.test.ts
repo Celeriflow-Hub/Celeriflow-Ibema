@@ -5,6 +5,7 @@ import { allocatePayrollAmount, calculateContractRubrics, calculateContribution,
 import { parsePayrollMovementImport } from "../src/lib/rh/movement-import";
 import { calculateDailyBenefit, hrBenefitRuleSchema } from "../src/lib/rh/benefit-calculation";
 import { selectRemunerationAverage } from "../src/lib/rh/remuneration-average";
+import { calculateConsignmentMargin } from "../src/lib/rh/consignment-margin";
 
 test("fórmula Decimal preserva precisão, precedência e rejeita execução/ciclos", () => {
   const resolve = (name: string) => { if (name === "SALARIO_BASE") return new Prisma.Decimal("1000.01"); throw new Error("Base ausente"); };
@@ -59,4 +60,20 @@ test("média das 80% maiores expõe seleção e arredondamento sem excluir perí
   assert.equal(result.selected.length, 4);
   assert.equal(result.excluded[0].amount.toFixed(2), "100.00");
   assert.throws(() => selectRemunerationAverage(values, new Prisma.Decimal(0), "CEIL"));
+});
+
+test("margem consignável agrega vínculos e valida rubricas sem duplicar o limite", () => {
+  const policy = { origin: "MARGEM_CONSIGNAVEL", remunerationRubricCodes: ["SALARIO"], compulsoryDeductionRubricCodes: ["PREVIDENCIA"], consignmentRubricCodes: ["CONSIGNADO"], legalReference: "Política demonstrativa" };
+  const rows = ["A", "B"].map(contractId => ({ contractId, items: [{ code: "SALARIO", type: "PROVENTO", value: "1000.01" }, { code: "PREVIDENCIA", type: "DESCONTO", value: "100.00" }, { code: "CONSIGNADO", type: "DESCONTO", value: "200.00" }] }));
+  const margin = calculateConsignmentMargin(rows, policy, "30");
+  assert.equal(margin.base, "1800.02");
+  assert.equal(margin.limit, "540.01");
+  assert.equal(margin.used, "400.00");
+  assert.equal(margin.available, "140.01");
+  assert.equal(margin.excess, "0.00");
+  assert.equal(calculateConsignmentMargin(rows, policy, "10").excess, "220.00");
+  assert.throws(() => calculateConsignmentMargin(rows, { ...policy, consignmentRubricCodes: ["PREVIDENCIA"] }, "30"));
+  assert.throws(() => calculateConsignmentMargin(rows, { ...policy, remunerationRubricCodes: ["AUSENTE"] }, "30"), /não encontrada/);
+  assert.throws(() => calculateConsignmentMargin(rows, { ...policy, remunerationRubricCodes: ["PREVIDENCIA"], compulsoryDeductionRubricCodes: [] }, "30"), /incompatível/);
+  assert.throws(() => calculateConsignmentMargin(rows, policy, "101"), /percentual/);
 });

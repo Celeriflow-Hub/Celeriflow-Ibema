@@ -34,6 +34,7 @@ Os arquivos do domínio SST recebidos permanecem preservados. O processamento de
 - Campanhas de recadastramento em `/rh/recadastramento` e `/portal-servidor/recadastramento`, com público definido, campos autorizados, vigência, acompanhamento paginado, diff e deferimento transacional no Cadastro Único. Conflito com atualização central posterior bloqueia o deferimento.
 - Adaptador interno de solicitações de despesa no Financeiro: classificação explícita por centro/componente, prévia, plano durável, controle de acesso à UG, recuperação de falha parcial e idempotência. Não cria empenho, liquidação nem pagamento.
 - Cenários persistidos de simulação dos oito tipos especiais mediante política de rubricas e parâmetros com fonte explícita. Sem fechamento oficial, tributos automáticos, consumo de direitos ou alteração do vínculo.
+- Margem consignável por PF, agregada entre vínculos, com base/descontos/rubricas definidos explicitamente e percentual na política de cálculo; excesso bloqueia a execução antes de persistir. Memória imutável por demonstrativo, conferência em tela/PDF e consulta autenticada em `/portal-servidor/margem`.
 
 Formatos de configuração e limites: `docs/RH_FOLHA_POLITICAS_OPERACIONAIS.md`.
 
@@ -68,11 +69,11 @@ O plano usa **F0–F9**, totalizando dez fases. Esta execução ainda está em a
 | F0 Fundação | Parcial | Temporalidade mensal entregue; completar rateios intramês, transições de regime e consolidação dos demais consumidores. |
 | F1 Cadastro | Parcial | Cargos/vagas/níveis, multivínculo temporal completo, campos configuráveis, cessões/estágio, pasta funcional e consultas integrais. |
 | F2 Motor | Parcial | IRRF completo, múltiplos esquemas/competências, regras de arredondamento, alocação temporal e conferência completa. |
-| F3 Movimentos/benefícios | Parcial | Completar múltiplas linhas/calendários de VT, família/documentos, pensões/consignados e reflexos das demais origens. Importação transacional e VT/VA configurável já disponíveis. |
+| F3 Movimentos/benefícios | Parcial | Completar múltiplas linhas/calendários de VT, família/documentos, pensões, contratos/parcelas/reservas de consignação e reflexos das demais origens. Importação, VT/VA e controle de margem agregada disponíveis. |
 | F4 Direitos/frequência | Parcial | Médias, horas extras reconhecidas e cancelamento compensatório entregues; completar perdas/prorrogações/férias especiais, gozo de múltiplos aquisitivos, licença prêmio/ATS/averbação e banco de horas completo. |
 | F5 Folhas especiais | Parcial | Mensal oficial e cenários isolados dos oito tipos especiais disponíveis. Fluxos oficiais de rescisão/RRA/13º/férias, tributação, direitos e reintegração continuam pendentes. Reajuste contratual coletivo disponível. |
 | F6 Contabilidade | Parcial | Solicitações de despesa integradas ao Financeiro com retomada; completar empenho, provisões, retenções/repasses, baixa, pagamentos, diárias e produtividade. |
-| F7 Portal | Parcial | PDF próprio, publicação futura, solicitações e campanhas/deferimento disponíveis; faltam renda anual fiscal, margem e demais jornadas. |
+| F7 Portal | Parcial | PDF próprio, publicação futura, solicitações, campanhas/deferimento e consulta de margem histórica disponíveis; faltam renda anual fiscal, reserva de margem e demais jornadas. |
 | F8 eSocial/obrigações | Parcial | Origens/outbox disponíveis; faltam layouts/validadores/cliente/worker e exportadores históricos. Configuração externa posterior não substitui esses desenvolvimentos internos. |
 | F9 POC | Parcial | Testes iniciais e regressão; ampliar casos ouro, relatórios e evidências item a item, além do percurso autenticado. |
 
@@ -114,6 +115,13 @@ Seed preparado: `npx tsx scripts/seed-hr-engine-demo.ts` / `--apply`. Cria somen
 - ESLint aprovado para os arquivos RH/Portal e scripts alterados. **Build completo atualizado aprovado** (`npm run build`), incluindo TypeScript e geração das rotas de recadastramento, Financeiro e cenários especiais. `git diff --check` aprovado.
 - Migration temporal novamente conferida: `APPLIED_CHECKSUM_VERIFIED`, sem dependências de runtime ausentes. Regressão SST→Folha repetida após o incremento: **14 testes aprovados**.
 - Todos os estados da tabela acima continuam parciais. As pendências internas não são tratadas como dependências do município ou de acesso externo.
+
+### Continuidade — controle de margem consignável
+
+- Oito testes RH aprovados, incluindo soma Decimal de vínculos, arredondamento único, rejeição de rubricas ausentes/incompatíveis, excesso sem execução parcial, compensação e fechamento/publicação com memória.
+- Teste integrado confirma que atualização de movimentos não altera a memória anterior, que o titular não acessa a simulação pelo Portal e que outro titular não acessa o demonstrativo publicado.
+- Snapshots legados permanecem sem margem; a consulta explicita sua indisponibilidade, sem aplicar parâmetros atuais ao passado.
+- ESLint, `git diff --check` e **build completo atualizado (`npm run build`) aprovados**, incluindo TypeScript e a nova rota do Portal.
 
 ## Cemitérios
 

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { allocatePayrollAmount, calculateContractRubrics, calculateContribution, payrollPeriod } from "./calculation-engine";
 import { resolveContractRevision } from "./contract-timeline";
+import { calculateConsignmentMargin } from "./consignment-margin";
 
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
@@ -280,10 +281,22 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
       row.result.net = row.result.gross.sub(row.result.deductions);
       if (row.result.net.lt(0) && ruleSet.calculationPolicy.negativeNetPayPolicy !== "PERMITIR") throw new Error(`Líquido negativo em ${row.contract.registration}.`);
     }
+    const marginRule = ruleSet.rules.find(rule => rule.code === "MARGEM_CONSIGNAVEL");
+    const margins = new Map<string, ReturnType<typeof calculateConsignmentMargin>>();
+    if (marginRule) {
+      const rate = ruleSet.calculationPolicy.maxConsignmentMarginRate;
+      if (rate === null) throw new Error("Configure o percentual máximo da margem consignável na política de cálculo.");
+      for (const personId of samePersons) {
+        const rows = calculated.filter(row => row.contract.employee.personId === personId);
+        const margin = calculateConsignmentMargin(rows.map(row => ({ contractId: row.contract.id, items: row.result.items })), marginRule.value, rate);
+        if (D(margin.excess).gt(0)) throw new Error(`Descontos consignados excedem a margem da pessoa física em R$ ${margin.excess}. Concilie antes do cálculo.`);
+        margins.set(personId, margin);
+      }
+    }
     const sum = (key: "gross" | "deductions" | "net" | "employer") => calculated.reduce((total, row) => total.add(row.result[key]), D(0));
     if (canonicalItems.some(item => !contracts.some(c => c.employeeId === item.employeeId))) throw new Error("Inclua todos os servidores com origens lançadas nesta folha.");
     if (new Set(contracts.map(c => c.employeeId)).size !== contracts.length && canonicalItems.length) throw new Error("Origens por servidor exigem alocação explícita entre vínculos antes deste cálculo.");
-    return tx.hrPayrollRun.create({ data: { payrollId: input.payrollId, requestKey: input.requestKey, mode: input.mode, scope: input.scope, ruleSetId: ruleSet.id, actorId, snapshot: json({ payroll, ruleSet, contractIds: ids, canonicalItems, contractVersions: contracts.map(c => ({ id: c.id, version: c.version })) }), gross: sum("gross"), deductions: sum("deductions"), net: sum("net"), employer: sum("employer"), statements: { create: calculated.map(row => ({ contractId: row.contract.id, gross: row.result.gross, deductions: row.result.deductions, net: row.result.net, employer: row.result.employer, snapshot: json({ contract: row.contract, regime: row.regime, days: row.days, items: row.result.items, bases: row.result.bases }) })) } }, include: { statements: true } });
+    return tx.hrPayrollRun.create({ data: { payrollId: input.payrollId, requestKey: input.requestKey, mode: input.mode, scope: input.scope, ruleSetId: ruleSet.id, actorId, snapshot: json({ payroll, ruleSet, contractIds: ids, canonicalItems, contractVersions: contracts.map(c => ({ id: c.id, version: c.version })) }), gross: sum("gross"), deductions: sum("deductions"), net: sum("net"), employer: sum("employer"), statements: { create: calculated.map(row => ({ contractId: row.contract.id, gross: row.result.gross, deductions: row.result.deductions, net: row.result.net, employer: row.result.employer, snapshot: json({ contract: row.contract, regime: row.regime, days: row.days, items: row.result.items, bases: row.result.bases, consignmentMargin: margins.get(row.contract.employee.personId!) ?? null }) })) } }, include: { statements: true } });
   }, { timeout: 60000 });
 }
 

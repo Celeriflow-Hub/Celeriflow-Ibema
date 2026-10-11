@@ -98,3 +98,30 @@ Em `/rh/operacoes`, aba cálculos, selecione uma folha de tipo especial, contrat
 Cadastro inicial preserva admissão; alterações exigem data de vigência e versão esperada. Revisões futuras não reescrevem demonstrativos anteriores. Mudança no meio da competência é bloqueada no cálculo mensal até o rateio temporal estar implementado. Transições de regime em aquisitivos exigem política própria; programação de férias verifica vínculo e vigência da política durante a reserva.
 
 Reajuste coletivo: informe chave estável, IDs dos contratos, vigência, percentual assinado e fundamento. Faça PREVIA, confira valores e copie o hash para APLICAR mantendo os mesmos parâmetros. Alteração concorrente invalida a prévia. Falha em qualquer contrato reverte o lote inteiro; repetir um lote aplicado preserva as revisões existentes.
+
+## Margem consignável (categoria CONSIGNACAO)
+
+Crie uma regra ativa com código **MARGEM_CONSIGNAVEL** no conjunto do regime:
+
+```json
+{
+  "origin": "MARGEM_CONSIGNAVEL",
+  "remunerationRubricCodes": ["SALARIO"],
+  "compulsoryDeductionRubricCodes": ["PREVIDENCIA_RGPS", "IRRF"],
+  "consignmentRubricCodes": ["CONSIGNADO"],
+  "legalReference": "Norma municipal/convênio que define a base e o limite"
+}
+```
+
+Informe também `maxConsignmentMarginRate` na **política de cálculo** do mesmo conjunto. Nenhum percentual, base ou código é escolhido pelo nome da verba. Os códigos do exemplo precisam ser substituídos pelos efetivamente calculados no conjunto: cada código deve existir nos itens de todos os vínculos apurados, ter tipo compatível e pertencer a apenas uma finalidade. Os descontos consignados podem ser lançados como movimentos nas rubricas de desconto autorizadas; o controle examina também verbas calculadas por fórmula.
+
+Apuração por pessoa física, dentro da execução mensal:
+
+1. Somar as rubricas de remuneração dos vínculos selecionados.
+2. Subtrair os descontos obrigatórios configurados, limitando a base mínima a zero.
+3. Aplicar o percentual máximo sobre a base agregada, arredondando HALF_UP para centavos uma única vez.
+4. Subtrair os descontos consignados apurados. Excesso bloqueia tanto simulação quanto cálculo oficial antes de persistir a execução.
+
+O motor exige a seleção de todos os vínculos da PF. Todos os demonstrativos dessa PF preservam a mesma memória agregada: o limite **não se multiplica pelo número de contratos**. Conferência disponível em `/rh/operacoes/demonstrativos/[id]`, no PDF e em `/portal-servidor/margem`. O Portal respeita titularidade, liberação, revogação e fechamento; a lista mostra um registro por execução, com filtro e páginas de 20.
+
+A consulta é histórica, calculada na versão da folha. Alterar a política posteriormente não modifica a memória anterior. Versões antigas sem memória não recebem valores retroativamente. Reserva de margem para novo empréstimo, contratos/parcela de consignação, submargens por produto e integração com consignatárias continuam pendentes; a consulta não autoriza crédito.

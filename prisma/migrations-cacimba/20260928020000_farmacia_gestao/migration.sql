@@ -1,0 +1,1 @@
+ALTER TABLE "HealthMaterialProfile" ADD COLUMN IF NOT EXISTS "catmatCode" TEXT, ADD COLUMN IF NOT EXISTS "portaria344List" TEXT;

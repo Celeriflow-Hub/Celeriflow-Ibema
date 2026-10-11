@@ -1,0 +1,76 @@
+name: Vette - Sprint V1 Frota
+
+on:
+  push:
+    branches: [vette]
+    paths:
+      - "src/app/app-domain/frotas/**"
+      - "src/lib/frotas/**"
+      - "src/lib/integrations/sagres/**"
+      - "VETTE_SPRINT_V2.md"
+      - "src/app/app-domain/portal-frota/**"
+      - "src/app/portal/frota/**"
+      - "src/app/api/portal/frota/**"
+      - "src/lib/identifiers/**"
+      - "tests/fleet-gestao.test.ts"
+      - "tests/fleet-portal.test.ts"
+      - "tests/frotas.integration.test.ts"
+      - "tests/frota-concurrency.pg.test.ts"
+      - "tests/sagres.test.ts"
+      - "prisma/**/*.prisma"
+      - "prisma.config.ts"
+      - "prisma/migrations-cacimba/**"
+      - "tests/frotas-opening.test.ts"
+      - ".github/workflows/vette-frota-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vette-frota-v1-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VERCEL_ENV: preview
+      SKIP_NEXT_TYPECHECK: "1"
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ephemeral-ci-only
+          POSTGRES_DB: vette_frota_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d vette_frota_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies and generate Prisma client
+        run: npm install --package-lock=false --no-save --no-audit --no-fund
+      - name: Sprint V1 unit tests (no external database)
+        run: node --import tsx --test tests/fleet-gestao.test.ts tests/fleet-portal.test.ts
+      - name: Existing fleet integration tests (in-memory PGlite only)
+        run: npm run test:frotas
+      - name: Real PostgreSQL concurrency (temporary local CI service only)
+        env:
+          TEST_POSTGRES_URL: postgresql://postgres:ephemeral-ci-only@127.0.0.1:5432/vette_frota_ci
+        run: node --import tsx --test tests/frota-concurrency.pg.test.ts
+      - name: SAGRES layout and validation unit tests
+        run: node --import tsx --test tests/sagres.test.ts
+      - name: Production-source TypeScript check
+        run: NODE_OPTIONS=--max-old-space-size=5120 npx tsc --noEmit -p tsconfig.build.json
+      - name: Safe build without deploying database migrations
+        run: npm run build

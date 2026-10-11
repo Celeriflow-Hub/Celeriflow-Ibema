@@ -632,6 +632,7 @@ model Taxpayer {
 
 // Fornecedores
 model Supplier {
+  hrConsignmentAgreements HrConsignmentAgreement[]
   sstHealthPlans SstHealthPlan[]
   sstEquipment SstEquipment[]
   id                       String    @id @default(cuid())
@@ -6682,6 +6683,7 @@ model HrEmploymentContract {
   movements HrMovement[]
   statements HrPayrollStatement[]
   rights HrRightEntry[]
+  consignments HrConsignmentAgreement[]
   @@index([employeeId, status, admittedAt])
 }
 
@@ -6700,6 +6702,7 @@ model HrEmploymentRevision {
 }
 
 model HrMovement {
+  consignmentEntries HrConsignmentEntry[]
   id String @id @default(cuid())
   contractId String
   contract HrEmploymentContract @relation(fields: [contractId], references: [id], onDelete: Restrict)
@@ -6716,6 +6719,7 @@ model HrMovement {
 }
 
 model HrPayrollRun {
+  consignmentAgreements HrConsignmentAgreement[]
   id String @id @default(cuid())
   payrollId String
   payroll Payroll @relation(fields: [payrollId], references: [id], onDelete: Restrict)
@@ -6768,6 +6772,54 @@ model HrRightEntry {
   actorId String
   createdAt DateTime @default(now())
   @@index([contractId, kind, periodStart])
+}
+
+model HrConsignmentAgreement {
+  id String @id @default(cuid())
+  sourceKey String @unique
+  contractId String
+  contract HrEmploymentContract @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  supplierId String
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  sourceRunId String
+  sourceRun HrPayrollRun @relation(fields: [sourceRunId], references: [id], onDelete: Restrict)
+  scope String
+  number String
+  rubricCode String
+  snapshot Json
+  actorId String
+  createdAt DateTime @default(now())
+  installments HrConsignmentInstallment[]
+  @@unique([contractId, supplierId, number, scope])
+  @@index([contractId, scope])
+}
+
+model HrConsignmentInstallment {
+  id String @id @default(cuid())
+  agreementId String
+  agreement HrConsignmentAgreement @relation(fields: [agreementId], references: [id], onDelete: Restrict)
+  sequence Int
+  competenceAt DateTime
+  amount Decimal @db.Decimal(18,2)
+  entries HrConsignmentEntry[]
+  @@unique([agreementId, sequence])
+  @@unique([agreementId, competenceAt])
+  @@index([competenceAt])
+}
+
+model HrConsignmentEntry {
+  id String @id @default(cuid())
+  installmentId String
+  installment HrConsignmentInstallment @relation(fields: [installmentId], references: [id], onDelete: Restrict)
+  sourceKey String @unique
+  kind String
+  amount Decimal @db.Decimal(18,2)
+  movementId String? @unique
+  movement HrMovement? @relation(fields: [movementId], references: [id], onDelete: Restrict)
+  reason String
+  actorId String
+  createdAt DateTime @default(now())
+  @@index([installmentId])
 }
 
 model HrIntegrationEvent {

@@ -48,6 +48,7 @@ export default async function WorkforcePage({ searchParams }: { searchParams: Pr
     <Link href="/rh/solicitacoes" className="text-xs underline">Analisar solicitações do Portal</Link>
     <Link href="/rh/operacoes/medias" className="text-xs underline">Médias e seleção das maiores remunerações</Link>
     <Link href="/rh/recadastramento" className="text-xs underline">Campanhas e pendências de recadastramento</Link>
+    <Link href="/rh/consignacoes" className="text-xs underline">Contratos, reservas e parcelas de consignação</Link>
     <form action="/api/rh/relatorios" className="flex flex-wrap gap-2 text-xs">
       <select name="kind" className="rounded border px-2"><option value="RESUMO_CONTABIL">Resumo por rubrica/regime/centro/local</option><option value="PREVIDENCIA">Bases, segurado, patronal e FGTS</option><option value="CONTRATOS_MULTIPLOS">Servidores com múltiplos contratos</option></select>
       <input name="q" placeholder="Nome/matrícula (opcional)" className="h-8 rounded border px-2" />

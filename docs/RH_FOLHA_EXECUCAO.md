@@ -35,6 +35,7 @@ Os arquivos do domínio SST recebidos permanecem preservados. O processamento de
 - Adaptador interno de solicitações de despesa no Financeiro: classificação explícita por centro/componente, prévia, plano durável, controle de acesso à UG, recuperação de falha parcial e idempotência. Não cria empenho, liquidação nem pagamento.
 - Cenários persistidos de simulação dos oito tipos especiais mediante política de rubricas e parâmetros com fonte explícita. Sem fechamento oficial, tributos automáticos, consumo de direitos ou alteração do vínculo.
 - Margem consignável por PF, agregada entre vínculos, com base/descontos/rubricas definidos explicitamente e percentual na política de cálculo; excesso bloqueia a execução antes de persistir. Memória imutável por demonstrativo, conferência em tela/PDF e consulta autenticada em `/portal-servidor/margem`.
+- `/rh/consignacoes`: contratos imutáveis vinculados ao credor central, cronograma de parcelas iguais, reserva de margem por competência, lançamento único e cancelamento compensatório de parcelas não lançadas. `/portal-servidor/consignacoes`: consulta do próprio titular, a partir de referências liberadas.
 
 Formatos de configuração e limites: `docs/RH_FOLHA_POLITICAS_OPERACIONAIS.md`.
 
@@ -69,11 +70,11 @@ O plano usa **F0–F9**, totalizando dez fases. Esta execução ainda está em a
 | F0 Fundação | Parcial | Temporalidade mensal entregue; completar rateios intramês, transições de regime e consolidação dos demais consumidores. |
 | F1 Cadastro | Parcial | Cargos/vagas/níveis, multivínculo temporal completo, campos configuráveis, cessões/estágio, pasta funcional e consultas integrais. |
 | F2 Motor | Parcial | IRRF completo, múltiplos esquemas/competências, regras de arredondamento, alocação temporal e conferência completa. |
-| F3 Movimentos/benefícios | Parcial | Completar múltiplas linhas/calendários de VT, família/documentos, pensões, contratos/parcelas/reservas de consignação e reflexos das demais origens. Importação, VT/VA e controle de margem agregada disponíveis. |
+| F3 Movimentos/benefícios | Parcial | Completar múltiplas linhas/calendários de VT, família/documentos, pensões, submargens por produto, renegociação/compensações de consignação e reflexos das demais origens. Importação, VT/VA, margem agregada e contratos/parcelas/reservas simples disponíveis. |
 | F4 Direitos/frequência | Parcial | Médias, horas extras reconhecidas e cancelamento compensatório entregues; completar perdas/prorrogações/férias especiais, gozo de múltiplos aquisitivos, licença prêmio/ATS/averbação e banco de horas completo. |
 | F5 Folhas especiais | Parcial | Mensal oficial e cenários isolados dos oito tipos especiais disponíveis. Fluxos oficiais de rescisão/RRA/13º/férias, tributação, direitos e reintegração continuam pendentes. Reajuste contratual coletivo disponível. |
 | F6 Contabilidade | Parcial | Solicitações de despesa integradas ao Financeiro com retomada; completar empenho, provisões, retenções/repasses, baixa, pagamentos, diárias e produtividade. |
-| F7 Portal | Parcial | PDF próprio, publicação futura, solicitações, campanhas/deferimento e consulta de margem histórica disponíveis; faltam renda anual fiscal, reserva de margem e demais jornadas. |
+| F7 Portal | Parcial | PDF próprio, publicação futura, solicitações, campanhas/deferimento, margem histórica e consulta de cronogramas consignados disponíveis; faltam renda anual fiscal, solicitação de crédito pelo titular e demais jornadas. |
 | F8 eSocial/obrigações | Parcial | Origens/outbox disponíveis; faltam layouts/validadores/cliente/worker e exportadores históricos. Configuração externa posterior não substitui esses desenvolvimentos internos. |
 | F9 POC | Parcial | Testes iniciais e regressão; ampliar casos ouro, relatórios e evidências item a item, além do percurso autenticado. |
 
@@ -122,6 +123,16 @@ Seed preparado: `npx tsx scripts/seed-hr-engine-demo.ts` / `--apply`. Cria somen
 - Teste integrado confirma que atualização de movimentos não altera a memória anterior, que o titular não acessa a simulação pelo Portal e que outro titular não acessa o demonstrativo publicado.
 - Snapshots legados permanecem sem margem; a consulta explicita sua indisponibilidade, sem aplicar parâmetros atuais ao passado.
 - ESLint, `git diff --check` e **build completo atualizado (`npm run build`) aprovados**, incluindo TypeScript e a nova rota do Portal.
+
+### Continuidade — contratos, reservas e parcelas de consignação
+
+- Migration aditiva `20261011160000_hr_consignment_schedule`: contratos, parcelas e entradas de reserva/lançamento/cancelamento imutáveis, integridade referencial, sinais de ledger e unicidades de contrato/origem.
+- Cronograma com parcelas iguais (até o limite explícito da política), referência mensal oficial mais recente do titular, consignatárias autorizadas do cadastro central e preservação de política/margem/autorização em snapshot.
+- Reserva serializada entre todos os contratos do titular, por competência e escopo; falha em uma competência reverte contrato e cronograma inteiros. Replay não duplica contrato/parcela/movimento; mesmo número/credor/vínculo/escopo não aceita cadastro com outra chave.
+- Parcelas gerenciadas já presentes na referência são identificadas pelos movimentos preservados no snapshot para evitar desconto duplicado da margem futura. Descontos não gerenciados da referência permanecem como ocupação conservadora.
+- Cálculo e fechamento verificam parcelas reservadas pendentes de lançamento. Parcela lançada não aceita cancelamento automático; exige conciliação/compensação própria, ainda pendente. Cancelar parcela não lançada cria entrada negativa e preserva a reserva original.
+- Testes PostgreSQL aprovados para reserva/replay/excesso sem gravação parcial, lançamento/replay, cancelamento, cronograma pendente, recência da referência, margem gerenciada e triggers imutáveis. TypeScript e ESLint aprovados; build atualizado ainda em validação.
+- Migration aplicada pelo deploy dirigido e reconferida com `APPLIED_CHECKSUM_VERIFIED`, sem dependências de runtime ausentes. `git diff --check` aprovado. O build foi interrompido e retomado em segundo plano; sua aprovação ainda depende do resultado final. A nova tentativa de navegador retornou `[browser.disconnected]`.
 
 ## Cemitérios
 

@@ -124,4 +124,37 @@ Apuração por pessoa física, dentro da execução mensal:
 
 O motor exige a seleção de todos os vínculos da PF. Todos os demonstrativos dessa PF preservam a mesma memória agregada: o limite **não se multiplica pelo número de contratos**. Conferência disponível em `/rh/operacoes/demonstrativos/[id]`, no PDF e em `/portal-servidor/margem`. O Portal respeita titularidade, liberação, revogação e fechamento; a lista mostra um registro por execução, com filtro e páginas de 20.
 
-A consulta é histórica, calculada na versão da folha. Alterar a política posteriormente não modifica a memória anterior. Versões antigas sem memória não recebem valores retroativamente. Reserva de margem para novo empréstimo, contratos/parcela de consignação, submargens por produto e integração com consignatárias continuam pendentes; a consulta não autoriza crédito.
+A consulta é histórica, calculada na versão da folha. Alterar a política posteriormente não modifica a memória anterior. Versões antigas sem memória não recebem valores retroativamente. O cronograma interno de reservas e parcelas está disponível conforme abaixo; submargens por produto e integração com consignatárias continuam pendentes. A consulta não autoriza crédito.
+
+## Contratos e cronogramas consignados
+
+Regra ativa JSON na categoria CONSIGNACAO, no mesmo conjunto da referência mensal:
+
+```json
+{
+  "origin": "CONSIGNACAO_CONTRATOS",
+  "maxInstallments": 60,
+  "referenceValidityMonths": 3,
+  "supplierIds": ["ID_FORNECEDOR_CREDOR_CONSIGNATARIA"],
+  "legalReference": "Convênio e autorização aplicáveis"
+}
+```
+
+Operação: `/rh/consignacoes`. Informe chave estável, vínculo de alocação, consignatária central, número do contrato, regra, cálculo oficial fechado mais recente do titular, rubrica, primeira competência, quantidade/valor de parcelas iguais e fundamento. A primeira competência deve ser posterior à referência e respeitar o prazo da política. O conjunto deve cobrir todo o cronograma e corresponder ao vínculo e ao escopo. Produção exige conjunto oficial aprovado.
+
+O serviço reserva cada competência na mesma transação do contrato/cronograma. As reservas de todos os vínculos do titular compartilham o limite. A ocupação é o total reservado na competência mais o consignado não gerenciado da referência. Parcelas gerenciadas identificadas pelos movimentos da referência não são deduzidas novamente. A referência é uma base conservadora; o cálculo mensal real continua conferindo a margem com a remuneração efetivamente apurada e pode bloquear descontos diante de redução salarial.
+
+Antes de calcular a competência, gere os movimentos das parcelas reservadas, selecionando a folha mensal correspondente. Cada parcela tem uma origem única. Reservas pendentes bloqueiam cálculo/fechamento. Parcelas não lançadas podem ser canceladas com motivo, liberando a reserva por entrada compensatória; reserva e autorização anteriores permanecem imutáveis. Parcelas lançadas/competências fechadas exigem conciliação própria.
+
+O número do contrato é único por credor/vínculo/escopo, mesmo se outra chave de origem for informada. Repetir a chave com os mesmos dados retorna o cronograma existente; modificar os dados é rejeitado. Mudanças/renegociações não reescrevem o contrato e requerem fluxo próprio, ainda pendente.
+
+O titular consulta `/portal-servidor/consignacoes` após liberação da folha de referência. Consulta mostra reservas, parcelas lançadas e canceladas. O lançamento na folha não comprova repasse ao credor. Submargens por produto, parcelas variáveis, portabilidade, quitação financeira e transmissão a consignatárias continuam pendentes.
+
+Implantação dirigida:
+
+```powershell
+npx tsx scripts/deploy-hr-migrations.ts --consignments
+npx tsx scripts/deploy-hr-migrations.ts --consignments --apply
+```
+
+Esse comando aplica apenas a migration de consignações; requer a foundation e a migration temporal previamente implantadas.

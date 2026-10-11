@@ -4,6 +4,7 @@ import { z } from "zod";
 import { allocatePayrollAmount, calculateContractRubrics, calculateContribution, payrollPeriod } from "./calculation-engine";
 import { resolveContractRevision } from "./contract-timeline";
 import { calculateConsignmentMargin } from "./consignment-margin";
+import { assertConsignmentSchedulePosted } from "./consignment-service";
 
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
@@ -180,6 +181,7 @@ export async function calculatePayrollRun(db: PrismaClient, actorId: string, raw
     if (ruleSet.status !== "ATIVA" || ruleSet.scope !== input.scope || ruleSet.effectiveFrom > period.start || (ruleSet.effectiveUntil && ruleSet.effectiveUntil < period.end) || !ruleSet.calculationPolicy || !ruleSet.rubrics.length) throw new Error("Regras ativas e política devem cobrir toda a competência e o escopo selecionado.");
     if (input.scope === "PRODUCAO" && (ruleSet.isDemo || !ruleSet.approvedAt || ruleSet.approvedAt > new Date() || !ruleSet.legalReference)) throw new Error("Produção exige regras oficiais aprovadas, com fundamento legal.");
     if (ruleSet.calculationPolicy.roundingMode !== "HALF_UP" || ruleSet.calculationPolicy.roundingScale !== 2) throw new Error("Este motor requer arredondamento HALF_UP com duas casas; publique política compatível.");
+    await assertConsignmentSchedulePosted(tx, ids, period.start, input.scope, ruleSet.rules.some(rule => rule.code === "MARGEM_CONSIGNAVEL"));
     const calculated = contracts.map(contract => {
       if (!contract.employee.person || !contract.employee.isActive) throw new Error("Vínculo sem pessoa física/servidor ativo.");
       const regime = regimes.find(r => r.id === contract.regimeId);
@@ -329,6 +331,7 @@ export async function closePayrollRun(db: PrismaClient, actorId: string, runId: 
       if (normalize(movements) !== normalize(contractSnapshot.movements)) throw new Error("Movimentos mudaram após o cálculo. Recalcule antes de fechar.");
     }
     const ruleSnapshot = (current.snapshot as { ruleSet: { rules: { code: string; value: unknown }[] } }).ruleSet;
+    await assertConsignmentSchedulePosted(tx, (snapshot.contractVersions ?? []).map(version => version.id), payrollPeriod(payroll.competence).start, current.scope, ruleSnapshot.rules.some(rule => rule.code === "MARGEM_CONSIGNAVEL"));
     const mapping = z.record(z.string(), z.string().min(1)).parse(ruleSnapshot.rules.find(rule => rule.code === "FOLHA_EVENTOS")?.value);
     const statements = await tx.hrPayrollStatement.findMany({ where: { runId }, include: { contract: true }, orderBy: { id: "asc" } });
     for (const statement of statements) {

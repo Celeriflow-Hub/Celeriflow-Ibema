@@ -8,7 +8,8 @@ config({ path: ".env.local", quiet: true });
 config({ quiet: true });
 neonConfig.webSocketConstructor = ws;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL });
-const name = process.argv.includes("--temporal") ? "20261011130000_hr_contract_temporal_revisions" : "20261011030000_hr_workforce_foundation";
+if (process.argv.includes("--temporal") && process.argv.includes("--consignments")) throw new Error("Selecione apenas uma migration RH por execução.");
+const name = process.argv.includes("--consignments") ? "20261011160000_hr_consignment_schedule" : process.argv.includes("--temporal") ? "20261011130000_hr_contract_temporal_revisions" : "20261011030000_hr_workforce_foundation";
 
 async function main() {
   const client = await pool.connect();
@@ -20,12 +21,15 @@ async function main() {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('RH_MIGRATIONS_DEPLOY'))");
     const requiredTables = ["Employee", "Payroll", "PayrollItem", "HrEmploymentRegime", "HrPayrollRuleSet", "SstBenefitPayrollScope", "SstBenefitPayrollOrigin", "SstLeavePayrollOrigin"];
     if (process.argv.includes("--temporal")) requiredTables.push("HrEmploymentRevision");
+    if (process.argv.includes("--consignments")) requiredTables.push("HrEmploymentContract", "HrEmploymentRevision", "HrPayrollRun", "HrMovement", "Supplier");
     const missing: string[] = [];
     for (const table of requiredTables) {
       const result = await client.query('SELECT to_regclass($1) AS relation', [`"${table}"`]);
       if (!result.rows[0].relation) missing.push(table);
     }
-    for (const [table, column] of [["PayrollItem", "valueDecimal"], ["Payroll", "totalValueDecimal"]]) {
+    const requiredColumns = [["PayrollItem", "valueDecimal"], ["Payroll", "totalValueDecimal"]];
+    if (process.argv.includes("--consignments")) requiredColumns.push(["HrEmploymentRevision", "effectiveFrom"]);
+    for (const [table, column] of requiredColumns) {
       const result = await client.query('SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name=$1 AND column_name=$2', [table, column]);
       if (!result.rowCount) missing.push(`${table}.${column}`);
     }

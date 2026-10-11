@@ -21,6 +21,7 @@ import { submitRecertificationProposal, decideRecertificationProposal, listMyRec
 import { dispatchPayrollExpenseRequests } from "../src/lib/rh/finance-bridge";
 import type { AppContext } from "../src/lib/platform/tenant-context";
 import { simulateSpecialPayroll } from "../src/lib/rh/special-simulation";
+import { reserveConsignmentAgreement, postConsignmentInstallment, cancelConsignmentInstallment } from "../src/lib/rh/consignment-service";
 
 test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamento, Portal e saldos", async () => {
   const pg = new PGlite();
@@ -45,6 +46,7 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
     await pg.exec(readFileSync("prisma/migrations-ibema/20261011030000_hr_workforce_foundation/migration.sql", "utf8"));
     await pg.exec('CREATE UNIQUE INDEX test_expense_idempotency ON "Expense"("idempotencyKey")');
     await pg.exec(readFileSync("prisma/migrations-ibema/20261011130000_hr_contract_temporal_revisions/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261011160000_hr_consignment_schedule/migration.sql", "utf8"));
     await pg.exec(`
       INSERT INTO "Person" (id,"fullName",cpf,status) VALUES ('person','Servidor demonstrativo','00000000000','Ativo');
       INSERT INTO "Employee" (id,name,"personId","isActive") VALUES ('employee','Servidor demonstrativo','person',true);
@@ -297,6 +299,42 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
     assert.equal((await getPayrollStatement(db, marginOfficial.statements[0].id, "employee")).consignmentMargin?.used, "100.00");
     await assert.rejects(getPayrollStatement(db, marginOfficial.statements[0].id, "intruder"), /indisponível/);
     assert.equal((await getPayrollStatement(db, updated.statements[0].id)).consignmentMargin, null, "snapshot legado não inventa margem atual");
+    await db.hrPayrollRule.create({ data: { id: "consignment-policy", ruleSetId: "set", code: "CONSIGNACAO_CONTRATOS", name: "Política sintética de cronograma", category: "CONSIGNACAO", valueType: "JSON", isActive: true, value: { origin: "CONSIGNACAO_CONTRATOS", maxInstallments: 4, referenceValidityMonths: 4, supplierIds: ["salary-supplier"], legalReference: "Convênio sintético no teste isolado" } } });
+    const agreementInput = { sourceKey: "consignment-agreement-1", contractId: contract.id, supplierId: "salary-supplier", sourceRunId: marginOfficial.id, ruleId: "consignment-policy", number: "DEMO-CONS-1", rubricCode: "CONSIGNADO", firstCompetence: "03/2027", count: 2, amount: "100.00", reason: "Autorização sintética de consignação" };
+    await db.hrPayrollRuleSet.update({ where: { id: "set" }, data: { isDemo: true } });
+    await assert.rejects(reserveConsignmentAgreement(db, "actor", agreementInput), /oficial aprovado/);
+    await db.hrPayrollRuleSet.update({ where: { id: "set" }, data: { isDemo: false } });
+    const agreement = await reserveConsignmentAgreement(db, "actor", agreementInput);
+    assert.equal(agreement.installments.length, 2);
+    assert.equal((await reserveConsignmentAgreement(db, "another-actor", agreementInput)).id, agreement.id);
+    await assert.rejects(reserveConsignmentAgreement(db, "actor", { ...agreementInput, amount: "101.00" }), /dados diferentes/);
+    await assert.rejects(reserveConsignmentAgreement(db, "actor", { ...agreementInput, sourceKey: "duplicate-number" }), /já cadastrado/);
+    await assert.rejects(reserveConsignmentAgreement(db, "actor", { ...agreementInput, sourceKey: "over-limit-agreement", number: "EXCESS", amount: "350.00" }), /excede a margem/);
+    assert.equal(await db.hrConsignmentAgreement.count(), 1, "lote de reserva falho não cria contrato ou parcelas parciais");
+    const marchPayroll = await db.payroll.create({ data: { competence: "03/2027", type: "Mensal", status: "Aberta" } });
+    const marchInput = { ...marginInput, payrollId: marchPayroll.id, requestKey: "march-consignment", mode: "OFICIAL" };
+    await assert.rejects(calculatePayrollRun(db, "actor", marchInput), /ainda não lançada/);
+    const marchInstallment = agreement.installments.find(item => item.sequence === 1)!;
+    const aprilInstallment = agreement.installments.find(item => item.sequence === 2)!;
+    await assert.rejects(postConsignmentInstallment(db, "actor", { installmentId: marchInstallment.id, payrollId: marginPayroll.id }), /competência da parcela/);
+    const postedInstallment = await postConsignmentInstallment(db, "actor", { installmentId: marchInstallment.id, payrollId: marchPayroll.id });
+    assert.equal(postedInstallment.amount.toFixed(2), "100.00");
+    assert.equal((await postConsignmentInstallment(db, "another-actor", { installmentId: marchInstallment.id, payrollId: marchPayroll.id })).id, postedInstallment.id);
+    await assert.rejects(cancelConsignmentInstallment(db, "actor", { installmentId: marchInstallment.id, reason: "Cancelamento de parcela já lançada" }), /conciliação/);
+    const cancellation = { installmentId: aprilInstallment.id, reason: "Cancelamento autorizado da parcela futura" };
+    const canceledInstallment = await cancelConsignmentInstallment(db, "actor", cancellation);
+    assert.equal(canceledInstallment.amount.toFixed(2), "-100.00");
+    assert.equal((await cancelConsignmentInstallment(db, "another-actor", cancellation)).id, canceledInstallment.id);
+    const aprilPayroll = await db.payroll.create({ data: { competence: "04/2027", type: "Mensal", status: "Aberta" } });
+    await assert.rejects(postConsignmentInstallment(db, "actor", { installmentId: aprilInstallment.id, payrollId: aprilPayroll.id }), /cancelada/);
+    const marchRun = await calculatePayrollRun(db, "actor", marchInput);
+    await closePayrollRun(db, "actor", marchRun.id);
+    assert.equal((await getPayrollStatement(db, marchRun.statements[0].id)).consignmentMargin?.used, "100.00");
+    await assert.rejects(reserveConsignmentAgreement(db, "actor", { ...agreementInput, sourceKey: "stale-reference", number: "STALE", firstCompetence: "04/2027", count: 1 }), /mais recente/);
+    const nextAgreement = await reserveConsignmentAgreement(db, "actor", { ...agreementInput, sourceKey: "new-reference", number: "DEMO-CONS-2", sourceRunId: marchRun.id, firstCompetence: "04/2027", count: 1, amount: "400.00" });
+    assert.equal(nextAgreement.installments.length, 1, "parcela gerenciada no histórico não é descontada novamente da margem futura");
+    await assert.rejects(pg.query('UPDATE "HrConsignmentEntry" SET amount=0 WHERE id=$1', [canceledInstallment.id]), /immutable/);
+    await assert.rejects(pg.query('DELETE FROM "HrConsignmentAgreement" WHERE id=$1', [agreement.id]), /immutable/);
     await db.hrPayrollRubric.create({ data: { ruleSetId: "set", code: "DECIMO_CENARIO", name: "Décimo terceiro proporcional sintético", type: "PROVENTO", calculationMethod: "FORMULA_CONTROLADA", formulaExpression: "SALARIO_BASE * AVOS / 12", priority: 1, isActive: true } });
     await db.hrPayrollRule.create({ data: { id: "special-rule", ruleSetId: "set", code: "ESPECIAL_CENARIO", name: "Cenário sintético 13º", category: "CALCULO", valueType: "JSON", value: { origin: "SIMULACAO_FOLHA_ESPECIAL", payrollType: "13º", rubricCodes: ["DECIMO_CENARIO"], inputNames: ["AVOS"], legalReference: "Somente teste sintético", premises: "Sem tributação automática e sem aquisição de direitos" }, isActive: true } });
     const specialPayroll = await db.payroll.create({ data: { competence: "11/2026", type: "13º", status: "Aberta" } });

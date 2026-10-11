@@ -13,14 +13,29 @@ import { generateAttendanceOvertime } from "@/lib/rh/attendance-payroll";
 import { decideRecertificationProposal } from "@/lib/rh/recertification";
 import { dispatchPayrollExpenseRequests } from "@/lib/rh/finance-bridge";
 import { simulateSpecialPayroll } from "@/lib/rh/special-simulation";
+import { reserveConsignmentAgreement, postConsignmentInstallment, cancelConsignmentInstallment } from "@/lib/rh/consignment-service";
+import { assertPayrollBudgetScope } from "@/lib/rh/payroll-access";
 
 export async function executeWorkforceOperation(command: string, values: Record<string, string>) {
-  const allowed = ["contrato", "movimento", "direito", "calcular", "fechar", "cancelar", "publicar", "vincular", "aquisitivos", "reservar-ferias", "importar", "beneficio", "decidir-solicitacao", "reajustar", "cancelar-ferias", "ponto-horas-extras", "decidir-recadastramento", "financeiro", "simular-especial"];
+  const allowed = ["contrato", "movimento", "direito", "calcular", "fechar", "cancelar", "publicar", "vincular", "aquisitivos", "reservar-ferias", "importar", "beneficio", "decidir-solicitacao", "reajustar", "cancelar-ferias", "ponto-horas-extras", "decidir-recadastramento", "financeiro", "simular-especial", "consignacao-reservar", "consignacao-lancar", "consignacao-cancelar"];
   if (!allowed.includes(command)) return { error: "Operação inválida." };
-  const context = await getTenantContextForModuleOperation("RH", ["contrato", "movimento", "direito", "aquisitivos", "reservar-ferias", "importar", "beneficio", "ponto-horas-extras"].includes(command) && !values.id ? "create" : "update");
+  const context = await getTenantContextForModuleOperation("RH", ["contrato", "movimento", "direito", "aquisitivos", "reservar-ferias", "importar", "beneficio", "ponto-horas-extras", "consignacao-reservar"].includes(command) && !values.id ? "create" : "update");
   try {
     let id = "";
     let message = "Operação registrada.";
+    if (command.startsWith("consignacao-")) {
+      const sourceRunId = command === "consignacao-reservar" ? values.sourceRunId : (await context.prisma.hrConsignmentInstallment.findUniqueOrThrow({ where: { id: values.installmentId }, include: { agreement: true } })).agreement.sourceRunId;
+      const sourceRun = await context.prisma.hrPayrollRun.findUniqueOrThrow({ where: { id: sourceRunId } });
+      await assertPayrollBudgetScope(context, sourceRun.payrollId);
+      if (command === "consignacao-reservar") id = (await reserveConsignmentAgreement(context.prisma, context.user.id, values)).id;
+      if (command === "consignacao-lancar") {
+        await assertPayrollBudgetScope(context, values.payrollId);
+        id = (await postConsignmentInstallment(context.prisma, context.user.id, values)).id;
+      }
+      if (command === "consignacao-cancelar") id = (await cancelConsignmentInstallment(context.prisma, context.user.id, values)).id;
+      revalidatePath("/rh/consignacoes");
+      revalidatePath("/portal-servidor/margem");
+    }
     if (["calcular", "simular-especial", "fechar", "cancelar", "publicar"].includes(command)) {
       const payrollId = ["calcular", "simular-especial"].includes(command) ? values.payrollId : (await context.prisma.hrPayrollRun.findUniqueOrThrow({ where: { id: values.runId } })).payrollId;
       const scope = await context.prisma.sstBenefitPayrollScope.findUnique({ where: { payrollId } });

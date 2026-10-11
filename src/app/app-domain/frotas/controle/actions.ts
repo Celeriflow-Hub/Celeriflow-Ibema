@@ -130,7 +130,7 @@ export async function installBattery(f: FormData) {
     return ctx.prisma.$transaction(async (tx) => {
       await tx.fleetBattery.updateMany({ where: { unitId: unit.id, removedAt: null }, data: { removedAt: installedAt } });
       const b = await tx.fleetBattery.create({ data: { unitId: unit.id, identifier: req(f, "identifier", "a identificação"), brand: req(f, "brand", "a marca"), installedAt, cost, createdById: ctx.user.id } });
-      if (cost && cost > 0) await tx.fleetExpense.create({ data: { unitId: unit.id, nature: "MANUTENCAO", amount: cost, occurredAt: installedAt, description: `Troca de bateria ${b.identifier}`, sourceType: "BATERIA", sourceId: b.id, createdById: ctx.user.id } as never });
+      if (cost && cost > 0) await tx.fleetExpense.create({ data: { unitId: unit.id, nature: "MANUTENCAO", amount: cost, occurredAt: installedAt, description: `Troca de bateria ${b.identifier}`, sourceType: "BATERIA", sourceId: b.id, sourceKey: `BATERIA:${b.id}`, createdById: ctx.user.id } });
       return { type: "FLEET_BATTERY", id: b.id };
     });
   });
@@ -172,8 +172,8 @@ export async function executeServiceAuthorization(f: FormData) {
       await scopedUnit(ctx, a.unitId);
       if (a.status !== "EMITIDA") throw new UserError("Autorização já utilizada ou cancelada.");
       if (amount > Number(a.amountLimit)) throw new UserError("Valor acima do limite autorizado.");
-      const exp = await tx.fleetExpense.create({ data: { unitId: a.unitId, nature: "MANUTENCAO", amount, occurredAt: new Date(), description: `${a.code} · ${a.description}${a.procurementRef ? ` · ${a.procurementKind ?? ""} ${a.procurementRef}` : ""}`, sourceType: "AUTORIZACAO_SERVICO", sourceId: a.id, createdById: ctx.user.id } as never });
-      await tx.fleetServiceAuthorization.update({ where: { id }, data: { status: "EXECUTADA", amountActual: amount, executedAt: new Date(), expenseId: (exp as { id: string }).id } });
+      const exp = await tx.fleetExpense.create({ data: { unitId: a.unitId, nature: "MANUTENCAO", amount, occurredAt: new Date(), description: `${a.code} · ${a.description}${a.procurementRef ? ` · ${a.procurementKind ?? ""} ${a.procurementRef}` : ""}`, sourceType: "AUTORIZACAO_SERVICO", sourceId: a.id, sourceKey: `AUTORIZACAO_SERVICO:${a.id}`, createdById: ctx.user.id } });
+      await tx.fleetServiceAuthorization.update({ where: { id }, data: { status: "EXECUTADA", amountActual: amount, executedAt: new Date(), expenseId: exp.id } });
       return { type: "FLEET_SERVICE_AUTH", id };
     });
   });

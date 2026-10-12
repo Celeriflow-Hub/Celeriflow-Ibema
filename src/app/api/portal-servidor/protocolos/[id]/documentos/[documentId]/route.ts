@@ -14,7 +14,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     const { id, documentId } = await params;
     const own = await readOwnFunctionalRequest(access.context.prisma, access.employee.id, id);
     if (!own.payload.attachments.some(document => document.documentId === documentId)) throw new AccessError("Documento indisponível.", 404);
-    const version = await access.context.prisma.documentVersion.findFirst({ where: { documentId, versionNumber: 1, status: "FINAL", document: { status: "Válido", processDocuments: { some: { processId: own.process.id, purpose: "REQUERIMENTO_FUNCIONAL" } } } } });
+    const version = await access.context.prisma.documentVersion.findFirst({ where: { documentId, versionNumber: 1, status: { in: ["FINAL", "SIGNED"] }, document: { status: { in: ["Válido", "Assinado"] }, processDocuments: { some: { processId: own.process.id, purpose: "REQUERIMENTO_FUNCIONAL" } } } } });
     if (!version) throw new AccessError("Documento indisponível.", 404);
     const file = await getFile(version.fileUrl);
     if (!file?.stream) throw new AccessError("Arquivo indisponível.", 404);

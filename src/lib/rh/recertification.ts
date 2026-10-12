@@ -7,10 +7,11 @@ import { applyRecertificationDetails, captureRecertificationDetails, emptyRecert
 const fields = ["email", "emailSecondary", "phonePrimary", "phoneSecondary", "whatsapp", "maritalStatus", "profession", "educationLevel", "socialName", "rg", "rgIssuer", "motherName", "fatherName", "nationality", "birthPlace", "gender", "raceColor"] as const;
 export const recertificationCampaignSchema = z.object({
   origin: z.literal("CAMPANHA_RECADASTRAMENTO"), startsAt: z.string().datetime(), endsAt: z.string().datetime(),
-  employeeIds: z.array(z.string().min(1)).min(1), fields: z.array(z.enum(fields)).min(1), instructions: z.string().max(4000),
+  employeeIds: z.array(z.string().min(1)).min(1), fields: z.array(z.enum(fields)), instructions: z.string().max(4000),
   sections: z.array(z.enum(recertificationSections)).default([]), requireEvidence: z.boolean().default(false),
   evidenceDocumentClassCode: z.string().min(1).optional(),
-}).strict().refine(value => new Date(value.endsAt) >= new Date(value.startsAt), "Período de campanha inválido.");
+  budgetUnitId: z.string().min(1).optional(),
+}).strict().refine(value => new Date(value.endsAt) >= new Date(value.startsAt) && (value.fields.length > 0 || value.sections.length > 0) && new Set(value.fields).size === value.fields.length, "Período ou campos/seções de campanha inválidos.");
 
 const proposalSchema = z.partialRecord(z.enum(fields), z.string().trim().max(250));
 type ContactValues = Partial<Record<typeof fields[number], string | null>>;
@@ -51,11 +52,13 @@ export async function requestRecertificationCorrection(context: AppContext, raw:
   });
 }
 
-export async function listRecertificationProgress(db: PrismaClient) {
+export async function listRecertificationProgress(db: PrismaClient, scope?: { employeeIds: string[]; budgetUnitIds: string[] }) {
   const rules = await db.hrPayrollRule.findMany({ where: { category: "PORTAL", valueType: "JSON" }, orderBy: [{ createdAt: "desc" }, { id: "asc" }] });
   const campaigns = rules.flatMap(rule => {
     const parsed = recertificationCampaignSchema.safeParse(rule.value);
-    return parsed.success ? [{ id: rule.id, name: rule.name, active: rule.isActive, ...parsed.data }] : [];
+    if (!parsed.success || scope && parsed.data.budgetUnitId && !scope.budgetUnitIds.includes(parsed.data.budgetUnitId)) return [];
+    const employeeIds = scope ? parsed.data.employeeIds.filter(id => scope.employeeIds.includes(id)) : parsed.data.employeeIds;
+    return employeeIds.length ? [{ id: rule.id, name: rule.name, active: rule.isActive, ...parsed.data, employeeIds }] : [];
   });
   const employeeIds = [...new Set(campaigns.flatMap(campaign => campaign.employeeIds))];
   const employees = await db.employee.findMany({ where: { id: { in: employeeIds } }, select: { id: true, name: true, isActive: true } });

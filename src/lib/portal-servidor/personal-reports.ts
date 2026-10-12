@@ -2,9 +2,10 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { AccessError, type AppContext } from "@/lib/platform/tenant-context";
 import { ownReleasedStatementIds } from "./payroll-publication";
+import { attendanceTotalsPolicySchema, configuredAttendanceTotals } from "./attendance-totals";
 
-export const personalReportKinds = ["FICHA_FINANCEIRA", "CONTRIBUICOES", "PONTO", "FERIAS", "BANCO_HORAS", "LICENCA_PREMIO", "GOZOS_LICENCA_PREMIO", "HISTORICO_ATS", "AFASTAMENTOS", "CONSIGNACOES", "FICHA_REGISTRO", "ATOS", "PLANOS"] as const;
-export const personalReportQuerySchema = z.object({ kind: z.enum(personalReportKinds), from: z.iso.date(), until: z.iso.date(), contractId: z.string().min(1).optional(), format: z.enum(["PDF", "CSV", "XLSX"]).default("PDF") }).strict().refine(value => value.until >= value.from, "Período fora de ordem.").refine(value => !value.contractId || !["PONTO", "AFASTAMENTOS", "ATOS", "PLANOS"].includes(value.kind), "Este relatório usa o cadastro pessoal, sem filtro por contrato.");
+export const personalReportKinds = ["FICHA_FINANCEIRA", "CONTRIBUICOES", "SALARIOS_CONTRIBUICAO", "PONTO", "FERIAS", "BANCO_HORAS", "LICENCA_PREMIO", "GOZOS_LICENCA_PREMIO", "HISTORICO_ATS", "AFASTAMENTOS", "CONSIGNACOES", "FICHA_REGISTRO", "ATOS", "PLANOS"] as const;
+export const personalReportQuerySchema = z.object({ kind: z.enum(personalReportKinds), from: z.iso.date(), until: z.iso.date(), contractId: z.string().min(1).optional(), totalsPolicyId: z.string().optional(), format: z.enum(["PDF", "CSV", "XLSX"]).default("PDF") }).strict().refine(value => value.until >= value.from, "Período fora de ordem.").refine(value => !value.contractId || !["PONTO", "AFASTAMENTOS", "ATOS", "PLANOS"].includes(value.kind), "Este relatório usa o cadastro pessoal, sem filtro por contrato.");
 type PersonalReport = { title: string; headers: string[]; rows: string[][] };
 const civil = (value: Date | null | undefined) => value?.toISOString().slice(0, 10) || "";
 const jsonObject = (value: Prisma.JsonValue) => value && !Array.isArray(value) && typeof value === "object" ? value : {};
@@ -15,14 +16,21 @@ export async function buildOwnPersonalReport(context: AppContext, raw: unknown):
   if (input.contractId && !await context.prisma.hrEmploymentContract.findFirst({ where: { id: input.contractId, employeeId } })) throw new AccessError("Contrato indisponível.", 404);
   const from = new Date(`${input.from}T00:00:00Z`), until = new Date(`${input.until}T23:59:59.999Z`);
   const contractWhere = { employeeId, ...(input.contractId ? { id: input.contractId } : {}) };
-  if (input.kind === "FICHA_FINANCEIRA" || input.kind === "CONTRIBUICOES") {
+  if (["FICHA_FINANCEIRA", "CONTRIBUICOES", "SALARIOS_CONTRIBUICAO"].includes(input.kind)) {
     const ids = await ownReleasedStatementIds(context.prisma, employeeId);
     const all = await context.prisma.hrPayrollStatement.findMany({ where: { id: { in: ids }, contract: contractWhere, releaseAt: { lte: new Date() }, revokedAt: null }, include: { run: { include: { payroll: true } } }, orderBy: [{ run: { createdAt: "asc" } }, { id: "asc" }] });
     const rows = all.filter(statement => { const [month, year] = statement.run.payroll.competence.split("/").map(Number); const start = new Date(Date.UTC(year, month - 1, 1)), end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)); return start <= until && end >= from; });
     const snapshotSchema = z.object({ contract: z.object({ registration: z.string() }), regime: z.object({ socialSecurityScheme: z.object({ code: z.string(), name: z.string(), regime: z.string() }).nullable() }), items: z.array(z.object({ code: z.string(), name: z.string(), type: z.string(), value: z.string() })), bases: z.record(z.string(), z.string()) });
-    if (input.kind === "CONTRIBUICOES") {
+    if (["CONTRIBUICOES", "SALARIOS_CONTRIBUICAO"].includes(input.kind)) {
       const reportRows = rows.map(statement => { const snapshot = snapshotSchema.parse(statement.snapshot), scheme = snapshot.regime.socialSecurityScheme; const employee = scheme ? snapshot.items.find(item => item.code === `PREVIDENCIA_${scheme.code}`)?.value || "0.00" : "0.00", fgts = snapshot.items.find(item => item.code === "FGTS")?.value || "0.00"; return [statement.run.payroll.competence, statement.run.payroll.type, snapshot.contract.registration, scheme?.name || "Não informado", scheme ? snapshot.bases[scheme.regime] || "0.00" : "", employee, statement.employer.sub(fgts).toFixed(2), statement.id]; });
-      return { title: "Contribuições previdenciárias por vínculo e competência — demonstrativos publicados", headers: ["Competência", "Tipo de folha", "Matrícula", "Previdência", "Base BRL", "Segurado BRL", "Patronal BRL", "Versão"], rows: reportRows };
+      const annual = new Map<string, { labels: string[]; base: Prisma.Decimal; employee: Prisma.Decimal; employer: Prisma.Decimal }>();
+      for (const row of reportRows) {
+        const labels = [row[0].split("/")[1], row[2], row[3]], key = JSON.stringify(labels);
+        const total = annual.get(key) || { labels, base: new Prisma.Decimal(0), employee: new Prisma.Decimal(0), employer: new Prisma.Decimal(0) };
+        total.base = total.base.add(row[4] || "0"); total.employee = total.employee.add(row[5]); total.employer = total.employer.add(row[6]); annual.set(key, total);
+      }
+      for (const total of annual.values()) reportRows.push([`TOTAL_ANUAL/${total.labels[0]}`, "TOTAL", total.labels[1], total.labels[2], total.base.toFixed(2), total.employee.toFixed(2), total.employer.toFixed(2), ""]);
+      return { title: input.kind === "SALARIOS_CONTRIBUICAO" ? "Salários de contribuição por previdência, vínculo e período — fontes publicadas" : "Contribuições previdenciárias por vínculo e competência — demonstrativos publicados", headers: ["Competência", "Tipo de folha", "Matrícula", "Previdência", "Base BRL", "Segurado BRL", "Patronal BRL", "Versão"], rows: reportRows };
     }
     const reportRows: string[][] = [];
     for (const statement of rows) {
@@ -36,7 +44,16 @@ export async function buildOwnPersonalReport(context: AppContext, raw: unknown):
   if (input.kind === "PONTO") {
     const rows = await context.prisma.attendanceRecord.findMany({ where: { employeeId, date: { gte: from, lte: until } }, orderBy: [{ date: "asc" }, { id: "asc" }] });
     const totals = rows.reduce((sum, row) => ({ hours: sum.hours.add(String(row.hoursWorked)), extra: sum.extra.add(String(row.extraHours)), bank: sum.bank.add(String(row.bankHours)) }), { hours: new Prisma.Decimal(0), extra: new Prisma.Decimal(0), bank: new Prisma.Decimal(0) });
-    return { title: "Espelho de ponto pessoal — relatório integral do período", headers: ["Data", "Entrada", "Saída", "Horas trabalhadas", "Horas extras", "Banco de horas", "Situação", "Registro"], rows: [...rows.map(row => [civil(row.date), row.entryTime?.toISOString() || "", row.exitTime?.toISOString() || "", String(row.hoursWorked), String(row.extraHours), String(row.bankHours), row.status, row.id]), ["TOTAL", "", "", totals.hours.toFixed(4), totals.extra.toFixed(4), totals.bank.toFixed(4), "", ""]] };
+    const configured: string[][] = [];
+    if (input.totalsPolicyId) {
+      const now = new Date(), rule = await context.prisma.hrPayrollRule.findFirst({ where: { id: input.totalsPolicyId, category: "PORTAL", isActive: true, ruleSet: { status: "ATIVA", effectiveFrom: { lte: now }, OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: now } }] } } });
+      const policy = attendanceTotalsPolicySchema.parse(rule?.value);
+      if (policy.employeeIds.length && !policy.employeeIds.includes(employeeId)) throw new AccessError("Totalizadores indisponíveis para o titular.", 403);
+      const employee = await context.prisma.employee.findUniqueOrThrow({ where: { id: employeeId }, select: { secretariatId: true } });
+      if (!employee.secretariatId || !await context.prisma.budgetUnit.findFirst({ where: { id: policy.budgetUnitId, secretariatId: employee.secretariatId }, select: { id: true } })) throw new AccessError("Totalizadores fora da unidade funcional.", 403);
+      configured.push(...configuredAttendanceTotals(rows, policy).map(total => ["TOTAL_CONFIGURADO", total.label, "", total.value, "", "", "", total.code]));
+    }
+    return { title: "Espelho de ponto pessoal — relatório integral do período", headers: ["Data", "Entrada", "Saída", "Horas trabalhadas / total configurado", "Horas extras", "Banco de horas", "Situação", "Registro"], rows: [...rows.map(row => [civil(row.date), row.entryTime?.toISOString() || "", row.exitTime?.toISOString() || "", String(row.hoursWorked), String(row.extraHours), String(row.bankHours), row.status, row.id]), ["TOTAL", "", "", totals.hours.toFixed(4), totals.extra.toFixed(4), totals.bank.toFixed(4), "", ""], ...configured] };
   }
   if (input.kind === "HISTORICO_ATS") {
     const movements = await context.prisma.hrMovement.findMany({ where: { contract: contractWhere, sourceKey: { startsWith: "ATS:" }, startsAt: { lte: until }, OR: [{ endsAt: null }, { endsAt: { gte: from } }] }, include: { contract: { select: { registration: true } } }, orderBy: [{ startsAt: "asc" }, { id: "asc" }] });

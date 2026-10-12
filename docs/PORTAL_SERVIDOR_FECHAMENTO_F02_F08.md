@@ -81,7 +81,7 @@ Verificações executadas:
 
 Migration preparada e testada localmente; não aplicada por esta execução ao banco de produção. Não houve commit/push/deploy desta rodada. Os testes locais não substituem a jornada com contas/cadastros reais.
 
-### Itens ainda abertos — desenvolvimento
+### Pendências identificadas antes do fechamento final — histórico
 
 1. F02: complemento documental completo, comprovante de protocolo, tratamento recorrente de uploads sem consumo e conferência do upgrade sobre os dados reais diagnosticados.
 2. F03: fonte anual de pagamentos individuais conciliados para IRRF, layouts municipais configuráveis e recibo específico de férias com vínculo aquisitivo/gozo/cálculo. Publicar PDF GED existente não encerra a construção dessas fontes/layouts.
@@ -91,4 +91,47 @@ Migration preparada e testada localmente; não aplicada por esta execução ao b
 6. F07: conferir concorrência de vagas e o percurso operacional CIPA; ampliar evidência por ciclo/comissão/resultado com contas reais.
 7. F08: PPP oficial completo a partir dos responsáveis/fontes ambientais, assinatura e versão; aprimorar paginação/filtros e configuração assistida das novas superfícies; validar autorização/isolamento e operações com contas reais de cada ator.
 
-Portanto, o planejamento de fechamento está concluído e o lote acima foi implementado/verificado, mas F02–F08 ainda não têm aceite integral. As dependências municipais da seção anterior e as pendências de desenvolvimento deste registro permanecem identificadas separadamente.
+O registro acima descreve o estágio anterior ao fechamento final a seguir; não deve ser utilizado isoladamente como estado atual da implementação.
+
+## Fechamento final de desenvolvimento F02–F08
+
+**Estado:** escopo de desenvolvimento das fases F02–F08 implementado e verificado localmente. A publicação do código, parametrização municipal e homologação com contas/dados reais são etapas operacionais distintas. A entrega não comprova integração no App, LDAP, push ou transmissão externa da F09.
+
+| Fase | Complementos finais implementados | Caminhos principais |
+|---|---|---|
+| F02 | Complemento textual/documental com códigos exigidos pelo RH, titularidade e consumo único; comprovante do protocolo; rollback de upload sem GED; limpeza recorrente de uploads não utilizados com retenção configurada, proteção de documentos consumidos/assinados e retry do storage | `/portal-servidor/protocolos/[id]`, `/api/portal-servidor/protocolos/[id]/comprovante`, `/api/portal-servidor/manutencao/anexos` |
+| F03 | Modelos municipais validados, informe anual por pagamentos individuais conciliados na origem nativa, grupos fiscais por rubrica/tipo de folha, totais anuais de contribuições/salários de contribuição e recibo de férias com aquisitivo/gozo/cálculo de origem | `/portal-servidor/documentos-funcionais`, `/rh/portal-funcional`, `/portal-servidor/relatorios` |
+| F04 | Totalizadores de ponto configuráveis e integrais; conciliação transacional de horas extras e banco no ajuste, com compensações, preservação das fontes originais, limites e saldos cronológicos; versões de integração impedem repostagem/stale update; competências fechadas exigem tratamento formal RH/Folha | `attendance-reconciliation.ts`, `attendance-totals.ts`, requerimentos e relatórios pessoais |
+| F05 | Geração das declarações de vínculo/tempo/magistério a partir de revisões/história funcional/averbações e exclusões configuradas; bloqueio de lacunas; termo de rescisão vinculado a cálculo e encerramento efetivo; arquivo autorizado dos atos; margem por banco com referência, reservas, validade e liberação RH FP-084 | `/portal-servidor/documentos-funcionais`, `/api/portal-servidor/atos/[id]`, `/rh/portal-funcional` |
+| F06 | Configuração assistida de campanhas, seleção do público/campos/seções/classes GED; conferência, saneamento de pessoa física do dependente com autorização de Cadastro Único e comprovação, devolução/reenvio e aplicação atômica; listagem administrativa limitada às unidades autorizadas | `/rh/recadastramento/configurar`, `/rh/solicitacoes`, `/portal-servidor/recadastramento` |
+| F07 | Fluxo de cursos/inscrições/comprovantes/conclusão/certificados e resultados de avaliações; teste PostgreSQL da disputa da última vaga e do retry; jornada CIPA validada pelos testes de titularidade, janela, participação única, sigilo e rollback | `/rh/atividades-funcionais`, `/portal-servidor/capacitacao`, `/portal-servidor/avaliacoes`, `/portal-servidor/sst/cipa` |
+| F08 | PPP completo na geração: história RH/LTCAT sem lacunas, CBO/atividades/agentes/medições vinculados a fonte técnica assinada, versão ambiental reconhecida, cobertura de responsabilidade técnica e assinatura GED obrigatória na emissão; novas superfícies CAT, agenda, departamentos, convenentes e concursos/PSS; gestão de emissões com filtro/paginação | `/sst/ppp`, `/portal-servidor/documentos-funcionais`, `/rh/portal-funcional`, superfícies específicas do lote anterior |
+
+### Documento de origem, assinatura e autenticidade
+
+- Geração cria documento/versão GED privados, hash do arquivo, modelo congelado, referências de origem e chave de autenticidade. Modelo que exige assinatura não é disponibilizado enquanto o GED não concluir a assinatura real.
+- O estado documental `Assinado` do fluxo GED é aceito junto a `Válido` quando a versão assinada corresponde à fonte; nenhum status de assinatura é fabricado pelo Portal.
+- Download pessoal revalida o titular ativo, versão e fontes; validação pública em `/validar-emissao/[code]` contém somente tipo, data, hash e estado de assinatura. O manifesto de origem verifica demonstrativos, comprovantes, pagamentos, períodos, versões ambientais, responsabilidades e reservas de margem sem divulgar dados pessoais/remuneração.
+- Revogação, validade da margem e fontes canceladas/substituídas impedem a validação/disponibilização da emissão correspondente.
+- A contagem de serviço usa dias distintos dos períodos canônicos, exclui afastamentos conforme política expressa e inclui apenas averbações reconhecidas nos escopos configurados. Não há criação automática de direito a partir de emprego anterior declarado.
+
+### Parametrização e operação municipal
+
+1. **Modelos:** em `/rh/portal-funcional`, cadastrar regra PORTAL de origem `MODELO_DOCUMENTO_FUNCIONAL`, com UG, tipos documentais, emitente/CNPJ, título/texto/rodapé/fundamento, classe GED e signatários. Marcadores permitidos são validados; fonte obrigatória ausente impede documento incompleto.
+2. **Informe anual:** configurar `annualGroups` com `code`, `label`, `rubricCodes` e `payrollTypes`. Cada rubrica de provento/desconto deve pertencer a exatamente um grupo no tipo de folha. RH/Financeiro concluem a alocação individual de pagamentos nativos confirmados, com comprovante GED e referência. A soma por demonstrativo deve ser exatamente o líquido; a soma por ordem não pode exceder o pago. Encargos patronais não podem ser usados como remuneração individual.
+3. **Férias/rescisão:** disponibilizar cálculo oficial fechado de produção e fontes RH correspondentes. Fonte especial marcada como estimada exige conferência definitiva RH, respaldada por documento de cálculo assinado da pessoa, antes da emissão definitiva. A conferência não altera valores nem presume pagamento.
+4. **Margem:** informar `supplierIds`, `validityDays` e `blockMarginUntilRelease` no modelo, mantendo política nativa de consignação/bancos vigente. A nova emissão pode permanecer bloqueada até a operação `LIBERAR_MARGEM` fundamentada pelo RH.
+5. **Jornada:** configurar regra `TOTALIZADORES_PONTO_FUNCIONAL`, com UG/público e totais por campo/status. A marcação mantém habilitação individual na regra `REGISTRO_PONTO_FUNCIONAL` existente. O ajuste conciliado não altera folha já fechada silenciosamente.
+6. **Campanhas:** usar `/rh/recadastramento/configurar` para público, campos, seções, janela e comprovação; saneamento de novo dependente exige RH e permissão de inclusão no Cadastro Único, sem trocar identidade existente divergente.
+7. **PPP:** o responsável SST utiliza `/sst/ppp` para carregar os IDs reais dos períodos/riscos e reconhecer a fonte técnica assinada. Informar NIT/CNAE/endereço, CBO/atividades por período e agentes/medições/EPC/EPI/CA por risco. O novo reconhecimento substitui o anterior do mesmo titular/UG/intervalo. O modelo PPP exige signatários e `requireSignature: true`.
+8. **Uploads:** administrador da instância define `PORTAL_UNUSED_UPLOAD_RETENTION_HOURS`. A rotina diária já está declarada em `vercel.json`, com autenticação `CRON_SECRET` e ator técnico ativo em `NOTIFICATION_SYSTEM_ACTOR_USER_ID`. Sem parâmetro de retenção, não há descarte por prazo presumido.
+
+Esses dados e decisões são fornecidos/configurados pelo município nas telas implementadas. Serviço sem a configuração/fonte exigida apresenta indisponibilidade específica; o Portal não inventa valores, regras ou assinatura.
+
+### Verificação final executada
+
+- **34 testes aprovados, zero falhas**, abrangendo modelos/fontes, dias históricos e totalizadores integrais, conciliação PostgreSQL/rollback e versões de ponto, disputa da última vaga/retry em cursos, autenticação, rotas/Proxy, relações/migration, RH/Folha, SST histórico, agenda e CIPA.
+- ESLint de todos os arquivos do lote: aprovado.
+- `npm run build` completo após as correções: aprovado — Prisma generate, Next typegen, TypeScript e compilação Next.js, incluindo as novas rotas.
+- Não foi necessária nova alteração de schema/migration neste último lote: os vínculos estruturais são os da migration aditiva anterior; fontes, confirmações e artefatos usam os registros canônicos RH/Folha/GED/SST existentes.
+- Nenhum commit/push/deploy realizado por esta execução. A homologação do ambiente publicado e os percursos com contas reais não são apresentados como testes locais realizados.

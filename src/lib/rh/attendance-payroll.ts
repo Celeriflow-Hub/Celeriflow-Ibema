@@ -3,6 +3,7 @@ import { z } from "zod";
 import { payrollPeriod } from "./calculation-engine";
 import { resolveContractRevision } from "./contract-timeline";
 import { enqueueHrIntegration } from "./workforce-service";
+import { attendancePostingKey } from "./attendance-reconciliation";
 
 const policySchema = z.object({ origin: z.literal("HORAS_EXTRAS_PONTO"), rubricCode: z.string().min(1), additionalRate: z.string().regex(/^\d+(?:\.\d{1,6})?$/), legalReference: z.string().trim().min(3) }).strict();
 
@@ -33,7 +34,7 @@ export async function generateAttendanceOvertime(db: PrismaClient, actorId: stri
       if (!hours.isFinite() || hours.lt(0) || hours.gt(24) || !hours.eq(hours.toDecimalPlaces(4))) throw new Error("Horas extras devem ter até quatro casas e estar entre 0 e 24 por dia.");
       const hourlyValue = contract.salary.div(contract.monthlyHours);
       const amount = hourlyValue.mul(hours).mul(new Prisma.Decimal(1).add(rate.div(100))).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-      const sourceKey = `PONTO:HORAS_EXTRAS:${record.id}`;
+       const sourceKey = await attendancePostingKey(tx, `PONTO:HORAS_EXTRAS:${record.id}`, current);
       await enqueueHrIntegration(tx, { sourceKey, domain: "AUDITORIA", environment: rule.ruleSet.scope, eventType: "HORAS_EXTRAS_CALCULADAS", payload: { contractId: contract.id, contractVersion: contract.version, competence: input.competence, ruleId: rule.id, policy, attendance: current, hourlyValue: hourlyValue.toString(), hours: hours.toString(), amount: amount.toFixed(2) } });
       const existing = await tx.hrMovement.findUnique({ where: { sourceKey } });
       if (existing) { movements.push(existing.id); continue; }

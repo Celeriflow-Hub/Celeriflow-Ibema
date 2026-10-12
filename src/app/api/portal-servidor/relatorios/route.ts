@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     if (access.status !== "AVAILABLE") throw new AccessError("Acesso funcional indisponível.", 403);
     const values = Object.fromEntries(request.nextUrl.searchParams);
     if (values.contractId === "") delete values.contractId;
+    if (values.totalsPolicyId === "") delete values.totalsPolicyId;
     const input = personalReportQuerySchema.parse(values);
     const report = await buildOwnPersonalReport(access.context, input);
     const file = await renderHrReport(report, input.format);

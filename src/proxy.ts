@@ -57,7 +57,7 @@ export default function proxy(req: NextRequest) {
     return NextResponse.rewrite(destination, { request: { headers: requestHeaders } });
   }
 
-  const isPublicValidation = /^\/validar-(?:documento|aviso|recibo)\/[^/]+$/.test(url.pathname);
+  const isPublicValidation = /^\/validar-(?:documento|aviso|recibo|emissao)\/[^/]+$/.test(url.pathname);
   const isPublicProtocolPortal = url.pathname === "/portal-protocolos";
   const isPublicInstitutionalPortal = url.pathname === "/portal" || url.pathname.startsWith("/portal/");
   const isPublicTransparencyPortal = url.pathname === "/portal-transparencia";

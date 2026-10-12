@@ -3,7 +3,7 @@ import { getTenantContextForModule, isSystemAdministrator } from "@/lib/platform
 import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
 import { OperationForm } from "../operacoes/OperationForm";
-import { RecertificationCorrectionForm } from "../recadastramento/CorrectionForm";
+import { RecertificationCorrectionForm, RecertificationDependentReconciliation } from "../recadastramento/CorrectionForm";
 
 export const dynamic = "force-dynamic";
 export default async function HrRequests({ searchParams }: { searchParams: Promise<{ page?: string; status?: string }> }) {
@@ -29,6 +29,7 @@ export default async function HrRequests({ searchParams }: { searchParams: Promi
       {row.kind === "RECADASTRAMENTO" && <details className="my-2"><summary>Conferir valores anteriores, propostos e comprovação</summary><pre className="whitespace-pre-wrap break-words">{JSON.stringify({ before: (row.payload as { before: unknown }).before, proposal: (row.payload as { proposal: unknown }).proposal, beforeDetails: (row.payload as { beforeDetails?: unknown }).beforeDetails, details: (row.payload as { details?: unknown }).details }, null, 2)}</pre><p>O deferimento aplica os campos aprovados ao Cadastro Único na mesma transação da decisão. Empregos anteriores são declarações conferidas; não geram averbação automática de tempo.</p></details>}
       {row.decision && <p className="whitespace-pre-wrap">Decisão: {row.decision}</p>}
       {row.kind === "RECADASTRAMENTO" && row.status === "EM_ANALISE" && <RecertificationCorrectionForm requestId={row.id} />}
+      {row.kind === "RECADASTRAMENTO" && row.status === "EM_ANALISE" && <RecertificationDependentReconciliation requestId={row.id} />}
       {row.status === "EM_ANALISE" && <OperationForm command={row.kind === "CREDITO_CONSIGNADO" ? "decidir-credito" : row.kind === "RECADASTRAMENTO" ? "decidir-recadastramento" : "decidir-solicitacao"} title="Registrar decisão" fields={[{ name: "requestId", label: "Solicitação", value: row.id, type: "hidden" }, { name: "status", label: "Resultado", options: [{ value: "DEFERIDA", label: "Deferida" }, { value: "INDEFERIDA", label: "Indeferida" }] }, { name: "decision", label: "Fundamento, providência e referência ao registro funcional", type: "textarea", required: true }, ...(row.kind === "CREDITO_CONSIGNADO" ? [{ name: "number", label: "Número do contrato (deferimento)" }, { name: "rubricCode", label: "Rubrica consignada (deferimento)" }] : [])]} />}
     </article>)}
     <ErpPagination page={page} total={total} pageSize={20} label="solicitações" previousHref={href(page - 1)} nextHref={href(page + 1)} />

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { payrollPeriod } from "./calculation-engine";
 import { resolveContractRevision } from "./contract-timeline";
 import { enqueueHrIntegration } from "./workforce-service";
+import { attendancePostingKey } from "./attendance-reconciliation";
 
 const policySchema = z.object({ origin: z.literal("BANCO_HORAS_PONTO"), maxBalanceHours: z.string().regex(/^\d+(?:\.\d{1,4})?$/), maxCreditPerDayHours: z.string().regex(/^\d+(?:\.\d{1,4})?$/), maxDebitPerDayHours: z.string().regex(/^\d+(?:\.\d{1,4})?$/), allowedStatuses: z.array(z.string().min(1)).min(1), forbidPaidOvertimeForCredit: z.boolean(), legalReference: z.string().trim().min(3) }).strict();
 export const timeBankPolicySchema = policySchema;
@@ -52,7 +53,7 @@ export async function generateAttendanceTimeBank(db: PrismaClient, actorId: stri
       const quantity = new Prisma.Decimal(String(current.bankHours));
       if (!quantity.isFinite() || !quantity.eq(quantity.toDecimalPlaces(4)) || quantity.gt(creditLimit) || quantity.negated().gt(debitLimit) || !policy.allowedStatuses.includes(current.status) || current.employeeId !== contract.employeeId || current.date < contract.admittedAt || (contract.endsAt && current.date > contract.endsAt)) throw new Error("Horas/situação/período do ponto incompatíveis com a política do banco.");
       if (quantity.gt(0) && policy.forbidPaidOvertimeForCredit && current.extraHours > 0) throw new Error("Política impede crédito de banco em registro com horas extras remuneradas.");
-      const sourceKey = `PONTO:BANCO_HORAS:${current.id}`;
+      const sourceKey = await attendancePostingKey(tx, `PONTO:BANCO_HORAS:${current.id}`, current);
       await enqueueHrIntegration(tx, { sourceKey, domain: "AUDITORIA", environment: rule.ruleSet.scope, eventType: "BANCO_HORAS_RECONHECIDO", payload: { contractId: contract.id, contractVersion: contract.version, competence: input.competence, ruleId: rule.id, policy, attendance: current, quantity: quantity.toString() } });
       const existing = await tx.hrRightEntry.findUnique({ where: { sourceKey } });
       if (existing) { ids.push(existing.id); continue; }

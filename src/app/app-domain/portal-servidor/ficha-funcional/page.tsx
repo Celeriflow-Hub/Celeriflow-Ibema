@@ -149,12 +149,12 @@ export default async function FichaFuncionalPage({ searchParams }: { searchParam
                   <tr><th className="w-[22%] px-3">Data</th><th className="w-[38%] px-3">Tipo de ato</th><th className="w-[25%] px-3">Número</th><th className="w-[15%] px-3 text-right">Registro</th></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {acts.map((act) => <tr key={act.id} className="h-[clamp(17px,2.25vh,24px)] hover:bg-slate-50"><td className="px-3 py-0 whitespace-nowrap font-medium">{formatDate(act.date)}</td><td className="px-3 py-0"><span className="block truncate" title={act.type}>{act.type}</span></td><td className="px-3 py-0"><span className="block truncate">{act.actNumber || "Não informado"}</span></td><td className="px-3 py-0 text-right text-[10px] text-slate-500">{formatDate(act.createdAt)}</td></tr>)}
+                  {acts.map((act) => <tr key={act.id} className="h-[clamp(17px,2.25vh,24px)] hover:bg-slate-50"><td className="px-3 py-0 whitespace-nowrap font-medium">{formatDate(act.date)}</td><td className="px-3 py-0"><span className="block truncate" title={act.type}>{act.type}</span></td><td className="px-3 py-0"><span className="block truncate">{act.actNumber || "Não informado"}</span></td><td className="px-3 py-0 text-right text-[10px] text-slate-500"><a href={`/api/portal-servidor/atos/${act.id}`} className="font-semibold text-emerald-800 underline">Arquivo do ato</a></td></tr>)}
                 </tbody>
               </table>
             </div>
             <div className="divide-y divide-slate-100 overflow-y-auto md:hidden">
-              {acts.map((act) => <article key={act.id} className="space-y-1 p-3"><div className="flex items-start justify-between gap-3"><p className="min-w-0 truncate text-xs font-semibold text-slate-900">{act.type}</p><time className="shrink-0 text-[11px] text-slate-500">{formatDate(act.date)}</time></div><p className="text-[11px] text-slate-600">{act.actNumber || "Número não informado"}</p></article>)}
+              {acts.map((act) => <article key={act.id} className="space-y-1 p-3"><div className="flex items-start justify-between gap-3"><p className="min-w-0 truncate text-xs font-semibold text-slate-900">{act.type}</p><time className="shrink-0 text-[11px] text-slate-500">{formatDate(act.date)}</time></div><p className="text-[11px] text-slate-600">{act.actNumber || "Número não informado"}</p><a href={`/api/portal-servidor/atos/${act.id}`} className="text-xs font-semibold text-emerald-800 underline">Consultar arquivo do ato</a></article>)}
             </div>
           </>
         )}

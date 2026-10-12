@@ -16,7 +16,7 @@ export async function publishFunctionalDocument(context: AppContext, raw: unknow
     if (!employee.personId || employee.secretariatId !== unit.secretariatId) throw new Error("Unidade gestora incompatível com o vínculo de origem.");
     if (input.contractId && !await tx.hrEmploymentContract.findFirst({ where: { id: input.contractId, employeeId: employee.id } })) throw new Error("Contrato não pertence ao titular.");
     if (input.kind === "IRRF_ANUAL" && !input.year) throw new Error("Informe o ano de pagamento do comprovante de rendimentos.");
-    const version = await tx.documentVersion.findFirst({ where: { id: input.documentVersionId, status: input.kind === "PPP" ? "SIGNED" : { in: ["FINAL", "SIGNED"] }, document: { personId: employee.personId, status: "Válido" } }, include: { document: true } });
+    const version = await tx.documentVersion.findFirst({ where: { id: input.documentVersionId, status: input.kind === "PPP" ? "SIGNED" : { in: ["FINAL", "SIGNED"] }, document: { personId: employee.personId, status: { in: ["Válido", "Assinado"] } } }, include: { document: true } });
     if (!version) throw new Error("Selecione uma versão documental válida vinculada à pessoa do servidor; PPP exige assinatura.");
     const event = await enqueueHrIntegration(tx, { sourceKey: `PORTAL:PUBLICACAO:${input.kind}:${employee.id}:${version.id}`, domain: "PORTAL", environment: "INTERNO", eventType: "DOCUMENTO_FUNCIONAL_DISPONIBILIZADO", payload: { ...input, title: version.document.title, publisherId: context.user.id, hashSha256: version.hashSha256, fileUrl: version.fileUrl, documentId: version.documentId } });
     if (event.status === "REVOGADO") throw new Error("Publicação revogada exige uma nova versão documental.");
@@ -44,6 +44,6 @@ export async function listOwnPublishedDocuments(context: AppContext) {
   const events = await context.prisma.hrIntegrationEvent.findMany({ where: { domain: "PORTAL", eventType: "DOCUMENTO_FUNCIONAL_DISPONIBILIZADO", status: "PROCESSADO", payload: { path: ["employeeId"], equals: context.user.employeeId || "__SEM_VINCULO__" } }, orderBy: [{ createdAt: "desc" }, { id: "asc" }] });
   const now = new Date();
   const parsed = events.map(event => ({ id: event.id, payload: publicationPayloadSchema.parse(event.payload) })).filter(event => new Date(event.payload.releaseAt) <= now);
-  const versions = await context.prisma.documentVersion.findMany({ where: { id: { in: parsed.map(event => event.payload.documentVersionId) }, status: { in: ["FINAL", "SIGNED"] }, document: { status: "Válido", person: { employee: { id: context.user.employeeId || "__SEM_VINCULO__", isActive: true } } } }, select: { id: true, hashSha256: true, status: true } });
+   const versions = await context.prisma.documentVersion.findMany({ where: { id: { in: parsed.map(event => event.payload.documentVersionId) }, status: { in: ["FINAL", "SIGNED"] }, document: { status: { in: ["Válido", "Assinado"] }, person: { employee: { id: context.user.employeeId || "__SEM_VINCULO__", isActive: true } } } }, select: { id: true, hashSha256: true, status: true } });
   return parsed.filter(event => versions.some(version => version.id === event.payload.documentVersionId && version.hashSha256 === event.payload.hashSha256 && (event.payload.kind !== "PPP" || version.status === "SIGNED")));
 }

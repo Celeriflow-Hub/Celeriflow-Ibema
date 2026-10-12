@@ -8,6 +8,7 @@ import { functionalServiceSchema, listFunctionalServices, validateFunctionalValu
 import { reserveVacationRightInTransaction } from "@/lib/rh/vacation-rights";
 import { resolveContractRevision } from "@/lib/rh/contract-timeline";
 import { publicationPayloadSchema } from "./publication-contract";
+import { reconcileAttendanceSources } from "@/lib/rh/attendance-reconciliation";
 
 const requestInput = z.object({
   requestKey: z.string().min(1).max(160), serviceId: z.string().min(1), serviceVersion: z.number().int().positive(),
@@ -21,6 +22,7 @@ export const functionalRequestPayloadSchema = z.object({
   accepted: z.boolean(), attachments: z.array(z.object({ code: z.string(), documentId: z.string() })),
   awaitingComplement: z.boolean(), execution: z.enum(["AGUARDANDO_DECISAO", "PENDENTE", "EXECUTADA", "NAO_APLICAVEL"]),
   resultPublicationId: z.string().optional(),
+  complementDocumentCodes: z.array(z.string()).default([]),
 });
 
 function inputHash(input: z.infer<typeof requestInput>) {
@@ -66,7 +68,8 @@ export async function submitFunctionalRequest(context: AppContext, raw: unknown)
       await tx.$queryRaw`SELECT id FROM "HrIntegrationEvent" WHERE id=${reference.uploadEventId} FOR UPDATE`;
       const upload = await tx.hrIntegrationEvent.findFirst({ where: { id: reference.uploadEventId, domain: "PORTAL", eventType: "ANEXO_FUNCIONAL_RECEBIDO" } });
       const data = z.object({ employeeId: z.string(), actorId: z.string(), serviceId: z.string(), serviceVersion: z.number(), code: z.string(), documentId: z.string(), requestId: z.string().nullable() }).parse(upload?.payload);
-      if (data.employeeId !== employeeId || data.actorId !== context.user.id || data.serviceId !== service.id || data.serviceVersion !== input.serviceVersion || data.code !== requirement.code || data.requestId || (upload?.result as { requestId?: string } | null)?.requestId) throw new AccessError("Anexo não pertence a este requerimento.", 403);
+      if (upload?.status !== "RECEBIDO" || data.employeeId !== employeeId || data.actorId !== context.user.id || data.serviceId !== service.id || data.serviceVersion !== input.serviceVersion || data.code !== requirement.code || data.requestId || upload.result) throw new AccessError("Anexo não pertence a este requerimento.", 403);
+      if (!await tx.documentVersion.findFirst({ where: { documentId: data.documentId, versionNumber: 1, status: { in: ["FINAL", "SIGNED"] }, document: { status: { in: ["Válido", "Assinado"] } } }, select: { id: true } })) throw new Error("Anexo cancelado ou indisponível na origem GED.");
       attachments.push({ code: requirement.code, documentId: data.documentId });
     }
     if (input.attachments.length !== attachments.length) throw new Error("Anexo não autorizado pelo serviço.");
@@ -98,7 +101,7 @@ export async function readOwnFunctionalRequest(db: PrismaClient, employeeId: str
 }
 
 export async function requestFunctionalComplement(context: AppContext, raw: unknown) {
-  const input = z.object({ requestId: z.string().min(1), instructions: z.string().trim().min(10).max(4000) }).strict().parse(raw);
+  const input = z.object({ requestId: z.string().min(1), instructions: z.string().trim().min(10).max(4000), documentCodes: z.array(z.string()).max(20).default([]) }).strict().parse(raw);
   if (!canPerformModuleOperation(context.user, "RH", "update")) throw new AccessError("Sem autorização para analisar o requerimento.", 403);
   return context.prisma.$transaction(async tx => {
     await tx.$queryRaw`SELECT id FROM "HrPortalRequest" WHERE id=${input.requestId} FOR UPDATE`;
@@ -108,25 +111,40 @@ export async function requestFunctionalComplement(context: AppContext, raw: unkn
     const process = await tx.process.findUniqueOrThrow({ where: { id: payload.processId } });
     if (!isSystemAdministrator(context.user) && process.currentDepartmentId !== context.user.departmentId) throw new AccessError("Requerimento fora do setor responsável.", 403);
     if (request.status !== "EM_ANALISE" || ["Arquivado", "Cancelado", "Concluído"].includes(process.status)) throw new Error("Requerimento não aceita pendências.");
-    await tx.hrPortalRequest.update({ where: { id: request.id }, data: { payload: JSON.parse(JSON.stringify({ ...payload, awaitingComplement: true })) as Prisma.InputJsonValue } });
+    if (new Set(input.documentCodes).size !== input.documentCodes.length || input.documentCodes.some(code => !payload.configuration.requiredDocuments.some(document => document.code === code))) throw new Error("Documentos de complemento devem pertencer ao formulário enviado.");
+    await tx.hrPortalRequest.update({ where: { id: request.id }, data: { payload: JSON.parse(JSON.stringify({ ...payload, awaitingComplement: true, complementDocumentCodes: input.documentCodes })) as Prisma.InputJsonValue } });
     await tx.processEvent.create({ data: { processId: process.id, employeeId: context.user.employeeId, departmentId: process.currentDepartmentId, eventType: "FUNCTIONAL_COMPLEMENT_REQUESTED", description: input.instructions } });
     await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.processUpdated, targetType: "EMPLOYEE_PORTAL_REQUEST", targetId: request.id });
   });
 }
 
 export async function submitFunctionalComplement(context: AppContext, raw: unknown) {
-  const input = z.object({ requestId: z.string().min(1), description: z.string().trim().min(10).max(4000), requestKey: z.string().min(1).max(160) }).strict().parse(raw);
+  const input = z.object({ requestId: z.string().min(1), description: z.string().trim().min(10).max(4000), requestKey: z.string().min(1).max(160), attachments: z.array(z.object({ code: z.string(), uploadEventId: z.string() }).strict()).max(20).default([]) }).strict().parse(raw);
+  const fingerprint = createHash("sha256").update(JSON.stringify({ description: input.description, attachments: [...input.attachments].sort((a, b) => a.code.localeCompare(b.code)) })).digest("hex");
   return context.prisma.$transaction(async tx => {
     await tx.$queryRaw`SELECT id FROM "HrPortalRequest" WHERE id=${input.requestId} FOR UPDATE`;
     const request = await tx.hrPortalRequest.findFirst({ where: { id: input.requestId, employeeId: context.user.employeeId || "__SEM_VINCULO__" } });
     if (!request || !await tx.employee.findFirst({ where: { id: request.employeeId, isActive: true } })) throw new AccessError("Requerimento indisponível.", 403);
     const payload = functionalRequestPayloadSchema.parse(request.payload);
     const previous = await tx.processEvent.findFirst({ where: { processId: payload.processId, eventType: "FUNCTIONAL_COMPLEMENT", metadata: input.requestKey } });
-    if (previous) { if (previous.description !== input.description) throw new Error("Complemento repetido com dados diferentes."); return; }
+    if (previous) { if (previous.description !== (input.attachments.length ? `${input.description}\nReferência documental: ${fingerprint}` : input.description)) throw new Error("Complemento repetido com dados diferentes."); return; }
     const process = await tx.process.findUniqueOrThrow({ where: { id: payload.processId } });
     if (!payload.awaitingComplement || request.status !== "EM_ANALISE" || ["Arquivado", "Cancelado", "Concluído"].includes(process.status)) throw new Error("Não há pendência aberta para complementação.");
-    await tx.processEvent.create({ data: { processId: payload.processId, employeeId: request.employeeId, eventType: "FUNCTIONAL_COMPLEMENT", description: input.description, metadata: input.requestKey } });
-    await tx.hrPortalRequest.update({ where: { id: request.id }, data: { payload: JSON.parse(JSON.stringify({ ...payload, awaitingComplement: false })) as Prisma.InputJsonValue } });
+    if (new Set(input.attachments.map(document => document.code)).size !== input.attachments.length || payload.complementDocumentCodes.some(code => !input.attachments.some(document => document.code === code))) throw new Error("Envie todos os documentos solicitados, sem repetir códigos.");
+    const attachments = [...payload.attachments];
+    for (const reference of [...input.attachments].sort((a, b) => a.uploadEventId.localeCompare(b.uploadEventId))) {
+      if (!payload.configuration.requiredDocuments.some(document => document.code === reference.code)) throw new Error("Documento não configurado para o serviço.");
+      await tx.$queryRaw`SELECT id FROM "HrIntegrationEvent" WHERE id=${reference.uploadEventId} FOR UPDATE`;
+      const upload = await tx.hrIntegrationEvent.findFirst({ where: { id: reference.uploadEventId, eventType: "ANEXO_FUNCIONAL_RECEBIDO", domain: "PORTAL", status: "RECEBIDO" } });
+      const document = z.object({ employeeId: z.string(), actorId: z.string(), targetRequestId: z.string(), code: z.string(), documentId: z.string() }).parse(upload?.payload);
+      if (document.employeeId !== request.employeeId || document.actorId !== context.user.id || document.targetRequestId !== request.id || document.code !== reference.code || upload?.result) throw new AccessError("Anexo não pertence a este complemento.", 403);
+      if (!await tx.documentVersion.findFirst({ where: { documentId: document.documentId, versionNumber: 1, status: { in: ["FINAL", "SIGNED"] }, document: { status: { in: ["Válido", "Assinado"] } } }, select: { id: true } })) throw new Error("Comprovação indisponível na origem GED.");
+      attachments.push({ code: document.code, documentId: document.documentId });
+      await tx.processDocument.create({ data: { processId: process.id, documentId: document.documentId, employeeId: request.employeeId, purpose: "REQUERIMENTO_FUNCIONAL" } });
+      await tx.hrIntegrationEvent.update({ where: { id: upload!.id }, data: { status: "PROCESSADO", result: { requestId: request.id, complementKey: input.requestKey } } });
+    }
+    await tx.processEvent.create({ data: { processId: payload.processId, employeeId: request.employeeId, eventType: "FUNCTIONAL_COMPLEMENT", description: input.attachments.length ? `${input.description}\nReferência documental: ${fingerprint}` : input.description, metadata: input.requestKey } });
+    await tx.hrPortalRequest.update({ where: { id: request.id }, data: { payload: JSON.parse(JSON.stringify({ ...payload, attachments, awaitingComplement: false, complementDocumentCodes: [] })) as Prisma.InputJsonValue } });
     await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.processUpdated, targetType: "EMPLOYEE_PORTAL_REQUEST", targetId: request.id });
   });
 }
@@ -159,6 +177,7 @@ export async function decideFunctionalRequest(context: AppContext, raw: unknown)
     }
     if (input.status === "DEFERIDA" && payload.configuration.operation === "AJUSTE_PONTO") {
       const values = payload.values;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:contract:${values.contractId}`}))`;
       await tx.$queryRaw`SELECT id FROM "AttendanceRecord" WHERE id=${values.attendanceId} FOR UPDATE`;
       const attendance = await tx.attendanceRecord.findFirst({ where: { id: values.attendanceId, employeeId: request.employeeId } });
       const contract = await tx.hrEmploymentContract.findFirst({ where: { id: values.contractId, employeeId: request.employeeId }, include: { revisions: true } });
@@ -166,11 +185,12 @@ export async function decideFunctionalRequest(context: AppContext, raw: unknown)
       const historical = resolveContractRevision(contract, contract.revisions, { start: attendance.date, end: attendance.date }).contract;
       if (attendance.date < historical.admittedAt || historical.endsAt && attendance.date > historical.endsAt) throw new Error("Registro fora do período do vínculo.");
       const competence = `${String(attendance.date.getUTCMonth() + 1).padStart(2, "0")}/${attendance.date.getUTCFullYear()}`;
-      if (await tx.hrPayrollStatement.count({ where: { contract: { employeeId: request.employeeId }, run: { status: "FECHADA", payroll: { competence } } } }) || await tx.hrMovement.count({ where: { sourceKey: `PONTO:HORAS_EXTRAS:${attendance.id}` } })) throw new Error("Ponto integrado ou competência fechada exige conciliação prévia dos reflexos pelo RH.");
+      if (await tx.hrPayrollStatement.count({ where: { contract: { employeeId: request.employeeId }, run: { status: "FECHADA", payroll: { competence } } } }) || await tx.payroll.count({ where: { competence, status: { in: ["Fechada", "Paga"] }, items: { some: { employeeId: request.employeeId } } } })) throw new Error("Competência fechada exige reabertura/ajuste formal na origem RH/Folha antes da alteração do ponto.");
       const update = z.object({ status: z.enum(["Presente", "Falta", "Atraso", "Abonada"]), entryTime: z.union([z.iso.datetime({ offset: true }), z.literal("")]), exitTime: z.union([z.iso.datetime({ offset: true }), z.literal("")]), hoursWorked: z.coerce.number().min(0).max(24), extraHours: z.coerce.number().min(0).max(24), bankHours: z.coerce.number().min(-24).max(24) }).parse(values);
       const entryTime = update.entryTime ? new Date(update.entryTime) : null, exitTime = update.exitTime ? new Date(update.exitTime) : null;
       if (exitTime && (!entryTime || exitTime <= entryTime || exitTime.getTime() - entryTime.getTime() > 86400000)) throw new Error("Intervalo de marcações inválido.");
       const after = await tx.attendanceRecord.update({ where: { id: attendance.id }, data: { ...update, entryTime, exitTime } });
+      await reconcileAttendanceSources(tx, context.user.id, request.id, attendance, after, historical);
       await tx.processEvent.create({ data: { processId: process.id, eventType: "FUNCTIONAL_ATTENDANCE_AUDIT", employeeId: context.user.employeeId, metadata: JSON.stringify({ requestId: request.id, before: attendance, after }) } });
       execution = "EXECUTADA"; reference = attendance.id;
     }

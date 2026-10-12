@@ -21,6 +21,7 @@ export const portalServidorNavigation: ModuleNavGroup[] = [
     title: "Consultas",
     items: [
       { title: "Emissões funcionais", href: "/portal-servidor/emissoes", icon: "fileText" },
+      { title: "Documentos e declarações", href: "/portal-servidor/documentos-funcionais", icon: "fileSignature" },
       { title: "Meus relatórios", href: "/portal-servidor/relatorios", icon: "fileText" },
       {
         title: "Documentos e assinaturas",

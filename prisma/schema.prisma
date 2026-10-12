@@ -14268,6 +14268,7 @@ model FleetUnit {
   expenses          FleetExpense[]
   documents         FleetDocument[]
   occurrences       FleetOccurrence[]
+  serviceAuthorizations FleetServiceAuthorization[]
   assetEvents       FleetAssetEvent[]
   createdById       String
   createdAt         DateTime           @default(now())
@@ -16736,6 +16737,7 @@ model FleetServiceAuthorization {
   id           String   @id @default(cuid())
   code         String   @unique
   unitId       String
+  unit         FleetUnit @relation(fields: [unitId], references: [id])
   supplierName String
   supplierCnpj String?
   description  String

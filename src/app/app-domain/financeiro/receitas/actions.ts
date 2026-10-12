@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { FinanceError, collectLaunchedRevenue, createRevenue, launchRevenue, redistributeRevenueResourceSource, reverseRevenue, type RevenueClassification } from "@/lib/financeiro";
-import { assertBudgetUnitAccess, getTenantContextForModuleOperation, type AppContext } from "@/lib/platform/tenant-context";
+import { assertBudgetUnitAccess, getTenantContextForModuleOperation, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -38,13 +38,17 @@ function revalidateRevenuePaths() {
   revalidatePath("/financeiro/relatorios");
 }
 
+function revenueActor(context: AppContext) {
+  return { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds };
+}
+
 export async function launchRevenueAction(data: z.infer<typeof revenueSchema>): Promise<ActionResult> {
   const parsed = revenueSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados da receita invalidos." };
   try {
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     assertBudgetUnitAccess(context.user, parsed.data.budgetUnitId);
-    await launchRevenue(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, {
+    await launchRevenue(context.prisma, revenueActor(context), {
       ...parsed.data,
       date: parseDate(parsed.data.date),
       sourceModule: "FINANCEIRO",
@@ -61,7 +65,7 @@ export async function collectRevenueAction(data: { revenueId: string; date: stri
   try {
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     await assertAccountAccess(context, data.bankAccountId);
-    await collectLaunchedRevenue(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, { revenueId: data.revenueId, date: parseDate(data.date), bankAccountId: data.bankAccountId, idempotencyKey: `FINANCEIRO:MANUAL_REVENUE:COLLECT:${randomUUID()}` });
+    await collectLaunchedRevenue(context.prisma, revenueActor(context), { revenueId: data.revenueId, date: parseDate(data.date), bankAccountId: data.bankAccountId, idempotencyKey: `FINANCEIRO:MANUAL_REVENUE:COLLECT:${randomUUID()}` });
     revalidateRevenuePaths();
     return {};
   } catch (error) { return { error: message(error) }; }
@@ -73,7 +77,7 @@ export async function recordRevenueCollectionAction(data: z.infer<typeof revenue
   try {
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     await assertAccountAccess(context, parsed.data.bankAccountId);
-    await createRevenue(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, {
+    await createRevenue(context.prisma, revenueActor(context), {
       ...parsed.data,
       date: parseDate(parsed.data.date),
       sourceModule: "FINANCEIRO",
@@ -89,7 +93,7 @@ export async function recordRevenueCollectionAction(data: z.infer<typeof revenue
 export async function reverseRevenueAction(data: { revenueId: string; date: string; justification: string }): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "delete");
-    await reverseRevenue(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, { revenueId: data.revenueId, date: parseDate(data.date), justification: data.justification });
+    await reverseRevenue(context.prisma, revenueActor(context), { revenueId: data.revenueId, date: parseDate(data.date), justification: data.justification });
     revalidateRevenuePaths();
     return {};
   } catch (error) { return { error: message(error) }; }
@@ -98,7 +102,7 @@ export async function reverseRevenueAction(data: { revenueId: string; date: stri
 export async function redistributeRevenueResourceSourceAction(data: { revenueId: string; date: string; value: number; destinationResourceSourceId: string; history: string }): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
-    await redistributeRevenueResourceSource(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, {
+    await redistributeRevenueResourceSource(context.prisma, revenueActor(context), {
       ...data,
       date: parseDate(data.date),
       idempotencyKey: `FINANCEIRO:MANUAL_REVENUE:REDISTRIBUTION:${randomUUID()}`,

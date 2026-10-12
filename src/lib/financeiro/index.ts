@@ -1873,11 +1873,13 @@ export async function recordConfirmedRevenue(
     tx.resourceSource.findUnique({ where: { id: input.resourceSourceId }, select: { id: true } }),
   ]);
   if (!bankAccount?.isActive) throw new FinanceError("A receita exige uma conta bancária ativa.");
+  if (bankAccount.budgetUnitId) assertActorBudgetUnit(actor, bankAccount.budgetUnitId);
   const year = await financialYearForPosting(tx, input.date, bankAccount.budgetUnitId);
   // A conta arrecadadora pode receber recursos de mais de uma fonte; its source is only a default routing hint.
   if (!nature || !source) throw new FinanceError("Natureza e fonte da receita devem estar configuradas.");
   const revenue = await tx.revenue.create({
-    data: { date: input.date, valueDecimal: value, value: legacyMoney(value), financialYearId: year.id, revenueNatureId: input.revenueNatureId, resourceSourceId: input.resourceSourceId, bankAccountId: input.bankAccountId, classification: input.classification ?? "ORCAMENTARIA", collectionDate: input.date, history: input.history?.trim() || undefined, sourceModule: input.sourceModule.trim(), sourceType: input.sourceType.trim(), sourceId: input.sourceId?.trim() || undefined, eventType: input.eventType.trim(), idempotencyKey: input.idempotencyKey, integrationEventId: input.integrationEventId, bankTransactionId: input.bankTransactionId, bankAccountExternalId: input.bankAccountExternalId, collectionReference: input.collectionReference, status: "Arrecadada", stage: "ARRECADADA" },
+    // Persist the originating UG independently of the collecting bank account.
+    data: { date: input.date, valueDecimal: value, value: legacyMoney(value), financialYearId: year.id, budgetUnitId: bankAccount.budgetUnitId, revenueNatureId: input.revenueNatureId, resourceSourceId: input.resourceSourceId, bankAccountId: input.bankAccountId, classification: input.classification ?? "ORCAMENTARIA", collectionDate: input.date, history: input.history?.trim() || undefined, sourceModule: input.sourceModule.trim(), sourceType: input.sourceType.trim(), sourceId: input.sourceId?.trim() || undefined, eventType: input.eventType.trim(), idempotencyKey: input.idempotencyKey, integrationEventId: input.integrationEventId, bankTransactionId: input.bankTransactionId, bankAccountExternalId: input.bankAccountExternalId, collectionReference: input.collectionReference, status: "Arrecadada", stage: "ARRECADADA" },
   });
   const movement = await tx.treasuryMovement.create({
     data: { date: input.date, type: "Revenue", direction: "Entrada", valueDecimal: value, history: revenue.history, bankAccountId: input.bankAccountId, financialYearId: year.id, revenueId: revenue.id, sourceModule: input.sourceModule.trim(), sourceType: input.sourceType.trim(), sourceId: input.sourceId?.trim() || undefined, eventType: input.eventType.trim(), idempotencyKey: `${input.idempotencyKey}:TREASURY` },
@@ -1918,7 +1920,10 @@ export async function launchRevenue(
   if (input.budgetUnitId) assertActorBudgetUnit(actor, input.budgetUnitId);
   return db.$transaction(async (tx) => {
     const existing = await tx.revenue.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
-    if (existing) return existing;
+    if (existing) {
+      if (existing.budgetUnitId !== (input.budgetUnitId ?? null) || !existing.valueDecimal?.equals(value) || existing.revenueNatureId !== input.revenueNatureId || existing.resourceSourceId !== input.resourceSourceId || existing.launchDate?.getTime() !== input.date.getTime()) throw new FinanceError("Receita já lançada com outros dados.");
+      return existing;
+    }
     const [year, nature, source] = await Promise.all([
       financialYearForPosting(tx, input.date, input.budgetUnitId),
       tx.revenueNature.findUnique({ where: { id: input.revenueNatureId }, select: { id: true } }),
@@ -1932,6 +1937,7 @@ export async function launchRevenue(
         valueDecimal: value,
         value: legacyMoney(value),
         financialYearId: year.id,
+        budgetUnitId: input.budgetUnitId,
         revenueNatureId: input.revenueNatureId,
         resourceSourceId: input.resourceSourceId,
         classification: input.classification ?? "ORCAMENTARIA",
@@ -1974,15 +1980,19 @@ export async function collectLaunchedRevenue(
     await lockRevenue(tx, input.revenueId);
     const revenue = await tx.revenue.findUnique({ where: { id: input.revenueId }, include: { treasuryMovement: true } });
     if (!revenue) throw new FinanceError("Receita nao encontrada.");
+    if (revenue.budgetUnitId) assertActorBudgetUnit(actor, revenue.budgetUnitId);
+    else if (actor.allowedBudgetUnitIds) throw new FinanceError("Receita legada sem unidade gestora conciliada.");
     if (revenue.stage !== "LANCADA" || revenue.treasuryMovement) throw new FinanceError("Somente receitas lancadas e ainda nao arrecadadas podem ser efetivadas.");
     const account = await tx.bankAccount.findUnique({ where: { id: input.bankAccountId }, select: { isActive: true, resourceSourceId: true, accountingPlanId: true, budgetUnitId: true } });
     const year = await financialYearForPosting(tx, input.date, account?.budgetUnitId);
     if (year.id !== revenue.financialYearId) throw new FinanceError("A arrecadacao deve ocorrer no mesmo exercicio financeiro da receita lancada.");
     if (!account?.isActive) throw new FinanceError("A arrecadação exige uma conta bancária ativa.");
+    if (account.budgetUnitId) assertActorBudgetUnit(actor, account.budgetUnitId);
+    if (revenue.budgetUnitId && revenue.budgetUnitId !== account.budgetUnitId) throw new FinanceError("A conta arrecadadora deve pertencer à unidade gestora do lançamento da receita.");
     const value = requiredDecimal(revenue.valueDecimal, "Revenue.valueDecimal");
     const collected = await tx.revenue.update({
       where: { id: revenue.id },
-      data: { date: input.date, collectionDate: input.date, bankAccountId: input.bankAccountId, status: "Arrecadada", stage: "ARRECADADA" },
+      data: { date: input.date, collectionDate: input.date, bankAccountId: input.bankAccountId, budgetUnitId: revenue.budgetUnitId ?? account.budgetUnitId, status: "Arrecadada", stage: "ARRECADADA" },
     });
     const movement = await tx.treasuryMovement.create({
       data: { date: input.date, type: "Revenue", direction: "Entrada", valueDecimal: value, history: collected.history, bankAccountId: input.bankAccountId, financialYearId: year.id, revenueId: collected.id, sourceModule: collected.sourceModule, sourceType: collected.sourceType, sourceId: collected.sourceId ?? collected.id, eventType: "REVENUE_COLLECTED", idempotencyKey: `${input.idempotencyKey}:TREASURY` },
@@ -2020,6 +2030,8 @@ export async function reverseRevenue(
     });
     if (!revenue) throw new FinanceError("Receita nao encontrada.");
     if (revenue.stage !== "ARRECADADA" || !revenue.treasuryMovement || revenue.reversal) throw new FinanceError("Somente receitas arrecadadas sem estorno anterior podem ser estornadas.");
+    if (revenue.budgetUnitId) assertActorBudgetUnit(actor, revenue.budgetUnitId);
+    else if (actor.allowedBudgetUnitIds) throw new FinanceError("Receita legada sem unidade gestora conciliada.");
     if (revenue.taxIntegration) throw new FinanceError("A receita originada de pagamento tributario deve ser estornada pelo fluxo tributario proprio.");
     if (revenue.resourceRedistributions.length) throw new FinanceError("A receita possui redistribuicoes por fonte. Regularize-as antes do estorno.");
     const value = requiredDecimal(revenue.valueDecimal, "Revenue.valueDecimal");
@@ -2072,8 +2084,10 @@ export async function redistributeRevenueResourceSource(
       if (existing) return existing;
     }
     await lockRevenue(tx, input.revenueId);
-    const revenue = await tx.revenue.findUnique({ where: { id: input.revenueId }, select: { id: true, stage: true, valueDecimal: true, resourceSourceId: true, financialYearId: true, bankAccountId: true, collectionDate: true, revenueNatureId: true } });
+    const revenue = await tx.revenue.findUnique({ where: { id: input.revenueId }, select: { id: true, budgetUnitId: true, stage: true, valueDecimal: true, resourceSourceId: true, financialYearId: true, bankAccountId: true, collectionDate: true, revenueNatureId: true } });
     if (!revenue || revenue.stage !== "ARRECADADA") throw new FinanceError("Somente receitas arrecadadas podem ter fonte redistribuida.");
+    if (revenue.budgetUnitId) assertActorBudgetUnit(actor, revenue.budgetUnitId);
+    else if (actor.allowedBudgetUnitIds) throw new FinanceError("Receita legada sem unidade gestora conciliada.");
     if (revenue.resourceSourceId === input.destinationResourceSourceId) throw new FinanceError("A fonte de destino deve ser diferente da fonte de origem.");
     const [destination, redistributed, bankAccount] = await Promise.all([
       tx.resourceSource.findUnique({ where: { id: input.destinationResourceSourceId }, select: { id: true } }),
@@ -2430,15 +2444,23 @@ export async function postAccountingTransactionInTransaction(
   if (!accountingScope && yearScope?.governmentEntityId) throw new FinanceError("O exercício da entidade exige lançamento com entidade e unidade gestora identificadas.");
   if (input.idempotencyKey) {
     const existing = await tx.accountingTransaction.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
-    if (existing) return existing;
+    if (existing) {
+      const entries = await tx.accountingEntry.findMany({ where: { transactionId: existing.id }, select: { accountId: true, type: true, valueDecimal: true } });
+      const expected = input.lines.map((line) => `${line.accountId}:${line.type}:${money(line.value).toFixed(2)}`).sort();
+      const persisted = entries.map((entry) => `${entry.accountId}:${entry.type}:${entry.valueDecimal?.toFixed(2) ?? "NULL"}`).sort();
+      if (existing.financialYearId !== input.financialYearId || existing.governmentEntityId !== (accountingScope?.governmentEntityId ?? null) || existing.budgetUnitId !== (accountingScope?.budgetUnitId ?? null) || existing.date.getTime() !== input.date.getTime() || existing.history !== input.history.trim() || existing.sourceModule !== (input.sourceModule?.trim() || "MANUAL") || existing.sourceType !== (input.sourceType?.trim() || "ACCOUNTING_TRANSACTION") || existing.sourceId !== (input.sourceId?.trim() || null) || existing.eventType !== (input.eventType?.trim() || "MANUAL_POSTING") || existing.reversalOfId !== (input.reversalOfId ?? null) || JSON.stringify(expected) !== JSON.stringify(persisted)) throw new FinanceError("Chave contábil já registrada com outros dados ou escopo.");
+      return existing;
+    }
   }
   if (input.sourceModule === "PLANEJAMENTO" && input.sourceType === "PLANNING_BUDGET" && /^PLANNING_(BUDGET_OPENING_(REVENUE|EXPENSE)|(REVENUE|EXPENSE)_(INCREASE|DECREASE))$/.test(input.eventType ?? "")) {
     const year = await tx.financialYear.findUniqueOrThrow({ where: { id: input.financialYearId } });
     if (!["Preparação", "Aberto"].includes(year.status) || input.date < year.startDate || input.date > year.endDate || input.date.getUTCFullYear() !== year.year) throw new FinanceError("Exercício indisponível para contabilização orçamentária de Planejamento.");
   } else await assertFinancialYearOpen(tx, input.financialYearId, input.date);
   await assertAccountingPeriodOpen(tx, input.financialYearId, input.date);
-  const accounts = await tx.accountingPlan.findMany({ where: { id: { in: input.lines.map((line) => line.accountId) } }, select: { id: true } });
+  const accounts = await tx.accountingPlan.findMany({ where: { id: { in: input.lines.map((line) => line.accountId) } }, select: { id: true, code: true } });
   if (accounts.length !== new Set(input.lines.map((line) => line.accountId)).size) throw new FinanceError("Uma ou mais contas contabeis nao foram encontradas.");
+  const childAccount = await tx.accountingPlan.findFirst({ where: { OR: accounts.map((account) => ({ code: { startsWith: `${account.code}.` } })) }, select: { id: true } });
+  if (childAccount) throw new FinanceError("A postagem exige conta analítica de último nível; conta sintética com desdobramentos não aceita partidas.");
   const transaction = await tx.accountingTransaction.create({
     data: {
       ...(accountingScope ?? {}),

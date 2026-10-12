@@ -10,6 +10,7 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
   const f = await createPlanningAccountingFixture("EXECUTIVE", { year });
   try {
     const models = ["Expense", "Supplier", "Company", "Creditor", "Commitment", "CommitmentMovement", "Settlement", "Payment", "FinancialDocument", "SettlementRetention", "PaymentRetention", "WithholdingPayable", "RetentionRule", "Revenue", "RevenueReversal", "BankAccount", "TreasuryMovement", "TaxRevenueIntegrationEvent", "RevenueResourceRedistribution", "PurchaseRequest", "PurchaseRequestItem", "PurchaseRequestItemBudgetAllocation", "PurchaseProcess", "PurchaseProcessItem", "PurchaseProcessItemOrigin", "Contract", "ProcurementLifecycleEvent", "TaxFinancialMapping", "TaxAssessment", "TaxGuide", "TaxPayment", "TaxAuditLog", "TaxBenefitRule", "TaxBenefitGrant"];
+    models.push("TaxIntegrationEvent", "TaxRegistryEntry", "Taxpayer", "TaxDocumentSequence");
     const enums = new Set<string>();
     for (const name of models) {
       const model = Prisma.dmmf.datamodel.models.find((item) => item.name === name);
@@ -51,6 +52,8 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
       CREATE UNIQUE INDEX ON "ProcurementLifecycleEvent" ("idempotencyKey");
       CREATE UNIQUE INDEX ON "TaxFinancialMapping" ("taxId");
       CREATE UNIQUE INDEX ON "TaxPayment" ("idempotencyKey");
+      CREATE UNIQUE INDEX ON "TaxIntegrationEvent" ("idempotencyKey");
+      CREATE UNIQUE INDEX ON "TaxDocumentSequence" (year, "documentType");
       CREATE UNIQUE INDEX ON "TaxRevenueIntegrationEvent" ("taxPaymentId");
       CREATE UNIQUE INDEX ON "TaxRevenueIntegrationEvent" ("revenueId");
       CREATE UNIQUE INDEX ON "TaxRevenueIntegrationEvent" ("idempotencyKey");

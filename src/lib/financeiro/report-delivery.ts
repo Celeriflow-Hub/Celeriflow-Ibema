@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
+import { financialUnitFilter, resolveFinancialReportScope } from "./report-scope";
 import {
   generateBalancoOrcamentario,
   generateBalancoPatrimonial,
@@ -165,7 +166,12 @@ export async function generateInternalReportDataset(
   options: { month?: number } = {},
   scope: { governmentEntityId?: string; budgetUnitIds?: string[] } = {},
 ): Promise<InternalReportDataset> {
-  const filter = { financialYearId, ...scope };
+  const resolvedScope = await resolveFinancialReportScope(db, financialYearId, scope);
+  if (resolvedScope.year !== year) throw new Error("O ano do relatório diverge do exercício financeiro.");
+  const filter = { financialYearId, ...resolvedScope };
+  const bankScope = financialUnitFilter(resolvedScope);
+  const entityReports = ["PPA", "LDO", "LOA", "MBA", "PPA_ANEXO_METAS", "LDO_ANEXO_PRIORIDADES_RISCOS", "LOA_ANEXO_PROGRAMACAO"];
+  if (entityReports.includes(reportType) && !resolvedScope.fullEntity) throw new Error("Este demonstrativo contém totais da entidade e exige acesso a todas as suas unidades gestoras.");
 
   switch (reportType) {
     case "DIARIO": {
@@ -230,7 +236,7 @@ export async function generateInternalReportDataset(
     }
     case "PPA": {
       const plans = await db.multiYearPlan.findMany({
-        where: { startYear: { lte: year }, endYear: { gte: year } },
+        where: { startYear: { lte: year }, endYear: { gte: year }, ...(filter.governmentEntityId ? { planningInstrument: { is: { governmentEntityId: filter.governmentEntityId } } } : {}) },
         include: {
           programs: {
             orderBy: { code: "asc" },
@@ -261,7 +267,7 @@ export async function generateInternalReportDataset(
       ] };
     }
     case "CMD": {
-      const laws = await db.annualBudgetLaw.findMany({ where: { financialYearId }, include: { cmdSchedules: { orderBy: [{ budgetUnitId: "asc" }, { month: "asc" }] } }, orderBy: { publicationDate: "asc" } });
+      const laws = await db.annualBudgetLaw.findMany({ where: { financialYearId }, include: { cmdSchedules: { where: filter.budgetUnitIds ? { budgetUnitId: { in: filter.budgetUnitIds } } : {}, orderBy: [{ budgetUnitId: "asc" }, { month: "asc" }] } }, orderBy: { publicationDate: "asc" } });
       const unitIds = [...new Set(laws.flatMap((law) => law.cmdSchedules.map((schedule) => schedule.budgetUnitId)))];
       const units = await db.budgetUnit.findMany({ where: { id: { in: unitIds } }, select: { id: true, code: true, name: true } });
       const unitsById = new Map(units.map((unit) => [unit.id, unit]));
@@ -276,7 +282,7 @@ export async function generateInternalReportDataset(
     }
     case "PPA_ANEXO_METAS": {
       const plans = await db.multiYearPlan.findMany({
-        where: { startYear: { lte: year }, endYear: { gte: year } },
+        where: { startYear: { lte: year }, endYear: { gte: year }, ...(filter.governmentEntityId ? { planningInstrument: { is: { governmentEntityId: filter.governmentEntityId } } } : {}) },
         include: {
           programs: {
             orderBy: { code: "asc" },
@@ -313,7 +319,7 @@ export async function generateInternalReportDataset(
         generateBalancoOrcamentario(db, filter),
         generateBalancoPatrimonial(db, filter),
         db.annualAccountingClose.findUnique({ where: { financialYearId }, select: { status: true, preparedAt: true, closedAt: true } }),
-        db.payableCarryForward.findMany({ where: { originFinancialYearId: financialYearId }, select: { type: true, status: true, valueDecimal: true }, orderBy: { type: "asc" } }),
+        db.payableCarryForward.findMany({ where: { originFinancialYearId: financialYearId, ...(filter.budgetUnitIds ? { commitment: { appropriation: { budgetUnitId: { in: filter.budgetUnitIds } } } } : {}) }, select: { type: true, status: true, valueDecimal: true }, orderBy: { type: "asc" } }),
       ]);
       return {
         title: "PCA - Prestação de Contas Anual interna",
@@ -334,7 +340,7 @@ export async function generateInternalReportDataset(
     }
     case "CONCILIACAO_TESOURARIA": {
       const reconciliations = await db.bankReconciliation.findMany({
-        where: { date: { gte: new Date(Date.UTC(year, 0, 1)), lte: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999)) } },
+        where: { bankAccount: bankScope, date: { gte: new Date(Date.UTC(year, 0, 1)), lte: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999)) } },
         include: { bankAccount: { select: { bankName: true, agency: true, accountNumber: true, accountType: true, budgetUnit: { select: { code: true, name: true } }, resourceSource: { select: { code: true, name: true } } } } },
         orderBy: [{ date: "asc" }, { periodEnd: "asc" }],
       });
@@ -353,7 +359,7 @@ export async function generateInternalReportDataset(
     case "BALANCO_FINANCEIRO":
     case "FLUXO_CAIXA_ANUAL": {
       const movements = await db.treasuryMovement.findMany({
-        where: { financialYearId, status: "Confirmado" },
+        where: { financialYearId, status: "Confirmado", bankAccount: bankScope },
         include: { bankAccount: { select: { bankName: true, agency: true, accountNumber: true, budgetUnit: { select: { code: true, name: true } }, resourceSource: { select: { code: true, name: true } } } } },
         orderBy: [{ date: "asc" }, { createdAt: "asc" }],
       });
@@ -394,7 +400,8 @@ export function reportDatasetCsv(dataset: InternalReportDataset) {
 
 export async function generateFinancialReportCsv(db: PrismaClient, reportType: InternalReportType, financialYearId: string) {
   // This compatibility API predates the explicit year parameter used by the route.
-  const dataset = await generateInternalReportDataset(db, reportType, financialYearId, new Date().getUTCFullYear());
+  const scope = await resolveFinancialReportScope(db, financialYearId);
+  const dataset = await generateInternalReportDataset(db, reportType, financialYearId, scope.year);
   return reportDatasetCsv(dataset);
 }
 

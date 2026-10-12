@@ -13,6 +13,7 @@ import {
 import { generatePCA, generateBalancoFinanceiro } from "@/lib/financeiro/relatorios-legais";
 import { generateBudgetChangesComparison } from "@/lib/financeiro/planejamento";
 import { generateTreasuryBankStatement } from "@/lib/financeiro";
+import { resolveFinancialReportScope } from "@/lib/financeiro/report-scope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,8 +27,19 @@ export async function GET(request: NextRequest) {
     if (!documentType) {
       return NextResponse.json({ error: "Tipo de documento não informado." }, { status: 400 });
     }
-    if (["PCA", "BALANCO_FINANCEIRO", "COMPARATIVO_ORCAMENTO"].includes(documentType) && !isSystemAdministrator(context.user)) {
-      throw new AccessError("A impressão de demonstrativos consolidados é restrita ao administrador do sistema.", 403);
+    let reportYear: { id: string; year: number } | undefined;
+    const reportScope = { budgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds };
+    if (["PCA", "BALANCO_FINANCEIRO", "COMPARATIVO_ORCAMENTO"].includes(documentType)) {
+      const financialYearId = request.nextUrl.searchParams.get("financialYearId");
+      const governmentEntityId = request.nextUrl.searchParams.get("governmentEntityId");
+      const year = Number(request.nextUrl.searchParams.get("year") ?? 2026);
+      if (!Number.isInteger(year) || year < 1900 || year > 2200) return NextResponse.json({ error: "Ano inválido." }, { status: 400 });
+      const candidates = await context.prisma.financialYear.findMany({ where: financialYearId ? { id: financialYearId } : { year, ...(governmentEntityId ? { governmentEntityId } : {}) }, select: { id: true, year: true }, take: 2 });
+      if (!candidates.length) throw new AccessError("Exercício financeiro não encontrado.", 404);
+      if (candidates.length !== 1) return NextResponse.json({ error: "Selecione a entidade ou informe financialYearId para imprimir este demonstrativo." }, { status: 400 });
+      reportYear = candidates[0];
+      const resolved = await resolveFinancialReportScope(context.prisma, reportYear.id, reportScope);
+      if (!resolved.fullEntity) throw new AccessError("O demonstrativo exige acesso a todas as unidades gestoras da entidade.", 403);
     }
 
     let html = "";
@@ -146,12 +158,11 @@ export async function GET(request: NextRequest) {
       }
 
       case "PCA": {
-        const yearParam = request.nextUrl.searchParams.get("year");
-        const year = yearParam ? parseInt(yearParam, 10) : 2026;
-        const financialYear = await context.prisma.financialYear.findFirst({ where: { year, governmentEntityId: null } });
+        const financialYear = reportYear;
+        const year = financialYear?.year ?? 2026;
         if (!financialYear) return NextResponse.json({ error: "Exercício financeiro não encontrado." }, { status: 404 });
 
-        const pcaData = await generatePCA(context.prisma, { financialYearId: financialYear.id });
+        const pcaData = await generatePCA(context.prisma, { financialYearId: financialYear.id, ...reportScope });
         const demos = pcaData.demonstrativos;
 
         html = generatePcaPrintHtml({
@@ -187,12 +198,11 @@ export async function GET(request: NextRequest) {
       }
 
       case "BALANCO_FINANCEIRO": {
-        const yearParam = request.nextUrl.searchParams.get("year");
-        const year = yearParam ? parseInt(yearParam, 10) : 2026;
-        const financialYear = await context.prisma.financialYear.findFirst({ where: { year, governmentEntityId: null } });
+        const financialYear = reportYear;
+        const year = financialYear?.year ?? 2026;
         if (!financialYear) return NextResponse.json({ error: "Exercício financeiro não encontrado." }, { status: 404 });
 
-        const bf = await generateBalancoFinanceiro(context.prisma, { financialYearId: financialYear.id });
+        const bf = await generateBalancoFinanceiro(context.prisma, { financialYearId: financialYear.id, ...reportScope });
 
         html = generateBalancoFinanceiroPrintHtml({
           year,
@@ -203,9 +213,7 @@ export async function GET(request: NextRequest) {
       }
 
       case "COMPARATIVO_ORCAMENTO": {
-        const yearParam = request.nextUrl.searchParams.get("year");
-        const year = yearParam ? parseInt(yearParam, 10) : 2026;
-        const financialYear = await context.prisma.financialYear.findFirst({ where: { year, governmentEntityId: null } });
+        const financialYear = reportYear;
         if (!financialYear) return NextResponse.json({ error: "Exercício financeiro não encontrado." }, { status: 404 });
 
         const comp = await generateBudgetChangesComparison(context.prisma, financialYear.id);

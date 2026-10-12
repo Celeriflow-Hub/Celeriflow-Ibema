@@ -4335,6 +4335,8 @@ model BudgetUnit {
   planningEntityUnit PlanningEntityUnit?
   accountingTransactions AccountingTransaction[]
   id            String      @id @default(cuid())
+  revenues      Revenue[]
+  internalControlPlans InternalControlPlan[]
   code          String      @unique
   name          String
   secretariatId String
@@ -4468,6 +4470,8 @@ model Revenue {
   valueDecimal            Decimal?                        @db.Decimal(18, 2)
   financialYearId         String?
   financialYear           FinancialYear?                  @relation(fields: [financialYearId], references: [id])
+  budgetUnitId            String?
+  budgetUnit              BudgetUnit?                     @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
   revenueNatureId         String
   revenueNature           RevenueNature                   @relation(fields: [revenueNatureId], references: [id])
   resourceSourceId        String
@@ -4500,6 +4504,7 @@ model Revenue {
   updatedAt               DateTime                        @updatedAt
 
   @@index([financialYearId, stage, date])
+  @@index([budgetUnitId, financialYearId, stage, date])
   @@index([resourceSourceId, stage])
   @@index([bankTransactionId])
   @@index([integrationEventId])
@@ -7551,12 +7556,15 @@ model InternalControlPlan {
   status    String    @default("ABERTO") // ABERTO, CONCLUIDO, CANCELADO
   dueAt     DateTime?
   ownerId   String
+  budgetUnitId String?
+  budgetUnit BudgetUnit? @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
   findings InternalControlFinding[]
 
   @@index([status, dueAt])
+  @@index([budgetUnitId, status, dueAt])
 }
 
 model InternalControlFinding {

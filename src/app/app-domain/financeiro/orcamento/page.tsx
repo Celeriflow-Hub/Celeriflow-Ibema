@@ -26,7 +26,7 @@ export default async function OrcamentoPage() {
       orderBy: { date: "desc" },
       take: 50,
     }),
-    prisma.financialYear.findMany({ orderBy: { year: "desc" } }),
+    prisma.financialYear.findMany({ where: isSystemAdministrator(context.user) ? {} : { governmentEntity: { is: { planningUnits: { some: { budgetUnitId: { in: context.user.allowedBudgetUnitIds } } } } } }, orderBy: { year: "desc" } }),
     prisma.creditRequest.findMany({
       where: isSystemAdministrator(context.user)
         ? {}

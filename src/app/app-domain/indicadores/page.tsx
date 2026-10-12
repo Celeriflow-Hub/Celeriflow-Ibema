@@ -1,4 +1,4 @@
-import { canViewModule, getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { canViewModule, getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { getFleetExpenseIndicators } from "@/lib/frotas/indicators";
 import { dateOnly } from "@/lib/frotas/contract";
 import { PageFrame } from "@/components/app-ui/PageFrame";
@@ -7,15 +7,16 @@ import { PageHeader } from "@/components/app-ui/PageHeader";
 export default async function IndicadoresPage({ searchParams }: { searchParams: Promise<{ start?: string; end?: string }> }) {
   const context = await getTenantContextForModule("ADMINISTRACAO");
   const { prisma } = context;
+  const unitScope = isSystemAdministrator(context.user) ? {} : { budgetUnitId: { in: context.user.allowedBudgetUnitIds } };
   const params = await searchParams;
   const start = dateOnly(params.start || `${new Date().getFullYear()}-01-01`);
   const end = params.end ? new Date(dateOnly(params.end).getTime() + 86400000 - 1) : new Date();
   if (start > end) throw new Error("A data inicial deve ser anterior ao fim do período.");
   const [plans, pendingFindings, fleetCost, payments, socialBenefits, licenses] = await Promise.all([
-    prisma.internalControlPlan.count({ where: { createdAt: { gte: start, lte: end } } }),
-    prisma.internalControlFinding.count({ where: { status: { not: "RESOLVIDO" } } }),
+    prisma.internalControlPlan.count({ where: { ...unitScope, createdAt: { gte: start, lte: end } } }),
+    prisma.internalControlFinding.count({ where: { plan: unitScope, status: { not: "RESOLVIDO" } } }),
     canViewModule(context.user, "FROTAS") ? getFleetExpenseIndicators(context, start, end) : null,
-    prisma.payment.aggregate({ where: { date: { gte: start, lte: end }, status: { in: ["Emitida", "Paga"] } }, _sum: { valueDecimal: true } }),
+    canViewModule(context.user, "FINANCEIRO") ? prisma.payment.aggregate({ where: { commitment: { appropriation: unitScope }, date: { gte: start, lte: end }, status: { in: ["Emitida", "Paga"] } }, _sum: { valueDecimal: true } }) : null,
     prisma.socialBenefitConcession.count({ where: { createdAt: { gte: start, lte: end } } }).catch(() => 0),
     prisma.environmentalLicense.count({ where: { createdAt: { gte: start, lte: end } } }).catch(() => 0),
   ]);
@@ -24,7 +25,7 @@ export default async function IndicadoresPage({ searchParams }: { searchParams: 
     ["Planos de controle", plans.toString(), "Planos registrados no período"],
     ["Apontamentos pendentes", pendingFindings.toString(), "Demandam tratamento e evidência"],
     ["Gastos realizados de frotas", fleetCost ? money.format(Number(fleetCost.knownAmount)) : "Acesso restrito", fleetCost ? `${fleetCost.total} registros canônicos · ${fleetCost.missing} sem valor informado · ${fleetCost.complete ? "valoração completa" : "total conhecido parcial"}. Não equivale à apropriação contábil de custos.` : "A leitura exige permissão de Frotas e seu recorte de setor."],
-    ["Pagamentos emitidos", money.format(Number(payments._sum.valueDecimal ?? 0)), "Execução financeira no período"],
+    ["Pagamentos emitidos", payments ? money.format(Number(payments._sum.valueDecimal ?? 0)) : "Acesso restrito", "Execução financeira no período e nas UGs autorizadas"],
     ["Benefícios sociais", socialBenefits.toString(), "Concessões registradas"],
     ["Licenças ambientais", licenses.toString(), "Licenças emitidas ou em análise"],
   ];

@@ -321,7 +321,7 @@ export async function recordAssetDisposal(db: PrismaClient, input: AssetDisposal
     if (input.type === "Alienação" && disposalValue > 0 && input.actor) {
       const [year, revenueNature, resourceSource, treasuryAccount] = await Promise.all([
         tx.financialYear.findFirst({
-          where: { status: "Aberto", startDate: { lte: input.date }, endDate: { gte: input.date } },
+          where: { governmentEntityId: null, status: "Aberto", startDate: { lte: input.date }, endDate: { gte: input.date } },
         }),
         tx.revenueNature.findFirst(),
         tx.resourceSource.findFirst(),

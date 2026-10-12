@@ -6,6 +6,7 @@ export default async function ReceitasPage() {
   const accountAccess = isSystemAdministrator(context.user) ? {} : { budgetUnitId: { in: context.user.allowedBudgetUnitIds } };
   const [revenues, revenueNatures, resourceSources, bankAccounts, budgetUnits] = await Promise.all([
     context.prisma.revenue.findMany({
+      where: accountAccess,
       include: {
         revenueNature: { select: { code: true, name: true } },
         resourceSource: { select: { code: true, name: true } },

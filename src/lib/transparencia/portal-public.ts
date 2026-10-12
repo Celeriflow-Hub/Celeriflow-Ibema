@@ -48,6 +48,8 @@ export async function getPublicFinancialReportSnapshots(db: Db) {
     select: {
       id: true,
       year: true,
+      governmentEntityId: true,
+      governmentEntity: { select: { name: true } },
       annualAccountingCloses: { select: { status: true, closedAt: true } },
     },
     orderBy: { year: "desc" },
@@ -76,6 +78,8 @@ export async function getPublicFinancialReportSnapshots(db: Db) {
     if (!document || !version) return [];
     return [{
       year: year.year,
+      governmentEntityId: year.governmentEntityId,
+      governmentEntityName: year.governmentEntity?.name ?? "Legado",
       type: report.type,
       label: report.label,
       version: version.versionNumber,
@@ -87,10 +91,10 @@ export async function getPublicFinancialReportSnapshots(db: Db) {
 
 export async function getPublicFinancialReportSnapshot(
   db: Db,
-  input: { year: number; reportType: PublicFinancialReportType; version?: number },
+  input: { year: number; reportType: PublicFinancialReportType; version?: number; governmentEntityId?: string },
 ) {
   const financialYear = await db.financialYear.findFirst({
-    where: { year: input.year, governmentEntityId: null },
+    where: { year: input.year, governmentEntityId: input.governmentEntityId ?? null },
     select: { id: true, annualAccountingCloses: { select: { status: true } } },
   });
   if (!financialYear) return null;

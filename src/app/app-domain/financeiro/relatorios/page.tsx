@@ -1,5 +1,5 @@
 import { financialReportOptions } from "@/lib/financeiro/report-delivery";
-import { canIssueFinancialReports, getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { canIssueFinancialReports, getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +8,8 @@ const pocReportTypes = new Set(["BALANCETE", "CONCILIACAO_TESOURARIA", "BALANCO_
 export default async function FinanceiroRelatoriosPage() {
   const context = await getTenantContextForModule("FINANCEIRO");
   const years = await context.prisma.financialYear.findMany({
-    select: { id: true, year: true, status: true },
+    where: isSystemAdministrator(context.user) ? {} : { governmentEntity: { is: { planningUnits: { some: { budgetUnitId: { in: context.user.allowedBudgetUnitIds } } } } } },
+    select: { id: true, year: true, status: true, governmentEntity: { select: { name: true } } },
     orderBy: { year: "desc" },
   });
   const canIssue = canIssueFinancialReports(context.user);
@@ -28,7 +29,7 @@ export default async function FinanceiroRelatoriosPage() {
               Exercício financeiro
               <select name="financialYearId" required defaultValue="" className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm">
                 <option value="" disabled>Selecione o exercício</option>
-                {years.map((year) => <option key={year.id} value={year.id}>{year.year} - {year.status}</option>)}
+                {years.map((year) => <option key={year.id} value={year.id}>{year.governmentEntity?.name ?? "Legado"} — {year.year} — {year.status}</option>)}
               </select>
             </label>
             <label className="text-sm font-medium text-slate-700">

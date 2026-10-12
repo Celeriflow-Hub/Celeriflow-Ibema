@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { MUNICIPALITY_NAME } from "@/lib/municipality-identity";
+import { financialUnitFilter, resolveFinancialReportScope } from "./report-scope";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -128,13 +129,16 @@ export async function generateBalanceteContabil(db: Db, filter: ReportFilter) {
 
 // --- Relatório Resumido da Execução Orçamentária (RREO) ---
 export async function generateRREO(db: Db, filter: ReportFilter) {
+  const scope = await resolveFinancialReportScope(db, filter.financialYearId, filter);
+  if (!scope.fullEntity) throw new Error("O RREO contém previsões globais e exige acesso a todas as unidades gestoras da entidade.");
+  filter = { ...filter, ...scope };
   const dateCond = filter.startDate || filter.endDate ? dateFilter(filter) : undefined;
 
   const [appropriations, revenues, forecasts, fixations] = await Promise.all([
     db.budgetAppropriation.findMany({
       where: {
         financialYearId: filter.financialYearId,
-        ...(filter.budgetUnitId ? { budgetUnitId: filter.budgetUnitId } : {}),
+        ...(filter.budgetUnitIds ? { budgetUnitId: { in: filter.budgetUnitIds } } : {}),
       },
       include: {
         expenseNature: true,
@@ -187,6 +191,7 @@ export async function generateRREO(db: Db, filter: ReportFilter) {
       where: {
         financialYearId: filter.financialYearId,
         stage: "ARRECADADA",
+        ...(filter.budgetUnitIds ? { budgetUnitId: { in: filter.budgetUnitIds } } : {}),
         ...(dateCond ? { date: dateCond } : {}),
       },
       include: { revenueNature: true },
@@ -307,11 +312,13 @@ export async function generateRREO(db: Db, filter: ReportFilter) {
 
 // --- Relatório de Gestão Fiscal (RGF - Despesa com Pessoal / LRF) ---
 export async function generateRGF(db: Db, filter: ReportFilter) {
+  filter = { ...filter, ...await resolveFinancialReportScope(db, filter.financialYearId, filter) };
   const revenues = await db.revenue.findMany({
     where: {
       financialYearId: filter.financialYearId,
       stage: "ARRECADADA",
       classification: { not: "INTRAORCAMENTARIA" },
+      ...(filter.budgetUnitIds ? { budgetUnitId: { in: filter.budgetUnitIds } } : {}),
       ...(filter.startDate || filter.endDate ? { date: dateFilter(filter) } : {}),
     },
     select: { valueDecimal: true, value: true, classification: true },
@@ -324,7 +331,7 @@ export async function generateRGF(db: Db, filter: ReportFilter) {
       appropriation: {
         financialYearId: filter.financialYearId,
         expenseNature: { code: { startsWith: "3.1" } },
-        ...(filter.budgetUnitId ? { budgetUnitId: filter.budgetUnitId } : {}),
+        ...(filter.budgetUnitIds ? { budgetUnitId: { in: filter.budgetUnitIds } } : {}),
       },
       status: { in: ["Emitido", "Liquidado", "Pago"] },
       ...(filter.startDate || filter.endDate ? { date: dateFilter(filter) } : {}),
@@ -375,11 +382,13 @@ export async function generateBalancoOrcamentario(db: Db, filter: ReportFilter) 
 
 // --- Balanço Patrimonial ---
 export async function generateBalancoPatrimonial(db: Db, filter: ReportFilter) {
+  filter = { ...filter, ...await resolveFinancialReportScope(db, filter.financialYearId, filter) };
   const accounts = await db.accountingPlan.findMany({
     include: {
       entries: {
         where: {
           transaction: {
+            ...accountingScopeFilter(filter),
             financialYearId: filter.financialYearId,
             status: "POSTADO",
             ...(filter.startDate || filter.endDate ? { date: dateFilter(filter) } : {}),
@@ -430,6 +439,7 @@ export async function generateBalancoPatrimonial(db: Db, filter: ReportFilter) {
 
 // --- Balanço Financeiro (MCASP / Anexo 13 da Lei 4.320/64) ---
 export async function generateBalancoFinanceiro(db: Db, filter: ReportFilter) {
+  filter = { ...filter, ...await resolveFinancialReportScope(db, filter.financialYearId, filter) };
   const [rreo, financialYear, treasuryMovements, withholdings] = await Promise.all([
     generateRREO(db, filter),
     db.financialYear.findUnique({ where: { id: filter.financialYearId }, select: { startDate: true, endDate: true } }),
@@ -438,25 +448,13 @@ export async function generateBalancoFinanceiro(db: Db, filter: ReportFilter) {
         status: "Confirmado",
         bankAccount: {
           isActive: true,
-          ...(filter.budgetUnitId ? { budgetUnitId: filter.budgetUnitId } : {}),
+          ...financialUnitFilter(filter),
         },
       },
       select: { date: true, direction: true, valueDecimal: true },
     }),
     db.withholdingPayable.findMany({
-      where: filter.budgetUnitId
-        ? {
-            retention: {
-              payment: {
-                commitment: {
-                  appropriation: {
-                    budgetUnitId: filter.budgetUnitId,
-                  },
-                },
-              },
-            },
-          }
-        : {},
+      where: { retention: { payment: { commitment: { appropriation: { financialYearId: filter.financialYearId, ...(filter.budgetUnitIds ? { budgetUnitId: { in: filter.budgetUnitIds } } : {}) } } } } },
     }),
   ]);
   if (!financialYear) throw new Error("Exercício financeiro não encontrado para o Balanço Financeiro.");
@@ -506,11 +504,13 @@ export async function generateBalancoFinanceiro(db: Db, filter: ReportFilter) {
 
 // --- Demonstração das Variações Patrimoniais (DVP / MCASP) ---
 export async function generateDVP(db: Db, filter: ReportFilter) {
+  filter = { ...filter, ...await resolveFinancialReportScope(db, filter.financialYearId, filter) };
   const accounts = await db.accountingPlan.findMany({
     include: {
       entries: {
         where: {
           transaction: {
+            ...accountingScopeFilter(filter),
             financialYearId: filter.financialYearId,
             status: "POSTADO",
             ...(filter.startDate || filter.endDate ? { date: dateFilter(filter) } : {}),

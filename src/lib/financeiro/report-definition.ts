@@ -1,5 +1,5 @@
 import type { ReportDefinition } from "@/lib/reports/report-engine";
-import { isSystemAdministrator } from "@/lib/platform/tenant-context";
+import { AccessError, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import {
   generateInternalReportDataset,
   type InternalReportDataset,
@@ -40,11 +40,14 @@ export const financeInternalReportDefinition: ReportDefinition<FinanceReportInpu
   async createDataset(context, input) {
     const financialYear = await context.prisma.financialYear.findUnique({
       where: { id: input.financialYearId },
-      select: { id: true, year: true },
+      select: { id: true, year: true, governmentEntityId: true },
     });
     if (!financialYear) {
-      const { AccessError } = await import("@/lib/platform/tenant-context");
       throw new AccessError("Exercício financeiro não encontrado.", 404);
+    }
+    if (!isSystemAdministrator(context.user)) {
+      const binding = financialYear.governmentEntityId ? await context.prisma.planningEntityUnit.findFirst({ where: { governmentEntityId: financialYear.governmentEntityId, budgetUnitId: { in: context.user.allowedBudgetUnitIds } }, select: { budgetUnitId: true } }) : null;
+      if (!binding) throw new AccessError("Exercício fora das entidades autorizadas.", 403);
     }
 
     const [report, institution, storedTemplate] = await Promise.all([

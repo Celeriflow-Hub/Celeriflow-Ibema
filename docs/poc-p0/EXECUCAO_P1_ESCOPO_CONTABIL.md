@@ -17,11 +17,20 @@
 11. Fixture de PostgreSQL/PGlite aplica as migrations; testes cobrem postagem escopada, recusa de UG não autorizada, interseção de filtros, leitura segregada das três consultas, pendências bancárias restritas à entidade, fechamento/reabertura mensal e encerramento anual independentes de Prefeitura/Câmara, com segregação de responsáveis.
 12. Arrecadação, lançamento prévio, coleta, redistribuição de fonte, estorno e confirmação de pagamento tributário usam a UG da origem/conta para escolher o exercício. A confirmação tributária grava receita, tesouraria e partida no mesmo escopo, preservando replay e rollback transacional.
 13. A seleção de exercícios e as actions de fechamento da tela contábil validam acesso à entidade; o administrador técnico conserva o acesso previsto pelo contexto.
+14. `Revenue.budgetUnitId` persiste a UG antes da arrecadação. Migration `20261012140000_revenue_budget_unit_scope` vincula a dimensão, infere somente contas de origem conhecidas e valida UG/ente/exercício/conta. Coleta com conta de outra UG, operações fora do perfil e replay com dados divergentes são recusados.
+15. `20261012150000_accounting_year_scope_update_guard` estende o guard contábil à alteração do exercício: uma partida da Câmara não pode ser religada ao exercício da Prefeitura.
+16. `report-scope.ts` intersecta exercício/entidade/UG solicitada/UGs autorizadas. Tesouraria, conciliações, patrimônio contábil, DVP, RGF e programação de desembolso aplicam o escopo; demonstrativos com totais indivisíveis da entidade exigem acesso ao conjunto completo de UGs. Impressão pede identificação explícita quando o ano é ambíguo. A lista pública e o download de snapshots distinguem a entidade.
+17. `sendAccountingReference` referencia a partida já gerada pela baixa canônica do retorno, sem produzir segunda escrituração. Preserva referência anterior na trilha quando presente; retorno sem baixa canônica fica pendente, sem partida presumida. Teste cobre pagamento com excesso e replay.
+18. Constituição tributária grava exercício/ente/UG no snapshot; emissão de guia preserva o vínculo e mudança da conta padrão não muda a identidade da arrecadação.
+19. Postagem recusa conta com desdobramentos cadastrados e valida conteúdo/escopo da chave idempotente antes de reutilizar uma partida.
+20. Carga de proveniência de ensaio: quatro versões DRAFT de 2024–2027, 63 entradas de planejamento por versão (252 no banco), hash/origem/vigência explícitos; 21 contas contábeis por ano documentadas no manifesto. **Nenhuma classificação foi homologada como oficial.** Evidência: `CLASSIFICACOES_ENSAIO_P1.json`.
+21. Identidades de ensaio: 21 cadeias PF→contribuinte/fornecedor/credor, sem alterar IDs de contribuinte, imóvel ou inscrição. Dados e documentos são fictícios; replay das cargas mantém as quantidades. Evidência: `IDENTIDADES_ENSAIO_P1.json`.
+22. `InternalControlPlan.budgetUnitId` vincula o Controle Interno ao cadastro canônico de UG/ente. A criação, o registro e a resolução de apontamentos validam o escopo. A tela e os contadores de indicadores restringem planos/apontamentos às UGs autorizadas; planos legados ficam sem atribuição presumida. Indicadores financeiros também respeitam módulo e UG.
 
 ### Migrations e banco
 
 - Antes da P1: 68 migrations locais, todas aplicadas.
-- Depois da P1: 72 migrations locais, `prisma migrate status` atualizado.
+- Estado atual: 75 migrations locais, sete migrations P1 aplicadas.
 - A primeira tentativa da migration de exercícios parou ao encontrar o índice único legado `FinancialYear_year_key`; não havia inserido/atualizado linhas. A tentativa foi marcada como rollback, somente os objetos parciais dessa tentativa foram removidos e a migration corrigida foi aplicada. O registro de rollback permanece no histórico de migrations; a execução mais recente está concluída e a base está atualizada.
 - As migrations adicionam dimensões/índices/guards e os exercícios por entidade; não removem tabelas. Exercícios legados e chaves de negócio existentes são preservados. Referências P0 LDO/LOA são apontadas ao novo exercício da mesma entidade/ano.
 - O inventário prévio da P0 mostrava **zero lançamentos contábeis** na base; portanto não havia partidas existentes a migrar ou classificar. Se surgirem registros históricos legados no futuro, continuam explicitamente sem escopo até reconciliação baseada em evidência.
@@ -31,26 +40,30 @@
 ## Ainda falta na P1
 
 1. A unicidade do exercício agora é por entidade, mantendo índice parcial separado para os exercícios legados sem entidade. Porém, os consumidores ainda precisam receber/selecionar a entidade em todos os fluxos de Financeiro, Planejamento e Tributação antes de declarar a migração integral concluída.
-2. A confirmação canônica de pagamento tributário já segue o exercício da entidade arrecadadora. Cadastros/constituição de créditos tributários e o caminho paralelo `sendAccountingReference` em `src/lib/tributacao/s2-service.ts` ainda usam o exercício legado. Completar esses consumidores e reconciliar a referência paralela para evitar dupla contabilização continua dentro da P1.
-3. Relatórios RREO/RGF/DCASP, snapshots/publicação, jobs e filtros gerais ainda necessitam revisão integral de escopo; nesta entrega a implementação explícita cobre Diário/Razão/Balancete e o dataset interno que os compõe. O aceite legal dos demonstrativos permanece pendente.
+2. Constituição/guia pelo serviço tributário canônico e confirmação de pagamento já resolvem exercício pela UG; a referência paralela não posta novamente. Outros produtores tributários e patrimoniais, sem origem administrativa canônica, ainda precisam de revisão integral; o caminho patrimonial legado foi restringido explicitamente ao exercício sem entidade, evitando seleção arbitrária entre entes.
+3. A geração interna de demonstrativos e a impressão passaram a aplicar escopo, além dos snapshots por entidade. Jobs, publicações e demais consumidores gerais precisam de revisão completa; totais indivisíveis não são apresentados como se fossem totais da UG. O aceite legal dos demonstrativos permanece pendente.
 4. Contas/naturezas/fontes do P0 são sintéticas. Homologar e relacionar versões/códigos vigentes do plano de contas e classificações municipais/PCASP/TCE/STN com os documentos da seção 8 do plano consolidado; não publicar nem contabilizar os códigos `POC` como classificados oficialmente.
 5. Centros de custo estão vinculados às entidades de ensaio, mas `CostCenter` não é dimensão de contabilização aprovada; o domínio de apropriação por objeto/item vem na F11/P6.
+6. O escopo administrativo do Controle Interno foi implementado na tela, comandos e contadores. Relações CNAE/CBO/serviços e dimensões de fonte/MSC ainda exigem a conclusão prevista no plano; documentos GED compartilhados precisam seguir sua política própria de acesso.
 
 ## Verificações
 
 - `npx prisma validate`: aprovado.
 - `npx prisma generate`: aprovado.
-- `npx prisma migrate deploy`: aplicou as quatro migrations P1, com recuperação registrada da tentativa inicial de exercícios.
-- `npx prisma migrate status`: todas as 72 migrations atualizadas.
+- `npx prisma migrate deploy`: sete migrations P1 aplicadas, com recuperação registrada da tentativa inicial de exercícios.
 - ESLint direcionado: aprovado.
-- `src/lib/financeiro/__tests__/accounting-scope.test.ts`: 2/2 aprovados em PostgreSQL embarcado e migrations aplicadas.
+- `src/lib/financeiro/__tests__/accounting-scope.test.ts`: 3/3 aprovados em PostgreSQL embarcado com as sete migrations aplicadas.
+- `src/lib/c7/__tests__/control-scope.test.ts` e `operations-service.test.ts`: 2/2 aprovados; criação/apontamento/resolução fora da UG recusados, status preservado após recusa.
 - `tests/planning-accounting.test.ts`: 5/5 aprovados.
 - `tests/planning-completion.test.ts`: 5/5 aprovados.
-- `tests/planning-execution.test.ts`: 6 aprovados, 3 de concorrência PostgreSQL real não executados por falta de conexão de teste configurada. Os dois cenários inicialmente falhos (lançamento prévio e confirmação tributária) foram corrigidos e passaram na reexecução direcionada.
+- `tests/planning-execution.test.ts`: 8 aprovados, 3 de concorrência PostgreSQL real não executados por falta de conexão de teste configurada.
 - `tests/planning-postgres.test.ts`: 1/1 aprovado, incluindo as jornadas da Prefeitura, Câmara e fundo com exercícios próprios.
-- Total: 19 cenários aprovados; 3 de concorrência externa não executados.
+- `tests/public-finance.test.ts`: 19/19 aprovados; preservação dos formatos de exportação e projeções públicas.
+- Total das suítes relacionadas: 43 cenários aprovados; 3 de concorrência externa não executados. A rodada conjunta escopo/execução/completion foi interrompida por timeout e teve uma falha do protocolo da fixture após erro SQL esperado; a verificação do guard passou a usar a conexão direta da fixture. Reexecução integral dessas três suítes: 16 aprovados/3 não executados, sem falhas.
 - `scripts/verify-poc-p1-scope.ts`: inventário de leitura apenas aprovado no banco atual.
-- `npm run build`, após o ajuste da confirmação tributária: aprovado, incluindo Prisma Client, tipos de rotas, typecheck completo, compilação Next e geração das páginas.
+- `npm run build`: aprovado após as alterações de receita, referência tributária, snapshots, validação de conta, seletor orçamentário e autorização do exercício na definição de relatório. Revalidação posterior ao escopo do Controle Interno/indicadores em andamento.
+- Auditoria Decimal/Float: não há registros em AccountingEntry, Revenue, Commitment, Settlement ou Payment na base atual; zero divergências, sem criação de saldos artificiais. Regras com movimentos são exercitadas nas fixtures isoladas.
+- Cargas de catálogo/identidade P1: aplicação e reaplicação aprovadas; verificação final registrada em `VERIFICACAO_P1.json`.
 - Verificação da matriz P0: aprovada; o hash do schema é conferido contra o commit histórico da baseline para preservar a evidência original após a evolução P1.
 - Navegação autenticada pelo navegador não foi executada nesta sessão.
 

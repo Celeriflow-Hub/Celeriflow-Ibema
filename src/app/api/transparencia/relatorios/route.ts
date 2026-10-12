@@ -12,12 +12,13 @@ export async function GET(request: NextRequest) {
   const reportType = request.nextUrl.searchParams.get("reportType");
   const rawVersion = request.nextUrl.searchParams.get("version");
   const version = rawVersion ? Number(rawVersion) : undefined;
+  const governmentEntityId = request.nextUrl.searchParams.get("governmentEntityId") || undefined;
   if (!Number.isSafeInteger(year) || year < 2000 || year > 2100 || !isPublicFinancialReportType(reportType) || (version !== undefined && (!Number.isSafeInteger(version) || version < 1))) {
     return NextResponse.json({ error: "Informe exercício, tipo de relatório e versão válidos." }, { status: 400 });
   }
 
   try {
-    const snapshot = await getPublicFinancialReportSnapshot(prisma, { year, reportType, version });
+    const snapshot = await getPublicFinancialReportSnapshot(prisma, { year, reportType, version, governmentEntityId });
     if (!snapshot) return NextResponse.json({ error: "Relatório público não encontrado." }, { status: 404 });
     const file = await getFile(snapshot.fileUrl);
     if (!file?.stream) return NextResponse.json({ error: "Snapshot do relatório não está disponível." }, { status: 404 });

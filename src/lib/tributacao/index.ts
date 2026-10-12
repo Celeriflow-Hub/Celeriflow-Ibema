@@ -39,6 +39,15 @@ async function assertAssessmentYearOpen(tx: Db, year: number, budgetUnitId?: str
   return financialYear;
 }
 
+async function assessmentYearScope(tx: Db, actor: TaxActor, year: number, taxId: string, snapshot?: Prisma.JsonValue | null) {
+  const stored = snapshot && typeof snapshot === "object" && !Array.isArray(snapshot) ? snapshot : {};
+  const mapping = await tx.taxFinancialMapping.findUnique({ where: { taxId }, select: { defaultBankAccount: { select: { budgetUnitId: true } } } });
+  const budgetUnitId = typeof stored.budgetUnitId === "string" ? stored.budgetUnitId : mapping?.defaultBankAccount.budgetUnitId;
+  if (actor.allowedBudgetUnitIds && (!budgetUnitId || !actor.allowedBudgetUnitIds.includes(budgetUnitId))) throw new TaxError("Lançamento tributário fora das unidades gestoras autorizadas.");
+  const financialYear = await assertAssessmentYearOpen(tx, year, budgetUnitId);
+  return { financialYear, budgetUnitId: budgetUnitId ?? null };
+}
+
 async function nextNumber(tx: Prisma.TransactionClient, year: number, documentType: "ASSESSMENT" | "GUIDE") {
   const sequence = await tx.taxDocumentSequence.upsert({
     where: { year_documentType: { year, documentType } },
@@ -99,7 +108,7 @@ export async function createTaxAssessment(
 ) {
   const calculation = calculateTaxAssessment(input);
   return db.$transaction(async (tx) => {
-    await assertAssessmentYearOpen(tx, input.year);
+    const scope = await assessmentYearScope(tx, actor, input.year, input.taxId);
     const [tax, taxpayer] = await Promise.all([
       tx.tax.findUnique({ where: { id: input.taxId }, select: { id: true, isActive: true } }),
       tx.taxpayer.findUnique({ where: { id: input.taxpayerId }, select: { id: true, status: true } }),
@@ -128,7 +137,7 @@ export async function createTaxAssessment(
         penaltyValueDecimal: calculation.penalty,
         correctionValueDecimal: calculation.correction,
         finalValueDecimal: calculation.finalValue,
-        calculationSnapshot: { taxableBase: calculation.taxableBase.toFixed(2), rate: calculation.rate.toString(), discount: calculation.discount.toFixed(2), interest: calculation.interest.toFixed(2), penalty: calculation.penalty.toFixed(2), correction: calculation.correction.toFixed(2), finalValue: calculation.finalValue.toFixed(2) },
+        calculationSnapshot: { taxableBase: calculation.taxableBase.toFixed(2), rate: calculation.rate.toString(), discount: calculation.discount.toFixed(2), interest: calculation.interest.toFixed(2), penalty: calculation.penalty.toFixed(2), correction: calculation.correction.toFixed(2), finalValue: calculation.finalValue.toFixed(2), budgetUnitId: scope.budgetUnitId, governmentEntityId: scope.financialYear.governmentEntityId, financialYearId: scope.financialYear.id },
         taxId: input.taxId,
         taxpayerId: input.taxpayerId,
         realEstateId: input.realEstateId,
@@ -149,7 +158,7 @@ export async function generateTaxGuide(
     await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${input.assessmentId} FOR UPDATE`;
     const assessment = await tx.taxAssessment.findUnique({ where: { id: input.assessmentId }, include: { guides: { where: { status: { not: "Cancelada" } } } } });
     if (!assessment || assessment.status === "Cancelado") throw new TaxError("O lançamento tributário não está disponível para geração de guia.");
-    await assertAssessmentYearOpen(tx, assessment.year);
+    await assessmentYearScope(tx, actor, assessment.year, assessment.taxId, assessment.calculationSnapshot);
     if (input.dueDate.getFullYear() !== assessment.year) throw new TaxError("O vencimento da guia deve pertencer ao exercício do lançamento.");
     if (assessment.guides.length) throw new TaxError("O lançamento já possui guia ativa. Cancele-a formalmente antes de emitir outra.");
     if (input.documentId) {
@@ -185,6 +194,9 @@ export async function confirmTaxPayment(
     const bankAccountId = input.bankAccountId ?? mapping.defaultBankAccountId;
     const account = await tx.bankAccount.findUnique({ where: { id: bankAccountId }, select: { isActive: true, budgetUnitId: true } });
     if (!account?.isActive) throw new TaxError("A baixa exige uma conta bancária ativa.");
+    const assessmentSnapshot = guide.assessment.calculationSnapshot;
+    const assessmentScope = assessmentSnapshot && typeof assessmentSnapshot === "object" && !Array.isArray(assessmentSnapshot) ? assessmentSnapshot : {};
+    if (typeof assessmentScope.budgetUnitId === "string" && assessmentScope.budgetUnitId !== account.budgetUnitId) throw new TaxError("A conta arrecadadora diverge da unidade gestora do lançamento tributário.");
     const year = await assertAssessmentYearOpen(tx, guide.assessment.year, account.budgetUnitId);
     if (input.paymentDate < year.startDate || input.paymentDate > year.endDate) throw new TaxError("A data de pagamento está fora do exercício financeiro do lançamento.");
     if (input.proofDocumentId) {
@@ -240,7 +252,7 @@ export async function cancelTaxGuide(db: PrismaClient, actor: TaxActor, guideId:
     await tx.$queryRaw`SELECT id FROM "TaxGuide" WHERE id = ${guideId} FOR UPDATE`;
     const guide = await tx.taxGuide.findUnique({ where: { id: guideId }, include: { assessment: true, payments: { where: { status: "Confirmado" }, select: { id: true } } } });
     if (!guide) throw new TaxError("Guia não encontrada.");
-    await assertAssessmentYearOpen(tx, guide.assessment.year);
+    await assessmentYearScope(tx, actor, guide.assessment.year, guide.assessment.taxId, guide.assessment.calculationSnapshot);
     if (guide.status === "Cancelada") throw new TaxError("A guia já está cancelada.");
     if (guide.payments.length) throw new TaxError("Guia com pagamento confirmado exige estorno, não cancelamento.");
     const cancelled = await tx.taxGuide.update({ where: { id: guide.id }, data: { status: "Cancelada" } });

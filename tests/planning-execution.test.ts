@@ -11,9 +11,58 @@ import { readPlanningMonthlyExecution } from "../src/lib/planejamento/monthly-ex
 import { addApprovedPlanningLine, addPlanningLine } from "../src/lib/planejamento/service";
 import { configurePlanningInternalExecution } from "../src/lib/planejamento/accounting-bridge";
 import { createPlanningCreditPreview } from "../src/lib/planejamento/credits";
-import { confirmTaxPayment } from "../src/lib/tributacao";
+import { confirmTaxPayment, createTaxAssessment, generateTaxGuide } from "../src/lib/tributacao";
+import { processCollectionReturn, sendAccountingReference } from "../src/lib/tributacao/s2-service";
 
 type Fixture = Awaited<ReturnType<typeof createPlanningExecutionFixture>>;
+
+test("P1: constituição e guia preservam o exercício e a UG tributária após mudança do mapeamento", async () => scenario(async (f) => {
+  await f.db.financialYear.update({ where: { id: "ano" }, data: { status: "Aberto" } });
+  await f.db.tax.create({ data: { id: "tributo-escopo", name: "Tributo de ensaio", taxType: "Taxa", isActive: true } });
+  await f.db.taxpayer.create({ data: { id: "contribuinte-escopo", taxpayerType: "PJ", companyId: "empresa", status: "Ativo" } });
+  await f.db.taxFinancialMapping.create({ data: { taxId: "tributo-escopo", revenueNatureId: "receita", resourceSourceId: "livre", defaultBankAccountId: "banco", isActive: true } });
+  const assessment = await createTaxAssessment(f.db, f.actor, { year: 2026, taxId: "tributo-escopo", taxpayerId: "contribuinte-escopo", taxableBase: "100.00", rate: "4" });
+  const snapshot = assessment.calculationSnapshot as Prisma.JsonObject;
+  assert.equal(snapshot.financialYearId, "ano");
+  assert.equal(snapshot.governmentEntityId, "ente");
+  assert.equal(snapshot.budgetUnitId, "ug");
+  await f.db.bankAccount.create({ data: { id: "banco-mapeamento-alterado", budgetUnitId: "ug-restrita", bankName: "Outra unidade", agency: "0001", accountNumber: "1234" } });
+  await f.db.taxFinancialMapping.update({ where: { taxId: "tributo-escopo" }, data: { defaultBankAccountId: "banco-mapeamento-alterado" } });
+  const guide = await generateTaxGuide(f.db, f.actor, { assessmentId: assessment.id, dueDate: new Date("2026-03-31") });
+  const payment = { guideId: guide.id, amountPaid: "4.00", paymentDate: new Date("2026-03-01"), paymentMethod: "PIX", idempotencyKey: "scope-tax-payment" };
+  await assert.rejects(confirmTaxPayment(f.db, f.actor, payment), /diverge da unidade gestora/i);
+  assert.equal(await f.db.taxPayment.count(), 0);
+  await confirmTaxPayment(f.db, f.actor, { ...payment, bankAccountId: "banco" });
+  assert.equal((await f.db.revenue.findFirstOrThrow()).budgetUnitId, "ug");
+}));
+
+test("P1: retorno tributário referencia a partida canônica sem duplicar receita ou contabilidade", async () => scenario(async (f) => {
+  await f.db.financialYear.update({ where: { id: "ano" }, data: { status: "Aberto" } });
+  await f.pg.exec(`INSERT INTO "Tax" (id,name,"taxType","isActive") VALUES ('tributo-ref','Taxa de ensaio','Taxa',true);
+    INSERT INTO "TaxFinancialMapping" (id,"taxId","revenueNatureId","resourceSourceId","defaultBankAccountId","isActive") VALUES ('mapa-ref','tributo-ref','receita','livre','banco',true);
+    INSERT INTO "TaxAssessment" (id,year,"originalValue","originalValueDecimal","finalValueDecimal","taxId","taxpayerId",status) VALUES ('lancamento-ref',2026,4,4,4,'tributo-ref','contribuinte','Lançado');
+    INSERT INTO "TaxGuide" (id,"guideNumber","totalValue","totalValueDecimal","dueDate","assessmentId",status) VALUES ('guia-ref','DAM-REF',4,4,'2026-03-31','lancamento-ref','Emitida');`);
+  const occurredAt = new Date("2026-03-01T12:00:00Z");
+  const returned = await processCollectionReturn(f.db, f.actor, { idempotencyKey: "ref-return", guideNumber: "DAM-REF", amount: "5.00", occurredAt, status: "CONFIRMADO" });
+  const before = await f.db.accountingTransaction.count();
+  const input = { sourceType: "ARRECADACAO", sourceId: returned.id, amount: "5.00", competence: occurredAt };
+  const reference = await sendAccountingReference(f.db, f.actor, input);
+  assert.equal(reference.status, "PROCESSADO");
+  assert.equal((await sendAccountingReference(f.db, f.actor, input)).id, reference.id);
+  assert.equal(await f.db.accountingTransaction.count(), before);
+  assert.equal(await f.db.revenue.count(), 1);
+  assert.equal((await f.db.revenue.findFirstOrThrow()).valueDecimal!.toFixed(2), "4.00");
+  const result = reference.result as Prisma.JsonObject;
+  assert.equal(result.mode, "CANONICAL_REFERENCE");
+  const transaction = await f.db.accountingTransaction.findUniqueOrThrow({ where: { id: String(result.accountingTransactionId) } });
+  assert.equal(transaction.budgetUnitId, "ug");
+  assert.equal(transaction.governmentEntityId, "ente");
+  await assert.rejects(sendAccountingReference(f.db, f.actor, { ...input, amount: "4.00" }), /outros dados/i);
+  await assert.rejects(sendAccountingReference(f.db, { ...f.actor, allowedBudgetUnitIds: ["ug-restrita"] }, input), /autorizadas/i);
+  const pending = await sendAccountingReference(f.db, f.actor, { ...input, sourceId: "origem-inexistente" });
+  assert.equal(pending.status, "PENDENTE");
+  assert.equal(await f.db.accountingTransaction.count(), before);
+}));
 const commitInput = (f: Fixture, reservationId: string, value: string) => ({ number: `NE-${randomUUID()}`, date: new Date(`${f.year}-09-01`), value, type: "Ordinário", history: "Manutenção dos serviços municipais", appropriationId: f.appropriationId, supplierId: "fornecedor", reservationId });
 async function financeState(f: Fixture) {
   return { quotas: await f.db.planningQuota.findMany({ orderBy: { id: "asc" } }), appropriation: await f.db.budgetAppropriation.findUniqueOrThrow({ where: { id: f.appropriationId } }), expenses: await f.db.expense.findMany({ orderBy: { id: "asc" } }), reservations: await f.db.budgetReservation.findMany({ orderBy: { id: "asc" } }), payments: await f.db.payment.findMany({ orderBy: { id: "asc" } }), counts: await Promise.all([f.db.expense.count(), f.db.budgetReservation.count(), f.db.commitment.count(), f.db.commitmentMovement.count(), f.db.payment.count(), f.db.treasuryMovement.count(), f.db.revenue.count(), f.db.planningQuotaEvent.count(), f.db.accountingTransaction.count(), f.db.accountingEntry.count(), f.db.financialDocument.count(), f.db.financialAuditLog.count()]) };
@@ -89,10 +138,18 @@ test("S2: arrecadação direta/lançada, replay e estorno alimentam metas uma ú
   await f.db.financialYear.update({ where: { id: "ano" }, data: { status: "Aberto" } });
   const input = { date: new Date("2026-03-01"), value: "12.00", revenueNatureId: "receita", resourceSourceId: "livre", bankAccountId: "banco", sourceModule: "TRIBUTARIO", sourceType: "TAX_PAYMENT", sourceId: "pagamento-origem", eventType: "TAX_PAYMENT_CONFIRMED", idempotencyKey: "tax:receipt" };
   const first = await createRevenue(f.db, f.actor, input);
+  assert.equal(first.budgetUnitId, "ug");
   assert.equal((await createRevenue(f.db, f.actor, input)).id, first.id);
   await assert.rejects(createRevenue(f.db, f.actor, { ...input, value: "13.00" }), /outros dados/);
   assert.equal((await f.db.planningQuota.aggregate({ where: { lineId: f.revenue }, _sum: { consumed: true } }))._sum.consumed!.toFixed(2), "12.00");
   const launched = await launchRevenue(f.db, f.actor, { ...input, budgetUnitId: "ug", sourceModule: "FINANCEIRO", sourceType: "REVENUE", sourceId: "lancamento", idempotencyKey: "launched:receipt", value: "5.00" });
+  assert.equal(launched.budgetUnitId, "ug");
+  assert.equal(launched.bankAccountId, null);
+  await f.db.bankAccount.create({ data: { id: "banco-outra-ug", budgetUnitId: "ug-restrita", bankName: "Outra UG", agency: "0001", accountNumber: "9999" } });
+  const bothUnitsActor = { ...f.actor, allowedBudgetUnitIds: ["ug", "ug-restrita"] };
+  await assert.rejects(collectLaunchedRevenue(f.db, bothUnitsActor, { revenueId: launched.id, date: new Date("2026-03-02"), bankAccountId: "banco-outra-ug", idempotencyKey: "collect:wrong-unit" }), /unidade gestora do lançamento/i);
+  await assert.rejects(collectLaunchedRevenue(f.db, { ...f.actor, allowedBudgetUnitIds: ["ug-restrita"] }, { revenueId: launched.id, date: new Date("2026-03-02"), bankAccountId: "banco", idempotencyKey: "collect:unauthorized" }), /unidades autorizadas/i);
+  await assert.rejects(launchRevenue(f.db, bothUnitsActor, { ...input, budgetUnitId: "ug-restrita", sourceModule: "FINANCEIRO", sourceType: "REVENUE", sourceId: "lancamento", idempotencyKey: "launched:receipt", value: "5.00" }), /outros dados/i);
   await collectLaunchedRevenue(f.db, f.actor, { revenueId: launched.id, date: new Date("2026-03-02"), bankAccountId: "banco", idempotencyKey: "collect:receipt" });
   assert.equal((await f.db.planningQuota.aggregate({ where: { lineId: f.revenue }, _sum: { consumed: true } }))._sum.consumed!.toFixed(2), "17.00");
   await reverseRevenue(f.db, f.actor, { revenueId: launched.id, date: new Date("2026-04-01"), justification: "Estorno autorizado" });

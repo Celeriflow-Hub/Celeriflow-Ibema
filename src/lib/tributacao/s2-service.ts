@@ -356,31 +356,30 @@ export async function closeReconciliation(db: PrismaClient, actor: TaxActor, id:
 
 export async function sendAccountingReference(db: PrismaClient, actor: TaxActor, input: { sourceType: string; sourceId: string; amount: string | number; competence: Date }) {
   const idempotencyKey = `ACCOUNTING:${input.sourceType}:${input.sourceId}`;
-  const existing = await db.taxIntegrationEvent.findUnique({ where: { idempotencyKey } });
-  if (existing?.status === "PROCESSADO") return existing;
   const amountValue = money(input.amount);
-  const year = input.competence.getUTCFullYear();
-  const [financialYear, eventCatalog] = await Promise.all([
-    db.financialYear.findFirst({ where: { year, governmentEntityId: null } }),
-    db.accountingEventCatalog.findUnique({ where: { code: "TRIBUTARIO_ARRECADACAO" }, include: { rules: { where: { isActive: true }, take: 1 } } }),
-  ]);
-  const reason = !financialYear ? "Exercício financeiro não configurado" : !eventCatalog?.rules.length ? "Evento ou roteiro contábil não configurado" : !actor.employeeId ? "Usuário sem vínculo funcional para autoria contábil" : null;
-  if (reason) {
-    return db.taxIntegrationEvent.upsert({ where: { idempotencyKey }, create: { integrationCode: "ACCOUNTING", eventType: input.sourceType, idempotencyKey, status: "PENDENTE", evidenceLevel: "L1", payload: { sourceId: input.sourceId, amount: amountValue.toFixed(2), competence: input.competence.toISOString() }, result: { reason } }, update: { status: "PENDENTE", result: { reason } } });
-  }
-  const activeFinancialYear = financialYear!;
-  const activeEventCatalog = eventCatalog!;
-  const activeEmployeeId = actor.employeeId!;
   return db.$transaction(async (tx) => {
-    const transactionKey = idempotencyKey;
-    const prior = await tx.accountingTransaction.findUnique({ where: { idempotencyKey: transactionKey } });
-    const rule = activeEventCatalog.rules[0];
-    const transaction = prior ?? await tx.accountingTransaction.create({ data: { financialYearId: activeFinancialYear.id, date: input.competence, history: `Evento tributário ${input.sourceType} ${input.sourceId}`, status: "POSTADO", sourceModule: "TRIBUTARIO", sourceType: input.sourceType, sourceId: input.sourceId, eventType: activeEventCatalog.code, idempotencyKey: transactionKey, authorUsuarioId: actor.usuarioId, authorEmployeeId: activeEmployeeId, postedAt: new Date(), entries: { create: [
-      { date: input.competence, value: Number(amountValue), valueDecimal: amountValue, type: "Débito", history: `Evento tributário ${input.sourceId}`, accountId: rule.debitAccountId, authorId: activeEmployeeId },
-      { date: input.competence, value: Number(amountValue), valueDecimal: amountValue, type: "Crédito", history: `Evento tributário ${input.sourceId}`, accountId: rule.creditAccountId, authorId: activeEmployeeId },
-    ] } } });
-    const integration = await tx.taxIntegrationEvent.upsert({ where: { idempotencyKey }, create: { integrationCode: "ACCOUNTING", eventType: input.sourceType, idempotencyKey, status: "PROCESSADO", evidenceLevel: "L1", payload: { sourceId: input.sourceId, amount: amountValue.toFixed(2) }, result: { accountingTransactionId: transaction.id }, processedAt: new Date() }, update: { status: "PROCESSADO", result: { accountingTransactionId: transaction.id }, processedAt: new Date() } });
-    await audit(tx, actor, "SEND_ACCOUNTING", "AccountingTransaction", transaction.id, { sourceType: input.sourceType, sourceId: input.sourceId, amount: amountValue.toFixed(2) });
+    await tx.$queryRaw`SELECT id FROM "TaxIntegrationEvent" WHERE id = ${input.sourceId} FOR UPDATE`;
+    const origin = await tx.taxIntegrationEvent.findUnique({ where: { id: input.sourceId } });
+    const existing = await tx.taxIntegrationEvent.findUnique({ where: { idempotencyKey } });
+    const payload = { sourceId: input.sourceId, amount: amountValue.toFixed(2), competence: input.competence.toISOString() };
+    const previousPayload = jsonObject(existing?.payload);
+    if (existing && (previousPayload.amount !== payload.amount || (previousPayload.competence && previousPayload.competence !== payload.competence))) throw new TaxError("Referência contábil já registrada com outros dados.");
+    const originPayload = jsonObject(origin?.payload);
+    if (origin && (originPayload.amount !== payload.amount || originPayload.occurredAt !== payload.competence)) throw new TaxError("Valor ou competência divergem do retorno arrecadador.");
+    const payment = input.sourceType === "ARRECADACAO" && origin?.integrationCode === "BANK_RETURN" && origin.status === "PROCESSADO"
+      ? await tx.taxPayment.findUnique({ where: { idempotencyKey: origin.idempotencyKey } }) : null;
+    const link = payment ? await tx.taxRevenueIntegrationEvent.findUnique({ where: { taxPaymentId: payment.id }, include: { revenue: true } }) : null;
+    if (link?.revenue.budgetUnitId && actor.allowedBudgetUnitIds && !actor.allowedBudgetUnitIds.includes(link.revenue.budgetUnitId)) throw new TaxError("Referência fora das unidades gestoras autorizadas.");
+    const transaction = link?.revenue.idempotencyKey ? await tx.accountingTransaction.findUnique({ where: { idempotencyKey: `${link.revenue.idempotencyKey}:RECEITA_ARRECADADA` } }) : null;
+    if (!transaction || transaction.status !== "POSTADO") {
+      const result = { reason: "Arrecadação sem partida canônica confirmada; regularize a baixa no Financeiro." };
+      return tx.taxIntegrationEvent.upsert({ where: { idempotencyKey }, create: { integrationCode: "ACCOUNTING", eventType: input.sourceType, idempotencyKey, status: "PENDENTE", evidenceLevel: "L1", payload, result }, update: { status: "PENDENTE", payload, result } });
+    }
+    if (existing?.status === "PROCESSADO" && jsonObject(existing.result).accountingTransactionId === transaction.id) return existing;
+    const previousAccountingTransactionId = jsonObject(existing?.result).accountingTransactionId;
+    const result = { accountingTransactionId: transaction.id, revenueId: link!.revenueId, mode: "CANONICAL_REFERENCE", ...(typeof previousAccountingTransactionId === "string" && previousAccountingTransactionId !== transaction.id ? { previousAccountingTransactionId } : {}) };
+    const integration = await tx.taxIntegrationEvent.upsert({ where: { idempotencyKey }, create: { integrationCode: "ACCOUNTING", eventType: input.sourceType, idempotencyKey, status: "PROCESSADO", evidenceLevel: "L1", payload, result, processedAt: new Date() }, update: { status: "PROCESSADO", payload, result, processedAt: new Date() } });
+    await audit(tx, actor, "REFERENCE_ACCOUNTING", "AccountingTransaction", transaction.id, { sourceType: input.sourceType, sourceId: input.sourceId, amount: amountValue.toFixed(2), mode: "CANONICAL_REFERENCE" });
     return integration;
   });
 }

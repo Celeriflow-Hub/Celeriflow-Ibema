@@ -228,6 +228,7 @@ test("projeta contratos e licitações sem ids internos, rascunhos ou identifica
 
 test("entrega o Diário canônico como CSV seguro", async () => {
   const db = {
+    financialYear: { findUnique: async () => ({ year: 2026, governmentEntityId: null }) },
     accountingTransaction: {
       findMany: async () => [{
         id: "transaction-1",
@@ -252,6 +253,7 @@ test("entrega o Diário canônico como CSV seguro", async () => {
 
 test("gera balancete mensal com período e situação de fechamento explícitos", async () => {
   const db = {
+    financialYear: { findUnique: async () => ({ year: 2026, governmentEntityId: null }) },
     accountingPlan: {
       findMany: async () => [{
         id: "account-1",
@@ -285,6 +287,7 @@ test("gera balancete mensal com período e situação de fechamento explícitos"
 
 test("gera relatório de conciliações e síntese anual somente a partir dos registros internos", async () => {
   const db = {
+    financialYear: { findUnique: async () => ({ year: 2026, governmentEntityId: null }) },
     bankReconciliation: {
       findMany: async () => [{
         date: new Date("2026-03-01T00:00:00.000Z"),

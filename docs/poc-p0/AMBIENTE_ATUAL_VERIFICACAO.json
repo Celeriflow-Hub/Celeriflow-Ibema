@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-12T16:50:07.909Z",
-  "commit": "e5a5a3cbd6deb6eabc4fbb84685d0802515ff363",
+  "generatedAt": "2026-10-12T18:13:24.087Z",
+  "commit": "55cc61100f8cffa6e0374ab719f41a01697f6f16",
   "environment": "BANCO_ATUAL_AUTORIZADO_PELO_USUÁRIO_COM_DADOS_FICTÍCIOS",
   "mode": "READ_ONLY",
   "migrations": [
@@ -505,6 +505,24 @@
       "applied": true,
       "checksumMatches": true,
       "status": "APLICADA_E_CHECKSUM_CONFERIDO"
+    },
+    {
+      "name": "20261012140000_revenue_budget_unit_scope",
+      "applied": true,
+      "checksumMatches": true,
+      "status": "APLICADA_E_CHECKSUM_CONFERIDO"
+    },
+    {
+      "name": "20261012150000_accounting_year_scope_update_guard",
+      "applied": true,
+      "checksumMatches": true,
+      "status": "APLICADA_E_CHECKSUM_CONFERIDO"
+    },
+    {
+      "name": "20261012160000_internal_control_budget_scope",
+      "applied": true,
+      "checksumMatches": true,
+      "status": "APLICADA_E_CHECKSUM_CONFERIDO"
     }
   ],
   "before": {
@@ -522,7 +540,7 @@
     "ConfiguracaoPerfil": 18,
     "Usuario": 16,
     "UsuarioUnidadeGestora": 14,
-    "Person": 6,
+    "Person": 27,
     "Taxpayer": 24,
     "RealEstate": 22,
     "EconomicRegistration": 21,
@@ -531,12 +549,12 @@
     "AnnualBudgetLaw": 8,
     "PlanningInstrument": 18,
     "PlanningBudgetLine": 0,
-    "PlanningCatalogVersion": 0,
+    "PlanningCatalogVersion": 4,
     "AccountingTransaction": 0,
     "Revenue": 0,
     "TaxAssessment": 0,
     "TaxGuide": 0,
-    "FinancialAuditLog": 1
+    "FinancialAuditLog": 26
   },
   "after": {
     "GovernmentEntity": 4,
@@ -553,7 +571,7 @@
     "ConfiguracaoPerfil": 18,
     "Usuario": 16,
     "UsuarioUnidadeGestora": 14,
-    "Person": 6,
+    "Person": 27,
     "Taxpayer": 24,
     "RealEstate": 22,
     "EconomicRegistration": 21,
@@ -562,12 +580,12 @@
     "AnnualBudgetLaw": 8,
     "PlanningInstrument": 18,
     "PlanningBudgetLine": 0,
-    "PlanningCatalogVersion": 0,
+    "PlanningCatalogVersion": 4,
     "AccountingTransaction": 0,
     "Revenue": 0,
     "TaxAssessment": 0,
     "TaxGuide": 0,
-    "FinancialAuditLog": 1
+    "FinancialAuditLog": 26
   },
   "existingRowsPreserved": true,
   "fingerprintsBefore": {
@@ -628,8 +646,8 @@
       "hash": "d41d8cd98f00b204e9800998ecf8427e"
     },
     "Person": {
-      "count": 6,
-      "hash": "e21fe87d539de5051a4306a3a87b0616"
+      "count": 27,
+      "hash": "7353a08d9e75db61cc73464b379f6dd3"
     },
     "Taxpayer": {
       "count": 3,
@@ -718,8 +736,8 @@
       "hash": "d41d8cd98f00b204e9800998ecf8427e"
     },
     "Person": {
-      "count": 6,
-      "hash": "e21fe87d539de5051a4306a3a87b0616"
+      "count": 27,
+      "hash": "7353a08d9e75db61cc73464b379f6dd3"
     },
     "Taxpayer": {
       "count": 3,

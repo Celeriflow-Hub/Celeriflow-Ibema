@@ -491,7 +491,7 @@ Obter documentos/parâmetros locais durante as primeiras fases. **Isso não é i
 
 ### P1 — fundação compartilhada, escopo e classificações
 
-**Execução iniciada:** [P1 — escopo contábil](poc-p0/EXECUCAO_P1_ESCOPO_CONTABIL.md). Lançamentos, consultas e exercícios têm escopo de entidade/UG. Testes validam fechamentos independentes de Prefeitura/Câmara, segregação de responsáveis e integração Planejamento–Financeiro–Arrecadação tributária. P1 permanece em andamento: cadastros tributários legados, demais relatórios e classificações oficiais ainda precisam da conclusão do vínculo canônico e homologação.
+**Execução em andamento:** [P1 — fundação compartilhada](poc-p0/EXECUCAO_P1_ESCOPO_CONTABIL.md). Exercícios/fechamentos por entidade, receita com UG persistida, relatórios e Controle Interno com escopo autorizado; referência de retorno tributário reutiliza a partida canônica. Identidades de ensaio foram conciliadas e classificações sintéticas ganharam origem/vigência/hash. P1 permanece em andamento: revisão integral dos produtores restantes, relações CNAE/CBO/serviços, fonte/MSC e homologação dos catálogos oficiais ainda precisam ser concluídas.
 
 **Dependência:** P0. **Prioridade dos gaps:** estrutural.
 

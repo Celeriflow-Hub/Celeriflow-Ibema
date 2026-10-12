@@ -168,7 +168,13 @@ export default async function PortalTransparenciaPage({ searchParams }: { search
               <div><h2 className="text-lg font-bold">Relatórios legais</h2><p className="text-sm text-slate-500">Snapshots CSV gerados internamente e versionados.</p></div>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm"><thead className="bg-slate-100 text-xs uppercase tracking-wide text-slate-600"><tr><th className="px-4 py-3">Relatório</th><th className="px-4 py-3">Exercício</th><th className="px-4 py-3">Versão</th><th className="px-4 py-3">Gerado em</th><th className="px-4 py-3"></th></tr></thead><tbody className="divide-y divide-slate-200">{reports.map((report) => <tr key={`${report.type}-${report.year}`}><td className="px-4 py-3 font-medium">{report.label}</td><td className="px-4 py-3">{report.year}</td><td className="px-4 py-3">v{report.version}</td><td className="px-4 py-3">{formatDate(report.finalizedAt)}</td><td className="px-4 py-3"><a className="font-semibold text-sky-800 hover:underline" href={`/api/transparencia/relatorios?year=${report.year}&reportType=${report.type}&version=${report.version}`}>CSV</a></td></tr>)}{!reports.length && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Nenhum snapshot publicado.</td></tr>}</tbody></table>
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-slate-100 text-xs uppercase tracking-wide text-slate-600"><tr><th className="px-4 py-3">Relatório</th><th className="px-4 py-3">Entidade / exercício</th><th className="px-4 py-3">Versão</th><th className="px-4 py-3">Gerado em</th><th className="px-4 py-3"></th></tr></thead>
+                <tbody className="divide-y divide-slate-200">{reports.map((report) => <tr key={`${report.governmentEntityId ?? "legacy"}-${report.type}-${report.year}`}>
+                  <td className="px-4 py-3 font-medium">{report.label}</td><td className="px-4 py-3">{report.governmentEntityName} — {report.year}</td><td className="px-4 py-3">v{report.version}</td><td className="px-4 py-3">{formatDate(report.finalizedAt)}</td>
+                  <td className="px-4 py-3"><a className="font-semibold text-sky-800 hover:underline" href={`/api/transparencia/relatorios?year=${report.year}&reportType=${report.type}&version=${report.version}${report.governmentEntityId ? `&governmentEntityId=${encodeURIComponent(report.governmentEntityId)}` : ""}`}>CSV</a></td>
+                </tr>)}{!reports.length && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Nenhum snapshot publicado.</td></tr>}</tbody>
+              </table>
             </div>
           </div>
 

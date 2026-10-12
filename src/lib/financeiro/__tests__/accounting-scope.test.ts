@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { createPlanningAccountingFixture } from "../../../../tests/helpers/planning-accounting-fixture";
 import { authorizeAccountingMonthClose, authorizeAccountingMonthReopen, finalizeAnnualAccountingClose, postAccountingTransaction, prepareAnnualAccountingClose, requestAccountingMonthClose, requestAccountingMonthReopen } from "../index";
 import { generateBalanceteContabil, generateDiarioContabil, generateRazaoContabil } from "../relatorios-legais";
+import { generateInternalReportDataset } from "../report-delivery";
+import { resolveFinancialReportScope } from "../report-scope";
 
 test("contabilidade filtra Diario, Razao e Balancete pela entidade e UG sem misturar movimentos", async () => {
   const fixture = await createPlanningAccountingFixture();
@@ -17,6 +19,13 @@ test("contabilidade filtra Diario, Razao e Balancete pela entidade e UG sem mist
     });
     assert.equal(posted.governmentEntityId, "ente");
     assert.equal(posted.budgetUnitId, "ug");
+    await assert.rejects(postAccountingTransaction(db, { usuarioId: "ana", employeeId: "servidora-ana", allowedBudgetUnitIds: ["ug"] }, {
+      financialYearId: "ano", governmentEntityId: "ente", budgetUnitId: "ug", date: new Date("2026-01-01T00:00:00.000Z"), history: "Abertura contábil com escopo", sourceModule: "PLANEJAMENTO", sourceType: "PLANNING_BUDGET", eventType: "PLANNING_BUDGET_OPENING_EXPENSE", idempotencyKey: "scope:posted:opening", lines: [{ accountId: "debito", type: "Débito", value: "7.00" }, { accountId: "credito", type: "Crédito", value: "7.00" }],
+    }), /chave contábil.*outros dados/i);
+    await db.accountingPlan.create({ data: { id: "sintetica", code: "ISOLATED", name: "Conta sintética de ensaio", type: "Ativo" } });
+    await assert.rejects(postAccountingTransaction(db, { usuarioId: "ana", employeeId: "servidora-ana" }, {
+      financialYearId: "ano", governmentEntityId: "ente", budgetUnitId: "ug", date: new Date("2026-01-01"), history: "Conta sintética inválida", sourceModule: "PLANEJAMENTO", sourceType: "PLANNING_BUDGET", eventType: "PLANNING_BUDGET_OPENING_EXPENSE", lines: [{ accountId: "sintetica", type: "Débito", value: "1.00" }, { accountId: "credito", type: "Crédito", value: "1.00" }],
+    }), /conta sintética/i);
     await assert.rejects(postAccountingTransaction(db, { usuarioId: "ana", employeeId: "servidora-ana", allowedBudgetUnitIds: ["ug"] }, {
       financialYearId: "ano", governmentEntityId: "ente", budgetUnitId: "ug-restrita", date: new Date("2026-01-01T00:00:00.000Z"),
       history: "Unidade fora do perfil", sourceModule: "PLANEJAMENTO", sourceType: "PLANNING_BUDGET", eventType: "PLANNING_BUDGET_OPENING_EXPENSE",
@@ -76,6 +85,32 @@ test("contabilidade filtra Diario, Razao e Balancete pela entidade e UG sem mist
   } finally { await fixture.close(); }
 });
 
+test("exportação de tesouraria e conciliações intersecta exercício, entidade e UGs autorizadas", async () => {
+  const fixture = await createPlanningAccountingFixture();
+  try {
+    const { db } = fixture;
+    for (const [id, budgetUnitId, value] of [["permitida", "ug", "12.00"], ["restrita", "ug-restrita", "99.00"]] as const) {
+      await db.bankAccount.create({ data: { id, bankName: id, agency: "0001", accountNumber: id, budgetUnitId } });
+      await db.treasuryMovement.create({ data: { bankAccountId: id, financialYearId: "ano", date: new Date("2026-03-01"), type: "Revenue", direction: "Entrada", valueDecimal: value, status: "Confirmado" } });
+      await db.bankReconciliation.create({ data: { bankAccountId: id, date: new Date("2026-03-01"), periodStart: new Date("2026-03-01"), periodEnd: new Date("2026-03-31"), systemBalance: Number(value), bankBalance: Number(value), systemBalanceDecimal: value, bankBalanceDecimal: value } });
+    }
+    const scope = { budgetUnitIds: ["ug"] };
+    const balance = await generateInternalReportDataset(db, "BALANCO_FINANCEIRO", "ano", 2026, {}, scope);
+    assert.ok(JSON.stringify(balance).includes("permitida"));
+    assert.ok(!JSON.stringify(balance).includes("restrita"));
+    const reconciliation = await generateInternalReportDataset(db, "CONCILIACAO_TESOURARIA", "ano", 2026, {}, scope);
+    assert.equal(reconciliation.sections[0].rows.length, 1);
+    assert.equal(reconciliation.sections[0].rows[0].banco, "permitida");
+    const empty = await generateInternalReportDataset(db, "BALANCO_FINANCEIRO", "ano", 2026, {}, { budgetUnitIds: [] });
+    assert.ok(!JSON.stringify(empty).includes("permitida"));
+    await assert.rejects(generateInternalReportDataset(db, "RREO", "ano", 2026, {}, scope), /todas as unidades gestoras/i);
+    await assert.rejects(generateInternalReportDataset(db, "BALANCO_FINANCEIRO", "ano", 2025, {}, scope), /ano.*diverge/i);
+    await assert.rejects(resolveFinancialReportScope(db, "ano", { governmentEntityId: "outra" }), /entidade.*diverge/i);
+    assert.equal((await resolveFinancialReportScope(db, "ano")).fullEntity, true);
+    assert.deepEqual((await resolveFinancialReportScope(db, "ano", { budgetUnitId: "ug-restrita", budgetUnitIds: ["ug"] })).budgetUnitIds, []);
+  } finally { await fixture.close(); }
+});
+
 test("fechar e reabrir a Prefeitura não fecha a Câmara no mesmo ano", async () => {
   const fixture = await createPlanningAccountingFixture();
   try {
@@ -98,6 +133,8 @@ test("fechar e reabrir a Prefeitura não fecha a Câmara no mesmo ano", async ()
     const posting = { date: new Date("2026-01-15"), history: "Postagem de isolamento", lines: [{ accountId: "debito", type: "Débito" as const, value: "10.00" }, { accountId: "credito", type: "Crédito" as const, value: "10.00" }] };
     await assert.rejects(postAccountingTransaction(db, requester, { ...posting, financialYearId: "ano", governmentEntityId: "ente", budgetUnitId: "ug" }), /competencia contabil nao esta aberta/i);
     await postAccountingTransaction(db, requester, { ...posting, financialYearId: "ano-camara", governmentEntityId: "camara", budgetUnitId: "ug-camara" });
+    const chamberPosting = await db.accountingTransaction.findFirstOrThrow({ where: { financialYearId: "ano-camara" } });
+    await assert.rejects(fixture.pg.query('UPDATE "AccountingTransaction" SET "financialYearId"=$1 WHERE id=$2', ["ano", chamberPosting.id]), /entity.*financial year/i);
     await assert.rejects(postAccountingTransaction(db, requester, { ...posting, financialYearId: "ano-camara", governmentEntityId: "ente", budgetUnitId: "ug" }), /entidade.*exercício/i);
     await requestAccountingMonthReopen(db, requester, "ano", january, "Correção de ensaio por entidade.");
     await authorizeAccountingMonthReopen(db, authorizer, "ano", january);

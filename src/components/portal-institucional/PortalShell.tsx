@@ -62,6 +62,7 @@ const MAIN_MENU: MenuItem[] = [
     children: [
       { label: "Notícias", href: "/portal/noticias" },
       { label: "Eventos", href: "/portal/noticias?categoria=eventos" },
+      { label: "Concursos e processos seletivos", href: "/portal/concursos" },
       { label: "Multimídia", href: "/portal/noticias?categoria=multimidia" },
     ],
   },

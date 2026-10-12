@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { functionalServiceInputSchema, saveFunctionalService } from "@/lib/portal-servidor/service-catalog";
-import { decideFunctionalRequest, requestFunctionalComplement } from "@/lib/portal-servidor/functional-requests";
+import { completeFunctionalDocumentRequest, decideFunctionalRequest, requestFunctionalComplement } from "@/lib/portal-servidor/functional-requests";
 
 export async function saveFunctionalServiceAction(raw: unknown) {
   try {
@@ -32,4 +32,14 @@ export async function requestFunctionalComplementAction(raw: unknown) {
     revalidatePath("/rh/solicitacoes"); revalidatePath("/portal-servidor/protocolos", "layout");
     return { error: "" };
   } catch (error) { return { error: error instanceof Error ? error.message : "Não foi possível registrar a pendência." }; }
+}
+
+export async function completeFunctionalDocumentRequestAction(raw: unknown) {
+  try {
+    const context = await getTenantContextForModuleOperation("RH", "update");
+    await completeFunctionalDocumentRequest(context, raw);
+    revalidatePath("/rh/requerimentos-funcionais");
+    revalidatePath("/portal-servidor/protocolos", "layout");
+    return { error: "" };
+  } catch (error) { return { error: error instanceof Error ? error.message : "Não foi possível concluir a providência." }; }
 }

@@ -65,6 +65,7 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
       });
       await pg.exec(`CREATE TABLE "${name}" (${columns.join(",")})`);
     }
+    await pg.exec(`CREATE TABLE "ConfiguracaoInstancia" (id TEXT PRIMARY KEY,"nomePrefeitura" TEXT,"municipio" TEXT,"uf" TEXT,"cnpj" TEXT,"dominio" TEXT,status TEXT DEFAULT 'Ativa',"createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
     await pg.exec(readFileSync("prisma/migrations-ibema/20261011030000_hr_workforce_foundation/migration.sql", "utf8"));
     await pg.exec('CREATE UNIQUE INDEX test_expense_idempotency ON "Expense"("idempotencyKey")');
     await pg.exec(readFileSync("prisma/migrations-ibema/20261011130000_hr_contract_temporal_revisions/migration.sql", "utf8"));
@@ -821,7 +822,7 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
     assert.equal(expired.entryIds.length, 2);
     assert.deepEqual(await expireTimeBankLots(db, "other-actor", { ...expiryInput, mode: "APLICAR" }), expired);
     assert.equal((await db.hrRightEntry.aggregate({ where: { kind: "BANCO_HORAS", details: { path: ["scope"], equals: "DEMONSTRACAO" } }, _sum: { quantity: true } }))._sum.quantity?.toString(), "0");
-    await pg.exec(`CREATE TABLE "ConfiguracaoInstancia" (id TEXT PRIMARY KEY,"nomePrefeitura" TEXT,"municipio" TEXT,"uf" TEXT,"cnpj" TEXT,"dominio" TEXT,status TEXT DEFAULT 'Ativa',"createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+    await pg.exec(`
       CREATE UNIQUE INDEX poc_ruleset_key ON "HrPayrollRuleSet" ("configuracaoInstanciaId",code,"effectiveFrom");
       CREATE UNIQUE INDEX poc_policy_key ON "HrCalculationPolicy" ("ruleSetId");
       CREATE UNIQUE INDEX poc_scheme_key ON "HrSocialSecurityScheme" ("ruleSetId",code);

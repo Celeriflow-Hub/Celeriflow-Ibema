@@ -29,6 +29,7 @@ export async function decideEmployeeHrRequest(db: PrismaClient, actorId: string,
     if (request.kind === "RECADASTRAMENTO") throw new Error("Recadastramento exige revisão do diff e atualização canônica pelo fluxo próprio.");
     if (request.kind === "CREDITO_CONSIGNADO") throw new Error("Crédito consignado exige decisão e reserva transacional pelo fluxo próprio.");
     if (request.kind === "DIARIA_POC") throw new Error("Diária exige autorização numerada pelo fluxo próprio.");
+    if (["AVALIACAO_FUNCIONAL", "CAPACITACAO_INSCRICAO"].includes(request.kind)) throw new Error("Capacitação e avaliação exigem reconhecimento/publicação no fluxo próprio de atividades funcionais.");
     if (request.status !== "EM_ANALISE") {
       if (request.status === input.status && request.decision === input.decision) return request;
       throw new Error("Solicitação já decidida; o histórico foi preservado.");

@@ -11,7 +11,7 @@ Data: 12/10/2026. Referência: [plano e matriz dos checklists](PLANO_PORTAL_SERV
 - Regras municipais são parametrizadas na origem. Acesso ao Portal não equivale a habilitação para marcar ponto, elegibilidade para curso, direito a férias ou autorização de crédito.
 - Layout ERP profissional, com navegação funcional, filtros, listagens compactas, paginação, detalhes e comprovantes.
 
-**Estado deste documento:** implementação F02–F08 em andamento. Existem telas, APIs e serviços locais ainda sem validação final; os checkboxes abaixo representam aceite comprovado, não a mera presença de código. Os modelos estruturais propostos ainda não foram criados. As evidências da F01 permanecem no plano principal.
+**Estado deste documento:** implementação F02–F08 em andamento. O lote de fechamento já tem migration aditiva testada e build completo aprovado; os checkboxes abaixo representam aceite integral, não a mera presença de código. Consulte [o plano de fechamento e as evidências atuais](PORTAL_SERVIDOR_FECHAMENTO_F02_F08.md) para as entregas, verificações e pendências remanescentes. As evidências da F01 permanecem no plano principal.
 
 ### Registro do lote em implementação — 12/10/2026
 

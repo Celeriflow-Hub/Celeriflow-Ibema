@@ -7,6 +7,7 @@ import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence"
 import { functionalServiceSchema, listFunctionalServices, validateFunctionalValues } from "./service-catalog";
 import { reserveVacationRightInTransaction } from "@/lib/rh/vacation-rights";
 import { resolveContractRevision } from "@/lib/rh/contract-timeline";
+import { publicationPayloadSchema } from "./publication-contract";
 
 const requestInput = z.object({
   requestKey: z.string().min(1).max(160), serviceId: z.string().min(1), serviceVersion: z.number().int().positive(),
@@ -19,6 +20,7 @@ export const functionalRequestPayloadSchema = z.object({
   configuration: functionalServiceSchema, inputHash: z.string(), description: z.string(), values: z.record(z.string(), z.string()),
   accepted: z.boolean(), attachments: z.array(z.object({ code: z.string(), documentId: z.string() })),
   awaitingComplement: z.boolean(), execution: z.enum(["AGUARDANDO_DECISAO", "PENDENTE", "EXECUTADA", "NAO_APLICAVEL"]),
+  resultPublicationId: z.string().optional(),
 });
 
 function inputHash(input: z.infer<typeof requestInput>) {
@@ -74,6 +76,8 @@ export async function submitFunctionalRequest(context: AppContext, raw: unknown)
     if (destination.currentDepartment?.secretariatId !== unit.secretariatId) throw new Error("Roteiro inicial incompatível com a unidade responsável pelo serviço.");
     const payload = { origin: "REQUERIMENTO_FUNCIONAL", processId: process.id, serviceId: service.id, serviceName: service.name, configuration: service.configuration, inputHash: hash, description: input.description, values, accepted: input.accepted, attachments, awaitingComplement: false, execution: "AGUARDANDO_DECISAO" };
     const request = await tx.hrPortalRequest.create({ data: { employeeId, actorId: context.user.id, requestKey: input.requestKey, kind: `FUNCIONAL_${service.configuration.operation}`, payload: JSON.parse(JSON.stringify(payload)) as Prisma.InputJsonValue } });
+    await tx.hrPortalRequestBinding.create({ data: { requestId: request.id, processId: process.id, serviceRuleId: service.id, employeeId, actorId: context.user.id, serviceVersion: service.configuration.version } });
+    await tx.process.update({ where: { id: process.id }, data: { portalOrigin: "PORTAL_SERVIDOR", portalPurpose: "INTERNO_ENTIDADE" } });
     for (const attachment of attachments) await tx.processDocument.create({ data: { processId: process.id, documentId: attachment.documentId, employeeId, purpose: "REQUERIMENTO_FUNCIONAL" } });
     for (const reference of input.attachments) {
       const upload = await tx.hrIntegrationEvent.findUniqueOrThrow({ where: { id: reference.uploadEventId } });
@@ -144,7 +148,7 @@ export async function decideFunctionalRequest(context: AppContext, raw: unknown)
     if (payload.awaitingComplement || ["Arquivado", "Cancelado", "Concluído"].includes(process.status)) throw new Error("Resolva as pendências e confira a situação do processo antes de decidir.");
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:employee:${request.employeeId}`}))`;
     if (!await tx.employee.findFirst({ where: { id: request.employeeId, isActive: true } })) throw new Error("Titular funcional inativo. Encaminhe o atendimento ao RH.");
-    let execution: "EXECUTADA" | "NAO_APLICAVEL" = "NAO_APLICAVEL";
+    let execution: "EXECUTADA" | "NAO_APLICAVEL" | "PENDENTE" = input.status === "DEFERIDA" && payload.configuration.operation === "SOLICITACAO_RH" ? "PENDENTE" : "NAO_APLICAVEL";
     let reference: string | null = null;
     if (input.status === "DEFERIDA" && payload.configuration.operation === "FERIAS") {
       const values = payload.values;
@@ -175,6 +179,35 @@ export async function decideFunctionalRequest(context: AppContext, raw: unknown)
     await tx.processEvent.create({ data: { processId: process.id, employeeId: context.user.employeeId, departmentId: process.currentDepartmentId, eventType: "FUNCTIONAL_DECISION", description: input.decision, metadata: JSON.stringify({ status: input.status, requestId: request.id }) } });
     if (reference) await tx.processEvent.create({ data: { processId: process.id, employeeId: context.user.employeeId, eventType: "FUNCTIONAL_EXECUTION", description: "Providência funcional aplicada ao registro de origem.", metadata: JSON.stringify({ reference, operation: payload.configuration.operation, requestId: request.id }) } });
     await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "EMPLOYEE_PORTAL_DECISION", targetId: request.id });
+    return request.id;
+  });
+}
+
+export async function completeFunctionalDocumentRequest(context: AppContext, raw: unknown) {
+  const input = z.object({ requestId: z.string().min(1), publicationId: z.string().min(1) }).strict().parse(raw);
+  if (!canPerformModuleOperation(context.user, "RH", "update")) throw new AccessError("Sem autorização para concluir a providência.", 403);
+  return context.prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM "HrPortalRequest" WHERE id=${input.requestId} FOR UPDATE`;
+    const request = await tx.hrPortalRequest.findUniqueOrThrow({ where: { id: input.requestId } });
+    const payload = functionalRequestPayloadSchema.parse(request.payload);
+    assertBudgetUnitAccess(context.user, payload.configuration.budgetUnitId);
+    const process = await tx.process.findUniqueOrThrow({ where: { id: payload.processId } });
+    if (!isSystemAdministrator(context.user) && process.currentDepartmentId !== context.user.departmentId) throw new AccessError("Requerimento fora do setor responsável.", 403);
+    if (request.status !== "DEFERIDA" || payload.configuration.operation !== "SOLICITACAO_RH") throw new Error("Conclusão documental exige requerimento RH deferido.");
+    if (payload.execution === "EXECUTADA") {
+      if (payload.resultPublicationId !== input.publicationId) throw new Error("Providência já concluída com outro resultado.");
+      return request.id;
+    }
+    if (payload.execution !== "PENDENTE" || ["Arquivado", "Cancelado", "Concluído"].includes(process.status)) throw new Error("Providência indisponível para execução.");
+    const publication = await tx.hrIntegrationEvent.findFirst({ where: { id: input.publicationId, domain: "PORTAL", eventType: "DOCUMENTO_FUNCIONAL_DISPONIBILIZADO", status: "PROCESSADO" } });
+    if (!publication) throw new Error("Publicação documental indisponível.");
+    const document = publicationPayloadSchema.parse(publication.payload);
+    if (document.employeeId !== request.employeeId || document.budgetUnitId !== payload.configuration.budgetUnitId || new Date(document.releaseAt) > new Date()) throw new Error("O resultado deve estar liberado para o titular e UG do requerimento.");
+    const version = await tx.documentVersion.findFirst({ where: { id: document.documentVersionId, hashSha256: document.hashSha256, status: { in: ["FINAL", "SIGNED"] }, document: { status: "Válido", person: { employee: { id: request.employeeId } } } } });
+    if (!version) throw new Error("Versão documental indisponível ou sem titularidade válida.");
+    await tx.hrPortalRequest.update({ where: { id: request.id }, data: { payload: JSON.parse(JSON.stringify({ ...payload, execution: "EXECUTADA", resultPublicationId: publication.id })) as Prisma.InputJsonValue } });
+    await tx.processEvent.create({ data: { processId: process.id, employeeId: context.user.employeeId, eventType: "FUNCTIONAL_EXECUTION", description: "Documento de resultado liberado para o titular.", metadata: JSON.stringify({ requestId: request.id, publicationId: publication.id, documentVersionId: version.id }) } });
+    await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "EMPLOYEE_PORTAL_EXECUTION", targetId: request.id });
     return request.id;
   });
 }

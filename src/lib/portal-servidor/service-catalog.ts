@@ -37,10 +37,11 @@ export const functionalServiceInputSchema = z.object({
 export async function listFunctionalServices(db: PrismaClient | Prisma.TransactionClient, employeeId: string) {
   const now = new Date();
   if (!await db.employee.findFirst({ where: { id: employeeId, isActive: true }, select: { id: true } })) return [];
-  const rules = await db.hrPayrollRule.findMany({ where: { category: "PORTAL", valueType: "JSON", isActive: true, ruleSet: { status: "ATIVA", effectiveFrom: { lte: now }, OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: now } }] } }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] });
+  const rules = await db.hrPayrollRule.findMany({ where: { category: "PORTAL", valueType: "JSON", isActive: true, ruleSet: { status: "ATIVA", effectiveFrom: { lte: now }, OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: now } }] } }, include: { functionalPortalConfiguration: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] });
   const services = rules.flatMap(rule => {
     const parsed = functionalServiceSchema.safeParse(rule.value);
-    return parsed.success && (!parsed.data.employeeIds.length || parsed.data.employeeIds.includes(employeeId)) ? [{ rule, configuration: parsed.data }] : [];
+    const link = rule.functionalPortalConfiguration;
+    return parsed.success && link && link.version === parsed.data.version && link.publicServiceId === parsed.data.publicServiceId && link.budgetUnitId === parsed.data.budgetUnitId && link.processTypeId === parsed.data.processTypeId && link.subjectId === parsed.data.subjectId && link.operation === parsed.data.operation && (!parsed.data.employeeIds.length || parsed.data.employeeIds.includes(employeeId)) ? [{ rule, configuration: parsed.data }] : [];
   });
   const publicServices = await db.publicService.findMany({ where: { id: { in: services.map(service => service.configuration.publicServiceId) }, target: "Servidor", isActive: true } });
   return services.flatMap(service => {
@@ -74,6 +75,8 @@ export async function saveFunctionalService(context: AppContext, raw: unknown) {
     const configuration = functionalServiceSchema.parse({ ...input.configuration, origin: "SERVICO_PORTAL_SERVIDOR", version: (prior?.version || 0) + 1, publicServiceId: common.id });
     const data = { name: input.name, description: input.description, category: "PORTAL", valueType: "JSON", value: JSON.parse(JSON.stringify(configuration)) as Prisma.InputJsonValue, isActive: input.isActive };
     const rule = previous ? await tx.hrPayrollRule.update({ where: { id: previous.id }, data }) : await tx.hrPayrollRule.create({ data: { ...data, ruleSetId: input.ruleSetId, code: input.code } });
+    const link = { publicServiceId: common.id, budgetUnitId: configuration.budgetUnitId, processTypeId: configuration.processTypeId, subjectId: configuration.subjectId, version: configuration.version, operation: configuration.operation, snapshot: JSON.parse(JSON.stringify(configuration)) as Prisma.InputJsonValue };
+    await tx.hrPortalServiceConfiguration.upsert({ where: { ruleId: rule.id }, create: { ruleId: rule.id, ...link }, update: link });
     await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.instanceConfigurationChanged, targetType: "EMPLOYEE_PORTAL_SERVICE", targetId: rule.id });
     return rule.id;
   });

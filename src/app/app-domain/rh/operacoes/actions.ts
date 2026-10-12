@@ -16,7 +16,7 @@ import { generateBenefitMovement } from "@/lib/rh/benefit-calculation";
 import { decideEmployeeHrRequest } from "@/lib/rh/portal-requests";
 import { adjustContractSalaries, changeContractsCollectively } from "@/lib/rh/workforce-service";
 import { generateAttendanceOvertime } from "@/lib/rh/attendance-payroll";
-import { decideRecertificationProposal } from "@/lib/rh/recertification";
+import { assertRecertificationReviewScope, decideRecertificationProposal } from "@/lib/rh/recertification";
 import { dispatchPayrollExpenseRequests, commitPayrollExpenseRequests, settlePayrollCommitments, payPayrollSettlements, concludePayrollFinanceCycle, reversePayrollCommitments } from "@/lib/rh/finance-bridge";
 import { simulateSpecialPayroll } from "@/lib/rh/special-simulation";
 import { reserveConsignmentAgreement, postConsignmentInstallment, cancelConsignmentInstallment } from "@/lib/rh/consignment-service";
@@ -234,7 +234,10 @@ export async function executeWorkforceOperation(command: string, values: Record<
       message = "Estorno compensatório registrado, com preservação do ponto e da entrada original.";
     }
     if (command === "decidir-solicitacao") id = (await decideEmployeeHrRequest(context.prisma, context.user.id, values)).id;
-    if (command === "decidir-recadastramento") id = (await decideRecertificationProposal(context.prisma, context.user.id, values)).id;
+    if (command === "decidir-recadastramento") {
+      await assertRecertificationReviewScope(context, values.requestId);
+      id = (await decideRecertificationProposal(context.prisma, context.user.id, values)).id;
+    }
     if (command === "financeiro") {
       const result = await dispatchPayrollExpenseRequests(context, values);
       message = `${result.applied ? "Solicitações de despesa geradas" : "Prévia sem geração financeira"}: ${JSON.stringify(result.lines)}`;

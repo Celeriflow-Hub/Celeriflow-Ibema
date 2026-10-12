@@ -32,7 +32,8 @@ export async function listOwnCareerActivities(context: AppContext) {
   const courses = rules.flatMap(rule => { const policy = coursePolicySchema.safeParse(rule.value); return policy.success && (!policy.data.employeeIds.length || policy.data.employeeIds.includes(employee.id)) ? [{ id: rule.id, name: rule.name, policy: policy.data }] : []; });
   const evaluations = rules.flatMap(rule => { const policy = evaluationPolicySchema.safeParse(rule.value); return policy.success && (policy.data.employeeIds.includes(employee.id) || policy.data.commissionUserIds.includes(context.user.id)) ? [{ id: rule.id, name: rule.name, policy: policy.data }] : []; });
   const enrollments = await context.prisma.hrPortalRequest.findMany({ where: { employeeId: employee.id, kind: "CAPACITACAO_INSCRICAO" }, orderBy: { createdAt: "desc" } });
-  const assessments = await context.prisma.hrPortalRequest.findMany({ where: { kind: "AVALIACAO_FUNCIONAL", OR: [{ employeeId: employee.id }, { payload: { path: ["commissionUserIds"], array_contains: [context.user.id] } }] }, orderBy: { createdAt: "desc" } });
+  const assignedCycles = evaluations.filter(cycle => cycle.policy.commissionUserIds.includes(context.user.id));
+  const assessments = await context.prisma.hrPortalRequest.findMany({ where: { kind: "AVALIACAO_FUNCIONAL", OR: [{ employeeId: employee.id }, ...assignedCycles.map(cycle => ({ AND: [{ payload: { path: ["cycleId"], equals: cycle.id } }, { payload: { path: ["commissionUserIds"], array_contains: [context.user.id] } }] }))] }, orderBy: { createdAt: "desc" } });
   return { courses, evaluations, enrollments, assessments };
 }
 
@@ -121,8 +122,16 @@ export async function submitCommissionEvaluation(context: AppContext, raw: unkno
     if (!payload.policy.commissionUserIds.includes(context.user.id) || request.employeeId === context.user.employeeId) throw new AccessError("Avaliação não atribuída a este avaliador.", 403);
     if (now < new Date(payload.policy.startsAt) || now > new Date(payload.policy.endsAt)) throw new Error("Avaliação fora da janela configurada.");
     validateAnswers(payload.policy, input.answers);
+    const sourceKey = `PORTAL:COMISSAO:${request.id}:${context.user.id}`;
+    const previous = await tx.hrIntegrationEvent.findUnique({ where: { sourceKey } });
+    if (previous) {
+      const stored = z.object({ answers: z.record(z.string(), z.number()), comment: z.string() }).parse(previous.payload);
+      if (previous.status !== "PROCESSADO" || stored.comment !== input.comment || payload.policy.questions.some(question => stored.answers[question.code] !== input.answers[question.code])) throw new Error("Parecer já registrado com outros dados; o histórico foi preservado.");
+      return previous.id;
+    }
+    if (request.status !== "EM_ANALISE") throw new Error("Avaliação encerrada para novos pareceres.");
     const score = payload.policy.questions.reduce((sum, question) => sum.add(new Prisma.Decimal(String(input.answers[question.code])).mul(String(question.weight))), new Prisma.Decimal(0)).div(payload.policy.questions.reduce((sum, question) => sum.add(String(question.weight)), new Prisma.Decimal(0))).toFixed(4);
-    const event = await enqueueHrIntegration(tx, { sourceKey: `PORTAL:COMISSAO:${request.id}:${context.user.id}`, domain: "PORTAL", environment: "INTERNO", eventType: "AVALIACAO_COMISSAO_REGISTRADA", payload: { ...input, employeeId: request.employeeId, actorId: context.user.id, score } });
+    const event = await enqueueHrIntegration(tx, { sourceKey, domain: "PORTAL", environment: "INTERNO", eventType: "AVALIACAO_COMISSAO_REGISTRADA", payload: { ...input, employeeId: request.employeeId, actorId: context.user.id, score } });
     await tx.hrIntegrationEvent.update({ where: { id: event.id }, data: { status: "PROCESSADO" } });
     const completed = await tx.hrIntegrationEvent.count({ where: { domain: "PORTAL", eventType: "AVALIACAO_COMISSAO_REGISTRADA", payload: { path: ["requestId"], equals: request.id } } });
     if (completed === payload.policy.commissionUserIds.length) await tx.hrPortalRequest.update({ where: { id: request.id }, data: { status: "AVALIADA", decidedAt: now } });

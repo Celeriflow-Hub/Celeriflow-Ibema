@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveCareerPolicyAction, completeFunctionalCourseAction } from "./actions";
+import { saveCareerPolicyAction, completeFunctionalCourseAction, publishFunctionalEvaluationResultAction } from "./actions";
 
 type ActivityValues = { id: string; ruleSetId: string; code: string; name: string; isActive: boolean; value: unknown };
 const control = "rounded border border-slate-300 bg-white p-2 text-sm";
@@ -58,4 +58,23 @@ export function CourseCompletionForm({ requestId }: { requestId: string }) {
     </fieldset>
     {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
   </form>;
+}
+
+export function EvaluationPublicationForm({ requestId }: { requestId: string }) {
+  const [pending, startTransition] = useTransition(), [error, setError] = useState("");
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const data = new FormData(event.currentTarget); setError("");
+    startTransition(async () => {
+      try {
+        const result = await publishFunctionalEvaluationResultAction({ requestId, conclusion: String(data.get("conclusion")), evidenceReference: String(data.get("evidenceReference")), releaseAt: new Date(String(data.get("releaseAt"))).toISOString() });
+        setError(result.error);
+      } catch { setError("Não foi possível publicar o resultado."); }
+    });
+  }
+  return <form onSubmit={submit} className="space-y-2"><fieldset disabled={pending} className="grid gap-2 sm:grid-cols-2">
+    <label className="flex flex-col gap-1 text-xs sm:col-span-2">Conclusão administrativa<textarea name="conclusion" required minLength={10} maxLength={4000} className={control} /></label>
+    <label className="flex flex-col gap-1 text-xs">Referência da decisão/documento<input name="evidenceReference" required minLength={5} maxLength={2000} className={control} /></label>
+    <label className="flex flex-col gap-1 text-xs">Disponibilizar em (horário local)<input name="releaseAt" type="datetime-local" required className={control} /></label>
+    <button className="rounded bg-emerald-800 px-3 py-2 text-xs font-semibold text-white sm:col-span-2">{pending ? "Publicando…" : "Publicar resultado para o titular"}</button>
+  </fieldset>{error && <p role="alert" className="text-xs text-red-700">{error}</p>}</form>;
 }

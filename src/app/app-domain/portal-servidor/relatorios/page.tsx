@@ -9,6 +9,7 @@ const labels: Record<(typeof personalReportKinds)[number], string> = {
   PONTO: "Espelho de ponto", FERIAS: "Direitos e saldos de férias", BANCO_HORAS: "Banco de horas",
   LICENCA_PREMIO: "Licença-prêmio", AFASTAMENTOS: "Afastamentos e faltas", CONSIGNACOES: "Consignações",
   FICHA_REGISTRO: "Ficha de registro funcional", ATOS: "Atos legais", PLANOS: "Despesas dos planos de saúde",
+  GOZOS_LICENCA_PREMIO: "Gozos de licença-prêmio vinculados ao RH", HISTORICO_ATS: "Histórico do adicional por tempo de serviço",
 };
 
 export default async function PersonalReportsPage() {

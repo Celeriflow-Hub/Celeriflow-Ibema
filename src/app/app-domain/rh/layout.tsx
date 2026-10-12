@@ -36,6 +36,7 @@ const sidebarNavItems = [
   { title: "Emissões funcionais", href: "/rh/emissoes-funcionais", icon: FileSignature },
   { title: "Publicação funcional da folha", href: "/rh/publicacao-funcional", icon: Wallet },
   { title: "Capacitação e avaliações", href: "/rh/atividades-funcionais", icon: Users },
+  { title: "Concursos e PSS", href: "/rh/concursos", icon: UserPlus },
 ];
 
 export default function RhLayout({ children }: { children: React.ReactNode }) {

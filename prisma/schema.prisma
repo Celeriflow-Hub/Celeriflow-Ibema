@@ -265,6 +265,7 @@ model Role {
 
 // Servidores BÃ¡sicos (Base para RH e vinculaÃ§Ã£o de responsÃ¡veis)
 model Employee {
+  functionalPortalBindings HrPortalRequestBinding[]
   legislativeAdvisor CamAdvisor?
   sstEquipmentItems SstEquipmentDeliveryItem[]
   sstElectionElectors SstElectionElector[]
@@ -1886,6 +1887,7 @@ model CertificateUseAudit {
 
 // Tipo de Processo
 model ProcessType {
+  functionalPortalServices HrPortalServiceConfiguration[]
   id                     String      @id @default(cuid())
   name                   String // AlvarÃ¡, LicenÃ§a, CertidÃ£o, OfÃ­cio...
   description            String?
@@ -1909,6 +1911,7 @@ model ProcessType {
 
 // Assunto do Processo (vinculado a um Tipo)
 model Subject {
+  functionalPortalServices HrPortalServiceConfiguration[]
   id                    String      @id @default(cuid())
   name                  String
   description           String?
@@ -1931,6 +1934,9 @@ model Subject {
 
 // Processo / Protocolo Principal
 model Process {
+  functionalPortalBinding HrPortalRequestBinding?
+  portalOrigin String?
+  portalPurpose String?
   constructionEnforcementCase ConstructionEnforcementCase?
   constructionCase ConstructionCase?
   sstCertificates SstMedicalCertificate[]
@@ -2595,6 +2601,7 @@ model OfficialDiary {
 }
 
 model PublicService {
+  functionalPortalConfiguration HrPortalServiceConfiguration?
   id           String   @id @default(cuid())
   name         String
   description  String
@@ -4314,6 +4321,7 @@ model CreditRequestItem {
 }
 
 model BudgetUnit {
+  functionalPortalServices HrPortalServiceConfiguration[]
   planningLines PlanningBudgetLine[]
   planningDemands PlanningCommunityDemand[]
   sstEquipment SstEquipment[]
@@ -7076,6 +7084,8 @@ model HrPayrollRuleSet {
 }
 
 model HrPayrollRule {
+  functionalPortalConfiguration HrPortalServiceConfiguration?
+  recruitmentApplications HrRecruitmentApplication[]
   sstLeaveRuleVersions SstLeavePayrollRuleVersion[]
   id             String           @id @default(cuid())
   ruleSetId      String
@@ -7454,6 +7464,7 @@ model HrIntegrationEvent {
 }
 
 model HrPortalRequest {
+  functionalBinding HrPortalRequestBinding?
   id String @id @default(cuid())
   employeeId String
   requestKey String @unique
@@ -7466,6 +7477,65 @@ model HrPortalRequest {
   createdAt DateTime @default(now())
   decidedAt DateTime?
   @@index([employeeId, kind, status])
+}
+
+model HrPortalServiceConfiguration {
+  ruleId String @id
+  rule HrPayrollRule @relation(fields: [ruleId], references: [id], onDelete: Restrict)
+  publicServiceId String @unique
+  publicService PublicService @relation(fields: [publicServiceId], references: [id], onDelete: Restrict)
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  processTypeId String
+  processType ProcessType @relation(fields: [processTypeId], references: [id], onDelete: Restrict)
+  subjectId String
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  version Int
+  operation String
+  snapshot Json
+  bindings HrPortalRequestBinding[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([budgetUnitId, operation])
+}
+
+model HrPortalRequestBinding {
+  requestId String @id
+  request HrPortalRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  processId String @unique
+  process Process @relation(fields: [processId], references: [id], onDelete: Restrict)
+  serviceRuleId String
+  service HrPortalServiceConfiguration @relation(fields: [serviceRuleId], references: [ruleId], onDelete: Restrict)
+  employeeId String
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  actorId String
+  actor Usuario @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  serviceVersion Int
+  createdAt DateTime @default(now())
+  @@index([employeeId, createdAt])
+}
+
+model HrRecruitmentApplication {
+  id String @id @default(uuid())
+  noticeRuleId String
+  noticeRule HrPayrollRule @relation(fields: [noticeRuleId], references: [id], onDelete: Restrict)
+  applicantUserId String
+  applicant Usuario @relation("RecruitmentApplicant", fields: [applicantUserId], references: [id], onDelete: Restrict)
+  cpf String
+  roleCode String
+  number Int
+  status String @default("RECEBIDA")
+  snapshot Json
+  requestHash String
+  decision String?
+  decidedById String?
+  decidedBy Usuario? @relation("RecruitmentDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  decidedAt DateTime?
+  @@unique([noticeRuleId, cpf])
+  @@unique([noticeRuleId, applicantUserId])
+  @@unique([noticeRuleId, number])
+  @@index([applicantUserId, createdAt])
 }
 
 model HrPayrollItemOrigin {
@@ -14024,6 +14094,9 @@ model ConfiguracaoPerfil {
 }
 
 model Usuario {
+  functionalPortalBindings HrPortalRequestBinding[]
+  recruitmentApplications HrRecruitmentApplication[] @relation("RecruitmentApplicant")
+  recruitmentDecisions HrRecruitmentApplication[] @relation("RecruitmentDecider")
   sstPreventionRecords SstPreventionRecord[] @relation("SstPreventionAuthor")
   sstPreventionRevisions SstPreventionRevision[] @relation("SstPreventionRevisionAuthor")
   sstCats SstCat[]

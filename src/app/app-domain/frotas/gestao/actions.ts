@@ -221,7 +221,7 @@ export async function startTrip(f: FormData) {
       if (start == null) throw new UserError("Informe a leitura de saída.");
       const problem = validateReading(unit.currentReading == null ? null : Number(unit.currentReading), start, unit.meterType as MeterType);
       if (problem) throw new UserError(problem);
-      const trip = await tx.fleetTrip.create({ data: { unitId, driverId, destination, purpose, departedAt: new Date(), startReading: start, createdById: user.id, balanceId: balance?.id } });
+      const trip = await tx.fleetTrip.create({ data: { unitId, driverId, destination, purpose, departedAt: new Date(), startReading: start, createdById: user.id } });
       return { type: "FLEET_TRIP", id: trip.id };
     });
   });
@@ -289,7 +289,7 @@ export async function saveFine(f: FormData) {
     const amount = num(f, "amount");
     if (!amount || amount <= 0) throw new UserError("Informe o valor da multa.");
     const due = str(f, "dueAt");
-    const m = await prisma.fleetFine.create({ data: { unitId, driverId, aitNumber: req(f, "aitNumber", "o número do auto"), infraction: req(f, "infraction", "a infração"), occurredAt: new Date(`${req(f, "occurredAt", "a data")}T12:00:00Z`), amount, points: num(f, "points") ?? 0, dueAt: due ? new Date(`${due}T12:00:00Z`) : null, createdById: user.id, balanceId: balance?.id } });
+    const m = await prisma.fleetFine.create({ data: { unitId, driverId, aitNumber: req(f, "aitNumber", "o número do auto"), infraction: req(f, "infraction", "a infração"), occurredAt: new Date(`${req(f, "occurredAt", "a data")}T12:00:00Z`), amount, points: num(f, "points") ?? 0, dueAt: due ? new Date(`${due}T12:00:00Z`) : null, createdById: user.id } });
     return { type: "FLEET_FINE", id: m.id };
   });
 }

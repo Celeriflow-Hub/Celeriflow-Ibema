@@ -16408,6 +16408,7 @@ model FleetDriver {
   active       Boolean  @default(true)
   createdById  String
   createdAt    DateTime @default(now())
+  serviceAuthorizations FleetServiceAuthorization[]
   updatedAt    DateTime @updatedAt
 }
 
@@ -16747,6 +16748,9 @@ model FleetServiceAuthorization {
   expenseId    String?  @unique
   createdById  String
   createdAt    DateTime @default(now())
+  driverId     String?
+  driver       FleetDriver? @relation(fields: [driverId], references: [id])
+  destination  String?
   executedAt   DateTime?
 
   @@index([unitId, status])

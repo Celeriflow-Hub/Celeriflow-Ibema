@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { checkRateLimit } from "@/lib/platform/rate-limit";
 
-// ATENÇÃO: O middleware roda no Edge Runtime — NÃO importar módulos Node.js aqui.
+// O Proxy separa as rotas públicas das rotas internas do sistema.
 const SESSION_COOKIE_NAME = "celeriflow_session";
 
 function configuredSystemHostname() {
@@ -32,11 +32,33 @@ export const config = {
 
 export default function proxy(req: NextRequest) {
   const url = req.nextUrl;
+  // Entradas institucionais reutilizam os portais existentes e seus filtros.
+  if (url.pathname === "/portal/portaldoservidor" || url.pathname === "/portal/portaldatransparencia") {
+    const destination = url.clone();
+    destination.pathname = url.pathname === "/portal/portaldoservidor"
+      ? "/portal-servidor"
+      : "/portal-transparencia";
+    return NextResponse.redirect(destination);
+  }
+
+  // O autosserviço funcional também funciona no domínio institucional.
+  // A página e as actions verificam a sessão e o vínculo funcional no servidor.
+  if (url.pathname === "/portal-servidor" || url.pathname.startsWith("/portal-servidor/")) {
+    if (!req.cookies.has(SESSION_COOKIE_NAME) && url.pathname !== "/portal-servidor/entrar") {
+      const loginUrl = new URL("/portal-servidor/entrar", req.url);
+      loginUrl.searchParams.set("returnTo", url.pathname + url.search);
+      return NextResponse.redirect(loginUrl);
+    }
+    const destination = url.clone();
+    destination.pathname = `/app-domain${url.pathname}`;
+    return NextResponse.rewrite(destination);
+  }
+
   const isPublicValidation = /^\/validar-(?:documento|aviso)\/[^/]+$/.test(url.pathname);
   const isPublicProtocolPortal = url.pathname === "/portal-protocolos";
   const isPublicInstitutionalPortal = url.pathname === "/portal" || url.pathname.startsWith("/portal/");
   const isPublicTransparencyPortal = url.pathname === "/portal-transparencia";
-  if (isPublicValidation || isPublicProtocolPortal || isPublicInstitutionalPortal || isPublicTransparencyPortal) {
+  if (isPublicValidation) {
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || req.headers.get("x-real-ip") || "unknown";
     const rateLimit = checkRateLimit(`public-read:${ip}`);
     if (!rateLimit.allowed) {
@@ -45,6 +67,11 @@ export default function proxy(req: NextRequest) {
         { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
       );
     }
+    return NextResponse.next();
+  }
+  // Navegação e prefetch não são tentativas de autenticação. O limite de
+  // consultas de validação não deve bloquear páginas públicas do cidadão.
+  if (isPublicProtocolPortal || isPublicInstitutionalPortal || isPublicTransparencyPortal) {
     return NextResponse.next();
   }
   const hostname = (req.headers.get("host") || "").toLowerCase().split(":")[0];

@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   LEGACY_MUNICIPALITY_PATTERN,
+  MUNICIPALITY_ADDRESS,
   MUNICIPALITY_INSTITUTION_NAME,
   MUNICIPALITY_NAME,
   MUNICIPALITY_STATE,
@@ -33,9 +34,9 @@ export type PublicPortalPage = {
 
 type PortalNewsRecord = Omit<PublicPortalNews, "publishedAt"> & { publishedAt: Date | null };
 
-const demonstrationInstitution: InstitutionalContact = {
+const defaultInstitution: InstitutionalContact = {
   name: MUNICIPALITY_INSTITUTION_NAME,
-  address: null,
+  address: MUNICIPALITY_ADDRESS,
   city: MUNICIPALITY_NAME,
   state: MUNICIPALITY_STATE,
   phone: null,
@@ -44,11 +45,17 @@ const demonstrationInstitution: InstitutionalContact = {
 };
 
 function publicInstitutionOrFallback(institution: InstitutionalContact | null) {
-  if (!institution) return demonstrationInstitution;
+  if (!institution) return defaultInstitution;
   const searchableValues = Object.values(institution).filter((value): value is string => typeof value === "string");
   return searchableValues.some((value) => LEGACY_MUNICIPALITY_PATTERN.test(value))
-    ? demonstrationInstitution
-    : institution;
+    ? defaultInstitution
+    : {
+        ...institution,
+        name: MUNICIPALITY_INSTITUTION_NAME,
+        address: institution.address?.trim() || MUNICIPALITY_ADDRESS,
+        city: MUNICIPALITY_NAME,
+        state: MUNICIPALITY_STATE,
+      };
 }
 
 function isUnavailablePortalSchema(error: unknown) {
@@ -140,7 +147,7 @@ export async function getInstitutionalContact(): Promise<InstitutionalContact> {
     });
     return publicInstitutionOrFallback(institution);
   } catch {
-    return demonstrationInstitution;
+    return defaultInstitution;
   }
 }
 

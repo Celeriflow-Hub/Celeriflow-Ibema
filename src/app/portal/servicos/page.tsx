@@ -23,7 +23,7 @@ const GROUPS: { id: string; title: string; items: { label: string; href: string;
     id: "transparencia",
     title: "Transparência e contas públicas",
     items: [
-      { label: "Portal da Transparência", href: "/portal-transparencia" },
+      { label: "Portal da Transparência", href: "/portal/portaldatransparencia" },
       { label: "Licitações e Contratos", href: "/portal/licitacoes-e-contratos" },
       { label: "Leis Municipais", href: "/portal/leis-municipais" },
       { label: "Dados Abertos (CSV)", href: "/portal/dados-abertos" },
@@ -49,6 +49,7 @@ const GROUPS: { id: string; title: string; items: { label: string; href: string;
     id: "servidor",
     title: "Servidor municipal",
     items: [
+      { label: "Portal do Servidor", href: "/portal/portaldoservidor" },
       { label: "Atendimento ao servidor", href: "/portal/contato" },
     ],
   },

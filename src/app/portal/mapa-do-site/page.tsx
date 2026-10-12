@@ -23,6 +23,7 @@ const SECTIONS: { title: string; links: { label: string; href: string }[] }[] = 
     title: "Serviços",
     links: [
       { label: "Todos os serviços", href: "/portal/servicos" },
+      { label: "Portal do Servidor", href: "/portal/portaldoservidor" },
       { label: "Ouvidoria", href: "/portal/ouvidoria" },
       { label: "Acesso à Informação (e-SIC)", href: "/portal/acesso-informacao" },
       { label: "Perguntas Frequentes", href: "/portal/perguntas-frequentes" },
@@ -32,7 +33,7 @@ const SECTIONS: { title: string; links: { label: string; href: string }[] }[] = 
   {
     title: "Transparência",
     links: [
-      { label: "Portal da Transparência", href: "/portal-transparencia" },
+      { label: "Portal da Transparência", href: "/portal/portaldatransparencia" },
       { label: "Licitações e Contratos", href: "/portal/licitacoes-e-contratos" },
       { label: "Leis Municipais", href: "/portal/leis-municipais" },
       { label: "Dados Abertos", href: "/portal/dados-abertos" },

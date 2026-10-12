@@ -41,3 +41,6 @@
 - [x] Portal institucional: todas as páginas com renderização sob demanda (build não trava mais sem banco); build tolerante a FIREBASE_PRIVATE_KEY inválida (login falha só em runtime até corrigir a variável)
 - [ ] Sprint 1 matriz de conformidade; Sprints 4–10 demais módulos
 - [ ] Adaptador TCE-PR (SIM-AM/AP) — aguarda leiautes oficiais
+- [x] Anexos da frota (aba Anexos em /frotas/controle) e dossiê multiveículo consolidado
+- [~] Matriz de conformidade Ibema (MATRIZ_CONFORMIDADE_IBEMA.md, resumo: node scripts/compliance-summary.mjs) — classificação automática, revisar à mão
+- [ ] Próximas lacunas: módulos da Câmara (Folha, Protocolo, Contábil, eSocial, Planejamento, Patrimônio, Compras, Ouvidoria, Transparência), Serviços Públicos, Controle Interno, Transparência, Planejamento, Protocolo, eSocial, Atenção Primária/Assistência à Saúde

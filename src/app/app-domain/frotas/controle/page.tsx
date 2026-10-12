@@ -5,11 +5,13 @@ import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { departmentWhere, fleetScope } from "@/lib/frotas/service";
 import { averageConsumption, CONSUMPTION_UNIT, type MeterType } from "@/lib/frotas/gestao-engine";
 import { CNH_SUSPENSION_POINTS, consumptionStatus, driverEligibility } from "@/lib/frotas/tr-rules";
+import { FLEET_ATTACHMENT_EXTENSIONS } from "@/lib/frotas/tr-rules";
+import { FLEET_ATTACHMENT_OWNER_LABELS } from "@/lib/frotas/attachments";
 import * as A from "./actions";
 
 export const dynamic = "force-dynamic";
 
-const TABS = [["cadastro", "Cadastro complementar"], ["agenda", "Agenda e destinos"], ["guarita", "Guarita"], ["motoristas", "CNH e pontos"], ["baterias", "Baterias"], ["seguros", "Seguros e taxas"], ["autorizacoes", "Autorizações de serviço"], ["multas", "Multas (CTB)"], ["sinistros", "Ocorrências e sinistros"], ["consumo", "Consumo alto/normal/baixo"]] as const;
+const TABS = [["cadastro", "Cadastro complementar"], ["agenda", "Agenda e destinos"], ["guarita", "Guarita"], ["motoristas", "CNH e pontos"], ["baterias", "Baterias"], ["seguros", "Seguros e taxas"], ["autorizacoes", "Autorizações de serviço"], ["multas", "Multas (CTB)"], ["sinistros", "Ocorrências e sinistros"], ["consumo", "Consumo alto/normal/baixo"], ["anexos", "Anexos"]] as const;
 const inp = "h-9 rounded-md border border-slate-400 bg-white px-2 text-sm dark:bg-slate-900";
 const btn = "h-9 rounded-md bg-emerald-800 px-3 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2";
 const money = (v: unknown) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
@@ -51,6 +53,14 @@ export default async function FrotaControlePage({ searchParams }: { searchParams
     prisma.fleetClaim.findMany({ where: { unitId: { in: ids } }, take: 200 }),
     prisma.fleetFuelOrder.findMany({ where: { unitId: { in: ids }, status: "ABASTECIDA" }, select: { unitId: true, reading: true, litersFilled: true } }),
   ]);
+  const authIds = auths.map((a) => a.id), fineIds = fines.map((f) => f.id), claimIds = claims.map((c) => c.id), driverIds = drivers.map((d) => d.id);
+  const attachments = aba === "anexos" ? await prisma.fleetAttachment.findMany({ where: { OR: [
+    { ownerType: "VEICULO", ownerId: { in: ids } },
+    { ownerType: "MOTORISTA", ownerId: { in: driverIds } },
+    { ownerType: "MULTA", ownerId: { in: fineIds } },
+    { ownerType: "SINISTRO", ownerId: { in: claimIds } },
+    { ownerType: "AUTORIZACAO", ownerId: { in: authIds } },
+  ] }, orderBy: { createdAt: "desc" }, take: 300 }) : [];
   const driverName = new Map(drivers.map((d) => [d.id, d.name]));
   const eligible = drivers.filter((d) => !driverEligibility({ cnhNumber: d.cnhNumber, cnhExpiresAt: d.cnhExpiresAt, points: d.cnhPoints, active: d.active }));
   const unitOptions = units.map((u) => <option key={u.id} value={u.id}>{u.code} · {u.plate ?? u.name}</option>);
@@ -134,6 +144,57 @@ export default async function FrotaControlePage({ searchParams }: { searchParams
           <form key="s" action={A.openClaim} className="flex flex-wrap items-end gap-1"><input type="hidden" name="occurrenceId" value={o.id} /><F label="Responsabilidade"><select name="responsibility" className={inp}><option value="PROPRIO">Própria</option><option value="TERCEIROS">Terceiros</option><option value="OUTROS">Outros</option></select></F><F label="Oficina"><input name="workshopName" className={`${inp} w-28`} /></F><F label="Placa envolvida"><input name="partyPlate" className={`${inp} w-24`} /></F><F label="Proprietário"><input name="partyOwner" className={`${inp} w-28`} /></F><F label="Condutor"><input name="partyDriver" className={`${inp} w-28`} /></F><button className={btn}>Abrir sinistro</button></form>]; })} /></Card></>}
 
       {aba === "consumo" && <Card title="Média de consumo por veículo"><Table caption="Consumo" head={["Veículo", "Média", "Esperado", "Status"]} rows={units.filter((u) => u.meterType !== "SEM_MARCADOR").map((u) => { const m = u.meterType as MeterType; const avg = averageConsumption(m, fuel.filter((x) => x.unitId === u.id).map((x) => ({ reading: Number(x.reading ?? 0), liters: Number(x.litersFilled ?? 0) }))); const st = consumptionStatus(m, avg, u.expectedConsumption ? Number(u.expectedConsumption) : null); return [label(u.id), avg == null ? "Sem dados" : `${avg} ${CONSUMPTION_UNIT[m]}`, u.expectedConsumption ? `${u.expectedConsumption} ${CONSUMPTION_UNIT[m]}` : "Não definido", st == null ? "—" : st === "ALTO" ? <b key="a" className="text-red-800">Alto</b> : st === "BAIXO" ? "Baixo" : "Normal"]; })} /></Card>}
+
+      {aba === "anexos" && (() => {
+        const fineLabel = new Map(fines.map((f) => [f.id, `Multa ${f.aitNumber} · ${label(f.unitId)}`]));
+        const claimLabel = new Map(claims.map((c) => [c.id, `Sinistro ${dt(c.createdAt)} · ${label(c.unitId)}`]));
+        const authLabel = new Map(auths.map((a) => [a.id, `${a.code} · ${label(a.unitId)}`]));
+        const ownerDescription = (ownerType: string, ownerId: string | null) => {
+          if (!ownerId) return "—";
+          if (ownerType === "VEICULO") return label(ownerId);
+          if (ownerType === "MOTORISTA") return driverName.get(ownerId) ?? "—";
+          if (ownerType === "MULTA") return fineLabel.get(ownerId) ?? "—";
+          if (ownerType === "SINISTRO") return claimLabel.get(ownerId) ?? "—";
+          if (ownerType === "AUTORIZACAO") return authLabel.get(ownerId) ?? "—";
+          return "—";
+        };
+        const sizeKb = (n: number) => `${(n / 1024).toFixed(0)} KB`;
+        return (
+          <section aria-labelledby="anexos-titulo" className="flex flex-col gap-3">
+            <Card title="Anexar documento (item 1.578 do Termo de Referência)">
+              <form action={A.uploadFleetAttachmentAction} className="flex flex-wrap items-end gap-2" aria-describedby="anexos-ajuda">
+                <F label="Registro">
+                  <select name="ownerRef" required className={`${inp} max-w-80`} aria-label="Registro ao qual o anexo pertence">
+                    <option value="">Selecione…</option>
+                    <optgroup label={FLEET_ATTACHMENT_OWNER_LABELS.VEICULO}>{units.map((u) => <option key={`v-${u.id}`} value={`VEICULO|${u.id}`}>{u.code} · {u.plate ?? u.name}</option>)}</optgroup>
+                    <optgroup label={FLEET_ATTACHMENT_OWNER_LABELS.MOTORISTA}>{drivers.map((d) => <option key={`m-${d.id}`} value={`MOTORISTA|${d.id}`}>{d.name}</option>)}</optgroup>
+                    <optgroup label={FLEET_ATTACHMENT_OWNER_LABELS.MULTA}>{fines.map((f) => <option key={`f-${f.id}`} value={`MULTA|${f.id}`}>{f.aitNumber} · {label(f.unitId)}</option>)}</optgroup>
+                    <optgroup label={FLEET_ATTACHMENT_OWNER_LABELS.SINISTRO}>{claims.map((c) => <option key={`s-${c.id}`} value={`SINISTRO|${c.id}`}>{dt(c.createdAt)} · {label(c.unitId)}</option>)}</optgroup>
+                    <optgroup label={FLEET_ATTACHMENT_OWNER_LABELS.AUTORIZACAO}>{auths.map((a) => <option key={`a-${a.id}`} value={`AUTORIZACAO|${a.id}`}>{a.code} · {label(a.unitId)}</option>)}</optgroup>
+                  </select>
+                </F>
+                <F label="Arquivo (máx. 20 MB)">
+                  <input type="file" name="file" required className={inp} aria-label="Arquivo do anexo" accept={FLEET_ATTACHMENT_EXTENSIONS.map((e) => `.${e}`).join(",")} />
+                </F>
+                <button className={btn}>Enviar anexo</button>
+              </form>
+              <p id="anexos-ajuda" className="mt-2 text-slate-600">Formatos aceitos: {FLEET_ATTACHMENT_EXTENSIONS.join(", ").toUpperCase()}. Tamanho máximo de 20 MB por arquivo.</p>
+            </Card>
+            <Card title="Anexos do setor">
+              <h3 id="anexos-titulo" className="sr-only">Lista de anexos</h3>
+              <Table caption="Anexos" head={["Tipo", "Registro", "Arquivo", "Tamanho", "Enviado em", "Abrir", "Excluir"]} rows={attachments.map((a) => [
+                FLEET_ATTACHMENT_OWNER_LABELS[a.ownerType as keyof typeof FLEET_ATTACHMENT_OWNER_LABELS] ?? a.ownerType,
+                ownerDescription(a.ownerType, a.ownerId),
+                a.fileName,
+                sizeKb(a.sizeBytes),
+                dtt(a.createdAt),
+                <Link key="o" href={`/api/frotas/anexos/${a.id}`} target="_blank" className="font-semibold text-emerald-900 underline underline-offset-2" aria-label={`Abrir anexo ${a.fileName}`}>Abrir</Link>,
+                <form key="d" action={A.deleteFleetAttachmentAction}><input type="hidden" name="id" value={a.id} /><button className="text-red-800 underline" aria-label={`Excluir anexo ${a.fileName}`}>Excluir</button></form>,
+              ])} />
+            </Card>
+          </section>
+        );
+      })()}
     </div>
   );
 }

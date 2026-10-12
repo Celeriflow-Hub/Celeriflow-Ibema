@@ -7,6 +7,7 @@ import type { AppContext } from "@/lib/platform/tenant-context";
 import { areaTitles, money, queryFleet } from "./queries";
 import { departmentWhere, FleetError, fleetScope } from "./service";
 import { labels, type FleetQuery } from "./contract";
+import { buildDossieSections } from "./report-dossie";
 import { renderOfficialDocument } from "@/lib/platform/official-document";
 
 type Input = { query: FleetQuery; documentType?: "plan" | "order" | "auth"; documentId?: string };
@@ -43,21 +44,24 @@ export async function createFleetReportDataset(context: AppContext, input: Input
   } else if (q.area === "relatorios" && q.report === "dossie") {
     const unitIds = q.unitIds ? q.unitIds.split(",") : q.unitId ? [q.unitId] : [];
     if (!unitIds.length) throw new FleetError("Selecione ao menos um veículo para o dossiê.");
-    const units = await context.prisma.fleetUnit.findMany({ where: { id: { in: unitIds }, ...departmentWhere(scope) }, include: { consumptions: { take: 20, orderBy: { occurredAt: "desc" } }, expenses: { where: { nature: "MANUTENCAO" }, take: 20, orderBy: { occurredAt: "desc" } }, usages: { take: 10, orderBy: { startedAt: "desc" } } }, orderBy: { code: "asc" } });
+    const units = await context.prisma.fleetUnit.findMany({ where: { id: { in: unitIds }, ...departmentWhere(scope) }, include: { consumptions: { orderBy: { occurredAt: "desc" } }, expenses: { where: { nature: "MANUTENCAO" }, orderBy: { occurredAt: "desc" } }, usages: { orderBy: { startedAt: "desc" } } }, orderBy: { code: "asc" } });
+    if (!units.length) throw new FleetError("Nenhum veículo autorizado encontrado para o dossiê.");
     const fines = await context.prisma.fleetFine.findMany({ where: { unitId: { in: unitIds } } });
     const occurrences = await context.prisma.fleetOccurrence.findMany({ where: { unitId: { in: unitIds } } });
     title = titles.dossie;
-    sections = [];
     const dt = (d: Date | null) => d ? d.toLocaleDateString("pt-BR") : "—";
-    for (const u of units) {
-      sections.push({ title: `Veículo: ${u.code}${u.plate ? ` / ${u.plate}` : ""} — ${u.name}`, rows: [{ "Categoria": labels[u.category], "Situação": labels[u.status], "Marca/Modelo/Ano": `${u.brand || "—"} / ${u.model || "—"} / ${u.year || "—"}`, "RENAVAM": u.renavam || "—" }] });
-      const uFines = fines.filter(f => f.unitId === u.id);
-      if (uFines.length) sections.push({ title: `Multas — ${u.code}`, rows: uFines.map(f => ({ "Data": dt(f.occurredAt), "Auto": f.aitNumber, "Infração": f.infraction, "Valor": money(f.amount), "Situação": f.status })) });
-      const uOccs = occurrences.filter(o => o.unitId === u.id);
-      if (uOccs.length) sections.push({ title: `Ocorrências/Sinistros — ${u.code}`, rows: uOccs.map(o => ({ "Data": dt(o.occurredAt), "Tipo": labels[o.type], "Descrição": o.description, "Valor envolvido": money(o.involvedValue) })) });
-      if (u.consumptions.length) sections.push({ title: `Últimos Abastecimentos — ${u.code}`, rows: u.consumptions.map(c => ({ "Data": dt(c.occurredAt), "Material": c.material, "Qtd": `${c.quantity} ${c.measurementUnit}`, "Custo": money(c.cost) })) });
-      if (u.expenses.length) sections.push({ title: `Últimas Manutenções — ${u.code}`, rows: u.expenses.map(e => ({ "Data": dt(e.occurredAt), "Descrição": e.description, "Valor": money(e.amount) })) });
-    }
+    sections = buildDossieSections(
+      units.map(u => ({
+        id: u.id, code: u.code, plate: u.plate, name: u.name, category: u.category, status: u.status,
+        brand: u.brand, model: u.model, year: u.year, renavam: u.renavam,
+        consumptions: u.consumptions.map(c => ({ occurredAt: c.occurredAt, material: c.material, quantity: c.quantity.toString(), measurementUnit: c.measurementUnit, cost: c.cost ? c.cost.toNumber() : null })),
+        expenses: u.expenses.map(e => ({ occurredAt: e.occurredAt, description: e.description, amount: e.amount ? e.amount.toNumber() : null })),
+        usages: u.usages.map(t => ({ startedAt: t.startedAt, endedAt: t.endedAt, purpose: t.purpose, initialReading: t.initialReading ? t.initialReading.toNumber() : null, finalReading: t.finalReading ? t.finalReading.toNumber() : null })),
+      })),
+      fines.map(f => ({ unitId: f.unitId, occurredAt: f.occurredAt, aitNumber: f.aitNumber, infraction: f.infraction, amount: f.amount.toNumber(), status: f.status })),
+      occurrences.map(o => ({ unitId: o.unitId, occurredAt: o.occurredAt, type: o.type, description: o.description, involvedValue: o.involvedValue ? o.involvedValue.toNumber() : null })),
+      { label: v => labels[v] || v, money: v => `R$ ${v.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`, date: dt },
+    );
   } else {
     if (q.area === "relatorios" && ["vencimentos", "abastecimentos"].includes(q.report) && (!q.from || !q.to)) throw new FleetError("Informe as duas datas do período para emitir este relatório.");
     const list = await queryFleet(context, q, true);

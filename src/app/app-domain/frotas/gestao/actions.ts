@@ -66,7 +66,7 @@ export async function saveDriver(f: FormData) {
   await run("motoristas", "create", async ({ prisma, user }) => {
     const expires = new Date(`${req(f, "cnhExpiresAt", "a validade da CNH")}T12:00:00Z`);
     if (Number.isNaN(expires.getTime())) throw new UserError("Validade da CNH inválida.");
-    const d = await prisma.fleetDriver.create({ data: { name: req(f, "name", "o nome"), cpf: requireValidCpf(req(f, "cpf", "o CPF")), cnhNumber: req(f, "cnhNumber", "o número da CNH"), cnhCategory: req(f, "cnhCategory", "a categoria").toUpperCase(), cnhExpiresAt: expires, departmentId: user.departmentId ?? null, createdById: user.id, balanceId: balance?.id } });
+    const d = await prisma.fleetDriver.create({ data: { name: req(f, "name", "o nome"), cpf: requireValidCpf(req(f, "cpf", "o CPF")), cnhNumber: req(f, "cnhNumber", "o número da CNH"), cnhCategory: req(f, "cnhCategory", "a categoria").toUpperCase(), cnhExpiresAt: expires, departmentId: user.departmentId ?? null, createdById: user.id } });
     return { type: "FLEET_DRIVER", id: d.id };
   });
 }

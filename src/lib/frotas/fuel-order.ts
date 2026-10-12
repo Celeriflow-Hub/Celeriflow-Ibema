@@ -92,6 +92,12 @@ export async function confirmFuelOrderOnce(db: PrismaClient, input: ConfirmFuelO
         confirmedVia: input.confirmedVia,
       },
     });
+    if (order.balanceId) {
+      await tx.fleetFuelBalance.update({
+        where: { id: order.balanceId },
+        data: { quantityConsumed: { increment: liters } },
+      });
+    }
     if (updated.count !== 1) throw new FuelOrderError("Esta ordem já foi utilizada.");
     // One financial appropriation per real consumption, also for the external
     // portal. This is the source read by the operational "Gastos" report.

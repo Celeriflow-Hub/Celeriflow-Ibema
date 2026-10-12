@@ -476,6 +476,8 @@ Obter documentos/parâmetros locais durante as primeiras fases. **Isso não é i
 
 ### P0 — consolidar rastreabilidade e preparar o ensaio
 
+**Execução registrada em 12/10/2026:** [fechamento P0](poc-p0/FECHAMENTO_P0.md) e [controles individuais](poc-p0/INDICE.md). Após esclarecimento do usuário de que o banco atual contém dados fictícios, a preparação passou a utilizar essa base, preservando registros e integrações. 68 migrations já aplicadas; dataset de ensaio aditivo carregado. Ensaio autenticado não executado nesta fase e não bloqueia o início das correções de P1.
+
 **Objetivo:** transformar o diagnóstico em controle executável sem duplicar entregas existentes.
 
 - Fixar revisão/commit de partida e inventário de migrations/status em **ambiente isolado**; registrar o estado real atual, sem usar o readiness antigo como estado presente.

@@ -51,11 +51,6 @@ docs/doc.zip
 
 /src/generated/prisma
 /src/generated/platform-prisma
-*.json
-!package.json
-!package-lock.json
-!tsconfig.json
-!components.json
-!vercel.json
 
-.env*
+# Keep project JSON configuration and shared development data versioned.
+# Environment files are excluded above, with .env.example intentionally allowed.

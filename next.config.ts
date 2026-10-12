@@ -15,6 +15,33 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  // Dynamic filesystem paths can make tracing pick up development archives.
+  // These root folders are not runtime assets; public/docs is intentionally kept.
+  outputFileTracingExcludes: {
+    "/*": [
+      "./docs/**/*",
+      "./image/**/*",
+      "./tests/**/*",
+      "./.agent/**/*",
+      "./.github/**/*",
+      "./coverage/**/*",
+      "./src/**/__tests__/**/*",
+      "./src/**/*.test.ts",
+      "./src/**/*.test.tsx",
+      "./src/**/*.spec.ts",
+      "./src/**/*.spec.tsx",
+      "./AGENTS.md",
+      "./CLAUDE.md",
+      "./README.md",
+      "./**/*.tsbuildinfo",
+      "./.env",
+      "./.env.*",
+      "./npm-debug.log*",
+      "./yarn-debug.log*",
+      "./yarn-error.log*",
+      "./.pnpm-debug.log*",
+    ],
+  },
   outputFileTracingIncludes: {
     "/api/financeiro/relatorios": ["./node_modules/pdfkit/js/data/**/*"],
     "/api/frotas/relatorios": ["./node_modules/pdfkit/js/data/**/*"],

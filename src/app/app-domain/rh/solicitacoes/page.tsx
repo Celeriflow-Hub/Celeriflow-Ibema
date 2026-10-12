@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function HrRequests({ searchParams }: { searchParams: Promise<{ page?: string; status?: string }> }) {
   const { prisma } = await getTenantContextForModule("RH"); const params = await searchParams;
   const status = ["EM_ANALISE", "DEFERIDA", "INDEFERIDA"].includes(params.status || "") ? params.status || "EM_ANALISE" : "EM_ANALISE";
-  const where = { status, kind: { not: "ACESSO_PORTAL" } };
+  const where = { status, kind: { notIn: ["ACESSO_PORTAL", "FUNCIONAL_SOLICITACAO_RH", "FUNCIONAL_FERIAS", "FUNCIONAL_AJUSTE_PONTO"] } };
   const total = await prisma.hrPortalRequest.count({ where });
   const page = Math.min(Math.max(1, Number.parseInt(params.page || "1") || 1), Math.max(1, Math.ceil(total / 20)));
   const rows = await prisma.hrPortalRequest.findMany({ where, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 20, skip: (page - 1) * 20 });
@@ -16,6 +16,7 @@ export default async function HrRequests({ searchParams }: { searchParams: Promi
   const href = (value: number) => `?${new URLSearchParams({ page: String(value), status })}`;
   return <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
     <ErpPageTitle title="Solicitações do Portal ao RH" description="Registre a decisão e a referência à providência funcional adotada." action={<Link href="/rh/operacoes">Operações</Link>} />
+    <div className="flex gap-3 text-xs"><Link href="/rh/requerimentos-funcionais" className="underline">Requerimentos protocolados</Link><Link href="/rh/servicos-funcionais" className="underline">Catálogo de serviços funcionais</Link></div>
     <form className="flex gap-2 text-xs"><select name="status" defaultValue={status} className="rounded border p-2"><option>EM_ANALISE</option><option>DEFERIDA</option><option>INDEFERIDA</option></select><button className="rounded border px-3">Filtrar</button></form>
     <p className="text-xs">{total} solicitações no filtro</p>
     {rows.map(row => <article key={row.id} className="rounded border bg-white p-3 text-xs">

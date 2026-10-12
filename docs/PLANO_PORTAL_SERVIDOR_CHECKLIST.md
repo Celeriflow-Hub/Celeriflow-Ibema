@@ -4,7 +4,7 @@ Data: 12/10/2026.
 
 ## Decisões e andamento da implantação
 
-- **Acesso somente ativo:** servidor inativo/desligado não terá acesso documental histórico pelo Portal. Solicitações de informações e documentos serão atendidas pelo RH. Esta decisão prevalece sobre a alternativa de acesso histórico discutida nas fases F01/F05 abaixo.
+- **Acesso somente ativo:** servidor inativo/desligado não terá acesso documental histórico pelo Portal. Solicitações de informações e documentos serão atendidas pelo RH, inclusive termo de rescisão. Ativo com outros vínculos pode consultar documentos próprios autorizados de contrato encerrado.
 - **Sem restrição por jornada:** servidor ativo pode acessar durante férias, afastamentos e fora do horário de trabalho. A condição funcional é `Employee.isActive`; permanecem a autenticação e as autorizações de conta/módulo existentes.
 - **Identificação:** acesso por e-mail institucional previamente cadastrado na conta vinculada ao servidor. O cadastro da conta e o vínculo continuam sendo administrados internamente; o domínio do e-mail, por si só, não autoriza nem provisiona um titular.
 - **LDAP adiado expressamente:** o responsável informou que o diretório ainda será providenciado. Nesta etapa, a tela funcional oferece e-mail/senha; integração LDAP e seus parâmetros serão tratados quando o diretório estiver disponível.
@@ -14,6 +14,7 @@ Data: 12/10/2026.
 - **Apresentação:** utilizar os componentes ERP profissionais existentes, com navegação funcional própria, filtros, tabelas compactas, paginação e tratamento de estados.
 - **F01 em implementação:** login funcional separado visualmente do administrativo, API específica que exige módulo autorizado e servidor ativo, retorno local após login, recuperação/alteração de senha, logout funcional, tratamento de acesso indisponível e atalhos das funcionalidades existentes. O layout revalida o cadastro ativo mesmo para sessão emitida antes da inativação e encaminha ao login com orientação RH. A política funcional FP-096 está definida; processamento de convites FP-103 continua pendente.
 - **F02–F09:** permanecem pendentes; os itens normativos não são considerados concluídos por existir somente uma tela ou um link.
+- **Planejamento detalhado:** [backlog de execução F02–F09](PORTAL_SERVIDOR_BACKLOG_EXECUCAO.md), com arquitetura do catálogo/processos, migração aditiva, tarefas, dependências, telas ERP e critérios de conclusão. Detalhamento documental não altera o estado de implementação das fases.
 
 ### Validação dos ajustes F01 — 12/10/2026
 
@@ -118,7 +119,7 @@ Legenda: **I** = caminho efetivo localizado, sujeito à validação operacional;
 | PA-042 / 156 | Emissão da margem com seleção de banco conveniado | P · B06/B09 | Margem histórica/pedido de crédito existem; completar documento por banco, validade e bloqueio de nova emissão conforme FP-084. F05 |
 | PA-043 / 156 | Solicitação específica de férias, análise e programação a partir do pedido | P · B07 | Texto livre não contém contrato/aquisitivo/datas; deferimento genérico não programa férias. Vincular decisão à programação transacional RH. F06 |
 | PA-044 / 156 | Emissão de relatório de períodos de licença-prêmio | P · B06 | Consulta do livro de direitos existe; emissão pessoal integral por aquisitivo, incluindo perdas/gozos/saldo. F05 |
-| PA-045 / 156 | Emissão do termo de rescisão | N · B12 | Criar emissão pessoal vinculada ao cálculo e contrato rescindido; resolver acesso documental histórico sem liberar operações de ativo. F05 |
+| PA-045 / 156 | Emissão do termo de rescisão | N · B12 | Criar emissão vinculada ao cálculo/contrato rescindido para titular ainda ativo; inativo/desligado obtém pelo RH conforme decisão. Registrar essa limitação no aceite. F05 |
 | PA-046 / 156 | Emissão da ficha de registro de funcionário | P · B04 | Ficha atual é resumo de `Employee`/atos. Completar dados canônicos, contratos e documento integral próprio. F05 |
 | PA-047 / 156 | Registro de ponto pelo Portal para funcionários autorizados | N · B04 | Página atual é somente consulta; habilitação individual/regras, horário de servidor e registro próprio auditado. F04 |
 | PA-048 / 156 | Emissão do relatório de aniversariantes | N · B12 | Projeção coletiva mínima e configurada conforme regra de privacidade da seção 2; não utilizar consulta administrativa completa. F07 |
@@ -274,7 +275,7 @@ Nenhum indicador deve agregar salários/pedidos pessoais de outros funcionários
 
 - Completar tratamento de sessão, recuperação/alteração de senha, retorno seguro e logout.
 - Separar apresentação do login/painel do cabeçalho administrativo; oferecer acesso público ao login pelo portal institucional.
-- Configurar perfil de autosserviço, processamento de convites FP-103, vínculo único e política FP-096/documentos históricos.
+- Configurar perfil de autosserviço, processamento de convites FP-103 e vínculo único. Aplicar a política FP-096 já decidida: cadastro ativo sem restrição de férias/afastamento/horário; documentos de inativos/desligados atendidos pelo RH.
 - Critério de conclusão: visitante chega ao login sem credencial administrativa; conta autorizada entra no painel próprio; sem vínculo/fora da política não recebe dados pessoais; sessão inválida retorna ao login.
 
 ### F02 — Catálogo funcional e protocolos internos
@@ -301,7 +302,7 @@ Nenhum indicador deve agregar salários/pedidos pessoais de outros funcionários
 
 - Depende de F01/F03 e histórico contratual canônico.
 - Entregar PA-028/029/031/042/044–046/053/054/057/063, usando revisões, direitos, averbações e parcelas existentes.
-- Completar documento de margem/banco e regra FP-084, com reserva/emissão distintas e acesso histórico ao termo de rescisão.
+- Completar documento de margem/banco e regra FP-084, com reserva/emissão distintas. Termo de contrato encerrado somente para titular ainda ativo; inativo/desligado recebe o documento pelo RH.
 - Critério: documento reproduz vínculo/período correto; contrato de outro titular não produz dados; uso/reserva/pagamento são situações distintas.
 
 ### F06 — Requerimentos RH com execução e recadastramento completo
@@ -360,7 +361,7 @@ Começar por **F01 → F02 → F03**, aproveitando imediatamente os demonstrativ
 
 Definir com o RH antes da implementação das respectivas fases:
 
-- Público ativo/inativo autorizado a consultas históricas e como aplicar FP-096 sem impedir indevidamente a emissão de termo de rescisão.
+- A política funcional de acesso já está definida: ativos acessam independentemente de férias/afastamentos/horário; inativos/desligados procuram o RH, inclusive para termo de rescisão. LDAP foi adiado.
 - Assuntos/roteiros, equipes responsáveis, prazos, documentação e atos legais de férias/ajustes/benefícios.
 - Layouts dos recibos/declarações e política de liberação por folha/regime/data.
 - Público e campos mínimos do relatório de aniversariantes e designações de comissões.

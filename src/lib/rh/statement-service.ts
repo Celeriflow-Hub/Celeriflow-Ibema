@@ -1,9 +1,10 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import PDFDocument from "pdfkit";
 import { consignmentMarginSchema } from "./consignment-margin";
 import { dependentAssessmentSchema, familyWageSnapshotSchema } from "./dependent-eligibility";
 import { receiptMessagesSnapshotSchema } from "./receipt-messages";
+import { personalStatementPublicationAllowed } from "@/lib/portal-servidor/payroll-publication";
 
 const snapshotSchema = z.object({
   contract: z.object({ registration: z.string(), workLocation: z.string(), salary: z.string(), employee: z.object({ name: z.string() }) }),
@@ -20,13 +21,14 @@ const snapshotSchema = z.object({
   pensions: z.array(z.object({ id: z.string(), courtReference: z.string(), basis: z.string(), base: z.string(), amount: z.string(), deductFromIncomeTax: z.boolean(), beneficiary: z.object({ id: z.string(), fullName: z.string() }) })).optional().default([]),
 });
 
-export async function getPayrollStatement(db: PrismaClient, id: string, employeeId?: string) {
-  const statement = await db.hrPayrollStatement.findFirst({ where: { id, ...(employeeId ? { contract: { employeeId }, releaseAt: { lte: new Date() }, revokedAt: null, run: { mode: "OFICIAL", status: "FECHADA" } } : {}) }, include: { run: { include: { payroll: true } } } });
+export async function getPayrollStatement(db: PrismaClient | Prisma.TransactionClient, id: string, employeeId?: string) {
+  const statement = await db.hrPayrollStatement.findFirst({ where: { id, ...(employeeId ? { contract: { employeeId }, releaseAt: { lte: new Date() }, revokedAt: null, run: { mode: "OFICIAL", status: { in: ["FECHADA", "CALCULADA"] } } } : {}) }, include: { run: { include: { payroll: true } } } });
   if (!statement) throw new Error("Demonstrativo indisponível.");
+  if (employeeId && !await personalStatementPublicationAllowed(db, statement, employeeId)) throw new Error("Demonstrativo indisponível.");
   return { id: statement.id, ...snapshotSchema.parse(statement.snapshot), competence: statement.run.payroll.competence, payrollType: statement.run.payroll.type, scope: statement.run.scope, mode: statement.run.mode, createdAt: statement.run.createdAt, gross: statement.gross.toFixed(2), deductions: statement.deductions.toFixed(2), net: statement.net.toFixed(2), employer: statement.employer.toFixed(2) };
 }
 
-export async function renderPayrollStatementPdf(statement: Awaited<ReturnType<typeof getPayrollStatement>>) {
+export async function renderPayrollStatementPdf(statement: Awaited<ReturnType<typeof getPayrollStatement>>, validationCode?: string) {
   const pdf = new PDFDocument({ size: "A4", margin: 42, bufferPages: true });
   const chunks: Buffer[] = [];
   const result = new Promise<Buffer>((resolve, reject) => { pdf.on("data", chunk => chunks.push(Buffer.from(chunk))); pdf.on("end", () => resolve(Buffer.concat(chunks))); pdf.on("error", reject); });
@@ -43,6 +45,7 @@ export async function renderPayrollStatementPdf(statement: Awaited<ReturnType<ty
   pdf.moveDown().fontSize(11).text(`Bruto: R$ ${statement.gross} · descontos: R$ ${statement.deductions} · líquido: R$ ${statement.net}`);
   pdf.fontSize(9).text(`Bases: ${Object.entries(statement.bases).map(([key, value]) => `${key}: ${value}`).join(" · ")}`);
   pdf.text(`Versão do demonstrativo: ${statement.id}`);
+  if (validationCode) pdf.text(`Autenticidade: /validar-recibo/${validationCode}`);
   pdf.text("O demonstrativo não comprova quitação bancária.");
   for (const message of statement.messages) pdf.moveDown().fontSize(9).text(message.text);
   if (statement.familyWage) {

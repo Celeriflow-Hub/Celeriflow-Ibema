@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { enqueueHrIntegration } from "./workforce-service";
 
-const fields = ["email", "phonePrimary", "phoneSecondary", "whatsapp", "maritalStatus", "profession", "educationLevel"] as const;
+const fields = ["email", "emailSecondary", "phonePrimary", "phoneSecondary", "whatsapp", "maritalStatus", "profession", "educationLevel", "socialName", "rg", "rgIssuer", "motherName", "fatherName", "nationality", "birthPlace", "gender", "raceColor"] as const;
 export const recertificationCampaignSchema = z.object({
   origin: z.literal("CAMPANHA_RECADASTRAMENTO"), startsAt: z.string().datetime(), endsAt: z.string().datetime(),
   employeeIds: z.array(z.string().min(1)).min(1), fields: z.array(z.enum(fields)).min(1), instructions: z.string().max(4000),
@@ -12,7 +12,8 @@ const proposalSchema = z.partialRecord(z.enum(fields), z.string().trim().max(250
 type ContactValues = Partial<Record<typeof fields[number], string | null>>;
 
 export async function listMyRecertificationCampaigns(db: PrismaClient, employeeId: string) {
-  const rules = await db.hrPayrollRule.findMany({ where: { category: "PORTAL", valueType: "JSON", isActive: true, ruleSet: { status: "ATIVA" } }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] });
+  const now = new Date();
+  const rules = await db.hrPayrollRule.findMany({ where: { category: "PORTAL", valueType: "JSON", isActive: true, ruleSet: { status: "ATIVA", effectiveFrom: { lte: now }, OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: now } }] } }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] });
   const campaigns = rules.flatMap(rule => {
     const parsed = recertificationCampaignSchema.safeParse(rule.value);
     if (!parsed.success || !parsed.data.employeeIds.includes(employeeId)) return [];
@@ -44,10 +45,11 @@ export async function submitRecertificationProposal(db: PrismaClient, actorId: s
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:recertification:${input.campaignRuleId}:${employeeId}`}))`;
     const rule = await tx.hrPayrollRule.findUniqueOrThrow({ where: { id: input.campaignRuleId }, include: { ruleSet: true } });
     const campaign = recertificationCampaignSchema.parse(rule.value); const now = new Date();
-    if (!rule.isActive || rule.category !== "PORTAL" || rule.ruleSet.status !== "ATIVA" || !campaign.employeeIds.includes(employeeId) || now < new Date(campaign.startsAt) || now > new Date(campaign.endsAt)) throw new Error("Campanha fora da vigência ou do público autorizado.");
+    if (!rule.isActive || rule.category !== "PORTAL" || rule.ruleSet.status !== "ATIVA" || now < rule.ruleSet.effectiveFrom || rule.ruleSet.effectiveUntil && now > rule.ruleSet.effectiveUntil || !campaign.employeeIds.includes(employeeId) || now < new Date(campaign.startsAt) || now > new Date(campaign.endsAt)) throw new Error("Campanha fora da vigência ou do público autorizado.");
     for (const name of Object.keys(input.proposal)) if (!campaign.fields.includes(name as typeof fields[number])) throw new Error("Campo não habilitado para esta campanha.");
     if (Object.keys(input.proposal).length !== campaign.fields.length || campaign.fields.some(field => !(field in input.proposal))) throw new Error("Preencha todos os campos habilitados na campanha.");
     if (input.proposal.email && !z.email().safeParse(input.proposal.email).success) throw new Error("E-mail inválido.");
+    if (input.proposal.emailSecondary && !z.email().safeParse(input.proposal.emailSecondary).success) throw new Error("E-mail secundário inválido.");
     const employee = await tx.employee.findUniqueOrThrow({ where: { id: employeeId }, include: { person: true } });
     if (!employee.isActive || !employee.person || employee.person.status !== "Ativo") throw new Error("Servidor sem pessoa física ativa.");
     const requestKey = `RECADASTRAMENTO:${rule.id}:${employeeId}`;

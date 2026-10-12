@@ -58,11 +58,14 @@ export async function acquireVacationRights(db: PrismaClient, actorId: string, c
 }
 
 export async function reserveVacationRight(db: PrismaClient, actorId: string, raw: unknown) {
+  return db.$transaction(tx => reserveVacationRightInTransaction(tx, actorId, raw));
+}
+
+export async function reserveVacationRightInTransaction(tx: Prisma.TransactionClient, actorId: string, raw: unknown) {
   const input = z.object({ contractId: z.string().min(1), sourceKey: z.string().min(1), periodStart: z.string(), periodEnd: z.string(), kind: z.enum(["GOZO", "PECUNIA"]), start: z.string(), days: z.coerce.number().int().min(1).max(90), reason: z.string().min(3) }).strict().parse(raw);
   const periodStart = civilDate(input.periodStart); const periodEnd = civilDate(input.periodEnd);
   const start = civilDate(input.start); const end = new Date(start.getTime() + (input.days - 1) * 86400000);
   if (periodEnd < periodStart) throw new Error("Aquisitivo inválido.");
-  return db.$transaction(async tx => {
     const contract = await tx.hrEmploymentContract.findUniqueOrThrow({ where: { id: input.contractId } });
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:employee:${contract.employeeId}`}))`;
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:contract:${input.contractId}`}))`;
@@ -98,7 +101,6 @@ export async function reserveVacationRight(db: PrismaClient, actorId: string, ra
     }
     const vacation = input.kind === "GOZO" ? await tx.vacation.create({ data: { employeeId: contract.employeeId, acquisitionStart: periodStart, acquisitionEnd: periodEnd, enjoymentStart: start, enjoymentEnd: end, days: input.days, status: "Programada" } }) : null;
     return tx.hrRightEntry.create({ data: { contractId: contract.id, sourceKey: input.sourceKey, kind: "FERIAS", periodStart, periodEnd, quantity: -input.days, amount: 0, actorId, details: JSON.parse(JSON.stringify({ kind: input.kind, start: input.start, end, reason: input.reason, vacationId: vacation?.id ?? null, policy })) } });
-  });
 }
 
 export async function cancelVacationReservation(db: PrismaClient, actorId: string, raw: unknown) {

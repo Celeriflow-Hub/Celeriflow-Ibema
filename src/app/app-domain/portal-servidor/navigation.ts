@@ -20,6 +20,8 @@ export const portalServidorNavigation: ModuleNavGroup[] = [
   {
     title: "Consultas",
     items: [
+      { title: "Emissões funcionais", href: "/portal-servidor/emissoes", icon: "fileText" },
+      { title: "Meus relatórios", href: "/portal-servidor/relatorios", icon: "fileText" },
       {
         title: "Documentos e assinaturas",
         href: "/portal-servidor/documentos",
@@ -55,14 +57,26 @@ export const portalServidorNavigation: ModuleNavGroup[] = [
   {
     title: "Solicitar serviços",
     items: [
+      { title: "Catálogo funcional", href: "/portal-servidor/servicos", icon: "clipboardList" },
+      { title: "Registrar meu ponto", href: "/portal-servidor/ponto/registro", icon: "clock3" },
+      { title: "Meus protocolos", href: "/portal-servidor/protocolos", icon: "fileText" },
       { title: "Pedidos ao RH", href: "/portal-servidor/solicitacoes-rh", icon: "clipboardList" },
       { title: "Recadastramento", href: "/portal-servidor/recadastramento", icon: "userRound" },
       { title: "Crédito consignado", href: "/portal-servidor/credito", icon: "walletCards" },
     ],
   },
   {
+    title: "Capacitação e avaliações",
+    items: [
+      { title: "Cursos e certificados", href: "/portal-servidor/capacitacao", icon: "fileText" },
+      { title: "Avaliações funcionais", href: "/portal-servidor/avaliacoes", icon: "clipboardList" },
+      { title: "Aniversariantes", href: "/portal-servidor/aniversariantes", icon: "users" },
+    ],
+  },
+  {
     title: "Saúde e segurança ocupacional",
     items: [
+      { title: "Minha agenda SST", href: "/portal-servidor/sst/agenda", icon: "calendarDays" },
       { title: "Comunicar acidente (CAT)", href: "/portal-servidor/sst/cat", icon: "fileHeart" },
       { title: "Eleições da CIPA", href: "/portal-servidor/sst/cipa", icon: "users" },
       { title: "Meus planos de saúde", href: "/portal-servidor/sst/planos", icon: "fileHeart" },

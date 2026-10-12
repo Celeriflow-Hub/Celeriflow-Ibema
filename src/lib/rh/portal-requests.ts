@@ -25,6 +25,7 @@ export async function decideEmployeeHrRequest(db: PrismaClient, actorId: string,
     await tx.$queryRaw`SELECT id FROM "HrPortalRequest" WHERE id=${input.requestId} FOR UPDATE`;
     const request = await tx.hrPortalRequest.findUniqueOrThrow({ where: { id: input.requestId } });
     if (request.kind === "ACESSO_PORTAL") throw new Error("Provisionamento de acesso depende da rotina de identidade e não pode ser deferido por este formulário.");
+    if (request.kind.startsWith("FUNCIONAL_")) throw new Error("Requerimento protocolado exige análise e execução pelo fluxo funcional próprio.");
     if (request.kind === "RECADASTRAMENTO") throw new Error("Recadastramento exige revisão do diff e atualização canônica pelo fluxo próprio.");
     if (request.kind === "CREDITO_CONSIGNADO") throw new Error("Crédito consignado exige decisão e reserva transacional pelo fluxo próprio.");
     if (request.kind === "DIARIA_POC") throw new Error("Diária exige autorização numerada pelo fluxo próprio.");

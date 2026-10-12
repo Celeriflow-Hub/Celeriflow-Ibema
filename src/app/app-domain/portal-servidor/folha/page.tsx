@@ -4,6 +4,7 @@ import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
 import { buttonVariants } from "@/components/ui/button";
 import { getEmployeePortalAccess } from "@/lib/portal-servidor/access";
 import { arePortalPayrollStatementsEnabled } from "@/lib/rh/payroll-configuration";
+import { ownReleasedStatementIds } from "@/lib/portal-servidor/payroll-publication";
 import type { Prisma } from "@prisma/client";
 import { FileText, Search, WalletCards } from "lucide-react";
 import Link from "next/link";
@@ -11,7 +12,6 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 20;
-const AVAILABLE_PAYROLL_STATUSES = ["Fechada", "Paga"] as const;
 
 type SearchParams = {
   competence?: string | string[];
@@ -100,15 +100,14 @@ export default async function FolhaPortalPage({ searchParams }: { searchParams: 
   const params = await searchParams;
   const competence = parseCompetence(params.competence);
   const { context, employee } = access;
-  const payrollWhere: Prisma.PayrollWhereInput = {
-    status: { in: [...AVAILABLE_PAYROLL_STATUSES] },
-  };
+  const payrollWhere: Prisma.PayrollWhereInput = {};
 
   if (competence) payrollWhere.competence = competence;
 
   const where: Prisma.PayrollItemWhereInput = {
     employeeId: employee.id,
     payroll: payrollWhere,
+    hrOrigin: { is: { statementId: { in: await ownReleasedStatementIds(context.prisma, employee.id, competence || undefined) } } },
   };
   const total = await context.prisma.payrollItem.count({ where });
   const page = resolvePage(params.page, total);
@@ -153,7 +152,7 @@ export default async function FolhaPortalPage({ searchParams }: { searchParams: 
     <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-3">
       <ErpPageTitle
         title="Demonstrativo de folha"
-        description="Lançamentos de competências fechadas ou pagas vinculados exclusivamente ao seu cadastro funcional."
+        description="Lançamentos próprios conciliados com demonstrativos liberados e não revogados pelo RH."
         icon={<WalletCards className="size-5 shrink-0 text-emerald-700" />}
         action={<Link href="/portal-servidor/demonstrativos" className="inline-flex h-8 items-center gap-1.5 rounded border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">Demonstrativos completos</Link>}
       />
@@ -196,7 +195,7 @@ export default async function FolhaPortalPage({ searchParams }: { searchParams: 
           <div className="flex h-full min-h-[220px] flex-col items-center justify-center p-6 text-center">
             <FileText className="size-5 text-slate-400" />
             <h2 className="mt-2 text-sm font-semibold text-slate-700">Nenhum lançamento de folha encontrado</h2>
-            <p className="mt-1 max-w-md text-xs text-slate-500">A consulta exibe somente competências fechadas ou pagas vinculadas ao seu cadastro funcional.</p>
+            <p className="mt-1 max-w-md text-xs text-slate-500">A consulta exibe lançamentos conciliados com demonstrativos próprios liberados pela política do RH. Consulte também os demonstrativos completos.</p>
           </div>
         ) : (
           <>

@@ -31,6 +31,11 @@ const sidebarNavItems = [
   { title: "Férias", href: "/rh/ferias", icon: CalendarDays },
   { title: "Licenças", href: "/rh/licencas", icon: HeartPulse },
   { title: "Atos de Pessoal", href: "/rh/atos", icon: FileSignature },
+  { title: "Serviços funcionais", href: "/rh/servicos-funcionais", icon: SlidersHorizontal },
+  { title: "Requerimentos funcionais", href: "/rh/requerimentos-funcionais", icon: FileSignature },
+  { title: "Emissões funcionais", href: "/rh/emissoes-funcionais", icon: FileSignature },
+  { title: "Publicação funcional da folha", href: "/rh/publicacao-funcional", icon: Wallet },
+  { title: "Capacitação e avaliações", href: "/rh/atividades-funcionais", icon: Users },
 ];
 
 export default function RhLayout({ children }: { children: React.ReactNode }) {

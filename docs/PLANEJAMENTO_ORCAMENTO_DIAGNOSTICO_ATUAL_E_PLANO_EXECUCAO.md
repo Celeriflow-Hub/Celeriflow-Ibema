@@ -8,6 +8,8 @@ Data: **11/10/2026**. Código examinado: **`b965d82` (`plan2`)**, com árvore de
 
 **Retomada atual após pedido de execução contínua:** implementações S3–S7 e verificações em [PLANEJAMENTO_S3_S7_EVIDENCIAS.md](PLANEJAMENTO_S3_S7_EVIDENCIAS.md). Próxima frente S8/S9, com materiais oficiais e ensaio ainda necessários. Os estados de diagnóstico abaixo são históricos; esse registro não promove A/H automaticamente.
 
+**Estado mais recente:** S8 técnica implementada; [publicação/diagnóstico e preparação S9](PLANEJAMENTO_S8_S9_PUBLICACAO_E_ENSAIO.md). A implantação operacional e o ensaio autenticado dos 198 IDs continuam pendentes, com bloqueios concretos registrados. Matrizes individuais: [controle de evidências](EVIDENCIAS_PLANEJAMENTO_ORCAMENTO.md).
+
 **Já existe domínio operacional próprio de Planejamento nas duas jornadas. O trabalho restante combina complementação funcional, fechamento das integrações e demonstração integral por ente. Não se resume a testar ou publicar o que já existe.**
 
 Esta revisão atualiza o diagnóstico inicial de 49 bases parciais/50 não evidenciadas. Aqueles números descrevem o inventário anterior a F0–F8 e não devem ser usados como percentual atual de implementação. Nenhum aceite integral novo é registrado por este documento.

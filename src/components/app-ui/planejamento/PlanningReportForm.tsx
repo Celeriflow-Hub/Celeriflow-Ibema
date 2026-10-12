@@ -4,6 +4,8 @@ import { planningBasePath } from "@/lib/planejamento/policy";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PlanningReportSubmission } from "./PlanningReportSubmission";
 import { PlanningLookupField } from "./PlanningLookupField";
+import { canDecidePlanningLegally } from "@/lib/planejamento/access";
+import { canPerformModuleOperation } from "@/lib/platform/tenant-context";
 
 export async function PlanningReportForm({ context, instrumentId, creditId }: { context: PlanningContext; instrumentId: string; creditId?: string }) {
   const [pieces, units, sources, dimensions, credits] = await Promise.all([
@@ -28,6 +30,7 @@ export async function PlanningReportForm({ context, instrumentId, creditId }: { 
     {select("transferPresentation", "Transferências", [{ id: "GROSS", name: "Valores brutos" }, { id: "NET", name: "Eliminar transferências internas conciliadas" }], "GROSS")}
     <PlanningLookupField jurisdiction={context.jurisdiction} name="targetInstrumentId" submitAs="targetId" label="Peça de comparação" options={pieces.filter((piece) => piece.id !== instrumentId).map((piece) => ({ id: piece.id, name: `${piece.governmentEntity.name} · ${piece.title}` }))} />
     <PlanningLookupField jurisdiction={context.jurisdiction} name="sourceInstrumentId" submitAs="additionalInstrumentIds" label="Consolidar peças adicionais do mesmo tipo" multiple options={pieces.filter((piece) => piece.id !== instrumentId && piece.kind === selectedKind).map((piece) => ({ id: piece.id, name: `${piece.governmentEntity.name} · ${piece.title}` }))} />
+    {canDecidePlanningLegally(context) && canPerformModuleOperation(context.user, "TRANSPARENCIA", "create") && <div className="space-y-2 rounded border p-3 text-sm md:col-span-2"><label className="flex items-center gap-2"><input type="checkbox" name="publishSimultaneous" value="true" />Publicar simultaneamente o documento para conferência no portal</label><p className="text-xs text-muted-foreground">A publicação conserva o aviso de leiaute não homologado. Somente arquivos confirmados e peças publicadas no fluxo legal ficam acessíveis.</p><input name="publicationReason" placeholder="Fundamento da publicação" className="w-full rounded border p-2" /></div>}
     <button className="rounded border bg-primary p-2 text-sm text-primary-foreground">Gerar documento</button>
   </PlanningReportSubmission></CardContent></Card>;
 }

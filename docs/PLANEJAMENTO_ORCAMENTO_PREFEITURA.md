@@ -129,6 +129,8 @@ Cada caixa abaixo é **pendente de entrega e demonstração integral do Executiv
 
 ## Evidência e conclusão
 
+Controle de ensaio individual preparado: [EVIDENCIAS_PLANEJAMENTO_PREFEITURA.md](EVIDENCIAS_PLANEJAMENTO_PREFEITURA.md). Os 99 IDs têm roteiro e resultado próprio; ensaio autenticado ainda não executado. Publicação técnica/diagnóstico: [S8/S9](PLANEJAMENTO_S8_S9_PUBLICACAO_E_ENSAIO.md).
+
 **Continuação técnica S3–S7:** [registro de implementação, testes e dependências](PLANEJAMENTO_S3_S7_EVIDENCIAS.md). Não promove as caixas EXE; materiais oficiais, implantação e demonstração independente continuam necessários.
 
 Para marcar cada caixa: registrar cenário, dados/exercício/UG/versão/data, perfil, rota, efeito persistido, saída emitida, testes relevantes e evidência da demonstração; requisitos com integração exigem prova de conexão real.

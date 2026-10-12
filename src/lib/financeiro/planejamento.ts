@@ -107,6 +107,13 @@ async function lockCreditRequest(tx: Prisma.TransactionClient, creditRequestId: 
   }
 }
 
+async function assertLegacyPlanningOwner(tx: Prisma.TransactionClient, entityType: PlanningEntityType, id: string) {
+  const [runtime] = await tx.$queryRaw<{ ready: boolean }[]>`SELECT to_regclass('"PlanningInstrument"') IS NOT NULL AS ready`;
+  if (!runtime?.ready) return;
+  const piece = await tx.planningInstrument.findFirst({ where: entityType === "PPA" ? { multiYearPlanId: id } : entityType === "LDO" ? { budgetGuidelineId: id } : { annualBudgetLawId: id }, select: { id: true } });
+  if (piece) throw new FinanceError("A peça foi adotada pelo Planejamento e Orçamento; utilize a jornada da entidade responsável.");
+}
+
 async function audit(
   tx: Db,
   actor: FinanceActor,
@@ -305,6 +312,7 @@ export async function addProgramPPA(
   return db.$transaction(async (tx) => {
     const plan = await tx.multiYearPlan.findUnique({ where: { id: input.multiYearPlanId } });
     if (!plan) throw new FinanceError("Plano Plurianual não encontrado.");
+    await assertLegacyPlanningOwner(tx, "PPA", plan.id);
     assertPlanningEditable(plan.status, "PPA");
 
     const program = await tx.programPPA.create({
@@ -331,6 +339,7 @@ export async function addActionPPA(
   return db.$transaction(async (tx) => {
     const program = await tx.programPPA.findUnique({ where: { id: input.programId }, include: { multiYearPlan: { select: { status: true } } } });
     if (!program) throw new FinanceError("Programa do PPA nao encontrado.");
+    await assertLegacyPlanningOwner(tx, "PPA", program.multiYearPlanId);
     assertPlanningEditable(program.multiYearPlan.status, "PPA");
     const action = await tx.actionPPA.create({
       data: { programId: program.id, code: input.code.trim(), name: input.name.trim(), type: input.type?.trim() || "Projeto" },
@@ -350,6 +359,7 @@ export async function addObjectivePPA(
   return db.$transaction(async (tx) => {
     const program = await tx.programPPA.findUnique({ where: { id: input.programId }, include: { multiYearPlan: { select: { status: true } } } });
     if (!program) throw new FinanceError("Programa do PPA não encontrado.");
+    await assertLegacyPlanningOwner(tx, "PPA", program.multiYearPlanId);
     assertPlanningEditable(program.multiYearPlan.status, "PPA");
     const objective = await tx.objectivePPA.create({
       data: { programId: program.id, code, description },
@@ -371,6 +381,7 @@ export async function addIndicatorPPA(
   return db.$transaction(async (tx) => {
     const objective = await tx.objectivePPA.findUnique({ where: { id: input.objectiveId }, include: { program: { include: { multiYearPlan: { select: { status: true } } } } } });
     if (!objective) throw new FinanceError("Objetivo do PPA não encontrado.");
+    await assertLegacyPlanningOwner(tx, "PPA", objective.program.multiYearPlanId);
     assertPlanningEditable(objective.program.multiYearPlan.status, "PPA");
     const indicator = await tx.indicatorPPA.create({
       data: { objectiveId: objective.id, name, unit, baselineValue, targetValue },
@@ -400,6 +411,7 @@ export async function addGoalPPA(
         include: { program: { include: { multiYearPlan: { select: { startYear: true, endYear: true, status: true } } } } },
     });
     if (!action) throw new FinanceError("Ação do PPA não encontrada.");
+    await assertLegacyPlanningOwner(tx, "PPA", action.program.multiYearPlanId);
     const plan = action.program.multiYearPlan;
     assertPlanningEditable(plan.status, "PPA");
     if (input.year < plan.startYear || input.year > plan.endYear) {
@@ -434,6 +446,7 @@ export async function createBudgetGuideline(
     const financialYear = await assertFinancialYearPlanningEligible(tx, input.financialYearId);
     const plan = await tx.multiYearPlan.findUnique({ where: { id: input.multiYearPlanId } });
     if (!plan) throw new FinanceError("Plano Plurianual não encontrado.");
+    await assertLegacyPlanningOwner(tx, "PPA", plan.id);
     if (financialYear.year < plan.startYear || financialYear.year > plan.endYear) {
       throw new FinanceError("O exercício da LDO deve estar dentro da vigência do PPA selecionado.");
     }
@@ -524,6 +537,7 @@ export async function createAnnualBudgetLaw(
     await assertFinancialYearPlanningEligible(tx, input.financialYearId);
     const guideline = await tx.budgetGuideline.findUnique({ where: { id: input.budgetGuidelineId } });
     if (!guideline) throw new FinanceError("Lei de Diretrizes Orçamentárias não encontrada.");
+    await assertLegacyPlanningOwner(tx, "LDO", guideline.id);
     if (guideline.financialYearId !== input.financialYearId) {
       throw new FinanceError("A LDO selecionada deve pertencer ao mesmo exercício financeiro da LOA.");
     }
@@ -686,6 +700,7 @@ export async function createBudgetAppropriationFromFixation(
         include: { annualBudgetLaw: { include: { budgetGuideline: { select: { multiYearPlanId: true } } } } },
     });
     if (!fixation) throw new FinanceError("Fixacao de despesa da LOA nao encontrada.");
+    await assertLegacyPlanningOwner(tx, "LOA", fixation.annualBudgetLawId);
     assertPlanningEditable(fixation.annualBudgetLaw.status, "LOA");
 
     await assertFinancialYearPlanningEligible(tx, fixation.annualBudgetLaw.financialYearId);
@@ -770,6 +785,7 @@ export async function saveMonthlyDisbursementSchedule(
       tx.budgetUnit.findUnique({ where: { id: input.budgetUnitId }, select: { id: true } }),
     ]);
     if (!law) throw new FinanceError("LOA nao encontrada.");
+    await assertLegacyPlanningOwner(tx, "LOA", law.id);
     assertPlanningEditable(law.status, "LOA");
     if (!budgetUnit) throw new FinanceError("Unidade orcamentaria nao encontrada.");
     await assertFinancialYearPlanningEligible(tx, law.financialYearId);
@@ -797,6 +813,7 @@ export async function saveBimonthlyRevenueTarget(
   return db.$transaction(async (tx) => {
     const law = await tx.annualBudgetLaw.findUnique({ where: { id: input.annualBudgetLawId }, select: { id: true, financialYearId: true, status: true } });
     if (!law) throw new FinanceError("LOA nao encontrada.");
+    await assertLegacyPlanningOwner(tx, "LOA", law.id);
     assertPlanningEditable(law.status, "LOA");
     await assertFinancialYearPlanningEligible(tx, law.financialYearId);
     const target = await tx.bimonthlyRevenueTarget.upsert({
@@ -1076,6 +1093,10 @@ export async function executeCreditRequest(
 // Demonstrativo Comparativo da LOA (Original vs Alterações por Créditos)
 // -----------------------------------------------------------------------------
 export async function generateBudgetChangesComparison(db: PrismaClient, financialYearId: string) {
+  const candidates = await db.annualBudgetLaw.findMany({ where: { financialYearId }, select: { id: true } });
+  if (candidates.length !== 1) throw new FinanceError("Selecione a peça/entidade na jornada de Planejamento; o exercício não possui uma LOA única para o comparativo legado.");
+  const [runtime] = await db.$queryRaw<{ ready: boolean }[]>`SELECT to_regclass('"PlanningInstrument"') IS NOT NULL AS ready`;
+  if (runtime?.ready && await db.planningInstrument.findUnique({ where: { annualBudgetLawId: candidates[0].id }, select: { id: true } })) throw new FinanceError("Comparativo da peça adotada deve ser emitido pelo Planejamento com entidade, versão e data de corte.");
   const [loa, creditRequests, appropriations] = await Promise.all([
     db.annualBudgetLaw.findFirst({
       where: { financialYearId },
@@ -1094,7 +1115,7 @@ export async function generateBudgetChangesComparison(db: PrismaClient, financia
   if (!loa) throw new FinanceError("LOA não encontrada para o exercício.");
 
   const totalFixadoOriginal = Number(loa.totalExpense);
-  const totalCreditosAdicionais = creditRequests.reduce((sum, req) => sum + Number(req.totalValue), 0);
+  const totalCreditosAdicionais = Number(creditRequests.reduce((sum, req) => sum.plus(req.items.reduce((value, item) => item.type === "Anulação" ? value.minus(item.value) : value.plus(item.value), new Prisma.Decimal(0))), new Prisma.Decimal(0)));
   const totalAtualizado = totalFixadoOriginal + totalCreditosAdicionais;
 
   const dotacoesComparativo = appropriations.map((app) => {

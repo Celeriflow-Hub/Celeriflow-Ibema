@@ -1,15 +1,18 @@
 import { canEditModule, getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import PlanejamentoClient from "./PlanejamentoClient";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlanejamentoPage() {
   const context = await getTenantContextForModule("FINANCEIRO");
+  if (!isSystemAdministrator(context.user)) return <div className="space-y-3 p-4"><h1 className="text-lg font-semibold">Planejamento e Orçamento</h1><p>Elaboração, versões e relatórios por entidade estão nas jornadas próprias. Os registros legados sem vínculo de entidade exigem reconciliação administrativa antes de consulta neste caminho.</p><div className="flex gap-4"><Link className="underline" href="/planejamento">Prefeitura — Planejamento</Link><Link className="underline" href="/camara/planejamento">Câmara — Planejamento</Link></div></div>;
   const budgetUnitFilter = isSystemAdministrator(context.user)
     ? {}
     : { id: { in: context.user.allowedBudgetUnitIds } };
   const [plans, financialYears, budgetUnits, expenseNatures, resourceSources, amendments] = await Promise.all([
     context.prisma.multiYearPlan.findMany({
+      where: { planningInstrument: { is: null } },
       include: {
         programs: {
           include: {
@@ -19,11 +22,13 @@ export default async function PlanejamentoPage() {
           orderBy: { code: "asc" },
         },
         budgetGuidelines: {
+          where: { planningInstrument: { is: null } },
           include: {
             financialYear: { select: { year: true, status: true } },
             priorities: true,
             risks: true,
             annualBudgetLaws: {
+              where: { planningInstrument: { is: null } },
               include: {
                 revenueForecasts: true,
                 expenseFixations: {

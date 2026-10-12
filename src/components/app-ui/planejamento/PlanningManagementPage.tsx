@@ -14,8 +14,9 @@ import { PlanningReportForm } from "./PlanningReportForm";
 import { PlanningMaintenancePage } from "./PlanningMaintenancePage";
 import { PlanningDocumentUpload } from "./PlanningDocumentUpload";
 import { planningReportCatalog } from "@/lib/planejamento/report-catalog";
+import { listPlanningPublicationManagement } from "@/lib/planejamento/publication";
 
-export const planningManagementSections = { manutencao: "Manutenção", versoes: "Versões", consistencias: "Consistências", compatibilizacao: "Compatibilização", emendas: "Emendas legislativas", programacao: "Programação e cotas", creditos: "Créditos orçamentários", workflow: "Tramitação e implantação", documentos: "Documentos e assinaturas", relatorios: "Relatórios" };
+export const planningManagementSections = { manutencao: "Manutenção", versoes: "Versões", consistencias: "Consistências", compatibilizacao: "Compatibilização", emendas: "Emendas legislativas", programacao: "Programação e cotas", creditos: "Créditos orçamentários", workflow: "Tramitação e implantação", documentos: "Documentos e assinaturas", relatorios: "Relatórios", publicacoes: "Publicações" };
 type Filters = { page?: string; linePage?: string; quotaPage?: string; legacyPage?: string; lineId?: string; sourceId?: string; targetId?: string; year?: string; creditId?: string; entity?: string; q?: string };
 const field = (name: string, label: string, extra: Partial<PlanningField> = {}): PlanningField => ({ name, label, ...extra });
 const options = (values: [string, string][]) => values.map(([id, name]) => ({ id, name }));
@@ -41,6 +42,11 @@ export async function PlanningManagementPage({ jurisdiction, kind, id, section, 
   const writable = canPerformModuleOperation(context.user, "PLANEJAMENTO", "update"); const creatable = canPerformModuleOperation(context.user, "PLANEJAMENTO", "create");
   const form = (title: string, operation: string, fields: PlanningField[], hidden: Record<string, string> = {}, allowed = writable) => allowed && <Card><CardHeader><CardTitle>{title}</CardTitle></CardHeader><CardContent><PlanningForm jurisdiction={jurisdiction} operation={operation} hidden={{ instrumentId: id, ...hidden }} fields={fields} /></CardContent></Card>;
   const blocks: React.ReactNode[] = [];
+  if (section === "publicacoes") {
+    const publications = await listPlanningPublicationManagement(context, id, page);
+    for (const snapshot of publications.records) blocks.push(<Card key={snapshot.id}><CardHeader><CardTitle>{planningReportCatalog.find((report) => report.type === snapshot.reportType)?.title ?? snapshot.reportType} · {snapshot.createdAt.toISOString().slice(0, 10)}</CardTitle></CardHeader><CardContent><p className="break-all text-xs">Hash do dataset: {snapshot.hash}</p>{snapshot.publications.map((publication) => <div key={publication.id} className="my-2 rounded border p-2 text-xs"><p>{publication.format} · {publication.status} · {publication.attempts} tentativa(s)</p>{publication.fileHash && <p className="break-all">SHA-256 do arquivo: {publication.fileHash}</p>}{publication.status === "PUBLISHED" && <><a className="underline" href={`/api/transparencia/planejamento/${publication.publicKey}`} target="_blank" rel="noreferrer">Consultar arquivo público</a>{canPerformModuleOperation(context.user, "TRANSPARENCIA", "update") && <PlanningForm jurisdiction={jurisdiction} operation="reportWithdraw" hidden={{ publicationId: publication.id }} fields={[field("reason", "Fundamento da retirada")]} />}</>}</div>)}{canPerformModuleOperation(context.user, "TRANSPARENCIA", "create") && <PlanningForm jurisdiction={jurisdiction} operation="reportPublish" hidden={{ snapshotId: snapshot.id }} fields={[field("format", "Formato", { type: "select", options: options([["PDF", "PDF"], ["CSV", "CSV"]]) }), field("reason", "Fundamento da publicação para conferência")]}/>}</CardContent></Card>);
+    blocks.push(<Card key="pagination"><CardContent className="pt-3"><ErpPagination page={publications.page} total={publications.total} previousHref={`${pathname}?page=${publications.page - 1}`} nextHref={`${pathname}?page=${publications.page + 1}`} /></CardContent></Card>);
+  }
   if (section === "documentos") {
     if (canPerformModuleOperation(context.user, "DOCUMENTOS", "create")) {
       const classes = await context.prisma.documentClass.findMany({ where: { isActive: true, OR: [{ code: { startsWith: "PLANEJAMENTO" } }, { code: { startsWith: "PLANNING" } }] }, select: { code: true, label: true }, orderBy: { code: "asc" } });

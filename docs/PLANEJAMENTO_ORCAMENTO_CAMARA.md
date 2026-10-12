@@ -134,6 +134,8 @@ Cada caixa abaixo é **pendente de entrega e demonstração integral do Legislat
 
 ## Evidência e conclusão
 
+Controle de ensaio individual preparado: [EVIDENCIAS_PLANEJAMENTO_CAMARA.md](EVIDENCIAS_PLANEJAMENTO_CAMARA.md). Os 99 IDs têm roteiro e resultado legislativo próprio; ensaio autenticado ainda não executado. Publicação técnica/diagnóstico: [S8/S9](PLANEJAMENTO_S8_S9_PUBLICACAO_E_ENSAIO.md).
+
 **Continuação técnica S3–S7:** [registro de implementação, testes e dependências](PLANEJAMENTO_S3_S7_EVIDENCIAS.md). Domínio compartilhado e entradas legislativas não substituem ensaio próprio da Câmara; nenhuma caixa LEG é promovida por esse registro.
 
 Para marcar cada caixa: registrar cenário legislativo, dados/exercício/UG/versão/data, perfil, rota `/camara/planejamento/*`, efeito persistido, saída emitida, testes relevantes e evidência da demonstração; requisitos com integração exigem prova de conexão real. Demonstrar também retorno/navegação dentro da Câmara e tentativa de acesso indevido a dados executivos.

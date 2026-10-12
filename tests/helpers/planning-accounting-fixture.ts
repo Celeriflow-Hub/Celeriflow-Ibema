@@ -40,7 +40,7 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
       });
       await pg.exec(`CREATE TABLE "${name}" (${columns.join(",")})`);
     }
-    for (const migration of ["20261011150000_add_planning_scoped_instruments", "20261011160000_add_planning_import_batches", "20261011170000_planning_immutable_movements", "20261011180000_planning_legal_operations", "20261011190000_planning_internal_connections", "20261011200000_planning_accounting_command_integrity", "20261011210000_planning_catalog_maintenance"]) await pg.exec(readFileSync(`prisma/migrations-ibema/${migration}/migration.sql`, "utf8"));
+    for (const migration of ["20261011150000_add_planning_scoped_instruments", "20261011160000_add_planning_import_batches", "20261011170000_planning_immutable_movements", "20261011180000_planning_legal_operations", "20261011190000_planning_internal_connections", "20261011200000_planning_accounting_command_integrity", "20261011210000_planning_catalog_maintenance", "20261011220000_planning_publication"]) await pg.exec(readFileSync(`prisma/migrations-ibema/${migration}/migration.sql`, "utf8"));
     await pg.exec(`
       CREATE UNIQUE INDEX ON "AccountingEventCatalog" (code);
       CREATE UNIQUE INDEX ON "AccountingPlan" (code);

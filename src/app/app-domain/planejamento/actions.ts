@@ -27,6 +27,7 @@ import { advancePlanningLegislativeProcedure, linkPlanningLegislativeProcedure }
 import { synchronizePlanningWaiver } from "@/lib/planejamento/fiscal-execution";
 import { projectPlanningAnnualMemory } from "@/lib/planejamento/projections";
 import { configurePlanningReportLayout } from "@/lib/planejamento/report-layouts";
+import { publishPlanningReport, withdrawPlanningPublication } from "@/lib/planejamento/publication";
 
 export async function searchPlanningOptions(jurisdiction: string, input: Record<string, string>) {
   try { const context = await getPlanningContext(jurisdictionSchema.parse(jurisdiction)); return { ...await planningLookup(context, input), error: undefined }; }
@@ -91,6 +92,8 @@ export async function savePlanningRecord(jurisdiction: string, operation: string
       case "waiverSync": id = await synchronizePlanningWaiver(context, clean); break;
       case "annualProjection": id = await projectPlanningAnnualMemory(context, clean); break;
       case "reportLayout": id = await configurePlanningReportLayout(context, clean); break;
+      case "reportPublish": id = (await publishPlanningReport(context, clean)).id; break;
+      case "reportWithdraw": id = await withdrawPlanningPublication(context, clean); break;
       case "memory": id = await addPlanningMemory(context, clean); break;
       case "waiver": id = await addPlanningWaiver(context, clean); break;
       case "scope": await configurePlanningEntity(context, clean.governmentEntityId, clean.budgetUnitId); break;

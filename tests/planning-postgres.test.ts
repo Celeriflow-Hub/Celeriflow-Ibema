@@ -57,6 +57,7 @@ test("PostgreSQL Planejamento F4–F8: versões, emendas, cotas, créditos, impl
     await pg.exec(readFileSync("prisma/migrations-ibema/20261011190000_planning_internal_connections/migration.sql", "utf8"));
     await pg.exec(readFileSync("prisma/migrations-ibema/20261011200000_planning_accounting_command_integrity/migration.sql", "utf8"));
     await pg.exec(readFileSync("prisma/migrations-ibema/20261011210000_planning_catalog_maintenance/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261011220000_planning_publication/migration.sql", "utf8"));
     await pg.exec(`INSERT INTO "GovernmentEntity" (id,code,name,type,status) VALUES ('prefeitura','PMVA','Prefeitura Municipal de Vila das Araucárias','PREFEITURA','ATIVA'),('camara','CMVA','Câmara Municipal de Vila das Araucárias','CAMARA','ATIVA');
       INSERT INTO "Secretariat" (id,name) VALUES ('saude','Secretaria Municipal de Saúde'),('legislativo','Câmara Municipal');
       INSERT INTO "BudgetUnit" (id,code,name,"secretariatId") VALUES ('ug-exe','03.01','Fundo Municipal de Saúde','saude'),('ug-leg','01.01','Câmara Municipal','legislativo');

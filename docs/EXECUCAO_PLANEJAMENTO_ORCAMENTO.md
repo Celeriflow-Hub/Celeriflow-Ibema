@@ -77,6 +77,10 @@ Registro: [PLANEJAMENTO_S2_EXECUCAO_FINANCEIRO_COMPRAS_EVIDENCIAS.md](PLANEJAMEN
 
 Registro atual: [PLANEJAMENTO_S3_S7_EVIDENCIAS.md](PLANEJAMENTO_S3_S7_EVIDENCIAS.md). Catálogos por edição/árvore/hash, grau da despesa/código composto, manutenção completa dos cadastros tratados pelo serviço, campos de obras/prioridades/riscos, importação com ano/realizado/prévia, ingresso GED e tramitação Câmara, RCL executada/renúncia/memórias e referência de modelos normativos. **62 testes/cenários nas suítes identificadas aprovados; Prisma/lint/TypeScript/build aprovados, 59 páginas estáticas.** Migration `20261011210000_planning_catalog_maintenance` executada somente em bases isoladas. Materiais oficiais, storage/provedor operacional, histórico reconciliado e aceites individuais continuam separados; próxima frente S8/S9.
 
+### S8 e preparação S9 — publicação e diagnóstico
+
+Registro atual: [PLANEJAMENTO_S8_S9_PUBLICACAO_E_ENSAIO.md](PLANEJAMENTO_S8_S9_PUBLICACAO_E_ENSAIO.md). Publicação de arquivo verificado, bytes iguais no acesso privado/público, falha/retry/lease/retirada, emissão simultânea e transição do legado. **66 testes/cenários aprovados; lint/Prisma/TypeScript/build aprovados, 59 páginas estáticas; smoke público Next aprovado.** Diagnóstico read-only: três migrations pendentes (`200000`, `210000`, `220000`), zero instrumentos/implantados, módulos ativos e storage configurado. Controles [EXE](EVIDENCIAS_PLANEJAMENTO_PREFEITURA.md)/[LEG](EVIDENCIAS_PLANEJAMENTO_CAMARA.md) têm 99 IDs cada, mas a S9 autenticada permanece não executada por falta de instância isolada/ciclo/perfis/sessão de ensaio. Nenhuma implantação/carga operacional implícita.
+
 ## Base municipal plausível
 
 - Dataset: `src/lib/planejamento/municipal-data.ts`.

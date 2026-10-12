@@ -971,7 +971,47 @@ model PlanningReportSnapshot {
   status String @default("GENERATED")
   createdById String
   createdAt DateTime @default(now())
+  publications PlanningReportPublication[]
   @@index([instrumentId, createdAt])
+}
+
+model PlanningReportPublication {
+  id String @id @default(cuid())
+  snapshotId String
+  snapshot PlanningReportSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  format String
+  publicKey String @unique @default(uuid())
+  status String @default("PENDING")
+  fileUrl String?
+  fileHash String?
+  filename String
+  contentType String
+  title String
+  kind String @default("REVIEW_COPY")
+  requestedById String
+  reason String
+  publishedAt DateTime?
+  withdrawnAt DateTime?
+  lastError String?
+  attempts Int @default(0)
+  leaseToken String?
+  leaseExpiresAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  events PlanningPublicationEvent[]
+  @@unique([snapshotId, format])
+  @@index([status, publishedAt])
+}
+
+model PlanningPublicationEvent {
+  id String @id @default(cuid())
+  publicationId String
+  publication PlanningReportPublication @relation(fields: [publicationId], references: [id], onDelete: Restrict)
+  type String
+  actorId String
+  payload Json
+  createdAt DateTime @default(now())
+  @@index([publicationId, createdAt])
 }
 
 // Adapters are connected in F9, using these transactional commands.

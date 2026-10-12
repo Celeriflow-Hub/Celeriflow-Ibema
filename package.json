@@ -7,6 +7,7 @@
     "dev": "next dev",
     "build": "node scripts/build.mjs",
     "build:check": "node scripts/build.mjs",
+    "typecheck": "node scripts/build.mjs --typecheck",
     "start": "next start",
     "lint": "eslint",
     "test:unit": "node scripts/run-group-a-tests.mjs",

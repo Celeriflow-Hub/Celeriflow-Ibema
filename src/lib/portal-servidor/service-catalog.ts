@@ -81,7 +81,7 @@ export async function saveFunctionalService(context: AppContext, raw: unknown) {
 
 export function validateFunctionalValues(service: FunctionalService, raw: Record<string, unknown>) {
   const result: Record<string, string> = {};
-  if (Object.keys(raw).some(key => !service.fields.some(field => field.code === key))) throw new AccessError("Campo não autorizado no formulário.", 400);
+  if (Object.keys(raw).some(key => !service.fields.some(field => field.code === key))) throw new AccessError("Campo não autorizado no formulário.", 403);
   for (const field of service.fields) {
     const value = raw[field.code];
     if (value !== undefined && typeof value !== "string") throw new Error(`Valor inválido: ${field.label}.`);

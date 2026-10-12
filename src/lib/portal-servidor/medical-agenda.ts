@@ -8,7 +8,8 @@ async function ownMedicalEmployee(context: AppContext) {
   if (moduleConfig?.ativo === false) throw new AccessError("Agenda SST indisponível.", 423);
   const employee = await context.prisma.employee.findFirst({ where: { id: context.user.employeeId || "__SEM_VINCULO__", isActive: true }, select: { id: true, secretariatId: true } });
   if (!employee?.secretariatId) throw new AccessError("Servidor sem vínculo ativo com unidade de atendimento.", 403);
-  return employee;
+  // Preserve the validated, non-null unit in the returned type as well as at runtime.
+  return { id: employee.id, secretariatId: employee.secretariatId };
 }
 
 export async function listOwnMedicalAgenda(context: AppContext, page = 1) {

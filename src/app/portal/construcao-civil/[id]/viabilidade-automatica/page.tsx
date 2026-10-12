@@ -29,3 +29,6 @@ export default async function AutomaticViabilityPage({ params }: { params: Promi
     </section>
   </main>;
 }
+
+// Render on request: the shared portal layout queries the database.
+export const dynamic = "force-dynamic";

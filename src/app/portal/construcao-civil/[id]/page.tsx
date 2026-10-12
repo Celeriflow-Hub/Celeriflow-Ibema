@@ -30,3 +30,6 @@ export default async function ConstructionPortalDetail({ params, searchParams }:
     <section className="space-y-3 rounded border p-3"><h2 className="font-semibold">Comunicação com o setor responsável</h2><ConstructionConversation key={String(accepted) + term?.id} caseId={id} external term={term} accepted={accepted} />{accepted && <ConstructionUpload caseId={id} />}{messages.map((message) => <article key={message.id} className="rounded border p-3"><p className="text-xs text-slate-500">{message.identityId ? "Profissional" : "Setor municipal"} — {message.createdAt.toLocaleString("pt-BR")}</p><p className="whitespace-pre-wrap break-words text-sm">{message.content}</p>{message.documentId && <a className="text-xs text-blue-700 underline" href={`/api/construcao-civil/anexos?${new URLSearchParams({ caseId: id, documentId: message.documentId })}`}>Baixar documento complementar</a>}</article>)}<ErpPagination page={page} total={total} pageSize={20} previousHref={`?page=${page - 1}`} nextHref={`?page=${page + 1}`} label="mensagens" /></section>
   </main>;
 }
+
+// Render on request: the shared portal layout queries the database.
+export const dynamic = "force-dynamic";

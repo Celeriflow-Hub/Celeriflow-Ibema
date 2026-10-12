@@ -5274,6 +5274,7 @@ model Contract {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  fuelBalances         FleetFuelBalance[]
 }
 
 model ContractAmendment {
@@ -16450,6 +16451,8 @@ model FleetFuelOrder {
   portalToken      String?
   confirmedVia     String?
   createdById      String
+  balanceId        String?
+  balance          FleetFuelBalance? @relation(fields: [balanceId], references: [id])
 
   @@index([unitId, status, issuedAt])
 }
@@ -16777,4 +16780,20 @@ model FleetAttachment {
   createdAt   DateTime @default(now())
 
   @@index([unitId, ownerType])
+}
+
+model FleetFuelBalance {
+  id                 String   @id @default(cuid())
+  contractId         String
+  contract           Contract @relation(fields: [contractId], references: [id])
+  fuelType           String
+  quantityContracted Decimal  @db.Decimal(14, 3)
+  quantityConsumed   Decimal  @db.Decimal(14, 3) @default(0)
+  alertThreshold     Decimal  @db.Decimal(14, 3) @default(100)
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  orders             FleetFuelOrder[]
+  @@unique([contractId, fuelType])
 }

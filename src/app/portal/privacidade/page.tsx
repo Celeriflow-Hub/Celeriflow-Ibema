@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PortalBreadcrumb } from "@/components/portal-institucional/PortalShell";
+import { CookiePreferencesButton } from "@/components/lgpd/CookieConsent";
 
 export const metadata: Metadata = {
   title: "Privacidade e Proteção de Dados | Portal Oficial",
@@ -76,8 +77,9 @@ export default function PrivacidadePage() {
             </table>
           </div>
           <p className="mt-3">
-            Preferências de acessibilidade podem ser mantidas no armazenamento local do navegador. A escolha de cookies pode ser revista a qualquer momento pelo controle “Preferências de cookies”, exibido no canto da tela depois da primeira decisão. Se finalidades ou categorias mudarem, a versão do consentimento deverá ser atualizada e uma nova escolha será solicitada.
+            Preferências de acessibilidade podem ser mantidas no armazenamento local do navegador. O aviso de cookies aparece na primeira entrada e é ocultado após sua escolha. Você pode revisar as preferências pelo botão abaixo. Se finalidades ou categorias mudarem, a versão do consentimento deverá ser atualizada e uma nova escolha será solicitada.
           </p>
+          <CookiePreferencesButton />
         </section>
 
         <section aria-labelledby="compartilhamento-retencao">

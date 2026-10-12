@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { Cookie, Settings2, X } from "lucide-react";
-import { useRef, useState, useSyncExternalStore } from "react";
+import { Cookie, X } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 const CONSENT_VERSION = 1;
 const CONSENT_COOKIE_NAME = `celeriflow_lgpd_consent_v${CONSENT_VERSION}`;
 const CONSENT_MAX_AGE_SECONDS = 60 * 60 * 24 * 180;
+const REVIEW_CONSENT_EVENT = "celeriflow:review-cookie-consent";
 
 type CookiePreference = "necessary" | "optional";
 type ConsentSnapshot = CookiePreference | null | "loading";
@@ -64,7 +65,7 @@ export function CookieConsent() {
   );
   const [selectedPreference, setSelectedPreference] = useState<CookiePreference | null>(null);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
-  const reviewButtonRef = useRef<HTMLButtonElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const isReady = storedPreference !== "loading";
   const preference = selectedPreference ?? (isReady ? storedPreference : null);
@@ -74,37 +75,28 @@ export function CookieConsent() {
     storeConsent(nextPreference);
     setSelectedPreference(nextPreference);
     setIsReviewOpen(false);
-    window.requestAnimationFrame(() => reviewButtonRef.current?.focus());
+    window.requestAnimationFrame(() => returnFocusRef.current?.focus());
   }
 
   function closeReview() {
     setIsReviewOpen(false);
-    window.requestAnimationFrame(() => reviewButtonRef.current?.focus());
+    window.requestAnimationFrame(() => returnFocusRef.current?.focus());
   }
 
-  function openReview() {
-    setIsReviewOpen(true);
-    window.requestAnimationFrame(() => closeButtonRef.current?.focus());
-  }
+  useEffect(() => {
+    function openReview() {
+      returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setIsReviewOpen(true);
+      window.requestAnimationFrame(() => closeButtonRef.current?.focus());
+    }
+    window.addEventListener(REVIEW_CONSENT_EVENT, openReview);
+    return () => window.removeEventListener(REVIEW_CONSENT_EVENT, openReview);
+  }, []);
 
   if (!isReady) return null;
 
   return (
     <>
-      {preference !== null && !isOpen && (
-        <button
-          ref={reviewButtonRef}
-          type="button"
-          onClick={openReview}
-          className="fixed bottom-3 left-3 z-[90] inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-md transition hover:border-slate-400 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e4c7e] sm:bottom-4 sm:left-4"
-          aria-label="Revisar preferências de cookies"
-        >
-          <Settings2 className="size-4" aria-hidden="true" />
-          <span className="hidden sm:inline">Preferências de cookies</span>
-          <span className="sm:hidden">Cookies</span>
-        </button>
-      )}
-
       {isOpen && (
         <section
           role="dialog"
@@ -185,5 +177,17 @@ export function CookieConsent() {
         </section>
       )}
     </>
+  );
+}
+
+export function CookiePreferencesButton() {
+  return (
+    <button
+      type="button"
+      onClick={() => window.dispatchEvent(new Event(REVIEW_CONSENT_EVENT))}
+      className="mt-3 rounded border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-[#0e4c7e] hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e4c7e]"
+    >
+      Revisar preferências de cookies
+    </button>
   );
 }

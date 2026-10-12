@@ -1,14 +1,10 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  BarChart3,
   BookOpen,
   Building2,
   ChevronLeft,
   ChevronRight,
-  FileSearch,
-  FileText,
-  Gavel,
   Globe,
   Landmark,
   Newspaper,
@@ -71,13 +67,6 @@ const MUNICIPALITY_SHORTCUTS = [
   { label: "História do Município", href: "/portal/historia", icon: BookOpen, bg: "bg-[#1a5276]" },
   { label: "Dados do Município", href: "/portal/historia#dados", icon: Globe, bg: "bg-[#1e8449]" },
   { label: "Símbolos do Município", href: "/portal/historia#simbolos", icon: Landmark, bg: "bg-[#6c3483]" },
-];
-
-const TRANSPARENCY_SHORTCUTS = [
-  { label: "Diário Oficial", href: "/portal/dados-abertos#diario", icon: FileText, description: "Publicações oficiais" },
-  { label: "Portal da Transparência", href: "/portal/portaldatransparencia", icon: BarChart3, description: "Receitas e despesas" },
-  { label: "Acesso à Informação", href: "/portal/acesso-informacao", icon: FileSearch, description: "e-SIC" },
-  { label: "Licitações", href: "/portal/licitacoes-e-contratos", icon: Gavel, description: "Editais e contratos" },
 ];
 
 // ---------- Components ----------
@@ -178,7 +167,7 @@ function SecretaryCard({ secretary }: { secretary: typeof DEMO_SECRETARIES[numbe
 // ---------- Page ----------
 
 export default async function InstitutionalPortalHome() {
-  const { institution, latestNews, pages } = await getInstitutionalPortalHome();
+  const { latestNews, pages } = await getInstitutionalPortalHome();
 
   return (
     <main>
@@ -269,35 +258,6 @@ export default async function InstitutionalPortalHome() {
         </div>
       </section>
 
-      {/* ── Transparency shortcuts ── */}
-      <section className="bg-[#1a5276]" aria-labelledby="transparencia-titulo">
-        <div className="mx-auto max-w-7xl px-5 py-8 sm:px-6">
-          <div className="mb-6 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.15em] text-emerald-300">Dados abertos e controle social</p>
-              <h2 id="transparencia-titulo" className="mt-1 text-xl font-bold text-white">Acesso Rápido à Transparência</h2>
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {TRANSPARENCY_SHORTCUTS.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="group flex flex-col items-center gap-3 rounded-xl border border-white/20 bg-white/10 p-6 text-center text-white backdrop-blur-sm transition hover:bg-white/20"
-              >
-                <div className="flex size-14 items-center justify-center rounded-full bg-white/20 transition group-hover:bg-white/30">
-                  <item.icon className="size-7" aria-hidden="true" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold">{item.label}</p>
-                  <p className="mt-0.5 text-xs text-white/70">{item.description}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ── Institutional pages ── */}
       {pages.length > 0 && (
         <section className="bg-white border-b border-slate-200" aria-labelledby="paginas-titulo">
@@ -321,30 +281,6 @@ export default async function InstitutionalPortalHome() {
           </div>
         </section>
       )}
-
-      {/* ── Portal da Transparência CTA ── */}
-      <section className="bg-[#073b64]" aria-labelledby="cta-transparencia">
-        <div className="mx-auto max-w-7xl px-5 py-10 sm:px-6">
-          <div className="relative overflow-hidden rounded-2xl bg-[#0a4a7a] px-6 py-8 shadow-sm sm:px-8 sm:py-10">
-            <div className="absolute -right-12 -top-20 size-64 rounded-full border-[28px] border-white/10" aria-hidden="true" />
-            <div className="relative grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">Dados abertos e controle social</p>
-                <h2 id="cta-transparencia" className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">Portal da Transparência</h2>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200">
-                  Acesse a execução orçamentária e financeira de {MUNICIPALITY_NAME}/{MUNICIPALITY_STATE}. Exporte dados em CSV e acompanhe registros publicáveis com proteção de informações pessoais.
-                </p>
-              </div>
-              <Link
-                href="/portal/portaldatransparencia"
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-5 py-3 text-sm font-bold text-[#073b64] transition hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
-              >
-                Ir para o Portal da Transparência <ArrowRight className="size-4" aria-hidden="true" />
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* ── Informativos POC ── */}
       <section className="bg-white border-b border-slate-200" aria-labelledby="informativos-titulo">

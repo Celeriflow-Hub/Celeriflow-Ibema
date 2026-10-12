@@ -9,18 +9,15 @@ import {
   ChevronRight,
   Cloud,
   Contrast,
-  FileText,
-  Headset,
   Home,
   Mail,
   Menu,
-  MessagesSquare,
-  Newspaper,
   Scale,
   Search,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
+import styles from "./PortalShell.module.css";
 import type { InstitutionalContact } from "@/lib/portal-institucional/public-content";
 import { MUNICIPALITY_NAME, MUNICIPALITY_STATE } from "@/lib/municipality-identity";
 
@@ -100,17 +97,8 @@ const MAIN_MENU: MenuItem[] = [
       { label: "Perguntas Frequentes", href: "/portal/perguntas-frequentes" },
     ],
   },
-  { label: "Quer Construir?", href: "/portal/construcao-civil" },
-  { label: "Carta de Serviços", href: "/portal/servicos" },
+  { label: "Todos Serviços", href: "/portal/servicos" },
   { label: "Licitações", href: "/portal/licitacoes-e-contratos" },
-];
-
-const SECONDARY_QUICK_LINKS = [
-  { label: "Portal do Servidor", href: "/portal/portaldoservidor", icon: Home },
-  { label: "Notícias", href: "/portal/noticias", icon: Newspaper },
-  { label: "Ouvidoria", href: "/portal/ouvidoria", icon: Headset },
-  { label: "Acesso à Informação", href: "/portal/acesso-informacao", icon: FileText },
-  { label: "Todos Serviços", href: "/portal/servicos", icon: MessagesSquare },
 ];
 
 const QUICK_ACCESS_BUTTONS = [
@@ -160,6 +148,38 @@ const QUICK_ACCESS_BUTTONS = [
 ];
 
 const FONT_STEPS = [0.875, 1, 1.125, 1.25];
+const ACCESSIBILITY_EVENT = "portal:accessibility-preferences";
+let accessibilityFallback = "1:0";
+
+function readAccessibilitySnapshot() {
+  try {
+    const saved = Number(window.localStorage.getItem("portal-a11y-font-step") ?? "1");
+    const step = Number.isInteger(saved) && saved >= 0 && saved < FONT_STEPS.length ? saved : 1;
+    return `${step}:${window.localStorage.getItem("portal-a11y-contrast") === "1" ? "1" : "0"}`;
+  } catch {
+    return accessibilityFallback;
+  }
+}
+
+function subscribeToAccessibility(callback: () => void) {
+  window.addEventListener("storage", callback);
+  window.addEventListener(ACCESSIBILITY_EVENT, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(ACCESSIBILITY_EVENT, callback);
+  };
+}
+
+function updateAccessibility(fontStep: number, highContrast: boolean) {
+  accessibilityFallback = `${fontStep}:${highContrast ? "1" : "0"}`;
+  try {
+    window.localStorage.setItem("portal-a11y-font-step", String(fontStep));
+    window.localStorage.setItem("portal-a11y-contrast", highContrast ? "1" : "0");
+  } catch {
+    // Keep controls usable when browser storage is unavailable.
+  }
+  window.dispatchEvent(new Event(ACCESSIBILITY_EVENT));
+}
 
 function TopAccessibilityBar({
   highContrast,
@@ -197,7 +217,6 @@ function TopAccessibilityBar({
           <Link href="/portal/acessibilidade" className="inline-flex items-center gap-1 rounded px-1 py-0.5 font-semibold hover:bg-white/15 hover:underline">
             <Accessibility className="size-3.5" aria-hidden="true" /> Acessibilidade
           </Link>
-          <a href="https://www.nvaccess.org/download/" target="_blank" rel="noreferrer" title="NVDA - Leitor de Telas" className="rounded px-1 py-0.5 font-semibold hover:bg-white/15 hover:underline">NVDA</a>
           <Link href="/portal/dados-abertos" className="rounded px-1 py-0.5 font-semibold hover:bg-white/15 hover:underline">Dados Abertos</Link>
           <Link href="/portal/mapa-do-site" className="rounded px-1 py-0.5 font-semibold hover:bg-white/15 hover:underline">Mapa do Site</Link>
           <Link href="/portal/contato" title="Contato" aria-label="Contato institucional" className="inline-flex items-center gap-1 rounded px-1 py-0.5 font-semibold hover:bg-white/15 hover:underline">
@@ -319,9 +338,9 @@ function SocialIcons() {
           {s.svg}
         </a>
       ))}
-      <a href="/portal/contato" aria-label="E-mail de contato" title="Contato por e-mail" className="flex size-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-700 hover:text-white hover:border-slate-700">
+      <Link href="/portal/contato" aria-label="E-mail de contato" title="Contato por e-mail" className="flex size-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-700 hover:text-white hover:border-slate-700">
         <Mail className="size-4" />
-      </a>
+      </Link>
     </div>
   );
 }
@@ -435,11 +454,6 @@ function MainMenu() {
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
 
   useEffect(() => {
-    setMobileOpen(false);
-    setOpenDropdown(null);
-  }, [pathname]);
-
-  useEffect(() => {
     if (!openDropdown) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpenDropdown(null);
@@ -455,7 +469,7 @@ function MainMenu() {
   return (
     <nav aria-label="Menu principal" className="bg-[#1a5276] text-white">
       <div className="mx-auto max-w-7xl px-2 sm:px-4">
-        <div className="flex items-center justify-between lg:hidden">
+        <div className="flex items-center justify-between xl:hidden">
           <span className="px-2 py-3 text-sm font-bold uppercase tracking-wide text-white/90">Menu</span>
           <button
             type="button"
@@ -471,18 +485,18 @@ function MainMenu() {
         </div>
 
         {/* Desktop */}
-        <ul className="hidden items-stretch lg:flex flex-wrap">
+        <ul className="hidden flex-nowrap items-stretch xl:flex">
           {MAIN_MENU.map((item, index) => {
             const isOpen = openDropdown === item.label;
             const isActive = pathname === item.href || (item.href !== "/portal" && pathname.startsWith(item.href));
             return (
-              <li key={item.label} className={`relative flex items-stretch ${index > 0 ? "border-l border-white/20" : ""}`}>
+              <li key={item.label} className={`relative flex shrink-0 items-stretch ${index > 0 ? "border-l border-white/20" : ""}`}>
                 {item.children ? (
                   <div className="flex items-stretch" onMouseLeave={() => setOpenDropdown(null)}>
                     <Link
                       href={item.href}
                       aria-current={isActive ? "page" : undefined}
-                      className={`flex items-center gap-1.5 px-3 py-[13px] text-[13px] font-semibold transition ${isActive ? "bg-white/20 text-white" : "text-white/90 hover:bg-white/15 hover:text-white"}`}
+                      className={`flex items-center gap-1.5 whitespace-nowrap px-2 py-[13px] text-[13px] font-semibold transition ${isActive ? "bg-white/20 text-white" : "text-white/90 hover:bg-white/15 hover:text-white"}`}
                     >
                       {item.home && <Home className="size-4" aria-hidden="true" />}
                       {item.label}
@@ -522,7 +536,7 @@ function MainMenu() {
                   <Link
                     href={item.href}
                     aria-current={isActive ? "page" : undefined}
-                    className={`flex items-center gap-1.5 px-3 py-[13px] text-[13px] font-semibold transition ${isActive ? "bg-white/20 text-white" : "text-white/90 hover:bg-white/15 hover:text-white"}`}
+                    className={`flex items-center gap-1.5 whitespace-nowrap px-2 py-[13px] text-[13px] font-semibold transition ${isActive ? "bg-white/20 text-white" : "text-white/90 hover:bg-white/15 hover:text-white"}`}
                   >
                     {item.home && <Home className="size-4" aria-hidden="true" />}
                     {item.label}
@@ -531,7 +545,7 @@ function MainMenu() {
               </li>
             );
           })}
-          <li className="ml-auto flex items-stretch border-l border-white/20">
+          <li className="ml-auto flex shrink-0 items-stretch border-l border-white/20">
             <Link href="/portal/mapa-do-site" aria-label="Todos os menus — mapa do site" title="Todos os menus" className="flex items-center px-4 text-white/70 hover:bg-white/15 hover:text-white">
               <Menu className="size-5" aria-hidden="true" />
             </Link>
@@ -540,7 +554,7 @@ function MainMenu() {
 
         {/* Mobile */}
         {mobileOpen && (
-          <ul id="menu-principal-movel" className="divide-y divide-white/10 border-t border-white/20 bg-[#153e63] pb-2 lg:hidden">
+          <ul id="menu-principal-movel" className="divide-y divide-white/10 border-t border-white/20 bg-[#153e63] pb-2 xl:hidden">
             {MAIN_MENU.map((item) => {
               const expanded = mobileExpanded === item.label;
               return (
@@ -591,63 +605,25 @@ function MainMenu() {
         )}
       </div>
 
-      {/* Secondary quick links bar */}
-      <div className="bg-white border-b border-slate-200 shadow-sm">
-        <nav aria-label="Acesso rápido institucional">
-          <ul className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-8 gap-y-1 px-4 py-2 sm:px-6">
-            {SECONDARY_QUICK_LINKS.map((item) => (
-              <li key={item.label}>
-                <Link href={item.href} className="inline-flex items-center gap-2 text-[13px] font-bold text-[#1a5276] hover:text-[#0e4c7e] hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0e4c7e]">
-                  <item.icon className="size-4" aria-hidden="true" />
-                  {item.label}
-                </Link>
-              </li>
-            ))}
-            <li className="ml-auto hidden lg:block">
-              <Link href="/portal/leis-municipais" title="Sistema de Processos Legislativos (SPL)" className="inline-flex items-center gap-2 rounded border border-[#1a5276]/20 bg-[#eef4f9] px-3 py-1.5 text-[12px] font-bold text-[#1a5276] transition hover:bg-[#1a5276] hover:text-white">
-                <Scale className="size-3.5" />
-                Sistema de Processos Legislativos (SPL)
-              </Link>
-            </li>
-          </ul>
-        </nav>
-      </div>
     </nav>
   );
 }
 
 export function PortalShell({ children, institution }: { children: React.ReactNode; institution: InstitutionalContact }) {
-  const [fontStep, setFontStep] = useState(1);
-  const [highContrast, setHighContrast] = useState(false);
+  const snapshot = useSyncExternalStore(subscribeToAccessibility, readAccessibilitySnapshot, () => "1:0");
+  const [step, contrast] = snapshot.split(":");
+  const fontStep = Number(step), highContrast = contrast === "1";
   const router = useRouter();
+  const pathname = usePathname();
   const [query, setQuery] = useState("");
-
-  useEffect(() => {
-    try {
-      const savedScale = Number(window.localStorage.getItem("portal-a11y-font-step") ?? "1");
-      if (Number.isInteger(savedScale) && savedScale >= 0 && savedScale < FONT_STEPS.length) setFontStep(savedScale);
-      setHighContrast(window.localStorage.getItem("portal-a11y-contrast") === "1");
-    } catch {
-      // sem armazenamento disponível
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem("portal-a11y-font-step", String(fontStep));
-      window.localStorage.setItem("portal-a11y-contrast", highContrast ? "1" : "0");
-    } catch {
-      // sem armazenamento disponível
-    }
-  }, [fontStep, highContrast]);
 
   const fontScale = FONT_STEPS[fontStep] ?? 1;
   const location = [institution.address, [institution.city, institution.state].filter(Boolean).join("/")].filter(Boolean).join(" · ");
 
   return (
     <div
-      className={`min-h-screen bg-[#eef1f4] text-slate-900 ${highContrast ? "portal-high-contrast" : ""}`}
-      style={{ fontSize: `${fontScale}rem` }}
+      className={`${styles.shell} min-h-screen bg-[#eef1f4] text-slate-900 ${highContrast ? "portal-high-contrast" : ""}`}
+      style={{ "--portal-font-scale": fontScale } as CSSProperties}
     >
       {highContrast && (
         <style>{`.portal-high-contrast, .portal-high-contrast main, .portal-high-contrast header, .portal-high-contrast nav, .portal-high-contrast footer, .portal-high-contrast section, .portal-high-contrast aside, .portal-high-contrast div { background-color: #000 !important; background-image: none !important; color: #fff !important; border-color: #fff !important; } .portal-high-contrast a, .portal-high-contrast button { color: #ffe600 !important; } .portal-high-contrast img { filter: contrast(1.15); }`}</style>
@@ -661,15 +637,15 @@ export function PortalShell({ children, institution }: { children: React.ReactNo
 
       <TopAccessibilityBar
         highContrast={highContrast}
-        onIncrease={() => setFontStep((s) => Math.min(FONT_STEPS.length - 1, s + 1))}
-        onDecrease={() => setFontStep((s) => Math.max(0, s - 1))}
-        onResetFont={() => setFontStep(1)}
-        onToggleContrast={() => setHighContrast((v) => !v)}
+        onIncrease={() => updateAccessibility(Math.min(FONT_STEPS.length - 1, fontStep + 1), highContrast)}
+        onDecrease={() => updateAccessibility(Math.max(0, fontStep - 1), highContrast)}
+        onResetFont={() => updateAccessibility(1, highContrast)}
+        onToggleContrast={() => updateAccessibility(fontStep, !highContrast)}
       />
 
       <header>
         <QuickAccessBar router={router} query={query} setQuery={setQuery} />
-        <MainMenu />
+        <MainMenu key={pathname} />
       </header>
 
       <div id="conteudo-principal" tabIndex={-1} className="outline-none">
@@ -729,7 +705,6 @@ export function PortalShell({ children, institution }: { children: React.ReactNo
               <li><Link href="/portal/contato" className="hover:text-white hover:underline">Fale Conosco</Link></li>
               <li><Link href="/portal/dados-abertos" className="hover:text-white hover:underline">Dados Abertos</Link></li>
               <li><Link href="/portal/acessibilidade" className="hover:text-white hover:underline">Acessibilidade</Link></li>
-              <li><Link href="/portal/nfse" className="hover:text-white hover:underline">NFS-e</Link></li>
             </ul>
           </div>
         </div>

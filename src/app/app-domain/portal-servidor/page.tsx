@@ -51,9 +51,10 @@ export default async function PortalServidorPage() {
         title="Portal do Servidor"
         description="Autosserviço, documentos e solicitações funcionais"
         icon={<UserRoundCheck className="size-5 text-emerald-700" />}
+        action={<Link href="/portal-servidor/solicitacoes-rh" className="inline-flex h-7 items-center rounded border border-emerald-700 bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800">Solicitar serviço ao RH</Link>}
       />
 
-      <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr] gap-2 p-3">
+      <div className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto p-3">
         <section className="grid gap-px overflow-hidden border border-slate-300 bg-slate-200 shadow-sm md:grid-cols-3">
           <div className="min-w-0 bg-white px-3 py-2.5">
             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Servidor</p>
@@ -105,6 +106,21 @@ export default async function PortalServidorPage() {
             </div>
             <p className="mt-3 text-xs leading-5 text-slate-600"><strong className="text-slate-900">{plannedVacations}</strong> férias programada(s) · <strong className="text-slate-900">{activeLeaves}</strong> afastamento(s) ativo(s).</p>
           </Link>
+        </section>
+        <section aria-labelledby="portal-services-title" className="space-y-2">
+          <h2 id="portal-services-title" className="text-xs font-bold uppercase tracking-wide text-slate-600">Pagamentos, direitos e serviços internos</h2>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              { href: "/portal-servidor/demonstrativos", title: "Meus contracheques", description: "Demonstrativos completos e PDFs publicados pelo RH." },
+              { href: "/portal-servidor/banco-horas", title: "Banco de horas", description: "Créditos, débitos e saldos dos seus vínculos." },
+              { href: "/portal-servidor/margem", title: "Margem consignável", description: "Consulte os cálculos disponíveis para seu cadastro." },
+              { href: "/portal-servidor/consignacoes", title: "Minhas consignações", description: "Contratos e parcelas registrados em seu nome." },
+              { href: "/portal-servidor/solicitacoes-rh", title: "Solicitações ao RH", description: "Envie pedidos e acompanhe a decisão do responsável." },
+              { href: "/portal-servidor/recadastramento", title: "Recadastramento", description: "Responda às campanhas atribuídas ao seu cadastro." },
+              { href: "/portal-servidor/credito", title: "Crédito consignado", description: "Registre seu pedido de crédito para análise." },
+              { href: "/portal-servidor/beneficios", title: "Meus benefícios", description: "Consulte os benefícios vinculados ao seu cadastro." },
+            ].map(service => <Link key={service.href} href={service.href} className="rounded border border-slate-300 bg-white p-3 shadow-sm hover:border-emerald-600 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"><h3 className="text-sm font-semibold text-slate-900">{service.title}</h3><p className="mt-2 text-xs leading-5 text-slate-600">{service.description}</p></Link>)}
+          </div>
         </section>
       </div>
     </div>

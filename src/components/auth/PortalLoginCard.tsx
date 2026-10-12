@@ -19,19 +19,20 @@ import { Label } from "@/components/ui/label";
 type PortalLoginCardProps = {
   audience: "citizen" | "employee";
   destination: string;
-  sessionEndpoint?: "/api/auth/session" | "/api/auth/construcao-civil/session";
+  initialError?: string;
+  sessionEndpoint?: "/api/auth/session" | "/api/auth/construcao-civil/session" | "/api/auth/portal-servidor/session";
 };
 
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
-export function PortalLoginCard({ audience, destination, sessionEndpoint = "/api/auth/session" }: PortalLoginCardProps) {
+export function PortalLoginCard({ audience, destination, initialError = "", sessionEndpoint = "/api/auth/session" }: PortalLoginCardProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [pendingMethod, setPendingMethod] = useState<"password" | "google" | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError);
   const isCitizen = audience === "citizen";
 
   async function createLocalSession(credential: UserCredential) {
@@ -98,19 +99,20 @@ export function PortalLoginCard({ audience, destination, sessionEndpoint = "/api
             {isCitizen ? "Entrar na minha área" : "Portal do Servidor"}
           </h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Use uma conta já autorizada pela administração municipal.
+            {isCitizen ? "Use uma conta já autorizada pela administração municipal." : "Use seu e-mail institucional cadastrado e sua senha. O acesso funcional é permitido enquanto seu cadastro estiver ativo."}
           </p>
         </div>
 
         {error && (
           <div role="alert" className="mb-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">
-            {error}
+            <p>{error}</p>
+            {!isCitizen && <p className="mt-2">Em caso de dúvidas, contate o RH pelo e-mail <a href="mailto:rh@emailprefeitura.com" className="font-semibold underline underline-offset-2">rh@emailprefeitura.com</a>.</p>}
           </div>
         )}
 
         <form onSubmit={handlePasswordLogin} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor={`${audience}-email`}>E-mail</Label>
+            <Label htmlFor={`${audience}-email`}>{isCitizen ? "E-mail" : "E-mail institucional cadastrado"}</Label>
             <div className="relative">
               <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
               <Input
@@ -155,33 +157,29 @@ export function PortalLoginCard({ audience, destination, sessionEndpoint = "/api
           </Button>
         </form>
 
-        <div className="my-5 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-          <span className="h-px flex-1 bg-slate-200" />
-          Outras formas de acesso
-          <span className="h-px flex-1 bg-slate-200" />
-        </div>
+        {!isCitizen && <Link href="/portal-servidor/recuperar-senha" className="mt-4 inline-flex text-sm font-semibold text-sky-800 hover:underline">Esqueci minha senha</Link>}
 
-        <div className="space-y-2.5">
-          {isCitizen ? (
-            <>
+        {isCitizen && (
+          <>
+            <div className="my-5 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              <span className="h-px flex-1 bg-slate-200" />
+              Outras formas de acesso
+              <span className="h-px flex-1 bg-slate-200" />
+            </div>
+            <div className="space-y-2.5">
               <Button type="button" variant="outline" className="h-11 w-full" onClick={handleGoogleLogin} disabled={pendingMethod !== null}>
                 {pendingMethod === "google" ? <Loader2 className="size-4 animate-spin" /> : <><span className="text-base font-bold text-blue-600" aria-hidden="true">G</span>Entrar com Google</>}
               </Button>
               <ConfiguredProvider label="Gov.br" />
-            </>
-          ) : (
-            <>
-              <ConfiguredProvider label="Microsoft" />
-              <ConfiguredProvider label="LDAP" />
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
 
         <p className="mt-5 text-xs leading-5 text-slate-500">
           O acesso não cria cadastro automaticamente. Sua conta precisa estar previamente autorizada no sistema.
         </p>
-        <Link href={isCitizen ? "/portal" : "/login"} className="mt-5 inline-flex text-sm font-semibold text-slate-600 underline-offset-4 hover:text-slate-950 hover:underline">
-          {isCitizen ? "Voltar ao portal" : "Ir para o acesso administrativo"}
+        <Link href="/portal" className="mt-5 inline-flex text-sm font-semibold text-slate-600 underline-offset-4 hover:text-slate-950 hover:underline">
+          Voltar ao portal institucional
         </Link>
       </div>
     </section>

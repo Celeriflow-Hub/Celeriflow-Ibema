@@ -263,6 +263,8 @@ type ModuleShellProps = {
   children: ReactNode;
   sidebarVariant?: "dark" | "light";
   desktopCollapsible?: boolean;
+  backHref?: string;
+  backLabel?: string;
 };
 
 function isCurrentRoute(
@@ -289,6 +291,8 @@ export function ModuleShell({
   children,
   sidebarVariant = "dark",
   desktopCollapsible = true,
+  backHref = "/dashboard",
+  backLabel = "Voltar ao painel geral",
 }: ModuleShellProps) {
   const ModuleIcon = iconRegistry[moduleIcon];
   const pathname = usePathname();
@@ -417,8 +421,8 @@ export function ModuleShell({
 
         <div className={cn("mt-2 shrink-0 border-t pt-2", isLightSidebar ? "border-slate-300" : "border-slate-700")}>
           <Link
-            href="/dashboard"
-            title={isCollapsed ? "Voltar ao painel geral" : undefined}
+            href={backHref}
+            title={isCollapsed ? backLabel : undefined}
             onClick={() => setIsMobileMenuOpen(false)}
             className={cn(
               "flex min-h-7 items-center gap-2.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors",
@@ -427,7 +431,7 @@ export function ModuleShell({
             )}
           >
             <ArrowLeft className={cn("size-4 shrink-0", isLightSidebar ? "text-slate-500" : "text-slate-400")} />
-            <span className={cn(isCollapsed && "lg:hidden")}>Voltar ao painel geral</span>
+            <span className={cn(isCollapsed && "lg:hidden")}>{backLabel}</span>
           </Link>
         </div>
       </aside>

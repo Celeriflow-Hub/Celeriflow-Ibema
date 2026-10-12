@@ -44,6 +44,7 @@ export default function ClientLayout({
   const pathname = usePathname();
   const router = useRouter();
   const isLoginPage = pathname === "/login" || pathname === "/";
+  const isEmployeePortal = pathname === "/portal-servidor" || pathname.startsWith("/portal-servidor/");
 
   const handleLogout = async () => {
     try {
@@ -55,7 +56,7 @@ export default function ClientLayout({
     }
   };
 
-  if (isLoginPage) {
+  if (isLoginPage || isEmployeePortal) {
     return <>{children}</>;
   }
 

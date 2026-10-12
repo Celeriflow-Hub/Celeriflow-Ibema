@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { checkRateLimit } from "@/lib/platform/rate-limit";
+import { EMPLOYEE_PORTAL_PATH_HEADER, isEmployeePublicRoute } from "@/lib/portal-servidor/routes";
 
 // O Proxy separa as rotas públicas das rotas internas do sistema.
 const SESSION_COOKIE_NAME = "celeriflow_session";
@@ -44,14 +45,16 @@ export default function proxy(req: NextRequest) {
   // O autosserviço funcional também funciona no domínio institucional.
   // A página e as actions verificam a sessão e o vínculo funcional no servidor.
   if (url.pathname === "/portal-servidor" || url.pathname.startsWith("/portal-servidor/")) {
-    if (!req.cookies.has(SESSION_COOKIE_NAME) && url.pathname !== "/portal-servidor/entrar") {
+    if (!req.cookies.has(SESSION_COOKIE_NAME) && !isEmployeePublicRoute(url.pathname)) {
       const loginUrl = new URL("/portal-servidor/entrar", req.url);
       loginUrl.searchParams.set("returnTo", url.pathname + url.search);
       return NextResponse.redirect(loginUrl);
     }
     const destination = url.clone();
     destination.pathname = `/app-domain${url.pathname}`;
-    return NextResponse.rewrite(destination);
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set(EMPLOYEE_PORTAL_PATH_HEADER, url.pathname + url.search);
+    return NextResponse.rewrite(destination, { request: { headers: requestHeaders } });
   }
 
   const isPublicValidation = /^\/validar-(?:documento|aviso)\/[^/]+$/.test(url.pathname);

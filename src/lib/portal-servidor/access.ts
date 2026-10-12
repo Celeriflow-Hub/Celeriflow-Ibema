@@ -1,4 +1,4 @@
-import { getTenantContextForModule, type AppContext } from "@/lib/platform/tenant-context";
+import { AccessError, getTenantContextForModule, type AppContext } from "@/lib/platform/tenant-context";
 
 export type PortalEmployee = {
   id: string;
@@ -23,11 +23,17 @@ export type EmployeePortalAccess =
  * Resolves the portal identity exclusively from the authenticated session.
  *
  * This boundary deliberately accepts no employee identifier from the browser.
- * The Portal is available to every authenticated profile, but a linked active
- * employee is still required before any personal data is returned.
+ * Module authorization and a linked active employee are required before
+ * any personal data is returned.
  */
 export async function getEmployeePortalAccess(): Promise<EmployeePortalAccess> {
-  const context = await getTenantContextForModule("PORTAL_SERVIDOR");
+  let context: AppContext;
+  try {
+    context = await getTenantContextForModule("PORTAL_SERVIDOR");
+  } catch (error) {
+    if (error instanceof AccessError) return { status: "UNAVAILABLE" };
+    throw error;
+  }
   const employeeId = context.user.employeeId;
 
   if (!employeeId) return { status: "UNAVAILABLE" };

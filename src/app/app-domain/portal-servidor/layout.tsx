@@ -1,22 +1,25 @@
-"use client";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { AccessError, getOptionalTenantContext } from "@/lib/platform/tenant-context";
+import { EMPLOYEE_PORTAL_LOGIN, EMPLOYEE_PORTAL_PATH_HEADER, employeePortalDestination, isEmployeePublicRoute } from "@/lib/portal-servidor/routes";
+import { EmployeePortalShell } from "@/components/portal-servidor/EmployeePortalShell";
+import { getInstitutionalContact } from "@/lib/portal-institucional/public-content";
+import { assertEmployeePortalLogin } from "@/lib/portal-servidor/login-policy";
 
-import { ModuleShell } from "@/components/app-ui/erp/ModuleShell";
-import { usePathname } from "next/navigation";
-import { portalServidorNavigation } from "./navigation";
+export default async function PortalServidorLayout({ children }: { children: React.ReactNode }) {
+  const requestedPath = (await headers()).get(EMPLOYEE_PORTAL_PATH_HEADER) || "/portal-servidor";
+  const pathname = requestedPath.split("?")[0];
+  if (isEmployeePublicRoute(pathname)) return <>{children}</>;
 
-export default function PortalServidorLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-
-  if (pathname === "/portal-servidor/entrar") return <>{children}</>;
-
-  return (
-    <ModuleShell
-      moduleTitle="Portal do Servidor"
-      moduleCaption="Autosserviço funcional"
-      moduleIcon="badgeCheck"
-      navigation={portalServidorNavigation}
-    >
-      {children}
-    </ModuleShell>
-  );
+  const context = await getOptionalTenantContext();
+  if (!context) redirect(`${EMPLOYEE_PORTAL_LOGIN}?${new URLSearchParams({ returnTo: employeePortalDestination(requestedPath) })}`);
+  // Recheck the current functional status even when a cookie was issued earlier.
+  try {
+    await assertEmployeePortalLogin(context.prisma, context.user);
+  } catch (error) {
+    if (!(error instanceof AccessError)) throw error;
+    redirect(`${EMPLOYEE_PORTAL_LOGIN}?${new URLSearchParams({ returnTo: employeePortalDestination(requestedPath), access: "unavailable" })}`);
+  }
+  const institution = await getInstitutionalContact();
+  return <EmployeePortalShell institutionName={institution.name} userName={context.user.name}>{children}</EmployeePortalShell>;
 }

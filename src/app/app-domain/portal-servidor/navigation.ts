@@ -45,6 +45,19 @@ export const portalServidorNavigation: ModuleNavGroup[] = [
         href: "/portal-servidor/folha",
         icon: "receiptText",
       },
+      { title: "Contracheques completos", href: "/portal-servidor/demonstrativos", icon: "receiptText" },
+      { title: "Banco de horas", href: "/portal-servidor/banco-horas", icon: "clock3" },
+      { title: "Licença-prêmio", href: "/portal-servidor/licenca-premio", icon: "calendarDays" },
+      { title: "Margem consignável", href: "/portal-servidor/margem", icon: "walletCards" },
+      { title: "Minhas consignações", href: "/portal-servidor/consignacoes", icon: "receiptText" },
+    ],
+  },
+  {
+    title: "Solicitar serviços",
+    items: [
+      { title: "Pedidos ao RH", href: "/portal-servidor/solicitacoes-rh", icon: "clipboardList" },
+      { title: "Recadastramento", href: "/portal-servidor/recadastramento", icon: "userRound" },
+      { title: "Crédito consignado", href: "/portal-servidor/credito", icon: "walletCards" },
     ],
   },
   {

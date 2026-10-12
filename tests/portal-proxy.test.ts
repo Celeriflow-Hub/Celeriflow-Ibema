@@ -99,3 +99,17 @@ test("portal do servidor encaminha páginas e ações autenticadas e conserva pa
     assert.equal(destination.search, "?year=2026");
   }
 });
+
+test("recuperação funcional é pública e o contexto de rota do Proxy sobrescreve cabeçalhos externos", () => {
+  const recovery = proxy(new NextRequest("https://www.ibema.celeriflow.com.br/portal-servidor/recuperar-senha", {
+    headers: { host: "www.ibema.celeriflow.com.br", "x-celeriflow-employee-path": "/rh" },
+  }));
+  assert.equal(recovery.status, 200);
+  assert.equal(new URL(recovery.headers.get("x-middleware-rewrite")!).pathname, "/app-domain/portal-servidor/recuperar-senha");
+  assert.equal(recovery.headers.get("x-middleware-request-x-celeriflow-employee-path"), "/portal-servidor/recuperar-senha");
+  const privatePage = proxy(new NextRequest("https://www.ibema.celeriflow.com.br/portal-servidor/seguranca", {
+    headers: { host: "www.ibema.celeriflow.com.br", "x-celeriflow-employee-path": "/portal-servidor/entrar" },
+  }));
+  assert.equal(privatePage.status, 307);
+  assert.equal(new URL(privatePage.headers.get("location")!).pathname, "/portal-servidor/entrar");
+});

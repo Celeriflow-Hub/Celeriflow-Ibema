@@ -19,7 +19,7 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
         const definition = (PrismaClientExports as Record<string, unknown>)[field.type];
         if (!definition || typeof definition !== "object") throw new Error(`Enum da fixture não localizado: ${field.type}`);
         const values = Object.values(definition as Record<string, string>).map((value) => `'${value}'`).join(",");
-        await f.pg.exec(`CREATE TYPE "${field.type}" AS ENUM (${values})`);
+        await f.pg.exec(`DO $$ BEGIN CREATE TYPE "${field.type}" AS ENUM (${values}); EXCEPTION WHEN duplicate_object THEN NULL; END $$;`);
         enums.add(field.type);
       }
       const columns = model.fields.filter((item) => item.kind !== "object").map((item) => {
@@ -31,13 +31,12 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
         const sqlType = item.kind === "enum" ? `"${item.type}"` : types[item.type] ?? "TEXT";
         return `"${item.name}" ${sqlType}${item.isList ? "[]" : ""}${item.name === "id" ? " PRIMARY KEY" : ""}${fallback}`;
       });
-      await f.pg.exec(`CREATE TABLE "${name}" (${columns.join(",")})`);
+      await f.pg.exec(`CREATE TABLE IF NOT EXISTS "${name}" (${columns.join(",")})`);
       for (const item of model.fields.filter((field) => field.isUnique && field.name !== "id")) await f.pg.exec(`CREATE UNIQUE INDEX ON "${name}" ("${item.name}")`);
       for (const fields of model.uniqueFields ?? []) await f.pg.exec(`CREATE UNIQUE INDEX ON "${name}" (${fields.map((field) => `"${field}"`).join(",")})`);
     }
     await f.pg.exec(`
       CREATE UNIQUE INDEX ON "BudgetReservation" (number);
-      CREATE UNIQUE INDEX ON "FinancialYear" (year);
       CREATE UNIQUE INDEX ON "Creditor" ("supplierId");
       CREATE UNIQUE INDEX ON "Expense" ("idempotencyKey");
       CREATE UNIQUE INDEX ON "Commitment" (number);

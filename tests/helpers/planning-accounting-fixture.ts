@@ -19,8 +19,9 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
   let db: PrismaClient | undefined;
   const close = async () => { await db?.$disconnect(); await server?.stop(); await pg.close(); };
   try {
-    const omitted: Record<string, string[]> = { ProgramPPA: ["origin", "guidelines", "targetAudience", "financing", "managerName"], ResourceSource: ["tceCode", "stnGroup", "stnSpecification", "stnDetail", "referenceYear"], RevenueNature: ["degree", "shortCode", "referenceYear"], AnnualBudgetLaw: ["metadata"] };
+    const omitted: Record<string, string[]> = { ProgramPPA: ["origin", "guidelines", "targetAudience", "financing", "managerName"], ResourceSource: ["tceCode", "stnGroup", "stnSpecification", "stnDetail", "referenceYear"], RevenueNature: ["degree", "shortCode", "referenceYear"], AnnualBudgetLaw: ["metadata"], AccountingTransaction: ["governmentEntityId", "budgetUnitId"], FinancialYear: ["governmentEntityId"] };
     const models = ["GovernmentEntity", "BudgetUnit", "Secretariat", "MultiYearPlan", "BudgetGuideline", "AnnualBudgetLaw", "AnnualBudgetRevenueForecast", "AnnualBudgetExpenseFixation", "BudgetGuidelinePriority", "BudgetGuidelineRisk", "BudgetAppropriation", "CreditRequest", "CreditRequestItem", "BudgetReservation", "BudgetMovement", "ProgramPPA", "ObjectivePPA", "IndicatorPPA", "ActionPPA", "GoalPPA", "FinancialYear", "ResourceSource", "RevenueNature", "ExpenseNature", "FinancialAuditLog", "Document", "DocumentVersion", "DocumentClass", "ConfiguracaoParametroInstancia", "AuditEvent", "HealthClinicalDocument", "HealthLabReport", "SstCertificateDocument", "Employee", "Usuario", "CamVereador", "Person", "CamGabinete", "AccountingPlan", "AccountingEntry", "AccountingTransaction", "AccountingEventCatalog", "AccountingPostingRule", "MonthlyAccountingClose", "Tax", "CamProposicao", "CamLei"];
+    models.push("Payment", "Commitment", "CommitmentMovement", "Settlement", "BankStatementItem", "BankAccount", "MonthlyAccountingCloseEvent", "AnnualAccountingClose", "PayableCarryForward", "PayableCarryForwardEvent");
     const enums = new Set<string>();
     for (const name of models) {
       const model = Prisma.dmmf.datamodel.models.find((item) => item.name === name)!;
@@ -40,7 +41,7 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
       });
       await pg.exec(`CREATE TABLE "${name}" (${columns.join(",")})`);
     }
-    for (const migration of ["20261011150000_add_planning_scoped_instruments", "20261011160000_add_planning_import_batches", "20261011170000_planning_immutable_movements", "20261011180000_planning_legal_operations", "20261011190000_planning_internal_connections", "20261011200000_planning_accounting_command_integrity", "20261011210000_planning_catalog_maintenance", "20261011220000_planning_publication"]) await pg.exec(readFileSync(`prisma/migrations-ibema/${migration}/migration.sql`, "utf8"));
+    for (const migration of ["20261011150000_add_planning_scoped_instruments", "20261011160000_add_planning_import_batches", "20261011170000_planning_immutable_movements", "20261011180000_planning_legal_operations", "20261011190000_planning_internal_connections", "20261011200000_planning_accounting_command_integrity", "20261011210000_planning_catalog_maintenance", "20261011220000_planning_publication", "20261012100000_accounting_entity_unit_scope", "20261012110000_entity_scoped_financial_years", "20261012120000_accounting_year_entity_guard", "20261012130000_scoped_year_requires_accounting_scope"]) await pg.exec(readFileSync(`prisma/migrations-ibema/${migration}/migration.sql`, "utf8"));
     await pg.exec(`
       CREATE UNIQUE INDEX ON "AccountingEventCatalog" (code);
       CREATE UNIQUE INDEX ON "AccountingPlan" (code);
@@ -54,6 +55,7 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
       CREATE UNIQUE INDEX ON "AccountingTransaction" ("reversalOfId");
       CREATE UNIQUE INDEX ON "AccountingPostingRule" ("eventId", "debitAccountId", "creditAccountId");
       CREATE UNIQUE INDEX ON "MonthlyAccountingClose" ("financialYearId", competence);
+      CREATE UNIQUE INDEX ON "AnnualAccountingClose" ("financialYearId");
       ALTER TABLE "AccountingEntry" ADD FOREIGN KEY ("transactionId") REFERENCES "AccountingTransaction"(id);
       ALTER TABLE "AccountingEntry" ADD FOREIGN KEY ("accountId") REFERENCES "AccountingPlan"(id);
       ALTER TABLE "AccountingEntry" ADD FOREIGN KEY ("authorId") REFERENCES "Employee"(id);
@@ -66,7 +68,7 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
       INSERT INTO "GovernmentEntity" (id,code,name,type,status) VALUES ('ente','VA','Vila das Araucárias','${jurisdiction === "EXECUTIVE" ? "PREFEITURA" : "CAMARA"}','ATIVA');
       INSERT INTO "Secretariat" (id,name) VALUES ('secretaria','Administração Municipal');
       INSERT INTO "BudgetUnit" (id,code,name,"secretariatId") VALUES ('ug','01.01','Unidade Municipal','secretaria'),('ug-restrita','02.01','Unidade de Obras','secretaria');
-      INSERT INTO "FinancialYear" (id,year,status,"startDate","endDate") VALUES ('ano',${year},'Preparação','${year}-01-01','${year}-12-31');
+      INSERT INTO "FinancialYear" (id,year,"governmentEntityId",status,"startDate","endDate") VALUES ('ano',${year},'ente','Preparação','${year}-01-01','${year}-12-31');
       INSERT INTO "ResourceSource" (id,code,name) VALUES ('livre','000','Recursos ordinários'),('vinculada','303','Recursos vinculados');
       INSERT INTO "RevenueNature" (id,code,name) VALUES ('receita','1.7.1.1.51','Transferências da União');
       INSERT INTO "ExpenseNature" (id,code,name) VALUES ('despesa','3.3.90.39','Serviços de terceiros');

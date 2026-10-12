@@ -73,7 +73,7 @@ test("S5: realizado anterior, ano explícito, prévia com hash/replay e importa�
     await createRevenue(f.db, f.actor, { date: new Date("2026-01-01"), value: "30.00", revenueNatureId: "receita", resourceSourceId: "livre", bankAccountId: "banco", sourceModule: "FINANCEIRO", sourceType: "REVENUE", eventType: "COLLECT", idempotencyKey: "completion:income" });
     const reservation = await f.reserve("COMPLETION-RES", "2.00");
     await createCommitment(f.db, f.actor, { number: "NE-COMPLETION", date: new Date("2026-09-01"), value: "2.00", type: "Ordinário", history: "Serviços municipais", appropriationId: f.appropriationId, supplierId: "fornecedor", reservationId: reservation.id });
-    await f.db.financialYear.create({ data: { id: "2027", year: 2027, status: "Preparação", startDate: new Date("2027-01-01"), endDate: new Date("2027-12-31") } });
+    await f.db.financialYear.create({ data: { id: "2027", governmentEntityId: "ente", year: 2027, status: "Preparação", startDate: new Date("2027-01-01"), endDate: new Date("2027-12-31") } });
     const common = { governmentEntityId: "ente", startYear: 2027, endYear: 2027, revenueDegree: 6, expenseDegree: 6, expenseLevel: "ELEMENT_SOURCE" };
     const ldo = await createPlanningInstrument(f.context, { ...common, kind: "LDO", code: "2027", title: "Diretrizes 2027", parentId: f.ppa });
     const loa = await createPlanningInstrument(f.context, { ...common, kind: "LOA", code: "2027", title: "Orçamento 2027", parentId: ldo });
@@ -129,7 +129,7 @@ test("S7: RCL de doze competências, renúncia tributária vinculada e projeçõ
     await createRevenue(f.db, f.actor, { date: new Date("2026-03-01"), value: "50.00", revenueNatureId: "receita", resourceSourceId: "livre", bankAccountId: "banco", sourceModule: "FINANCEIRO", sourceType: "REVENUE", eventType: "COLLECT", idempotencyKey: "s7:receipt" });
     const references = [{ budgetUnitId: "ug", resourceSourceId: "livre", revenueNature: { id: "receita" } }];
     assert.equal((await readPlanningRclExecution(f.context, "ente", references, "2026-09-30")).status, "INCOMPLETE");
-    await f.db.financialYear.create({ data: { id: "2025", year: 2025, status: "Encerrado", startDate: new Date("2025-01-01"), endDate: new Date("2025-12-31") } });
+    await f.db.financialYear.create({ data: { id: "2025", governmentEntityId: "ente", year: 2025, status: "Encerrado", startDate: new Date("2025-01-01"), endDate: new Date("2025-12-31") } });
     for (let index = 0; index < 12; index++) { const date = new Date(Date.UTC(2025, 9 + index, 1)); await f.db.monthlyAccountingClose.create({ data: { financialYearId: date.getUTCFullYear() === 2025 ? "2025" : "ano", competence: date, status: "FECHADO" } }); }
     const rcl = await readPlanningRclExecution(f.context, "ente", references, "2026-09-30"); assert.equal(rcl.total, "50.00"); assert.equal(rcl.rows.length, 12);
     await f.pg.exec(`INSERT INTO "Tax" (id,name,"taxType","isActive") VALUES ('taxa-s7','Taxa Municipal','Taxa',true);

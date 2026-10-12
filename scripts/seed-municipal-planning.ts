@@ -56,10 +56,10 @@ async function main() {
       const revenue = await tx.revenueNature.create({ data: { code: "1.7.1.1.51.1.1", name: "Cota-parte do Fundo de Participação dos Municípios", degree: 6, shortCode: "101", referenceYear: 2027 } });
       const legislativeRevenue = await tx.revenueNature.create({ data: { code: "TF.01", name: "Transferências financeiras recebidas do Executivo", degree: 1, shortCode: "102", referenceYear: 2027 } });
       const expense = await tx.expenseNature.create({ data: { code: "3.3.90.39", name: "Outros serviços de terceiros — pessoa jurídica" } });
-      const financialYear = await tx.financialYear.upsert({ where: { year: 2027 }, create: { year: 2027, startDate: new Date("2027-01-01T00:00:00Z"), endDate: new Date("2027-12-31T23:59:59.999Z"), status: "Preparação" }, update: {} });
-      if (!["Preparação", "Aberto"].includes(financialYear.status)) throw new Error("Exercício 2027 indisponível para planejamento.");
       for (const entity of municipalReference.entities) {
         const entityId = entities.get(entity.code)!;
+        const financialYear = await tx.financialYear.upsert({ where: { governmentEntityId_year: { governmentEntityId: entityId, year: 2027 } }, create: { governmentEntityId: entityId, year: 2027, startDate: new Date("2027-01-01T00:00:00Z"), endDate: new Date("2027-12-31T23:59:59.999Z"), status: "Preparação" }, update: {} });
+        if (!["Preparação", "Aberto"].includes(financialYear.status)) throw new Error("Exercício 2027 indisponível para planejamento.");
         const ppa = await tx.multiYearPlan.create({ data: { code: `${entity.code}:2026-2029`, name: "Plano Plurianual 2026–2029", startYear: 2026, endYear: 2029, status: "DRAFT", draftedById: actor.id } });
         const ppaInstrument = await tx.planningInstrument.create({ data: { governmentEntityId: entityId, kind: "PPA", code: "2026-2029", title: "Plano Plurianual 2026–2029", startYear: 2026, endYear: 2029, multiYearPlanId: ppa.id, createdById: actor.id } });
         const ldo = await tx.budgetGuideline.create({ data: { financialYearId: financialYear.id, multiYearPlanId: ppa.id, status: "DRAFT", draftedById: actor.id } });

@@ -89,8 +89,8 @@ export async function getPublicFinancialReportSnapshot(
   db: Db,
   input: { year: number; reportType: PublicFinancialReportType; version?: number },
 ) {
-  const financialYear = await db.financialYear.findUnique({
-    where: { year: input.year },
+  const financialYear = await db.financialYear.findFirst({
+    where: { year: input.year, governmentEntityId: null },
     select: { id: true, annualAccountingCloses: { select: { status: true } } },
   });
   if (!financialYear) return null;

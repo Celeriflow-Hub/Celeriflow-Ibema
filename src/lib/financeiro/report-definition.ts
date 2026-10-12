@@ -1,4 +1,5 @@
 import type { ReportDefinition } from "@/lib/reports/report-engine";
+import { isSystemAdministrator } from "@/lib/platform/tenant-context";
 import {
   generateInternalReportDataset,
   type InternalReportDataset,
@@ -53,6 +54,7 @@ export const financeInternalReportDefinition: ReportDefinition<FinanceReportInpu
         financialYear.id,
         financialYear.year,
         { month: input.month },
+        { budgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds },
       ),
       context.prisma.institution.findFirst({
         select: { name: true, legalName: true, cnpj: true, address: true, city: true, state: true },

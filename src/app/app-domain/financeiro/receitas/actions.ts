@@ -10,7 +10,7 @@ type ActionResult = { error?: string };
 const message = (error: unknown) => error instanceof Error ? error.message : "Nao foi possivel concluir a operacao de receita.";
 
 const classificationSchema = z.enum(["ORCAMENTARIA", "INTRAORCAMENTARIA", "REDUTORA"]);
-const revenueSchema = z.object({
+const baseRevenueSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data valida."),
   value: z.number().finite().positive("Informe um valor maior que zero."),
   revenueNatureId: z.string().trim().min(1, "Selecione a natureza da receita."),
@@ -18,6 +18,7 @@ const revenueSchema = z.object({
   classification: classificationSchema,
   history: z.string().trim().max(500, "O historico deve ter no maximo 500 caracteres.").optional(),
 });
+const revenueSchema = baseRevenueSchema.extend({ budgetUnitId: z.string().trim().min(1, "Selecione a unidade gestora.") });
 
 function parseDate(raw: string) {
   const date = new Date(`${raw}T12:00:00.000Z`);
@@ -42,6 +43,7 @@ export async function launchRevenueAction(data: z.infer<typeof revenueSchema>): 
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados da receita invalidos." };
   try {
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
+    assertBudgetUnitAccess(context.user, parsed.data.budgetUnitId);
     await launchRevenue(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, {
       ...parsed.data,
       date: parseDate(parsed.data.date),
@@ -66,7 +68,7 @@ export async function collectRevenueAction(data: { revenueId: string; date: stri
 }
 
 export async function recordRevenueCollectionAction(data: z.infer<typeof revenueSchema> & { bankAccountId: string }): Promise<ActionResult> {
-  const parsed = revenueSchema.extend({ bankAccountId: z.string().trim().min(1, "Selecione a conta bancaria.") }).safeParse(data);
+  const parsed = baseRevenueSchema.extend({ bankAccountId: z.string().trim().min(1, "Selecione a conta bancaria.") }).safeParse(data);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados da receita invalidos." };
   try {
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");

@@ -14,7 +14,7 @@ test("enforces the expense nature procurement-origin policy on commitments", asy
   const [user, employee, year, budgetUnit, resourceSource, secretariat, alternateSupplier] = await Promise.all([
     prisma.usuario.findFirst({ select: { id: true } }),
     prisma.employee.findFirst({ select: { id: true } }),
-    prisma.financialYear.findUnique({ where: { year: 2026 }, select: { id: true } }),
+    prisma.financialYear.findFirst({ where: { year: 2026, governmentEntityId: null }, select: { id: true } }),
     prisma.budgetUnit.findFirst({ select: { id: true } }),
     prisma.resourceSource.findFirst({ select: { id: true } }),
     prisma.secretariat.findFirst({ select: { id: true } }),

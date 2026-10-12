@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 
 const hash = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 const {manifest,requirements} = JSON.parse(readFileSync('docs/poc-p0/CONTROLE_REQUISITOS.json','utf8'));
@@ -8,7 +9,11 @@ assert.equal(requirements.length,1052);
 assert.equal(new Set(requirements.map((r)=>r.id)).size,1052);
 assert.equal(manifest.checklists.length,15);
 assert.equal(manifest.pdf.hash,hash(manifest.pdf.path));
-assert.equal(manifest.schemaHash,hash('prisma/schema.prisma'));
+assert.match(manifest.commit,/^[a-f0-9]{40}$/);
+const baselineSchema=execFileSync('git',['show',`${manifest.commit}:prisma/schema.prisma`],{maxBuffer:16*1024*1024});
+const baselineText=baselineSchema.toString('utf8').replaceAll('\r\n','\n');
+const baselineHashes=[baselineSchema,baselineText,baselineText.replaceAll('\n','\r\n')].map((content)=>createHash('sha256').update(content).digest('hex'));
+assert.ok(baselineHashes.includes(manifest.schemaHash),'Schema da baseline P0 diverge do commit preservado');
 assert.equal(requirements.filter((r)=>r.prior).length,265);
 for (const checklist of manifest.checklists) {
   const rows=requirements.filter((r)=>r.checklist===checklist.code);

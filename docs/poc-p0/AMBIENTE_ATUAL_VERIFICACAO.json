@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-10-12T14:15:20.967Z",
-  "commit": "f94b8be7d99a5f5a4ef0f4e12b104ad755f383cc",
+  "generatedAt": "2026-10-12T16:50:07.909Z",
+  "commit": "e5a5a3cbd6deb6eabc4fbb84685d0802515ff363",
   "environment": "BANCO_ATUAL_AUTORIZADO_PELO_USUÁRIO_COM_DADOS_FICTÍCIOS",
-  "mode": "ADDITIVE_ONLY",
+  "mode": "READ_ONLY",
   "migrations": [
     {
       "name": "20261009232000_baseline",
@@ -481,6 +481,32 @@
       "baselineMatches": true
     }
   ],
+  "subsequentMigrations": [
+    {
+      "name": "20261012100000_accounting_entity_unit_scope",
+      "applied": true,
+      "checksumMatches": true,
+      "status": "APLICADA_E_CHECKSUM_CONFERIDO"
+    },
+    {
+      "name": "20261012110000_entity_scoped_financial_years",
+      "applied": true,
+      "checksumMatches": true,
+      "status": "APLICADA_E_CHECKSUM_CONFERIDO"
+    },
+    {
+      "name": "20261012120000_accounting_year_entity_guard",
+      "applied": true,
+      "checksumMatches": true,
+      "status": "APLICADA_E_CHECKSUM_CONFERIDO"
+    },
+    {
+      "name": "20261012130000_scoped_year_requires_accounting_scope",
+      "applied": true,
+      "checksumMatches": true,
+      "status": "APLICADA_E_CHECKSUM_CONFERIDO"
+    }
+  ],
   "before": {
     "GovernmentEntity": 4,
     "PlanningEntityScope": 2,
@@ -488,7 +514,7 @@
     "Secretariat": 3,
     "BudgetUnit": 42,
     "CostCenter": 42,
-    "FinancialYear": 4,
+    "FinancialYear": 20,
     "ResourceSource": 21,
     "RevenueNature": 21,
     "ExpenseNature": 21,
@@ -519,7 +545,7 @@
     "Secretariat": 3,
     "BudgetUnit": 42,
     "CostCenter": 42,
-    "FinancialYear": 4,
+    "FinancialYear": 20,
     "ResourceSource": 21,
     "RevenueNature": 21,
     "ExpenseNature": 21,
@@ -734,7 +760,7 @@
       2027
     ],
     "nature": "SINTÉTICO; NÃO PARAMETRIZAÇÃO LEGAL",
-    "seeded": true
+    "seeded": false
   },
   "authentication": {
     "activeFirebaseLinkedUsers": 2,

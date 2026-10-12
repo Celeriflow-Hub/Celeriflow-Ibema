@@ -42,6 +42,13 @@ async function main() {
       const row = migrations.findLast((r) => r.migration_name === m.name && !r.rolled_back);
       return { name: m.name, applied: row?.finished === true, checksumMatches: [localHash, lfHash, crlfHash].includes(row?.checksum ?? ""), checksumMode: row?.checksum === localHash ? "BYTES_IDÊNTICOS" : "NORMALIZAÇÃO_LF_CRLF", baselineMatches: m.hash === localHash };
     });
+    const subsequentMigrations = [...new Set(migrations.map((row) => row.migration_name).filter((name) => !baseline.migrations.some((item: { name: string }) => item.name === name)))].map((name) => {
+      const row = migrations.findLast((migration) => migration.migration_name === name)!;
+      const sql = readFileSync(`prisma/migrations-ibema/${row.migration_name}/migration.sql`, "utf8");
+      const checksum = createHash("sha256").update(sql).digest("hex");
+      const normalized = createHash("sha256").update(sql.replaceAll("\r\n", "\n")).digest("hex");
+      return { name: row.migration_name, applied: row.finished && !row.rolled_back, checksumMatches: [checksum, normalized].includes(row.checksum), status: row.finished && !row.rolled_back && [checksum, normalized].includes(row.checksum) ? "APLICADA_E_CHECKSUM_CONFERIDO" : "PENDENTE_OU_DIVERGENTE" };
+    });
     if (migrationStatus.some((m: { applied: boolean; checksumMatches: boolean; baselineMatches: boolean }) => !m.applied || !m.checksumMatches || !m.baselineMatches)) {
       console.log(JSON.stringify(migrationStatus.filter((m: { applied: boolean; checksumMatches: boolean; baselineMatches: boolean }) => !m.applied || !m.checksumMatches || !m.baselineMatches), null, 2));
       throw new Error("Migration pendente ou checksum divergente; consultar inventário antes da carga.");
@@ -52,11 +59,11 @@ async function main() {
     if (apply && !actor) throw new Error("Administrador técnico ativo não encontrado.");
     if (apply) await db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('IBEMA_POC_P0_CURRENT_V1'))`;
-      for (const year of [2024, 2025, 2026, 2027]) await tx.financialYear.upsert({ where: { year }, update: {}, create: { id: `${prefix}year-${year}`, year, status: "Preparação", startDate: new Date(`${year}-01-01T00:00:00Z`), endDate: new Date(`${year}-12-31T23:59:59Z`) } });
       for (const suffix of ["exe", "leg"] as const) {
         const governmentEntityId = `${prefix}${suffix}`;
         const secretariatId = `${prefix}secretariat-${suffix}`;
         await tx.governmentEntity.upsert({ where: { id: governmentEntityId }, update: {}, create: { id: governmentEntityId, code: `POC-P0-${suffix.toUpperCase()}`, name: `POC P0 — ${suffix === "exe" ? "Prefeitura" : "Câmara"} (ensaio)`, type: suffix === "exe" ? "PREFEITURA" : "CAMARA" } });
+        for (const year of [2024, 2025, 2026, 2027]) await tx.financialYear.upsert({ where: { governmentEntityId_year: { governmentEntityId, year } }, update: {}, create: { id: `${prefix}fin-year-${suffix}-${year}`, governmentEntityId, year, status: "Preparação", startDate: new Date(`${year}-01-01T00:00:00Z`), endDate: new Date(`${year}-12-31T23:59:59Z`) } });
         await tx.planningEntityScope.upsert({ where: { governmentEntityId }, update: {}, create: { governmentEntityId, jurisdiction: suffix === "exe" ? "EXECUTIVE" : "LEGISLATIVE" } });
         await tx.secretariat.upsert({ where: { id: secretariatId }, update: {}, create: { id: secretariatId, name: `POC P0 — Administração ${suffix}` } });
         for (let i = 1; i <= 21; i++) {
@@ -78,7 +85,7 @@ async function main() {
         await tx.multiYearPlan.upsert({ where: { id: ppaId }, update: {}, create: { id: ppaId, code: `POC.P0.${suffix}.2024-2027`, name: "POC P0 — PPA de ensaio 2024–2027", startYear: 2024, endYear: 2027, status: "DRAFT", draftedById: actor!.id } });
         await tx.planningInstrument.upsert({ where: { id: pieceId }, update: {}, create: { id: pieceId, governmentEntityId, kind: "PPA", code: "POC-P0-2024-2027", title: "POC P0 — PPA de ensaio", startYear: 2024, endYear: 2027, multiYearPlanId: ppaId, createdById: actor!.id } });
         for (const year of [2024, 2025, 2026, 2027]) {
-          const financialYear = await tx.financialYear.findUniqueOrThrow({ where: { year } });
+          const financialYear = await tx.financialYear.findUniqueOrThrow({ where: { governmentEntityId_year: { governmentEntityId, year } } });
           const ldoId = `${prefix}${suffix}-ldo-${year}`;
           const loaId = `${prefix}${suffix}-loa-${year}`;
           const ldoPiece = `${prefix}${suffix}-piece-ldo-${year}`;
@@ -107,10 +114,10 @@ async function main() {
     const after = await inventory(db);
     const fingerprintsAfter = await fingerprint(db);
     const users = await db.usuario.groupBy({ by: ["perfilId"], where: { ativo: true, firebaseUid: { not: null } }, _count: true });
-    const report = { generatedAt: new Date().toISOString(), commit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), environment: "BANCO_ATUAL_AUTORIZADO_PELO_USUÁRIO_COM_DADOS_FICTÍCIOS", mode: apply ? "ADDITIVE_ONLY" : "READ_ONLY", migrations: migrationStatus, before, after, existingRowsPreserved: JSON.stringify(preserved) === JSON.stringify(fingerprintsAfter), fingerprintsBefore: preserved, fingerprintsAfter, dataset: { id: "POC_P0_CURRENT_V1", prefix, years: [2024, 2025, 2026, 2027], nature: "SINTÉTICO; NÃO PARAMETRIZAÇÃO LEGAL", seeded: apply }, authentication: { activeFirebaseLinkedUsers: users.reduce((sum, row) => sum + row._count, 0), profilesWithFirebaseLinkedUsers: users.length, existingCredentialsChanged: false, browserAcceptance: "NÃO_EXECUTADO; NAVEGADOR NÃO CONECTADO" }, conclusion: "Base atual compatível; nenhuma infraestrutura nova exigida. Preparação não é aceite dos requisitos." };
+    const report = { generatedAt: new Date().toISOString(), commit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), environment: "BANCO_ATUAL_AUTORIZADO_PELO_USUÁRIO_COM_DADOS_FICTÍCIOS", mode: apply ? "ADDITIVE_ONLY" : "READ_ONLY", migrations: migrationStatus, subsequentMigrations, before, after, existingRowsPreserved: JSON.stringify(preserved) === JSON.stringify(fingerprintsAfter), fingerprintsBefore: preserved, fingerprintsAfter, dataset: { id: "POC_P0_CURRENT_V1", prefix, years: [2024, 2025, 2026, 2027], nature: "SINTÉTICO; NÃO PARAMETRIZAÇÃO LEGAL", seeded: apply }, authentication: { activeFirebaseLinkedUsers: users.reduce((sum, row) => sum + row._count, 0), profilesWithFirebaseLinkedUsers: users.length, existingCredentialsChanged: false, browserAcceptance: "NÃO_EXECUTADO; NAVEGADOR NÃO CONECTADO" }, conclusion: "Base atual compatível; nenhuma infraestrutura nova exigida. Preparação não é aceite dos requisitos." };
     const reportPath = existsSync("docs/poc-p0/AMBIENTE_ATUAL.json") && JSON.parse(readFileSync("docs/poc-p0/AMBIENTE_ATUAL.json", "utf8")).mode === "ADDITIVE_ONLY" ? "docs/poc-p0/AMBIENTE_ATUAL_VERIFICACAO.json" : "docs/poc-p0/AMBIENTE_ATUAL.json";
     writeFileSync(reportPath, JSON.stringify(report, null, 2) + "\n");
-    console.log(JSON.stringify({ mode: report.mode, migrations: migrationStatus.length, before, after, existingRowsPreserved: report.existingRowsPreserved, authentication: report.authentication }, null, 2));
+    console.log(JSON.stringify({ mode: report.mode, migrations: migrationStatus.length + subsequentMigrations.length, baselineMigrations: migrationStatus.length, before, after, existingRowsPreserved: report.existingRowsPreserved, authentication: report.authentication }, null, 2));
   } finally { await db.$disconnect(); }
 }
 

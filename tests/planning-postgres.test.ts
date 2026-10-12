@@ -61,7 +61,7 @@ test("PostgreSQL Planejamento F4–F8: versões, emendas, cotas, créditos, impl
     await pg.exec(`INSERT INTO "GovernmentEntity" (id,code,name,type,status) VALUES ('prefeitura','PMVA','Prefeitura Municipal de Vila das Araucárias','PREFEITURA','ATIVA'),('camara','CMVA','Câmara Municipal de Vila das Araucárias','CAMARA','ATIVA');
       INSERT INTO "Secretariat" (id,name) VALUES ('saude','Secretaria Municipal de Saúde'),('legislativo','Câmara Municipal');
       INSERT INTO "BudgetUnit" (id,code,name,"secretariatId") VALUES ('ug-exe','03.01','Fundo Municipal de Saúde','saude'),('ug-leg','01.01','Câmara Municipal','legislativo');
-      INSERT INTO "FinancialYear" (id,year,status,"startDate","endDate") VALUES ('2027',2027,'Preparação','2027-01-01','2027-12-31');
+      INSERT INTO "FinancialYear" (id,year,"governmentEntityId",status,"startDate","endDate") VALUES ('2027',2027,'prefeitura','Preparação','2027-01-01','2027-12-31'),('camara-2026',2026,'camara','Preparação','2026-01-01','2026-12-31');
       INSERT INTO "ResourceSource" (id,code,name) VALUES ('livre','000','Recursos ordinários'),('saude','303','Saúde - receitas vinculadas');
       INSERT INTO "RevenueNature" (id,code,name) VALUES ('receita','1.7.1.1.51','Transferências da União');
       INSERT INTO "ExpenseNature" (id,code,name) VALUES ('despesa','3.3.90.39','Serviços de terceiros');`);
@@ -104,7 +104,7 @@ test("PostgreSQL Planejamento F4–F8: versões, emendas, cotas, créditos, impl
     const detail = await getPlanningInstrument(ctx, loa);
     assert.equal(detail.total, 3);
     assert.equal(detail.sums.find((row) => row.kind === "REVENUE")?._sum.originalValue?.toFixed(2), "100000.05");
-    await db.financialYear.create({ data: { id: "2026", year: 2026, status: "Preparação", startDate: new Date("2026-01-01"), endDate: new Date("2026-12-31") } });
+    await db.financialYear.create({ data: { id: "2026", governmentEntityId: "prefeitura", year: 2026, status: "Preparação", startDate: new Date("2026-01-01"), endDate: new Date("2026-12-31") } });
     const ldo26 = await createPlanningInstrument(ctx, { ...piece, kind: "LDO", code: "2026", title: "Diretrizes 2026", startYear: 2026, endYear: 2026, parentId: ppa });
     const loa26 = await createPlanningInstrument(ctx, { ...piece, kind: "LOA", code: "2026", title: "Orçamento 2026", startYear: 2026, endYear: 2026, parentId: ldo26 });
     const revenue = await addPlanningLine(ctx, { instrumentId: loa26, kind: "REVENUE", code: "R.2026", description: "Receitas ordinárias", year: 2026, budgetUnitId: "ug-exe", resourceSourceId: "livre", revenueNatureId: "receita", originalValue: "100.00" });
@@ -281,7 +281,7 @@ test("PostgreSQL Planejamento F4–F8: versões, emendas, cotas, créditos, impl
     const historicalProgram = await addPlanningProgram(ctx, { instrumentId: historyPpa, code: "0003", name: "Saúde Perto de Você", type: "Finalístico", origin: "Plano de governo", objectiveCode: "01", objective: "Atenção primária", guidelines: "Universalização", targetAudience: "Famílias", financing: "Receitas municipais", managerName: "Mariana Lopes de Almeida", indicatorName: "Consultas", indicatorUnit: "consultas", baselineValue: 20, targetValue: 50 });
     const historicalAction = await addPlanningAction(ctx, { instrumentId: historyPpa, programId: historicalProgram, code: "2003", name: "Atenção primária à saúde", type: "Atividade" });
     for (const [index, year] of [2023, 2024, 2025].entries()) {
-      await db.financialYear.create({ data: { id: String(year), year, status: "Preparação", startDate: new Date(`${year}-01-01`), endDate: new Date(`${year}-12-31`) } });
+      await db.financialYear.create({ data: { id: String(year), governmentEntityId: "prefeitura", year, status: "Preparação", startDate: new Date(`${year}-01-01`), endDate: new Date(`${year}-12-31`) } });
       const historicLdo = await createPlanningInstrument(ctx, { ...piece, kind: "LDO", code: String(year), title: `Diretrizes ${year}`, startYear: year, endYear: year, parentId: historyPpa });
       const historicLoa = await createPlanningInstrument(ctx, { ...piece, kind: "LOA", code: String(year), title: `Orçamento ${year}`, startYear: year, endYear: year, parentId: historicLdo });
       const historicLine = await addPlanningLine(ctx, { ...expense, instrumentId: historicLoa, programId: historicalProgram, actionId: historicalAction, code: "H", year, originalValue: "12.00" });
@@ -369,11 +369,12 @@ test("PostgreSQL Planejamento F4–F8: versões, emendas, cotas, créditos, impl
     await assert.rejects(pg.query('INSERT INTO "ProgramPPA" (id,code,name,"multiYearPlanId") VALUES ($1,$2,$3,$4)', ["closed-program", "9999", "Prioridade adicional", ppaCanonical.id]), /formal revision/);
     const fundProgram = await addPlanningProgram(admin, { instrumentId: fundPpa, code: "0003", name: "Gestão do Fundo Municipal de Saúde", type: "Finalístico", origin: "Plano municipal de saúde", objectiveCode: "01", objective: "Manter atendimento", guidelines: "Atenção primária", targetAudience: "Famílias", financing: "Recursos vinculados", managerName: "Mariana Lopes de Almeida", indicatorName: "Atendimentos", indicatorUnit: "atendimentos", baselineValue: 20, targetValue: 50 });
     const fundAction = await addPlanningAction(admin, { instrumentId: fundPpa, programId: fundProgram, code: "2003", name: "Atenção primária", type: "Atividade" });
+    await db.financialYear.create({ data: { id: "fundo-2026", governmentEntityId: "fundo", year: 2026, status: "Preparação", startDate: new Date("2026-01-01"), endDate: new Date("2026-12-31") } });
     const fundLdo = await createPlanningInstrument(admin, { ...piece, governmentEntityId: "fundo", kind: "LDO", code: "2026", title: "Diretrizes do Fundo Municipal", startYear: 2026, endYear: 2026, parentId: fundPpa });
     const fundLoa = await createPlanningInstrument(admin, { ...piece, governmentEntityId: "fundo", kind: "LOA", code: "2026", title: "Orçamento do Fundo Municipal", startYear: 2026, endYear: 2026, parentId: fundLdo });
     const fundExpense = await addPlanningLine(admin, { ...expense, instrumentId: fundLoa, budgetUnitId: "ug-fundo", programId: fundProgram, actionId: fundAction, code: "F", year: 2026, originalValue: "10.00" });
     await addPlanningLine(admin, { instrumentId: fundLoa, kind: "REVENUE", code: "R.F", description: "Receita do fundo", year: 2026, budgetUnitId: "ug-fundo", resourceSourceId: "livre", revenueNatureId: "receita", originalValue: "10.00" });
-    const legacy = await db.budgetAppropriation.create({ data: { code: "FMS-2026/LEG-F", financialYearId: "2026", budgetUnitId: "ug-fundo", expenseNatureId: "despesa", resourceSourceId: "livre", initialValue: 10, updatedValue: 10, committedValue: 2 } });
+    const legacy = await db.budgetAppropriation.create({ data: { code: "FMS-2026/LEG-F", financialYearId: "fundo-2026", budgetUnitId: "ug-fundo", expenseNatureId: "despesa", resourceSourceId: "livre", initialValue: 10, updatedValue: 10, committedValue: 2 } });
     for (const stage of ["SUBMIT", "APPROVE", "SANCTION", "PUBLISH"]) await transitionPlanningPiece(stage === "APPROVE" ? { ...admin, user: { ...admin.user, id: "beatriz" } } : admin, { ...workflow, instrumentId: fundLoa, stage });
     await assert.rejects(transitionPlanningPiece(admin, { ...workflow, instrumentId: fundLoa, stage: "IMPLANT" }), /dotações legadas/);
     const reconciliation = { instrumentId: fundLoa, lineId: fundExpense, appropriationId: legacy.id, reason: "Vinculação do saldo canônico existente", accountingEvidence: "Referência de abertura do fundo municipal" };

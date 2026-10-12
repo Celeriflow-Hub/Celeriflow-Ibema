@@ -255,7 +255,9 @@ export async function sendMovementToMunicipalSystem(
       throw new Error("As contas da transferência devem possuir contas analíticas vinculadas para registrar o razão bancário.");
     }
 
-    const year = await tx.financialYear.findUnique({ where: { year: item.date.getUTCFullYear() }, select: { id: true } });
+    const entityUnit = sourceAccount.budgetUnitId ? await tx.planningEntityUnit.findUnique({ where: { budgetUnitId: sourceAccount.budgetUnitId }, select: { governmentEntityId: true } }) : null;
+    if (!entityUnit) throw new Error("A unidade gestora da conta bancária não tem entidade vinculada.");
+    const year = await tx.financialYear.findFirst({ where: { year: item.date.getUTCFullYear(), governmentEntityId: entityUnit.governmentEntityId }, select: { id: true } });
     if (!year) throw new Error("Não existe exercício financeiro aberto para a data do lançamento.");
 
     const idempotencyKey = `BANK:STATEMENT:${item.id}:INVESTMENT_TRANSFER`;
@@ -286,6 +288,8 @@ export async function sendMovementToMunicipalSystem(
 
     const accounting = await postAccountingEventInTransaction(tx, { usuarioId: data.usuarioId, employeeId: data.employeeId }, {
       financialYearId: year.id,
+      governmentEntityId: entityUnit.governmentEntityId,
+      budgetUnitId: sourceAccount.budgetUnitId ?? undefined,
       date: item.date,
       eventCode: isInvestmentApplication(classification.category) ? "APLICACAO_FINANCEIRA" : "RESGATE_APLICACAO_FINANCEIRA",
       value,

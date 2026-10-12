@@ -4,7 +4,7 @@ import ReceitasClient from "./ReceitasClient";
 export default async function ReceitasPage() {
   const context = await getTenantContextForModule("FINANCEIRO");
   const accountAccess = isSystemAdministrator(context.user) ? {} : { budgetUnitId: { in: context.user.allowedBudgetUnitIds } };
-  const [revenues, revenueNatures, resourceSources, bankAccounts] = await Promise.all([
+  const [revenues, revenueNatures, resourceSources, bankAccounts, budgetUnits] = await Promise.all([
     context.prisma.revenue.findMany({
       include: {
         revenueNature: { select: { code: true, name: true } },
@@ -17,7 +17,8 @@ export default async function ReceitasPage() {
     }),
     context.prisma.revenueNature.findMany({ orderBy: { code: "asc" } }),
     context.prisma.resourceSource.findMany({ orderBy: { code: "asc" } }),
-    context.prisma.bankAccount.findMany({ where: accountAccess, select: { id: true, bankName: true, agency: true, accountNumber: true, resourceSourceId: true, isActive: true }, orderBy: { bankName: "asc" } }),
+    context.prisma.bankAccount.findMany({ where: accountAccess, select: { id: true, bankName: true, agency: true, accountNumber: true, resourceSourceId: true, budgetUnitId: true, isActive: true }, orderBy: { bankName: "asc" } }),
+    context.prisma.budgetUnit.findMany({ where: isSystemAdministrator(context.user) ? {} : { id: { in: context.user.allowedBudgetUnitIds } }, select: { id: true, name: true, planningEntityUnit: { select: { governmentEntity: { select: { name: true } } } } }, orderBy: { code: "asc" } }),
   ]);
 
   return <ReceitasClient
@@ -37,5 +38,6 @@ export default async function ReceitasPage() {
     revenueNatures={revenueNatures}
     resourceSources={resourceSources}
     bankAccounts={bankAccounts}
+    budgetUnits={budgetUnits.flatMap((unit) => unit.planningEntityUnit ? [{ id: unit.id, name: unit.name, governmentEntityName: unit.planningEntityUnit.governmentEntity.name }] : [])}
   />;
 }

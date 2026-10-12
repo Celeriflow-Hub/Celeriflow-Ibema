@@ -5,6 +5,8 @@ type Db = PrismaClient | Prisma.TransactionClient;
 
 export type ReportFilter = {
   financialYearId: string;
+  governmentEntityId?: string;
+  budgetUnitIds?: string[];
   startDate?: Date;
   endDate?: Date;
   budgetUnitId?: string;
@@ -17,17 +19,19 @@ function dateFilter(filter: ReportFilter) {
   };
 }
 
-function assertAccountingUnitFilterUnsupported(filter: ReportFilter) {
-  if (filter.budgetUnitId) {
-    throw new Error("Relatórios contábeis por unidade gestora exigem o vínculo da unidade ao lançamento contábil e não podem ser gerados com dados consolidados.");
-  }
+function accountingScopeFilter(filter: ReportFilter) {
+  return {
+    ...(filter.governmentEntityId ? { governmentEntityId: filter.governmentEntityId } : {}),
+    ...(filter.budgetUnitId ? { budgetUnitId: filter.budgetUnitId } : {}),
+    ...(filter.budgetUnitIds ? { AND: [{ budgetUnitId: { in: filter.budgetUnitIds } }] } : {}),
+  };
 }
 
 // --- Diário Contábil ---
 export async function generateDiarioContabil(db: Db, filter: ReportFilter) {
-  assertAccountingUnitFilterUnsupported(filter);
   const transactions = await db.accountingTransaction.findMany({
     where: {
+      ...accountingScopeFilter(filter),
       financialYearId: filter.financialYearId,
       status: "POSTADO",
       ...(filter.startDate || filter.endDate ? { date: dateFilter(filter) } : {}),
@@ -56,10 +60,10 @@ export async function generateDiarioContabil(db: Db, filter: ReportFilter) {
 
 // --- Razão Contábil ---
 export async function generateRazaoContabil(db: Db, filter: ReportFilter & { accountId?: string }) {
-  assertAccountingUnitFilterUnsupported(filter);
   const entries = await db.accountingEntry.findMany({
     where: {
       transaction: {
+        ...accountingScopeFilter(filter),
         financialYearId: filter.financialYearId,
         status: "POSTADO",
         ...(filter.startDate || filter.endDate ? { date: dateFilter(filter) } : {}),
@@ -86,12 +90,12 @@ export async function generateRazaoContabil(db: Db, filter: ReportFilter & { acc
 
 // --- Balancete Contábil ---
 export async function generateBalanceteContabil(db: Db, filter: ReportFilter) {
-  assertAccountingUnitFilterUnsupported(filter);
   const accounts = await db.accountingPlan.findMany({
     include: {
       entries: {
         where: {
           transaction: {
+            ...accountingScopeFilter(filter),
             financialYearId: filter.financialYearId,
             status: "POSTADO",
             ...(filter.startDate || filter.endDate ? { date: dateFilter(filter) } : {}),

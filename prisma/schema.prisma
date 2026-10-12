@@ -1321,6 +1321,8 @@ model GovernmentEntity {
   planningScope      PlanningEntityScope?
   planningUnits      PlanningEntityUnit[]
   planningInstruments PlanningInstrument[]
+  accountingTransactions AccountingTransaction[]
+  financialYears FinancialYear[]
 
   @@index([parentId, status])
   @@index([type, status])
@@ -3967,7 +3969,9 @@ model TaxCertificateEvaluation {
 
 model FinancialYear {
   id        String   @id @default(cuid())
-  year      Int      @unique
+  year      Int
+  governmentEntityId String?
+  governmentEntity GovernmentEntity? @relation(fields: [governmentEntityId], references: [id], onDelete: Restrict)
   status    String   @default("PreparaÃ§Ã£o") // PreparaÃ§Ã£o, Aberto, Em Encerramento, Encerrado
   startDate DateTime
   endDate   DateTime
@@ -3988,6 +3992,9 @@ model FinancialYear {
   budgetGuidelines               BudgetGuideline[]
   creditRequests                 CreditRequest[]
   retentionRules                 RetentionRule[]
+
+  @@unique([governmentEntityId, year])
+  @@index([year, status])
 }
 
 // --- Planejamento OrÃ§amentÃ¡rio: PPA, LDO, LOA, CMD, MBA, CrÃ©ditos Adicionais ---
@@ -4326,6 +4333,7 @@ model BudgetUnit {
   sstBoards SstMedicalBoard[]
   sstAvailabilities SstScheduleAvailability[]
   planningEntityUnit PlanningEntityUnit?
+  accountingTransactions AccountingTransaction[]
   id            String      @id @default(cuid())
   code          String      @unique
   name          String
@@ -5128,6 +5136,10 @@ model AccountingEntry {
 
 model AccountingTransaction {
   id               String                 @id @default(cuid())
+  governmentEntityId String?
+  governmentEntity GovernmentEntity?       @relation(fields: [governmentEntityId], references: [id], onDelete: Restrict)
+  budgetUnitId     String?
+  budgetUnit       BudgetUnit?             @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
   financialYearId  String
   financialYear    FinancialYear          @relation(fields: [financialYearId], references: [id])
   date             DateTime
@@ -5152,6 +5164,8 @@ model AccountingTransaction {
   updatedAt        DateTime               @updatedAt
 
   @@index([financialYearId, date, status])
+  @@index([governmentEntityId, financialYearId, date, status])
+  @@index([budgetUnitId, financialYearId, date, status])
   @@index([sourceModule, sourceType, sourceId])
 }
 

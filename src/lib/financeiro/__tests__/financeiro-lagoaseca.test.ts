@@ -457,7 +457,7 @@ describe("Lagoa Seca/PB - Validação Integrada e Regras Fiscais/Financeiras Est
   });
 
   test("4. Deve validar integridade e alinhamento dos dados da seed da POC", async () => {
-    const year = await prisma.financialYear.findUnique({ where: { year: 2026 } });
+      const year = await prisma.financialYear.findFirst({ where: { year: 2026, governmentEntityId: null } });
     assert.ok(year, "Exercício 2026 deve existir");
 
     const bankAccPref = await prisma.bankAccount.findUnique({ where: { id: "poc-robonuvem-revenue-20001" } });
@@ -571,7 +571,7 @@ describe("Lagoa Seca/PB - Validação Integrada e Regras Fiscais/Financeiras Est
   });
 
   test("5. Deve gerar RREO, RGF, Balanço Orçamentário e Balanço Patrimonial sem inconsistências", async () => {
-    const year = await prisma.financialYear.findUnique({ where: { year: 2026 } });
+      const year = await prisma.financialYear.findFirst({ where: { year: 2026, governmentEntityId: null } });
     assert.ok(year);
 
     const filter = { financialYearId: year.id };

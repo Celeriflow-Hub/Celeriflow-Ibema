@@ -57,16 +57,22 @@ async function main() {
     import("../src/lib/prisma"),
     import("../src/lib/financeiro/bank-integration-client"),
   ]);
-  const ensureFinancialYear = async (year: number) => prisma.financialYear.upsert({
-    where: { year },
-    create: {
-      year,
-      status: "Aberto",
-      startDate: new Date(`${year}-01-01T00:00:00.000Z`),
-      endDate: new Date(`${year}-12-31T23:59:59.999Z`),
-    },
-    update: { status: "Aberto" },
-  });
+  const ensureFinancialYear = async (year: number) => {
+    const unit = await prisma.budgetUnit.findFirst({ where: { code: "0101" }, select: { planningEntityUnit: { select: { governmentEntityId: true } } } });
+    const governmentEntityId = unit?.planningEntityUnit?.governmentEntityId;
+    if (!governmentEntityId) throw new Error("A UG 0101 deve possuir entidade vinculada antes do provisionamento.");
+    return prisma.financialYear.upsert({
+      where: { governmentEntityId_year: { governmentEntityId, year } },
+      create: {
+        year,
+        governmentEntityId,
+        status: "Aberto",
+        startDate: new Date(`${year}-01-01T00:00:00.000Z`),
+        endDate: new Date(`${year}-12-31T23:59:59.999Z`),
+      },
+      update: { status: "Aberto" },
+    });
+  };
   await bankIntegrationClient.checkSandboxHealth();
   const integrationCheck = await bankIntegrationClient.fetchBankStatement(
     { banco: bankName, agencia: agency, contaNumero: "20001-1" },

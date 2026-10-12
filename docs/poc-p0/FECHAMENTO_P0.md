@@ -4,6 +4,8 @@
 
 **Resultado:** controle individual dos 1.052 requisitos criado e dataset de preparação carregado no **banco atual**, autorizado pelo usuário como base de dados fictícios. A preparação técnica está disponível para iniciar P1. Ensaio autenticado e atendimento funcional dos requisitos ainda não foram executados nesta fase.
 
+O desenvolvimento iniciado após o fechamento está registrado em [execução P1 — escopo contábil](EXECUCAO_P1_ESCOPO_CONTABIL.md); esse registro não altera os aceites P0 nem promove requisitos da POC.
+
 ## 1. Decisão de ambiente
 
 O usuário esclareceu que os dados do banco atual são fictícios e autorizou interação com eles, preservando tabelas e integrações. Esse passa a ser o ambiente de trabalho do plano. Não é necessário contratar, configurar ou administrar uma infraestrutura adicional para começar as correções.

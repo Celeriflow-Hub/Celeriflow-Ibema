@@ -72,7 +72,7 @@ try {
         await tx.usuarioUnidadeGestora.upsert({where:{usuarioId_budgetUnitId:{usuarioId:id,budgetUnitId:`p0-${suffix}-ug-1`}},update:{},create:{usuarioId:id,budgetUnitId:`p0-${suffix}-ug-1`}});
       }
     }
-    for (const year of [2024,2025,2026,2027]) await tx.financialYear.upsert({where:{year},update:{},create:{id:`p0-year-${year}`,year,status:'Aberto',startDate:new Date(`${year}-01-01T00:00:00Z`),endDate:new Date(`${year}-12-31T23:59:59Z`)}});
+    for (const suffix of ['exe','leg']) for (const year of [2024,2025,2026,2027]) await tx.financialYear.upsert({where:{governmentEntityId_year:{governmentEntityId:`p0-${suffix}`,year}},update:{},create:{id:`p0-${suffix}-year-${year}`,governmentEntityId:`p0-${suffix}`,year,status:'Aberto',startDate:new Date(`${year}-01-01T00:00:00Z`),endDate:new Date(`${year}-12-31T23:59:59Z`)}});
     for (let i=1;i<=21;i++) {
       await tx.resourceSource.upsert({where:{id:`p0-source-${i}`},update:{},create:{id:`p0-source-${i}`,code:`P0.SOURCE.${i}`,name:`POC Fonte ${i} — não oficial`,referenceYear:2026}});
       await tx.revenueNature.upsert({where:{id:`p0-revenue-${i}`},update:{},create:{id:`p0-revenue-${i}`,code:`P0.REVENUE.${i}`,name:`POC Receita ${i} — não oficial`}});

@@ -163,8 +163,9 @@ export async function generateInternalReportDataset(
   financialYearId: string,
   year: number,
   options: { month?: number } = {},
+  scope: { governmentEntityId?: string; budgetUnitIds?: string[] } = {},
 ): Promise<InternalReportDataset> {
-  const filter = { financialYearId };
+  const filter = { financialYearId, ...scope };
 
   switch (reportType) {
     case "DIARIO": {

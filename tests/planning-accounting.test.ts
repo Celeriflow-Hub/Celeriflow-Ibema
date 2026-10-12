@@ -65,7 +65,7 @@ test("S1 PostgreSQL: abertura e seis eventos reais, replay e autorização nas d
         await assert.rejects(registerPlanningMovement({ ...f.context, user: { ...f.context.user, employeeId: null } }, movement(f, f.revenue)), /servidor responsável/);
         assert.deepEqual(await position(f), before, "recusa de autorização reverte o efeito orçamentário");
         const collision = movement(f, f.revenue);
-        await postAccountingTransaction(f.db, { usuarioId: "ana", employeeId: "servidora-ana" }, { financialYearId: "ano", date: new Date("2026-03-01"), history: "Origem incompatível da fixture isolada", lines: [{ accountId: "debito", type: "Débito", value: "0.01" }, { accountId: "credito", type: "Crédito", value: "0.01" }], sourceModule: "PLANEJAMENTO", sourceType: "PLANNING_BUDGET", sourceId: "origem-incompativel", eventType: "PLANNING_REVENUE_INCREASE", idempotencyKey: `accounting:${collision.submissionKey}` });
+        await postAccountingTransaction(f.db, { usuarioId: "ana", employeeId: "servidora-ana" }, { financialYearId: "ano", governmentEntityId: "ente", budgetUnitId: "ug", date: new Date("2026-03-01"), history: "Origem incompatível da fixture isolada", lines: [{ accountId: "debito", type: "Débito", value: "0.01" }, { accountId: "credito", type: "Crédito", value: "0.01" }], sourceModule: "PLANEJAMENTO", sourceType: "PLANNING_BUDGET", sourceId: "origem-incompativel", eventType: "PLANNING_REVENUE_INCREASE", idempotencyKey: `accounting:${collision.submissionKey}` });
         const beforeCollision = await position(f);
         await assert.rejects(registerPlanningMovement(f.context, collision), /Chave contábil/);
         assert.deepEqual(await position(f), beforeCollision);
@@ -218,7 +218,7 @@ test("S1 PostgreSQL: configuração recusa matriz incompleta/referencial, servid
     await assert.rejects(configurePlanningInternalAccounting({ ...f.context, user: { ...f.context.user, profileCode: "BUDGET_ANALYST" } }, configuration(f.loa)), /todas as unidades/);
     await assert.rejects(configurePlanningInternalAccounting({ ...f.context, jurisdiction: "LEGISLATIVE" }, configuration(f.loa)));
 
-    await f.db.financialYear.create({ data: { id: "futuro", year: 2027, status: "Preparação", startDate: new Date("2027-01-01"), endDate: new Date("2027-12-31") } });
+    await f.db.financialYear.create({ data: { id: "futuro", governmentEntityId: "ente", year: 2027, status: "Preparação", startDate: new Date("2027-01-01"), endDate: new Date("2027-12-31") } });
     const common = { governmentEntityId: "ente", code: "2027", startYear: 2027, endYear: 2027, revenueDegree: 6, expenseLevel: "ELEMENT_SOURCE" };
     const ldo = await createPlanningInstrument(f.context, { ...common, kind: "LDO", title: "Diretrizes do exercício seguinte", parentId: f.ppa });
     const loa = await createPlanningInstrument(f.context, { ...common, kind: "LOA", title: "Orçamento do exercício seguinte", parentId: ldo });

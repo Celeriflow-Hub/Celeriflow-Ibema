@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
       case "PCA": {
         const yearParam = request.nextUrl.searchParams.get("year");
         const year = yearParam ? parseInt(yearParam, 10) : 2026;
-        const financialYear = await context.prisma.financialYear.findUnique({ where: { year } });
+        const financialYear = await context.prisma.financialYear.findFirst({ where: { year, governmentEntityId: null } });
         if (!financialYear) return NextResponse.json({ error: "Exercício financeiro não encontrado." }, { status: 404 });
 
         const pcaData = await generatePCA(context.prisma, { financialYearId: financialYear.id });
@@ -189,7 +189,7 @@ export async function GET(request: NextRequest) {
       case "BALANCO_FINANCEIRO": {
         const yearParam = request.nextUrl.searchParams.get("year");
         const year = yearParam ? parseInt(yearParam, 10) : 2026;
-        const financialYear = await context.prisma.financialYear.findUnique({ where: { year } });
+        const financialYear = await context.prisma.financialYear.findFirst({ where: { year, governmentEntityId: null } });
         if (!financialYear) return NextResponse.json({ error: "Exercício financeiro não encontrado." }, { status: 404 });
 
         const bf = await generateBalancoFinanceiro(context.prisma, { financialYearId: financialYear.id });
@@ -205,7 +205,7 @@ export async function GET(request: NextRequest) {
       case "COMPARATIVO_ORCAMENTO": {
         const yearParam = request.nextUrl.searchParams.get("year");
         const year = yearParam ? parseInt(yearParam, 10) : 2026;
-        const financialYear = await context.prisma.financialYear.findUnique({ where: { year } });
+        const financialYear = await context.prisma.financialYear.findFirst({ where: { year, governmentEntityId: null } });
         if (!financialYear) return NextResponse.json({ error: "Exercício financeiro não encontrado." }, { status: 404 });
 
         const comp = await generateBudgetChangesComparison(context.prisma, financialYear.id);

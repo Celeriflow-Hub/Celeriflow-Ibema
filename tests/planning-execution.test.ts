@@ -92,7 +92,7 @@ test("S2: arrecadação direta/lançada, replay e estorno alimentam metas uma ú
   assert.equal((await createRevenue(f.db, f.actor, input)).id, first.id);
   await assert.rejects(createRevenue(f.db, f.actor, { ...input, value: "13.00" }), /outros dados/);
   assert.equal((await f.db.planningQuota.aggregate({ where: { lineId: f.revenue }, _sum: { consumed: true } }))._sum.consumed!.toFixed(2), "12.00");
-  const launched = await launchRevenue(f.db, f.actor, { ...input, sourceModule: "FINANCEIRO", sourceType: "REVENUE", sourceId: "lancamento", idempotencyKey: "launched:receipt", value: "5.00" });
+  const launched = await launchRevenue(f.db, f.actor, { ...input, budgetUnitId: "ug", sourceModule: "FINANCEIRO", sourceType: "REVENUE", sourceId: "lancamento", idempotencyKey: "launched:receipt", value: "5.00" });
   await collectLaunchedRevenue(f.db, f.actor, { revenueId: launched.id, date: new Date("2026-03-02"), bankAccountId: "banco", idempotencyKey: "collect:receipt" });
   assert.equal((await f.db.planningQuota.aggregate({ where: { lineId: f.revenue }, _sum: { consumed: true } }))._sum.consumed!.toFixed(2), "17.00");
   await reverseRevenue(f.db, f.actor, { revenueId: launched.id, date: new Date("2026-04-01"), justification: "Estorno autorizado" });

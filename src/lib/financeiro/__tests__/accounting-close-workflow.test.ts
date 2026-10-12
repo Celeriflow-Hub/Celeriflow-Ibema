@@ -26,7 +26,7 @@ describe("accounting close workflow", () => {
     assert.equal(users.length, 2, "A base de teste deve possuir dois usuarios ativos");
     requester = { usuarioId: users[0].id, employeeId: users[0].employeeId };
     authorizer = { usuarioId: users[1].id, employeeId: users[1].employeeId };
-    const existing = await prisma.financialYear.findUnique({ where: { year: yearNumber } });
+    const existing = await prisma.financialYear.findFirst({ where: { year: yearNumber, governmentEntityId: null } });
     assert.equal(existing, null, `O exercicio de teste ${yearNumber} ja existe`);
     const year = await prisma.financialYear.create({ data: { year: yearNumber, status: "Aberto", startDate: new Date(`${yearNumber}-01-01T00:00:00.000Z`), endDate: new Date(`${yearNumber}-12-31T23:59:59.999Z`) } });
     financialYearId = year.id;

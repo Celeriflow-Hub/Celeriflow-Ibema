@@ -64,7 +64,7 @@ export async function createParametrizedAssessment(
     if (typeof existingId === "string") return tx.taxAssessment.findUniqueOrThrow({ where: { id: existingId } });
     const year = input.competence.getUTCFullYear();
     const [financialYear, taxpayer, property, registration] = await Promise.all([
-      tx.financialYear.findUnique({ where: { year } }),
+      tx.financialYear.findFirst({ where: { year, governmentEntityId: null } }),
       tx.taxpayer.findUnique({ where: { id: input.taxpayerId } }),
       input.realEstateId ? tx.realEstate.findUnique({ where: { id: input.realEstateId } }) : null,
       input.economicRegistrationId ? tx.economicRegistration.findUnique({ where: { id: input.economicRegistrationId } }) : null,
@@ -361,7 +361,7 @@ export async function sendAccountingReference(db: PrismaClient, actor: TaxActor,
   const amountValue = money(input.amount);
   const year = input.competence.getUTCFullYear();
   const [financialYear, eventCatalog] = await Promise.all([
-    db.financialYear.findUnique({ where: { year } }),
+    db.financialYear.findFirst({ where: { year, governmentEntityId: null } }),
     db.accountingEventCatalog.findUnique({ where: { code: "TRIBUTARIO_ARRECADACAO" }, include: { rules: { where: { isActive: true }, take: 1 } } }),
   ]);
   const reason = !financialYear ? "Exercício financeiro não configurado" : !eventCatalog?.rules.length ? "Evento ou roteiro contábil não configurado" : !actor.employeeId ? "Usuário sem vínculo funcional para autoria contábil" : null;

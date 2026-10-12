@@ -22,17 +22,18 @@ const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "
 const stageLabel = { LANCADA: "Lancada", ARRECADADA: "Arrecadada", ESTORNADA: "Estornada" };
 const classificationLabel = { ORCAMENTARIA: "Orcamentaria", INTRAORCAMENTARIA: "Intraorcamentaria", REDUTORA: "Redutora" };
 
-export default function ReceitasClient({ revenues, revenueNatures, resourceSources, bankAccounts }: {
+export default function ReceitasClient({ revenues, revenueNatures, resourceSources, bankAccounts, budgetUnits }: {
   revenues: Revenue[];
   revenueNatures: { id: string; code: string; name: string }[];
   resourceSources: { id: string; code: string; name: string }[];
-  bankAccounts: { id: string; bankName: string; agency: string; accountNumber: string; resourceSourceId: string | null; isActive: boolean }[];
+  bankAccounts: { id: string; bankName: string; agency: string; accountNumber: string; resourceSourceId: string | null; budgetUnitId: string | null; isActive: boolean }[];
+  budgetUnits: { id: string; name: string; governmentEntityName: string }[];
 }) {
   const [mode, setMode] = useState<"LANCAR" | "ARRECADAR">("ARRECADAR");
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [pending, setPending] = useState(false);
-  const [form, setForm] = useState({ date: today(), value: 0, revenueNatureId: "", resourceSourceId: "", classification: "ORCAMENTARIA" as Revenue["classification"], bankAccountId: "", history: "" });
+  const [form, setForm] = useState({ date: today(), value: 0, revenueNatureId: "", resourceSourceId: "", budgetUnitId: "", classification: "ORCAMENTARIA" as Revenue["classification"], bankAccountId: "", history: "" });
 
   async function submit() {
     setPending(true);
@@ -83,6 +84,7 @@ export default function ReceitasClient({ revenues, revenueNatures, resourceSourc
           <div><Label>Natureza</Label><Select items={revenueNatures.map((item) => ({ value: item.id, label: `${item.code} - ${item.name}` }))} value={form.revenueNatureId} onValueChange={(revenueNatureId) => { if (revenueNatureId) setForm({ ...form, revenueNatureId }); }}><SelectTrigger className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent className="max-h-[300px] !w-auto min-w-[var(--anchor-width)]">{revenueNatures.map((item) => <SelectItem key={item.id} value={item.id}>{item.code} - {item.name}</SelectItem>)}</SelectContent></Select></div>
           <div><Label>Fonte</Label><Select items={resourceSources.map((item) => ({ value: item.id, label: `${item.code} - ${item.name}` }))} value={form.resourceSourceId} onValueChange={(resourceSourceId) => { if (resourceSourceId) setForm({ ...form, resourceSourceId, bankAccountId: "" }); }}><SelectTrigger className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent className="max-h-[300px] !w-auto min-w-[var(--anchor-width)]">{resourceSources.map((item) => <SelectItem key={item.id} value={item.id}>{item.code} - {item.name}</SelectItem>)}</SelectContent></Select></div>
           <div><Label>Classificacao</Label><Select value={form.classification} onValueChange={(classification) => setForm({ ...form, classification: classification as Revenue["classification"] })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(classificationLabel).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
+          {mode === "LANCAR" && <div><Label>Unidade gestora</Label><Select value={form.budgetUnitId} onValueChange={(budgetUnitId) => { if (budgetUnitId) setForm({ ...form, budgetUnitId }); }}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{budgetUnits.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.governmentEntityName} — {unit.name}</SelectItem>)}</SelectContent></Select></div>}
           <div><Label>Valor</Label><MoneyInput value={form.value} onChange={(value) => setForm({ ...form, value })} /></div>
           {mode === "ARRECADAR" && <div><Label>Conta bancaria compativel</Label><Select value={form.bankAccountId} onValueChange={(bankAccountId) => { if (bankAccountId) setForm({ ...form, bankAccountId }); }}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{compatibleAccounts.map((item) => <SelectItem key={item.id} value={item.id}>{item.bankName} {item.agency}/{item.accountNumber}</SelectItem>)}</SelectContent></Select></div>}
         </div>

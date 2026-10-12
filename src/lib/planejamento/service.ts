@@ -38,7 +38,7 @@ export async function createPlanningInstrument(context: PlanningContext, raw: un
     }
     const parent = input.parentId ? await tx.planningInstrument.findFirst({ where: { id: input.parentId, governmentEntityId: entity.id, ...planningInstrumentWhere(context) } }) : null;
     if (input.kind !== "PPA" && (!parent || parent.kind !== (input.kind === "LDO" ? "PPA" : "LDO") || input.startYear < parent.startYear || input.endYear > parent.endYear)) throw new Error("A peça anterior deve pertencer à mesma entidade, cadeia e vigência.");
-    const year = input.kind !== "PPA" ? await tx.financialYear.findUnique({ where: { year: input.startYear } }) : null;
+    const year = input.kind !== "PPA" ? await tx.financialYear.findFirst({ where: { year: input.startYear, governmentEntityId: entity.id } }) : null;
     if (input.kind !== "PPA" && (!year || !["Preparação", "Aberto"].includes(year.status))) throw new Error("Cadastre um exercício financeiro em preparação ou aberto.");
     let multiYearPlanId: string | undefined, budgetGuidelineId: string | undefined, annualBudgetLawId: string | undefined;
     if (input.kind === "PPA") {

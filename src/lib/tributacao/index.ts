@@ -30,8 +30,10 @@ async function audit(tx: Db, actor: TaxActor, action: string, entityType: string
   });
 }
 
-async function assertAssessmentYearOpen(tx: Db, year: number) {
-  const financialYear = await tx.financialYear.findUnique({ where: { year } });
+async function assertAssessmentYearOpen(tx: Db, year: number, budgetUnitId?: string | null) {
+  const binding = budgetUnitId ? await tx.planningEntityUnit.findUnique({ where: { budgetUnitId }, select: { governmentEntityId: true } }) : null;
+  if (budgetUnitId && !binding) throw new TaxError("Unidade gestora arrecadadora sem entidade vinculada.");
+  const financialYear = await tx.financialYear.findFirst({ where: { year, governmentEntityId: binding?.governmentEntityId ?? null } });
   if (!financialYear) throw new TaxError(`O exercício financeiro ${year} não está configurado.`);
   if (financialYear.status !== "Aberto") throw new TaxError(`O exercício financeiro ${year} não está aberto para operação tributária.`);
   return financialYear;
@@ -178,13 +180,13 @@ export async function confirmTaxPayment(
     await tx.$queryRaw`SELECT id FROM "TaxGuide" WHERE id = ${input.guideId} FOR UPDATE`;
     const guide = await tx.taxGuide.findUnique({ where: { id: input.guideId }, include: { assessment: { include: { tax: { include: { financialMapping: true } } } }, payments: { where: { status: "Confirmado" }, select: { amountPaidDecimal: true } } } });
     if (!guide || ["Cancelada", "Paga"].includes(guide.status)) throw new TaxError("A guia não está disponível para baixa.");
-    const year = await assertAssessmentYearOpen(tx, guide.assessment.year);
-    if (input.paymentDate < year.startDate || input.paymentDate > year.endDate) throw new TaxError("A data de pagamento está fora do exercício financeiro do lançamento.");
     const mapping = guide.assessment.tax.financialMapping;
     if (!mapping?.isActive) throw new TaxError("O tributo não possui mapeamento financeiro ativo.");
     const bankAccountId = input.bankAccountId ?? mapping.defaultBankAccountId;
-    const account = await tx.bankAccount.findUnique({ where: { id: bankAccountId }, select: { isActive: true } });
+    const account = await tx.bankAccount.findUnique({ where: { id: bankAccountId }, select: { isActive: true, budgetUnitId: true } });
     if (!account?.isActive) throw new TaxError("A baixa exige uma conta bancária ativa.");
+    const year = await assertAssessmentYearOpen(tx, guide.assessment.year, account.budgetUnitId);
+    if (input.paymentDate < year.startDate || input.paymentDate > year.endDate) throw new TaxError("A data de pagamento está fora do exercício financeiro do lançamento.");
     if (input.proofDocumentId) {
       const proof = await tx.document.findUnique({ where: { id: input.proofDocumentId }, select: { status: true } });
       if (proof?.status !== "Válido") throw new TaxError("O comprovante GED deve estar válido.");

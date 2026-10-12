@@ -13,8 +13,8 @@ async function main() {
   try {
     const result = await prisma.$transaction(async (tx) => {
       const [invalidYear, canonicalYear, actor] = await Promise.all([
-        tx.financialYear.findUnique({ where: { year: INVALID_YEAR } }),
-        tx.financialYear.findUnique({ where: { year: CANONICAL_YEAR } }),
+        tx.financialYear.findFirst({ where: { year: INVALID_YEAR, governmentEntityId: null } }),
+        tx.financialYear.findFirst({ where: { year: CANONICAL_YEAR, governmentEntityId: null } }),
         tx.usuario.findFirst({ where: { ativo: true }, orderBy: { createdAt: "asc" }, select: { id: true, employeeId: true } }),
       ]);
 

@@ -1,5 +1,17 @@
 # RH/Folha — registro de execução
 
+## Revisão e integração entre notebooks — 12/10/2026
+
+Integrados por `git pull --ff-only origin main` os commits `0d8d69f` (Plan 4) e `ef2acec` (plan5), com as entregas de Planejamento/Orçamento e correções RH de Diárias/POC. Alterações locais preservadas no stash `backup RH folha antes pull 20261012` e reaplicadas; conflito único em `/rh/poc` resolvido mantendo a consulta por `regimeId` e a seleção de fontes fechadas do 13º.
+
+O build anterior falhou na consulta `HrPortalRequest.include.employee`, relação inexistente no schema. Correção recebida do outro notebook: consulta dos servidores por `employeeId`, sem relação Prisma inventada. Nenhuma migration RH nova nesta rodada; as migrations de Planejamento chegaram com o pull.
+
+Conferência somente leitura com `npx prisma migrate status`: a migration `20261011220000_planning_publication` ainda está pendente no banco configurado. As duas migrations de Planejamento anteriores recebidas no pull já constam aplicadas. A pendência é do módulo de publicação de Planejamento; não foi aplicada por esta revisão de código.
+
+Pós-integração: nove testes do lote POC/transacional aprovados, incluindo o caso de vínculos inativos no rateio e proteção dos atos funcionais integrados; ESLint dos arquivos RH alterados e `git diff --check HEAD` aprovados. Os outros 31 testes RH/documentais/de direitos/SST passaram antes da integração. Build completo pós-integração em execução. Alterações desta continuação permanecem locais, sem commit/push.
+
+Pendências atuais consolidadas em [RH_FOLHA_PENDENCIAS_20261012.md](RH_FOLHA_PENDENCIAS_20261012.md); a tabela abaixo foi atualizada para não listar como ausentes os modelos entregues nesta continuidade.
+
 ## Continuação funcional — rateio, pensões e folhas vinculadas — 11/10/2026
 
 - Rateio mensal civil opcional em `/rh/poc`: salário/jornada/lotação por revisão, admissão/término/retorno parciais, reconciliação de centavos e bases fiscais/previdenciárias consolidadas. Divisor por dias civis e movimentos integrais rateados são políticas estimadas. Mudança de regime e ATS intramês permanecem pendentes.
@@ -119,13 +131,13 @@ O plano usa **F0–F9**, totalizando dez fases. Esta execução ainda está em a
 
 | Fase | Estado deste incremento | Próximos desenvolvimentos internos |
 |---|---|---|
-| F0 Fundação | Parcial | Temporalidade mensal entregue; completar rateios intramês, transições de regime e consolidação dos demais consumidores. |
+| F0 Fundação | Parcial | Revisões e rateio civil intramês demonstrativo entregues; completar critérios municipais/produção, transições de regime/previdência e consolidação dos demais consumidores temporais. |
 | F1 Cadastro | Parcial | Dependentes canônicos, alterações coletivas, campos configuráveis, quadro temporal de cargos/vagas/níveis, ocorrências e pasta funcional agregada disponíveis; completar progressões, multivínculo temporal completo, extensões de funções/designações, cessões/estágio, anexos específicos de contrato e consultas integrais. |
-| F2 Motor | Parcial | Redução mensal IRRF 2026 e memória por PF entregues no incremento documental; completar exceções fiscais, compensação entre folhas/pagamentos, múltiplos esquemas/competências, alocação temporal e conferência completa. |
-| F3 Movimentos/benefícios | Parcial | Completar múltiplas linhas/calendários de VT, exceções/faixas/elegibilidade especiais de família, pensões, submargens por produto, renegociação/compensações de consignação e reflexos das demais origens. Importação, VT/VA, salário-família parametrizado, margem agregada e contratos/parcelas/reservas simples disponíveis. |
-| F4 Direitos/frequência | Parcial | Médias, horas extras, banco/extrato/transferências/conversão, lotes FIFO com expiração explícita preservando aquisição, gozo conjunto de férias, licença-prêmio por dias contáveis/suspensão/reinício, ATS e averbação para ATS disponíveis. Completar perdas/prorrogações/exceções de férias, direitos por meses/anos/transições, averbações de outros direitos, ajustes de ATS e expiração automática/reconciliação de políticas entre regimes. |
-| F5 Folhas especiais | Parcial | Mensal oficial, cenários isolados e cálculo/fechamento/publicação dos oito especiais em DEMONSTRACAO disponíveis. Fluxos oficiais de produção de rescisão/RRA/13º/férias, tributação integral, direitos e reintegração continuam pendentes. Reajuste contratual coletivo disponível. |
-| F6 Contabilidade | Parcial | Solicitações nativas de despesa, apropriações mensais de provisão e baixa explícita ligada ao empenho nativo com estorno após anulação integral disponíveis; completar razão patrimonial, automatização do vínculo/baixa, retenções/repasses, liquidação/pagamento conciliados, diárias e produtividade. |
+| F2 Motor | Parcial | Redução mensal IRRF 2026, memória por PF, dedução explícita de pensões, rateio civil POC e diferenças vinculadas de 13º entregues. Completar exceções fiscais, compensação entre folhas/pagamentos, transições entre esquemas, bases especiais oficiais e conferência integral. |
+| F3 Movimentos/benefícios | Parcial | Importação, VT/VA, salário-família parametrizado, margem agregada, contratos/parcelas/reservas e pensões fixas/percentuais com beneficiário/memória disponíveis. Completar múltiplas linhas/calendários de VT, exceções de benefícios, proporcionalidade especial/repasse de pensões, submargens, renegociação e compensações de consignação. |
+| F4 Direitos/frequência | Parcial | Médias, horas extras, banco/FIFO/transferências/conversão/expiração explícita, gozo conjunto, férias com faixas de faltas POC e vínculo à folha, licença-prêmio/ATS por anos civis e averbação para ATS disponíveis. Completar perdas/prorrogações/afastamentos, transições de regime, outros direitos, ATS intramês, médias automáticas nas especiais e agendamento/reconciliação de banco. |
+| F5 Folhas especiais | Parcial | Oito especiais calculáveis/fecháveis/publicáveis em DEMONSTRACAO; final/diferença de 13º vinculados e férias conciliadas com reservas. Desligamento ao fim da competência e reintegração demonstrativos com atos/revisões entregues. Completar produção, tributação integral, desligamento intramês, TRCT, diferenças sucessivas/negativas, retroativos e direitos do intervalo de reintegração. |
+| F6 Contabilidade | Parcial | Solicitações nativas de despesa, provisões e baixa explícita por empenho, resumo/planejamento por segmentos e diárias com documentos POC disponíveis. Completar razão patrimonial, automatização de vínculos/baixas, retenções/repasses, liquidação/pagamento/retorno bancário, integração financeira de diárias e produtividade. |
 | F7 Portal | Parcial | PDF/mensagens históricas, publicação futura (inclusive especiais POC), solicitações, campanhas/deferimento, margem, cronogramas/crédito e consulta própria da licença-prêmio disponíveis. Informe anual modelo POC por pagamentos demonstrativos entregue; faltam renda anual fiscal oficial, carência/liberação de margem por banco e demais jornadas. |
 | F8 eSocial/obrigações | Parcial | Origens/outbox, histórico interno integral e renderizador de layouts configuráveis CSV/ASCII com validação/bytes/hash/download autorizado disponíveis; faltam mapeamentos oficiais/populações/classificações, XML/XSD/assinatura/cliente/worker e exportadores específicos de cada obrigação. Configuração externa posterior não substitui esses desenvolvimentos internos. |
 | F9 POC | Parcial | Testes iniciais e regressão; ampliar casos ouro, relatórios e evidências item a item, além do percurso autenticado. |

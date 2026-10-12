@@ -155,7 +155,7 @@ export async function issueServiceAuthorization(f: FormData) {
     if (!(limit && limit > 0)) throw new UserError("Informe o valor limite.");
     const year = new Date().getUTCFullYear();
     const seq = (await ctx.prisma.fleetServiceAuthorization.count({ where: { code: { startsWith: `AS-${year}-` } } })) + 1;
-    const a = await ctx.prisma.fleetServiceAuthorization.create({ data: { code: authorizationCode("SERVICO", seq, year), unitId: unit.id, supplierName: req(f, "supplierName", "o fornecedor"), supplierCnpj: str(f, "supplierCnpj") || null, description: req(f, "description", "o serviço"), amountLimit: limit, procurementKind: str(f, "procurementKind") || null, procurementRef: str(f, "procurementRef") || null, validUntil: str(f, "validUntil") ? day(str(f, "validUntil")) : null, createdById: ctx.user.id } });
+    const a = await ctx.prisma.fleetServiceAuthorization.create({ data: { code: authorizationCode("SERVICO", seq, year), unitId: unit.id, driverId: str(f, "driverId") || null, destination: str(f, "destination") || null, supplierName: req(f, "supplierName", "o fornecedor"), supplierCnpj: str(f, "supplierCnpj") || null, description: req(f, "description", "o serviço"), amountLimit: limit, procurementKind: str(f, "procurementKind") || null, procurementRef: str(f, "procurementRef") || null, validUntil: str(f, "validUntil") ? day(str(f, "validUntil")) : null, createdById: ctx.user.id } });
     return { type: "FLEET_SERVICE_AUTH", id: a.id };
   });
 }

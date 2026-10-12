@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { calculateAccountBalance, evaluateFiscalRule, parseFiscalRuleConfiguration } from "./fiscal-engine";
-import { confirmTaxPayment, TaxError, type TaxActor } from "./index";
+import { confirmTaxPaymentInTransaction, TaxError, type TaxActor } from "./index";
+import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxAssessmentCompensatedValue } from "./scope";
+import { assertTaxCreditScope, recordTaxExcessInTransaction, resolveCreditDestinationScope } from "./credit-finance";
+import { postAccountingEventInTransaction } from "@/lib/financeiro";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -19,6 +22,11 @@ async function audit(db: Db, actor: TaxActor, action: string, entityType: string
   await db.taxAuditLog.create({ data: { action, entityType, entityId, payload, authorUsuarioId: actor.usuarioId, authorEmployeeId: actor.employeeId } });
 }
 
+async function assessmentScope(db: Db, actor: TaxActor, assessment: { taxId: string; calculationSnapshot: Prisma.JsonValue | null }) {
+  try { return await resolveTaxAssessmentScope(db, actor, assessment.taxId, assessment.calculationSnapshot); }
+  catch (error) { throw new TaxError(error instanceof Error ? error.message : "Escopo tributário inválido."); }
+}
+
 async function nextNumber(tx: Prisma.TransactionClient, year: number, documentType: string) {
   const sequence = await tx.taxDocumentSequence.upsert({
     where: { year_documentType: { year, documentType } },
@@ -30,13 +38,16 @@ async function nextNumber(tx: Prisma.TransactionClient, year: number, documentTy
 }
 
 export async function resolveFiscalRule(db: Db, input: { taxId: string; parameterId?: string; effectiveAt: Date }) {
-  const parameter = input.parameterId
-    ? await db.taxParameter.findUnique({ where: { id: input.parameterId }, include: { tax: true } })
-    : await db.taxParameter.findFirst({
+  if (Number.isNaN(input.effectiveAt.getTime())) throw new TaxError("Informe uma competência fiscal válida.");
+  const candidates = input.parameterId
+    ? [await db.taxParameter.findUnique({ where: { id: input.parameterId }, include: { tax: true } })]
+    : await db.taxParameter.findMany({
         where: { taxId: input.taxId, isActive: true, effectiveFrom: { lte: input.effectiveAt }, OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: input.effectiveAt } }] },
-        include: { tax: true }, orderBy: { effectiveFrom: "desc" },
+        include: { tax: true }, orderBy: { effectiveFrom: "desc" }, take: 2,
       });
-  if (!parameter || parameter.taxId !== input.taxId || !parameter.isActive) throw new TaxError("Não há regra fiscal ativa para o tributo e a vigência informados.");
+  if (candidates.length > 1) throw new TaxError("Há regras fiscais sobrepostas na competência; selecione a versão aplicável ou concilie a vigência.");
+  const parameter = candidates[0];
+  if (!parameter || parameter.taxId !== input.taxId || !parameter.isActive || !parameter.tax.isActive) throw new TaxError("Não há regra fiscal ativa para o tributo e a vigência informados.");
   if (parameter.effectiveFrom > input.effectiveAt || (parameter.effectiveUntil && parameter.effectiveUntil < input.effectiveAt)) throw new TaxError("A regra fiscal não está vigente na competência informada.");
   return { parameter, configuration: parseFiscalRuleConfiguration(parameter.configuration) };
 }
@@ -61,25 +72,31 @@ export async function createParametrizedAssessment(
   return db.$transaction(async (tx) => {
     const existing = await tx.taxIntegrationEvent.findUnique({ where: { idempotencyKey: `ASSESSMENT:${input.originKey.trim()}` } });
     const existingId = jsonObject(existing?.result).assessmentId;
-    if (typeof existingId === "string") return tx.taxAssessment.findUniqueOrThrow({ where: { id: existingId } });
+    if (typeof existingId === "string") {
+      const assessment = await tx.taxAssessment.findUniqueOrThrow({ where: { id: existingId } });
+      await assessmentScope(tx, actor, assessment);
+      if (assessment.taxId !== input.taxId || assessment.taxpayerId !== input.taxpayerId || assessment.competence?.getTime() !== input.competence.getTime() || !assessment.taxableBaseDecimal?.equals(input.taxableBase) || assessment.realEstateId !== (input.realEstateId ?? null) || assessment.economicRegistrationId !== (input.economicRegistrationId ?? null) || jsonObject(assessment.calculationSnapshot).parameterId !== parameter.id) throw new TaxError("Lançamento já registrado com outros dados.");
+      return assessment;
+    }
     const year = input.competence.getUTCFullYear();
+    const scope = await assessmentScope(tx, actor, { taxId: input.taxId, calculationSnapshot: null });
     const [financialYear, taxpayer, property, registration] = await Promise.all([
-      tx.financialYear.findFirst({ where: { year, governmentEntityId: null } }),
+      resolveTaxFinancialYear(tx, year, scope).catch((error: unknown) => { throw new TaxError(error instanceof Error ? error.message : "Exercício inválido."); }),
       tx.taxpayer.findUnique({ where: { id: input.taxpayerId } }),
       input.realEstateId ? tx.realEstate.findUnique({ where: { id: input.realEstateId } }) : null,
       input.economicRegistrationId ? tx.economicRegistration.findUnique({ where: { id: input.economicRegistrationId } }) : null,
     ]);
     if (!financialYear || financialYear.status !== "Aberto") throw new TaxError(`O exercício financeiro ${year} deve estar aberto.`);
     if (!taxpayer || taxpayer.status !== "Ativo") throw new TaxError("Selecione um contribuinte ativo.");
-    if (property && property.taxpayerId !== taxpayer.id) throw new TaxError("O imóvel não pertence ao contribuinte selecionado.");
-    if (registration && registration.taxpayerId !== taxpayer.id) throw new TaxError("A inscrição econômica não pertence ao contribuinte selecionado.");
+    if (input.realEstateId && (!property || property.taxpayerId !== taxpayer.id)) throw new TaxError("O imóvel não pertence ao contribuinte selecionado.");
+    if (input.economicRegistrationId && (!registration || registration.taxpayerId !== taxpayer.id)) throw new TaxError("A inscrição econômica não pertence ao contribuinte selecionado.");
     const assessmentNumber = await nextNumber(tx, year, "ASSESSMENT");
     const rate = configuration.formula === "PERCENTUAL_BASE" ? new Prisma.Decimal(String(configuration.rate ?? 0)) : calculation.principal.div(new Prisma.Decimal(String(input.taxableBase || 1))).mul(100);
     const assessment = await tx.taxAssessment.create({ data: {
       year, assessmentNumber, competence: input.competence, originalValue: Number(calculation.principal), originalValueDecimal: calculation.principal,
       taxableBaseDecimal: new Prisma.Decimal(String(input.taxableBase)), rate, discountValueDecimal: 0, interestValueDecimal: 0,
       penaltyValueDecimal: 0, correctionValueDecimal: 0, finalValueDecimal: calculation.principal, status: "Lançado",
-      calculationSnapshot: { ...calculation.memory, parameterId: parameter.id, parameterCode: parameter.code, effectiveFrom: parameter.effectiveFrom.toISOString(), schedule: calculation.schedule.map((item) => ({ ...item, amount: item.amount.toFixed(2) })) },
+      calculationSnapshot: { ...calculation.memory, ...scope, financialYearId: financialYear.id, parameterId: parameter.id, parameterCode: parameter.code, effectiveFrom: parameter.effectiveFrom.toISOString(), schedule: calculation.schedule.map((item) => ({ ...item, amount: item.amount.toFixed(2) })) },
       taxId: input.taxId, taxpayerId: input.taxpayerId, realEstateId: input.realEstateId, economicRegistrationId: input.economicRegistrationId,
     } });
     await tx.taxIntegrationEvent.create({ data: {
@@ -100,10 +117,17 @@ export async function reviseTaxAssessment(db: PrismaClient, actor: TaxActor, inp
   return db.$transaction(async (tx) => {
     const priorEvent = await tx.taxIntegrationEvent.findUnique({ where: { idempotencyKey: `REVISION:${input.idempotencyKey}` } });
     const priorId = jsonObject(priorEvent?.result).registryEntryId;
-    if (typeof priorId === "string") return tx.taxRegistryEntry.findUniqueOrThrow({ where: { id: priorId } });
+    if (typeof priorId === "string") {
+      const entry = await tx.taxRegistryEntry.findUniqueOrThrow({ where: { id: priorId } });
+      const original = await tx.taxAssessment.findUniqueOrThrow({ where: { id: entry.entityId } });
+      await assessmentScope(tx, actor, original);
+      if (entry.entityId !== input.assessmentId) throw new TaxError("Revisão já registrada para outro lançamento.");
+      return entry;
+    }
     await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${input.assessmentId} FOR UPDATE`;
     const assessment = await tx.taxAssessment.findUnique({ where: { id: input.assessmentId } });
     if (!assessment || ["Cancelado", "Dívida Ativa"].includes(assessment.status)) throw new TaxError("O lançamento não está disponível para revisão.");
+    await assessmentScope(tx, actor, assessment);
     const oldValue = assessment.finalValueDecimal ?? assessment.originalValueDecimal;
     if (!oldValue) throw new TaxError("O lançamento não possui valor decimal conciliado.");
     let newValue: Prisma.Decimal;
@@ -142,9 +166,17 @@ export async function registerCreditEvent(db: PrismaClient, actor: TaxActor, inp
     const key = `CREDIT_EVENT:${input.idempotencyKey}`;
     const existing = await tx.taxIntegrationEvent.findUnique({ where: { idempotencyKey: key } });
     const existingId = jsonObject(existing?.result).registryEntryId;
-    if (typeof existingId === "string") return tx.taxRegistryEntry.findUniqueOrThrow({ where: { id: existingId } });
+    if (typeof existingId === "string") {
+      const entry = await tx.taxRegistryEntry.findUniqueOrThrow({ where: { id: existingId } });
+      const original = await tx.taxAssessment.findUniqueOrThrow({ where: { id: entry.entityId } });
+      await assessmentScope(tx, actor, original);
+      const data = jsonObject(entry.data);
+      if (entry.entityId !== input.assessmentId || data.eventType !== input.eventType || data.amount !== (input.amount === undefined ? null : money(input.amount).toFixed(2)) || data.reason !== input.reason.trim()) throw new TaxError("Evento já registrado com outros dados.");
+      return entry;
+    }
     const assessment = await tx.taxAssessment.findUnique({ where: { id: input.assessmentId } });
     if (!assessment) throw new TaxError("Lançamento não encontrado.");
+    await assessmentScope(tx, actor, assessment);
     const amountValue = input.amount === undefined ? null : money(input.amount);
     const entry = await tx.taxRegistryEntry.create({ data: {
       entityType: "TAX_ASSESSMENT", entityId: assessment.id, category: "CREDIT_EVENT", title: input.eventType.replaceAll("_", " "),
@@ -163,7 +195,8 @@ async function assessmentPosition(tx: Db, assessmentId: string) {
   if (!assessment) throw new TaxError("Lançamento não encontrado.");
   const total = assessment.finalValueDecimal ?? assessment.originalValueDecimal;
   if (!total) throw new TaxError("O lançamento não possui valor decimal conciliado.");
-  const paid = assessment.guides.flatMap((guide) => guide.payments).reduce((sum, payment) => sum.plus(payment.amountPaidDecimal ?? 0), new Prisma.Decimal(0));
+  const compensated = await taxAssessmentCompensatedValue(tx, assessment.id);
+  const paid = assessment.guides.flatMap((guide) => guide.payments).reduce((sum, payment) => sum.plus(payment.amountPaidDecimal ?? 0), compensated);
   const openGuides = assessment.guides.reduce<Prisma.Decimal>((sum, guide) => {
     const paidOnGuide = guide.payments.reduce((value, payment) => value.plus(payment.amountPaidDecimal ?? 0), new Prisma.Decimal(0));
     const guideTotal = guide.totalValueDecimal ?? new Prisma.Decimal(guide.totalValue);
@@ -177,10 +210,11 @@ export async function generatePartialTaxGuide(db: PrismaClient, actor: TaxActor,
   return db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${input.assessmentId} FOR UPDATE`;
     const position = await assessmentPosition(tx, input.assessmentId);
+    const scope = await assessmentScope(tx, actor, position.assessment);
     if (["Cancelado", "Pago"].includes(position.assessment.status)) throw new TaxError("O lançamento não está disponível para emissão.");
     if (requested.greaterThan(position.availableForGuide)) throw new TaxError(`O valor disponível para novos DAMs é ${position.availableForGuide.toFixed(2)}.`);
     const guideNumber = await nextNumber(tx, position.assessment.year, "GUIDE");
-    const guide = await tx.taxGuide.create({ data: { assessmentId: position.assessment.id, guideNumber, totalValue: Number(requested), totalValueDecimal: requested, dueDate: input.dueDate, documentId: input.documentId, status: "Emitida", calculationSnapshot: { assessmentId: position.assessment.id, amount: requested.toFixed(2), effect: "EMISSAO_SEM_BAIXA" } } });
+    const guide = await tx.taxGuide.create({ data: { assessmentId: position.assessment.id, guideNumber, totalValue: Number(requested), totalValueDecimal: requested, dueDate: input.dueDate, documentId: input.documentId, status: "Emitida", calculationSnapshot: { ...scope, assessmentId: position.assessment.id, amount: requested.toFixed(2), effect: "EMISSAO_SEM_BAIXA" } } });
     await tx.taxAssessment.update({ where: { id: position.assessment.id }, data: { status: "Emitido" } });
     await audit(tx, actor, "ISSUE_PARTIAL_DAM", "TaxGuide", guide.id, { assessmentId: position.assessment.id, amount: requested.toFixed(2), balanceBeforePayment: position.balance.toFixed(2) });
     return guide;
@@ -188,12 +222,14 @@ export async function generatePartialTaxGuide(db: PrismaClient, actor: TaxActor,
 }
 
 export async function generateGroupedTaxGuides(db: PrismaClient, actor: TaxActor, input: { assessmentIds: string[]; dueDate: Date }) {
-  const ids = [...new Set(input.assessmentIds.filter(Boolean))];
+  const ids = [...new Set(input.assessmentIds.filter(Boolean))].sort();
   if (ids.length < 2) throw new TaxError("Selecione pelo menos dois lançamentos para o DAM agrupado.");
   return db.$transaction(async (tx) => {
-    const assessments = await tx.taxAssessment.findMany({ where: { id: { in: ids } } });
+    const assessments = await tx.taxAssessment.findMany({ where: { id: { in: ids } }, orderBy: { id: "asc" } });
     if (assessments.length !== ids.length) throw new TaxError("Um dos lançamentos selecionados não foi encontrado.");
     if (new Set(assessments.map((item) => item.taxpayerId)).size !== 1) throw new TaxError("O DAM agrupado aceita apenas débitos do mesmo contribuinte.");
+    const scopes = await Promise.all(assessments.map((assessment) => assessmentScope(tx, actor, assessment)));
+    if (new Set(scopes.map((scope) => scope.budgetUnitId)).size !== 1) throw new TaxError("O DAM agrupado exige lançamentos da mesma unidade gestora.");
     const groupId = randomUUID();
     const guides = [];
     for (const assessment of assessments) {
@@ -201,7 +237,7 @@ export async function generateGroupedTaxGuides(db: PrismaClient, actor: TaxActor
       const position = await assessmentPosition(tx, assessment.id);
       if (position.availableForGuide.lessThanOrEqualTo(0)) throw new TaxError(`O lançamento ${assessment.assessmentNumber ?? assessment.id} não possui saldo livre para emissão.`);
       const guideNumber = await nextNumber(tx, assessment.year, "GUIDE");
-      const guide = await tx.taxGuide.create({ data: { assessmentId: assessment.id, guideNumber, totalValue: Number(position.availableForGuide), totalValueDecimal: position.availableForGuide, dueDate: input.dueDate, status: "Emitida", calculationSnapshot: { groupId, assessmentId: assessment.id, amount: position.availableForGuide.toFixed(2), effect: "EMISSAO_SEM_BAIXA" } } });
+      const guide = await tx.taxGuide.create({ data: { assessmentId: assessment.id, guideNumber, totalValue: Number(position.availableForGuide), totalValueDecimal: position.availableForGuide, dueDate: input.dueDate, status: "Emitida", calculationSnapshot: { ...scopes[0], groupId, assessmentId: assessment.id, amount: position.availableForGuide.toFixed(2), effect: "EMISSAO_SEM_BAIXA" } } });
       guides.push(guide);
       await tx.taxAssessment.update({ where: { id: assessment.id }, data: { status: "Emitido" } });
     }
@@ -215,9 +251,14 @@ export async function generateGroupedTaxGuides(db: PrismaClient, actor: TaxActor
 export async function createPixCharge(db: PrismaClient, actor: TaxActor, input: { guideId: string; idempotencyKey: string }) {
   const key = `PIX_CHARGE:${input.idempotencyKey.trim()}`;
   const existing = await db.taxIntegrationEvent.findUnique({ where: { idempotencyKey: key } });
-  if (existing) return existing;
   const guide = await db.taxGuide.findUnique({ where: { id: input.guideId }, include: { assessment: true } });
-  if (!guide || ["Cancelada", "Paga"].includes(guide.status)) throw new TaxError("O DAM não está disponível para cobrança.");
+  if (!guide) throw new TaxError("O DAM não está disponível para cobrança.");
+  await assessmentScope(db, actor, guide.assessment);
+  if (existing) {
+    if (jsonObject(existing.payload).guideId !== input.guideId) throw new TaxError("Cobrança já registrada para outra guia.");
+    return existing;
+  }
+  if (["Cancelada", "Paga"].includes(guide.status)) throw new TaxError("O DAM não está disponível para cobrança.");
   const reference = `PIX-${guide.guideNumber ?? guide.id}`;
   const event = await db.taxIntegrationEvent.create({ data: { integrationCode: "PIX_ADAPTER", eventType: "CHARGE_CREATED", idempotencyKey: key, externalReference: reference, status: "AGUARDANDO_CONFIRMACAO", evidenceLevel: "L1", taxpayerId: guide.assessment.taxpayerId, payload: { guideId: guide.id, guideNumber: guide.guideNumber, amount: guide.totalValueDecimal?.toFixed(2) ?? String(guide.totalValue) }, result: { reference, copyAndPaste: reference, paid: false } } });
   await audit(db, actor, "CREATE_CHARGE", "TaxIntegrationEvent", event.id, { guideId: guide.id, reference, status: event.status });
@@ -227,15 +268,31 @@ export async function createPixCharge(db: PrismaClient, actor: TaxActor, input: 
 export async function processCollectionReturn(db: PrismaClient, actor: TaxActor, input: {
   idempotencyKey: string; guideNumber?: string; amount: string | number; occurredAt: Date; status: "CONFIRMADO" | "INVALIDO" | "REJEITADO"; bankAccountId?: string; externalReference?: string;
 }) {
+  if (!input.idempotencyKey.trim() || Number.isNaN(input.occurredAt.getTime())) throw new TaxError("Chave e data válidas são obrigatórias para o retorno.");
   const key = `BANK_RETURN:${input.idempotencyKey.trim()}`;
-  const existing = await db.taxIntegrationEvent.findUnique({ where: { idempotencyKey: key } });
-  if (existing) return existing;
   const receivedAmount = money(input.amount, "Valor recebido");
-  const guide = input.guideNumber ? await db.taxGuide.findFirst({ where: { OR: [{ guideNumber: input.guideNumber }, { id: input.guideNumber }] }, include: { assessment: true, payments: { where: { status: "Confirmado" } } } }) : null;
+  return db.$transaction(async (tx) => {
+  // Serialize the return key even before an integration event exists.
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))::text`;
+  const existing = await tx.taxIntegrationEvent.findUnique({ where: { idempotencyKey: key } });
+  if (existing) {
+    const payload = jsonObject(existing.payload);
+    const guideId = typeof payload.guideId === "string" ? payload.guideId : null;
+    if (guideId) {
+      const priorGuide = await tx.taxGuide.findUniqueOrThrow({ where: { id: guideId }, include: { assessment: true } });
+      await assessmentScope(tx, actor, priorGuide.assessment);
+    } else if (actor.allowedBudgetUnitIds && jsonObject(existing.result).actorUsuarioId !== actor.usuarioId) throw new TaxError("Retorno rejeitado fora do usuário autorizado.");
+    if (payload.amount !== receivedAmount.toFixed(2) || payload.occurredAt !== input.occurredAt.toISOString() || (input.guideNumber ?? null) !== (payload.guideNumber ?? null) || (payload.bankAccountId ?? null) !== (input.bankAccountId ?? null) || (existing.externalReference ?? null) !== (input.externalReference ?? null) || (payload.returnStatus ?? "CONFIRMADO") !== input.status) throw new TaxError("Retorno já registrado com outros dados.");
+    return existing;
+  }
+  const matched = input.guideNumber ? await tx.taxGuide.findFirst({ where: { OR: [{ guideNumber: input.guideNumber }, { id: input.guideNumber }] }, select: { id: true } }) : null;
+  if (matched) await tx.$queryRaw`SELECT id FROM "TaxGuide" WHERE id = ${matched.id} FOR UPDATE`;
+  const guide = matched ? await tx.taxGuide.findUnique({ where: { id: matched.id }, include: { assessment: true, payments: { where: { status: "Confirmado" } } } }) : null;
+  if (guide) await assessmentScope(tx, actor, guide.assessment);
   if (input.status !== "CONFIRMADO" || !guide) {
     const reason = input.status === "REJEITADO" ? "Arquivo rejeitado" : !guide ? "Referência não localizada" : "Registro inválido";
-    const rejected = await db.taxIntegrationEvent.create({ data: { integrationCode: "BANK_RETURN", eventType: "COLLECTION_RETURN", idempotencyKey: key, externalReference: input.externalReference, status: "REJEITADO", evidenceLevel: "L1", payload: { guideNumber: input.guideNumber ?? null, amount: receivedAmount.toFixed(2), occurredAt: input.occurredAt.toISOString() }, result: { reason, applied: "0.00" }, processedAt: new Date() } });
-    await audit(db, actor, "REJECT_BANK_RETURN", "TaxIntegrationEvent", rejected.id, { reason });
+    const rejected = await tx.taxIntegrationEvent.create({ data: { integrationCode: "BANK_RETURN", eventType: "COLLECTION_RETURN", idempotencyKey: key, externalReference: input.externalReference, status: "REJEITADO", evidenceLevel: "L1", payload: { guideId: guide?.id ?? null, guideNumber: input.guideNumber ?? null, bankAccountId: input.bankAccountId ?? null, returnStatus: input.status, amount: receivedAmount.toFixed(2), occurredAt: input.occurredAt.toISOString() }, result: { reason, applied: "0.00", actorUsuarioId: actor.usuarioId }, processedAt: new Date() } });
+    await audit(tx, actor, "REJECT_BANK_RETURN", "TaxIntegrationEvent", rejected.id, { reason });
     return rejected;
   }
   const guideTotal = guide.totalValueDecimal ?? new Prisma.Decimal(String(guide.totalValue));
@@ -243,41 +300,73 @@ export async function processCollectionReturn(db: PrismaClient, actor: TaxActor,
   const outstanding = Prisma.Decimal.max(guideTotal.minus(paidBefore), 0);
   if (outstanding.lessThanOrEqualTo(0)) throw new TaxError("O DAM já está integralmente pago.");
   const applied = Prisma.Decimal.min(receivedAmount, outstanding);
-  await confirmTaxPayment(db, actor, { guideId: guide.id, amountPaid: applied, paymentDate: input.occurredAt, paymentMethod: "Retorno bancário", idempotencyKey: key, bankAccountId: input.bankAccountId });
+  await confirmTaxPaymentInTransaction(tx, actor, { guideId: guide.id, amountPaid: applied, paymentDate: input.occurredAt, paymentMethod: "Retorno bancário", idempotencyKey: key, bankAccountId: input.bankAccountId });
   const excess = receivedAmount.minus(applied).toDecimalPlaces(2);
   let creditEntryId: string | null = null;
   if (excess.greaterThan(0)) {
-    const credit = await db.taxRegistryEntry.create({ data: { entityType: "TAXPAYER", entityId: guide.assessment.taxpayerId, category: "TAX_CREDIT", title: `Crédito de arrecadação ${input.externalReference ?? input.idempotencyKey}`, data: { amount: excess.toFixed(2), available: excess.toFixed(2), originGuideId: guide.id, originEventKey: key }, status: "DISPONIVEL", source: "RETORNO_BANCARIO", actorUsuarioId: actor.usuarioId } });
+    const scope = await assessmentScope(tx, actor, guide.assessment);
+    const credit = await tx.taxRegistryEntry.create({ data: { entityType: "TAXPAYER", entityId: guide.assessment.taxpayerId, category: "TAX_CREDIT", title: `Crédito de arrecadação ${input.externalReference ?? input.idempotencyKey}`, data: { ...scope, amount: excess.toFixed(2), available: excess.toFixed(2), originGuideId: guide.id, originEventKey: key }, status: "DISPONIVEL", source: "RETORNO_BANCARIO", actorUsuarioId: actor.usuarioId } });
     creditEntryId = credit.id;
+    const payment = await tx.taxPayment.findUniqueOrThrow({ where: { idempotencyKey: key } });
+    if (!payment.bankAccountId) throw new TaxError("Pagamento sem conta para ingresso do excedente.");
+    await recordTaxExcessInTransaction(tx, actor, { creditId: credit.id, bankAccountId: payment.bankAccountId, date: input.occurredAt, amount: excess });
   }
-  const event = await db.taxIntegrationEvent.create({ data: { integrationCode: "BANK_RETURN", eventType: "COLLECTION_RETURN", idempotencyKey: key, externalReference: input.externalReference, status: "PROCESSADO", evidenceLevel: "L1", taxpayerId: guide.assessment.taxpayerId, payload: { guideId: guide.id, guideNumber: guide.guideNumber, amount: receivedAmount.toFixed(2), occurredAt: input.occurredAt.toISOString() }, result: { applied: applied.toFixed(2), excess: excess.toFixed(2), creditEntryId }, processedAt: new Date() } });
-  await audit(db, actor, "PROCESS_BANK_RETURN", "TaxIntegrationEvent", event.id, { guideId: guide.id, applied: applied.toFixed(2), excess: excess.toFixed(2) });
+  const event = await tx.taxIntegrationEvent.create({ data: { integrationCode: "BANK_RETURN", eventType: "COLLECTION_RETURN", idempotencyKey: key, externalReference: input.externalReference, status: "PROCESSADO", evidenceLevel: "L1", taxpayerId: guide.assessment.taxpayerId, payload: { guideId: guide.id, guideNumber: input.guideNumber ?? null, bankAccountId: input.bankAccountId ?? null, returnStatus: input.status, amount: receivedAmount.toFixed(2), occurredAt: input.occurredAt.toISOString() }, result: { applied: applied.toFixed(2), excess: excess.toFixed(2), creditEntryId }, processedAt: new Date() } });
+  await audit(tx, actor, "PROCESS_BANK_RETURN", "TaxIntegrationEvent", event.id, { guideId: guide.id, applied: applied.toFixed(2), excess: excess.toFixed(2) });
   return event;
+  });
 }
 
 export async function applyTaxCredit(db: PrismaClient, actor: TaxActor, input: {
   creditId: string; operation: "COMPENSAR" | "TRANSFERIR" | "RESTITUIR"; amount: string | number; assessmentId?: string; destinationTaxpayerId?: string; reason: string; idempotencyKey: string;
 }) {
   const requested = money(input.amount);
+  if (!input.reason.trim() || !input.idempotencyKey.trim()) throw new TaxError("Informe motivo e chave da movimentação do crédito.");
   return db.$transaction(async (tx) => {
     const key = `TAX_CREDIT:${input.idempotencyKey.trim()}`;
-    const prior = await tx.taxIntegrationEvent.findUnique({ where: { idempotencyKey: key } });
-    if (prior) return prior;
     await tx.$queryRaw`SELECT id FROM "TaxRegistryEntry" WHERE id = ${input.creditId} FOR UPDATE`;
     const credit = await tx.taxRegistryEntry.findUnique({ where: { id: input.creditId } });
     if (!credit || credit.category !== "TAX_CREDIT") throw new TaxError("Crédito tributário disponível não encontrado.");
     const data = jsonObject(credit.data);
+    const scope = await assertTaxCreditScope(tx, actor, credit.data);
+    const prior = await tx.taxIntegrationEvent.findUnique({ where: { idempotencyKey: key } });
+    if (prior) {
+      const payload = jsonObject(prior.payload);
+      const targetId = input.operation === "COMPENSAR" ? input.assessmentId : input.operation === "TRANSFERIR" ? input.destinationTaxpayerId : credit.entityId;
+      if (prior.eventType !== input.operation || payload.creditId !== credit.id || payload.amount !== requested.toFixed(2) || payload.targetId !== targetId || payload.reason !== input.reason.trim()) throw new TaxError("Movimento do crédito já registrado com outros dados.");
+      return prior;
+    }
+    if (!data.ingressTransactionId || !data.ingressMovementId) throw new TaxError("Crédito sem ingresso financeiro conciliado.");
     const available = new Prisma.Decimal(String(data.available ?? 0));
     if (requested.greaterThan(available)) throw new TaxError(`O crédito disponível é ${available.toFixed(2)}.`);
     if (input.operation === "COMPENSAR" && !input.assessmentId) throw new TaxError("Selecione o débito de destino da compensação.");
     if (input.operation === "TRANSFERIR" && !input.destinationTaxpayerId) throw new TaxError("Selecione o contribuinte de destino.");
+    if (!["COMPENSAR", "TRANSFERIR", "RESTITUIR"].includes(input.operation)) throw new TaxError("Operação do crédito inválida.");
+    if (input.operation === "TRANSFERIR") {
+      const destination = await tx.taxpayer.findUnique({ where: { id: input.destinationTaxpayerId! } });
+      if (!destination || destination.status !== "Ativo") throw new TaxError("Contribuinte de destino deve estar ativo.");
+    }
+    let accountingTransactionId: string | null = null;
+    if (input.operation === "COMPENSAR") {
+      await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${input.assessmentId!} FOR UPDATE`;
+      const { assessment, scope: destination } = await resolveCreditDestinationScope(tx, actor, input.assessmentId!);
+      if (assessment.taxpayerId !== credit.entityId || destination.budgetUnitId !== scope.budgetUnitId) throw new TaxError("Compensação exige débito do mesmo contribuinte e UG.");
+      if (["Cancelado", "Pago", "Suspenso", "Dívida Ativa"].includes(assessment.status)) throw new TaxError("Débito não está disponível para compensação.");
+      const position = await assessmentPosition(tx, assessment.id);
+      if (requested.gt(position.availableForGuide)) throw new TaxError("Compensação excede o saldo livre; cancele as guias abertas antes de compensar.");
+      const date = new Date();
+      const year = await resolveTaxFinancialYear(tx, date.getUTCFullYear(), scope);
+      const transaction = await postAccountingEventInTransaction(tx, actor, { financialYearId: year.id, ...scope, date, value: requested, eventCode: "TAX_CREDIT_COMPENSATED", history: `Compensação tributária ${credit.id} → ${assessment.id}`, sourceModule: "TRIBUTACAO", sourceType: "TAX_CREDIT_COMPENSATION", sourceId: credit.id, idempotencyKey: `${key}:ACCOUNTING` });
+      accountingTransactionId = transaction.id;
+      await tx.taxAssessment.update({ where: { id: assessment.id }, data: { status: requested.equals(position.balance) ? "Pago" : "Parcial" } });
+    }
     const remaining = available.minus(requested).toDecimalPlaces(2);
     await tx.taxRegistryEntry.update({ where: { id: credit.id }, data: { data: { ...data, available: remaining.toFixed(2) }, status: remaining.equals(0) ? "UTILIZADO" : "DISPONIVEL" } });
     const targetType = input.operation === "COMPENSAR" ? "TAX_ASSESSMENT" : "TAXPAYER";
-    const targetId = input.assessmentId ?? input.destinationTaxpayerId ?? credit.entityId;
-    const movement = await tx.taxRegistryEntry.create({ data: { entityType: targetType, entityId: targetId, category: input.operation === "RESTITUIR" ? "REFUND_REQUEST" : "CREDIT_MOVEMENT", title: input.operation, data: { operation: input.operation, sourceCreditId: credit.id, sourceTaxpayerId: credit.entityId, destinationId: targetId, amount: requested.toFixed(2), reason: input.reason.trim(), status: input.operation === "RESTITUIR" ? "PENDENTE_APROVACAO" : "EFETIVADO" }, status: input.operation === "RESTITUIR" ? "PENDENTE_APROVACAO" : "EFETIVADO", source: "INTERNO", actorUsuarioId: actor.usuarioId } });
-    if (input.operation === "TRANSFERIR") await tx.taxRegistryEntry.create({ data: { entityType: "TAXPAYER", entityId: targetId, category: "TAX_CREDIT", title: `Crédito transferido de ${credit.entityId}`, data: { amount: requested.toFixed(2), available: requested.toFixed(2), sourceCreditId: credit.id, movementId: movement.id }, status: "DISPONIVEL", source: "TRANSFERENCIA", actorUsuarioId: actor.usuarioId } });
-    const event = await tx.taxIntegrationEvent.create({ data: { integrationCode: "TAX_CREDIT", eventType: input.operation, idempotencyKey: key, status: input.operation === "RESTITUIR" ? "PENDENTE" : "PROCESSADO", evidenceLevel: "L1", taxpayerId: credit.entityId, payload: { creditId: credit.id, amount: requested.toFixed(2), targetId }, result: { movementId: movement.id, remaining: remaining.toFixed(2) }, processedAt: input.operation === "RESTITUIR" ? null : new Date() } });
+    const targetId = (input.operation === "COMPENSAR" ? input.assessmentId : input.operation === "TRANSFERIR" ? input.destinationTaxpayerId : credit.entityId)!;
+    const movement = await tx.taxRegistryEntry.create({ data: { entityType: targetType, entityId: targetId, category: input.operation === "RESTITUIR" ? "REFUND_REQUEST" : "CREDIT_MOVEMENT", title: input.operation, data: { ...scope, operation: input.operation, sourceCreditId: credit.id, sourceTaxpayerId: credit.entityId, destinationId: targetId, amount: requested.toFixed(2), accountingTransactionId, reason: input.reason.trim(), status: input.operation === "RESTITUIR" ? "PENDENTE_APROVACAO" : "EFETIVADO" }, status: input.operation === "RESTITUIR" ? "PENDENTE_APROVACAO" : "EFETIVADO", source: "INTERNO", actorUsuarioId: actor.usuarioId } });
+    if (input.operation === "TRANSFERIR") await tx.taxRegistryEntry.create({ data: { entityType: "TAXPAYER", entityId: targetId, category: "TAX_CREDIT", title: `Crédito transferido de ${credit.entityId}`, data: { ...data, ...scope, amount: requested.toFixed(2), available: requested.toFixed(2), sourceCreditId: credit.id, movementId: movement.id }, status: "DISPONIVEL", source: "TRANSFERENCIA", actorUsuarioId: actor.usuarioId } });
+    const event = await tx.taxIntegrationEvent.create({ data: { integrationCode: "TAX_CREDIT", eventType: input.operation, idempotencyKey: key, status: input.operation === "RESTITUIR" ? "PENDENTE" : "PROCESSADO", evidenceLevel: "L1", taxpayerId: credit.entityId, payload: { creditId: credit.id, amount: requested.toFixed(2), targetId, reason: input.reason.trim() }, result: { movementId: movement.id, remaining: remaining.toFixed(2), accountingTransactionId }, processedAt: input.operation === "RESTITUIR" ? null : new Date() } });
     await audit(tx, actor, input.operation, "TaxRegistryEntry", movement.id, { creditId: credit.id, amount: requested.toFixed(2), remaining: remaining.toFixed(2), targetId });
     return event;
   });
@@ -323,9 +412,12 @@ export async function resolveReconciliation(db: PrismaClient, actor: TaxActor, i
 
 export async function approveRefundRequest(db: PrismaClient, actor: TaxActor, input: { requestId: string; approved: boolean; reason: string }) {
   return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "TaxRegistryEntry" WHERE id = ${input.requestId} FOR UPDATE`;
     const request = await tx.taxRegistryEntry.findUnique({ where: { id: input.requestId } });
     if (!request || request.category !== "REFUND_REQUEST" || request.status !== "PENDENTE_APROVACAO") throw new TaxError("Pedido de restituição não está pendente de aprovação.");
     const data = jsonObject(request.data);
+    await assertTaxCreditScope(tx, actor, request.data);
+    if (!input.reason.trim()) throw new TaxError("Informe o motivo da decisão sobre a restituição.");
     const status = input.approved ? "APROVADA_AGUARDANDO_TESOURARIA" : "REJEITADA";
     if (!input.approved && typeof data.sourceCreditId === "string") {
       await tx.$queryRaw`SELECT id FROM "TaxRegistryEntry" WHERE id = ${data.sourceCreditId} FOR UPDATE`;
@@ -387,8 +479,9 @@ export async function sendAccountingReference(db: PrismaClient, actor: TaxActor,
 export async function getAssessmentAccount(db: Db, assessmentId: string) {
   const assessment = await db.taxAssessment.findUnique({ where: { id: assessmentId }, include: { tax: true, taxpayer: { include: { person: true, company: true } }, guides: { include: { payments: { where: { status: "Confirmado" } } } } } });
   if (!assessment) throw new TaxError("Lançamento não encontrado.");
-  const events = await db.taxRegistryEntry.findMany({ where: { entityType: "TAX_ASSESSMENT", entityId: assessment.id, category: "CREDIT_EVENT" }, orderBy: { createdAt: "asc" } });
+  const events = await db.taxRegistryEntry.findMany({ where: { entityType: "TAX_ASSESSMENT", entityId: assessment.id, OR: [{ category: "CREDIT_EVENT" }, { category: "CREDIT_MOVEMENT", status: "EFETIVADO" }] }, orderBy: { createdAt: "asc" } });
   const extinct = events.filter((event) => ["EXTINCAO_NAO_FINANCEIRA", "COMPENSACAO"].includes(String(jsonObject(event.data).eventType))).map((event) => String(jsonObject(event.data).amount ?? 0));
+  extinct.push((await taxAssessmentCompensatedValue(db, assessment.id)).toFixed(2));
   const payments = assessment.guides.flatMap((guide) => guide.payments).map((payment) => ({ idempotencyKey: payment.idempotencyKey ?? payment.id, amount: payment.amountPaidDecimal ?? 0 }));
   const total = assessment.finalValueDecimal ?? assessment.originalValueDecimal ?? new Prisma.Decimal(assessment.originalValue);
   const position = calculateAccountBalance({ constituted: total, payments, nonFinancialExtinctions: extinct });

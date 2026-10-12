@@ -3,7 +3,7 @@ import { AssetLifecycleClient } from "./AssetLifecycleClient";
 import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
 import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
-import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, isSystemAdministrator, canPerformModuleOperation } from "@/lib/platform/tenant-context";
 import {
   clampPatrimonioListPage,
   patrimonioListHref,
@@ -50,7 +50,15 @@ export default async function AssetLifecyclePage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const { prisma } = await getTenantContextForModule("PATRIMONIO");
+  const { prisma, user } = await getTenantContextForModule("PATRIMONIO");
+  const allowed = isSystemAdministrator(user) ? undefined : user.allowedBudgetUnitIds;
+  const canCollect = canPerformModuleOperation(user, "FINANCEIRO", "create");
+  const [budgetUnits, bankAccounts, revenueNatures, resourceSources] = await Promise.all([
+    prisma.budgetUnit.findMany({ where: { ...(allowed ? { id: { in: allowed } } : {}), planningEntityUnit: { isNot: null } }, select: { id: true, code: true, name: true }, orderBy: { code: "asc" } }),
+    canCollect ? prisma.bankAccount.findMany({ where: { isActive: true, ...(allowed ? { budgetUnitId: { in: allowed } } : {}) }, select: { id: true, bankName: true, accountNumber: true, budgetUnitId: true }, orderBy: { bankName: "asc" } }) : [],
+    canCollect ? prisma.revenueNature.findMany({ select: { id: true, code: true, name: true }, orderBy: { code: "asc" } }) : [],
+    canCollect ? prisma.resourceSource.findMany({ select: { id: true, code: true, name: true }, orderBy: { code: "asc" } }) : [],
+  ]);
   const params = await searchParams;
   const view = parseLifecycleView(params?.view);
   const requestedPage = parsePatrimonioListPage(params?.page);
@@ -138,7 +146,7 @@ export default async function AssetLifecyclePage({
           Operações de ciclo de vida (depreciação, baixas e reavaliação)
         </summary>
         <div className="border-t border-slate-200 p-3">
-          <AssetLifecycleClient initialCompetence={initialCompetence} />
+          <AssetLifecycleClient initialCompetence={initialCompetence} budgetUnits={budgetUnits} bankAccounts={bankAccounts} revenueNatures={revenueNatures} resourceSources={resourceSources} />
         </div>
       </details>
 

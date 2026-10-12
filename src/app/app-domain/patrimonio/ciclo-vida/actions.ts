@@ -1,13 +1,14 @@
 "use server";
 
 import { AssetLifecycleError, depreciateAssetsForMonth, recordAssetDisposal, recordAssetValueAdjustment, type AssetValueAdjustmentType } from "@/lib/patrimonio/asset-lifecycle";
-import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, isSystemAdministrator } from "@/lib/platform/tenant-context";
+import { FinanceError } from "@/lib/financeiro";
 import { revalidatePath } from "next/cache";
 
 type ActionResult = { error?: string; message?: string };
 
 function messageFor(error: unknown) {
-  return error instanceof AssetLifecycleError ? error.message : "Não foi possível concluir a operação patrimonial.";
+  return error instanceof AssetLifecycleError || error instanceof FinanceError ? error.message : "Não foi possível concluir a operação patrimonial.";
 }
 
 function parseCompetence(value: string) {
@@ -39,6 +40,7 @@ export async function registerAssetDisposal(input: {
   reason: string;
   justification: string;
   disposalValue: string;
+  financial?: { budgetUnitId: string; bankAccountId?: string; revenueNatureId?: string; resourceSourceId?: string };
 }): Promise<ActionResult> {
   try {
     const date = new Date(`${input.date}T12:00:00.000Z`);
@@ -47,11 +49,12 @@ export async function registerAssetDisposal(input: {
     }
     const disposalValue = input.disposalValue.trim() === "" ? 0 : Number(input.disposalValue.replace(",", "."));
     const context = await getTenantContextForModuleOperation("PATRIMONIO", "delete");
+    if (input.type === "Alienação" && disposalValue > 0) await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const writeOff = await recordAssetDisposal(context.prisma, {
       ...input,
       date,
       disposalValue,
-      actor: { usuarioId: context.user.id, employeeId: context.user.employeeId },
+      actor: { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds },
     });
     revalidatePath("/patrimonio/ciclo-vida");
     revalidatePath("/patrimonio/bens");
@@ -59,7 +62,7 @@ export async function registerAssetDisposal(input: {
     revalidatePath("/frotas");
     revalidatePath("/patrimonio/bens", "layout");
     return { message: writeOff.integration.pending
-      ? "Baixa registrada e frota vinculada inativada. O resultado contábil ficou pendente de parametrização; nenhuma receita ou lançamento foi criado."
+      ? "Baixa registrada e frota vinculada inativada. O resultado contábil ficou pendente de parametrização; confira os vínculos financeiros da alienação, quando houver."
       : "Baixa patrimonial registrada com a evidência de valor contábil." };
   } catch (error) {
     return { error: messageFor(error) };

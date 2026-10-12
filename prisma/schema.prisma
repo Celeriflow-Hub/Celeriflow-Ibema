@@ -1264,6 +1264,7 @@ model PlanningCatalogEntry {
   sourceBindings PlanningInstrumentSource[]
   @@unique([versionId, kind, code])
   @@unique([versionId, kind, canonicalId])
+  @@index([kind, canonicalId, versionId], map: "PlanningCatalogEntry_canonical_version_idx")
 }
 
 model PlanningInstrumentSource {

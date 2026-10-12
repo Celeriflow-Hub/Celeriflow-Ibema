@@ -1,18 +1,20 @@
-import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
+import { taxAssessmentAccessFilter } from "@/lib/tributacao/scope";
 import OperacoesTributariasClient from "./OperacoesTributariasClient";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 
 export const dynamic = "force-dynamic";
 
 export default async function OperacoesTributariasPage() {
-  const { prisma } = await getTenantContextForModule("TRIBUTACAO");
+  const { prisma, user } = await getTenantContextForModule("TRIBUTACAO");
+  const assessmentAccess = taxAssessmentAccessFilter(isSystemAdministrator(user) ? undefined : user.allowedBudgetUnitIds);
   const [taxes, taxpayers, processes, documents, activities, assessments, parameters, requests, evaluations] = await Promise.all([
     prisma.tax.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     prisma.taxpayer.findMany({ where: { status: "Ativo" }, include: { person: true, company: true }, orderBy: { createdAt: "desc" } }),
     prisma.process.findMany({ orderBy: { createdAt: "desc" }, take: 100, select: { id: true, protocolNumber: true, status: true } }),
     prisma.document.findMany({ where: { status: "Válido" }, orderBy: { createdAt: "desc" }, take: 100, select: { id: true, title: true } }),
     prisma.taxServiceActivity.findMany({ where: { isActive: true }, include: { tax: true }, orderBy: { code: "asc" } }),
-    prisma.taxAssessment.findMany({ where: { status: { in: ["Lançado", "Emitido", "Parcial"] } }, include: { tax: true, taxpayer: { include: { person: true, company: true } } }, take: 30, orderBy: { createdAt: "desc" } }),
+    prisma.taxAssessment.findMany({ where: { ...assessmentAccess, status: { in: ["Lançado", "Emitido", "Parcial"] } }, include: { tax: true, taxpayer: { include: { person: true, company: true } } }, take: 30, orderBy: { createdAt: "desc" } }),
     prisma.taxParameter.findMany({ include: { tax: true }, orderBy: { createdAt: "desc" }, take: 10 }),
     prisma.taxServiceRequest.findMany({ include: { taxpayer: { include: { person: true, company: true } }, process: true }, orderBy: { createdAt: "desc" }, take: 10 }),
     prisma.taxCertificateEvaluation.findMany({ include: { taxpayer: { include: { person: true, company: true } } }, orderBy: { evaluatedAt: "desc" }, take: 10 }),

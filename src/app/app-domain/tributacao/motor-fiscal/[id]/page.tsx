@@ -3,7 +3,8 @@ import { ArrowLeft, Landmark } from "lucide-react";
 import { notFound } from "next/navigation";
 import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
 import { ErpStatusBadge, ErpTableContainer, ErpTableTd, ErpTableTh, ErpTableThead, ErpTableTr } from "@/components/app-ui/erp/ErpTable";
-import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
+import { taxAssessmentAccessFilter } from "@/lib/tributacao/scope";
 import { getAssessmentAccount } from "@/lib/tributacao/s2-service";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,8 @@ const money = (value: string | number) => Number(value).toLocaleString("pt-BR", 
 const data = (value: unknown) => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 export default async function AssessmentAccountPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params; const { prisma } = await getTenantContextForModule("TRIBUTACAO");
+  const { id } = await params; const { prisma, user } = await getTenantContextForModule("TRIBUTACAO");
+  if (!await prisma.taxAssessment.findFirst({ where: { id, ...taxAssessmentAccessFilter(isSystemAdministrator(user) ? undefined : user.allowedBudgetUnitIds) }, select: { id: true } })) notFound();
   const result = await getAssessmentAccount(prisma, id).catch(() => null); if (!result) notFound();
   const { assessment, events, position } = result;
   const name = assessment.taxpayer.company?.corporateName ?? assessment.taxpayer.person?.fullName ?? "Contribuinte";

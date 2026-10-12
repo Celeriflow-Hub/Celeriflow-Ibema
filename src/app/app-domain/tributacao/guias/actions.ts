@@ -1,6 +1,6 @@
 "use server";
 
-import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, isSystemAdministrator, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { cancelTaxGuide, confirmTaxPayment } from "@/lib/tributacao";
 import { revalidatePath } from "next/cache";
 
@@ -12,7 +12,7 @@ export async function payGuide(guideId: string, amount: number) {
   const context = await getTenantPrisma("create");
   const paymentDate = new Date();
   const idempotencyKey = `TRIBUTARIO:MANUAL_GUIDE:${guideId}:${amount.toFixed(2)}:${paymentDate.toISOString().slice(0, 10)}`;
-  const result = await confirmTaxPayment(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, {
+  const result = await confirmTaxPayment(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, {
     guideId,
     amountPaid: amount,
     paymentDate,
@@ -26,7 +26,7 @@ export async function payGuide(guideId: string, amount: number) {
 
 export async function cancelGuide(guideId: string) {
   const context = await getTenantPrisma("update");
-  const result = await cancelTaxGuide(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, guideId);
+  const result = await cancelTaxGuide(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, guideId);
 
   revalidatePath("/tributacao/guias");
   return result;

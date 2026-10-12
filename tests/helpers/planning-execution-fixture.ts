@@ -10,7 +10,8 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
   const f = await createPlanningAccountingFixture("EXECUTIVE", { year });
   try {
     const models = ["Expense", "Supplier", "Company", "Creditor", "Commitment", "CommitmentMovement", "Settlement", "Payment", "FinancialDocument", "SettlementRetention", "PaymentRetention", "WithholdingPayable", "RetentionRule", "Revenue", "RevenueReversal", "BankAccount", "TreasuryMovement", "TaxRevenueIntegrationEvent", "RevenueResourceRedistribution", "PurchaseRequest", "PurchaseRequestItem", "PurchaseRequestItemBudgetAllocation", "PurchaseProcess", "PurchaseProcessItem", "PurchaseProcessItemOrigin", "Contract", "ProcurementLifecycleEvent", "TaxFinancialMapping", "TaxAssessment", "TaxGuide", "TaxPayment", "TaxAuditLog", "TaxBenefitRule", "TaxBenefitGrant"];
-    models.push("TaxIntegrationEvent", "TaxRegistryEntry", "Taxpayer", "TaxDocumentSequence");
+    models.push("TaxIntegrationEvent", "TaxRegistryEntry", "Taxpayer", "TaxDocumentSequence", "TaxParameter");
+    models.push("TreasuryTransfer", "Asset", "AssetCategory", "AssetMaintenance", "AssetWriteOff", "AssetIntegrationPendingConfiguration", "Department");
     const enums = new Set<string>();
     for (const name of models) {
       const model = Prisma.dmmf.datamodel.models.find((item) => item.name === name);
@@ -46,6 +47,7 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
       CREATE UNIQUE INDEX ON "Revenue" ("idempotencyKey");
       CREATE UNIQUE INDEX ON "TreasuryMovement" ("idempotencyKey");
       CREATE UNIQUE INDEX ON "TreasuryMovement" ("revenueId");
+      CREATE UNIQUE INDEX ON "TreasuryTransfer" ("idempotencyKey");
       CREATE UNIQUE INDEX ON "RevenueReversal" ("revenueId");
       CREATE UNIQUE INDEX ON "RevenueReversal" ("treasuryMovementId");
       CREATE UNIQUE INDEX ON "FinancialDocument" (number);
@@ -72,6 +74,7 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
     `);
     await f.db.employee.update({ where: { id: "servidora-ana" }, data: { isActive: true } });
     await f.rules();
+    for (const code of ["TAX_COLLECTION_EXCESS", "TAX_CREDIT_REFUNDED", "TAX_CREDIT_COMPENSATED"]) await f.db.accountingEventCatalog.create({ data: { code, name: code, rules: { create: { debitAccountId: code === "TAX_COLLECTION_EXCESS" ? "debito" : "credito", creditAccountId: code === "TAX_COLLECTION_EXCESS" ? "credito" : "debito", isReference: true } } } });
     for (const code of ["EMPENHO_EMITIDO", "LIQUIDACAO_REGISTRADA", "PAGAMENTO_EFETIVADO", "PAGAMENTO_ESTORNADO", "RECEITA_LANCADA", "RECEITA_ARRECADADA", "RECEITA_ESTORNADA", "RECEITA_REDISTRIBUIDA_FONTE"]) await f.db.accountingEventCatalog.create({ data: { id: code, code, name: code, rules: { create: { id: `rule:${code}`, debitAccountId: "debito", creditAccountId: "credito", isReference: true } } } });
     await configurePlanningInternalAccounting(f.context, { instrumentId: f.loa, enabled: "true", reason: "Matriz da base isolada conferida" });
     await transitionPlanningPiece(f.context, { ...f.workflow, stage: "IMPLANT" });

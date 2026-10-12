@@ -48,6 +48,7 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
     await pg.exec(readFileSync("prisma/migrations-ibema/20261012140000_revenue_budget_unit_scope/migration.sql", "utf8"));
     await pg.exec(readFileSync("prisma/migrations-ibema/20261012150000_accounting_year_scope_update_guard/migration.sql", "utf8"));
     await pg.exec(readFileSync("prisma/migrations-ibema/20261012160000_internal_control_budget_scope/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261012170000_shared_official_catalog_accounts/migration.sql", "utf8"));
     await pg.exec(`
       CREATE UNIQUE INDEX ON "AccountingEventCatalog" (code);
       CREATE UNIQUE INDEX ON "AccountingPlan" (code);

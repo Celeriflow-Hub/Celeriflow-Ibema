@@ -4,7 +4,12 @@ import { useState, useTransition } from "react";
 import { ReferencePicker } from "@/app/app-domain/frotas/ReferencePicker";
 import { registerAssetDisposal, registerAssetValueAdjustment, runMonthlyDepreciation } from "./actions";
 
-export function AssetLifecycleClient({ initialCompetence }: { initialCompetence: string }) {
+type ClassificationOption = { id: string; code: string; name: string };
+export function AssetLifecycleClient({ initialCompetence, budgetUnits, bankAccounts, revenueNatures, resourceSources }: {
+  initialCompetence: string; budgetUnits: ClassificationOption[];
+  bankAccounts: { id: string; bankName: string; accountNumber: string; budgetUnitId: string | null }[];
+  revenueNatures: ClassificationOption[]; resourceSources: ClassificationOption[];
+}) {
   const [isPending, startTransition] = useTransition();
   const [competence, setCompetence] = useState(initialCompetence);
   const [assetId, setAssetId] = useState("");
@@ -14,6 +19,10 @@ export function AssetLifecycleClient({ initialCompetence }: { initialCompetence:
   const [reason, setReason] = useState("");
   const [justification, setJustification] = useState("");
   const [disposalValue, setDisposalValue] = useState("");
+  const [budgetUnitId, setBudgetUnitId] = useState("");
+  const [bankAccountId, setBankAccountId] = useState("");
+  const [revenueNatureId, setRevenueNatureId] = useState("");
+  const [resourceSourceId, setResourceSourceId] = useState("");
   const [adjustmentType, setAdjustmentType] = useState<"REVALUATION" | "IMPAIRMENT" | "SUBSEQUENT_COST">("REVALUATION");
   const [adjustmentDate, setAdjustmentDate] = useState(initialCompetence ? `${initialCompetence}-01` : "");
   const [adjustmentValue, setAdjustmentValue] = useState("");
@@ -54,7 +63,7 @@ export function AssetLifecycleClient({ initialCompetence }: { initialCompetence:
         <form className="mt-4 grid gap-2" onSubmit={(event) => {
           event.preventDefault();
           startTransition(async () => {
-            const result = await registerAssetDisposal({ assetId, date, type, reason, justification, disposalValue });
+            const result = await registerAssetDisposal({ assetId, date, type, reason, justification, disposalValue, financial: { budgetUnitId, bankAccountId, revenueNatureId, resourceSourceId } });
             showResult(result);
             if (!result.error) {
               setReason("");
@@ -72,6 +81,24 @@ export function AssetLifecycleClient({ initialCompetence }: { initialCompetence:
             <input className="h-9 rounded-md border px-3 text-sm" type="date" required value={date} onChange={(event) => setDate(event.target.value)} />
           </div>
           <input className="h-9 rounded-md border px-3 text-sm" placeholder="Valor recebido (R$)" inputMode="decimal" disabled={type === "Baixa"} value={disposalValue} onChange={(event) => setDisposalValue(event.target.value)} />
+          <select aria-label="Unidade gestora da baixa" required className="h-9 rounded-md border px-3 text-sm" value={budgetUnitId} onChange={(event) => { setBudgetUnitId(event.target.value); setBankAccountId(""); }}>
+            <option value="">Unidade gestora responsável</option>
+            {budgetUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.code} — {unit.name}</option>)}
+          </select>
+          {type === "Alienação" && <>
+            <select aria-label="Conta arrecadadora da alienação" required className="h-9 rounded-md border px-3 text-sm" value={bankAccountId} onChange={(event) => setBankAccountId(event.target.value)}>
+              <option value="">Conta arrecadadora</option>
+              {bankAccounts.filter((account) => account.budgetUnitId === budgetUnitId).map((account) => <option key={account.id} value={account.id}>{account.bankName} — {account.accountNumber}</option>)}
+            </select>
+            <select aria-label="Natureza da receita de alienação" required className="h-9 rounded-md border px-3 text-sm" value={revenueNatureId} onChange={(event) => setRevenueNatureId(event.target.value)}>
+              <option value="">Natureza da receita</option>
+              {revenueNatures.map((nature) => <option key={nature.id} value={nature.id}>{nature.code} — {nature.name}</option>)}
+            </select>
+            <select aria-label="Fonte da receita de alienação" required className="h-9 rounded-md border px-3 text-sm" value={resourceSourceId} onChange={(event) => setResourceSourceId(event.target.value)}>
+              <option value="">Fonte de recursos</option>
+              {resourceSources.map((source) => <option key={source.id} value={source.id}>{source.code} — {source.name}</option>)}
+            </select>
+          </>}
           <input className="h-9 rounded-md border px-3 text-sm" placeholder="Motivo" required value={reason} onChange={(event) => setReason(event.target.value)} />
           <textarea className="min-h-20 rounded-md border px-3 py-2 text-sm" placeholder="Justificativa" required value={justification} onChange={(event) => setJustification(event.target.value)} />
           <button className="h-9 rounded-md border border-amber-600 px-4 text-sm font-medium text-amber-700 disabled:opacity-50" disabled={isPending || !assetId}>Registrar {type.toLowerCase()}</button>

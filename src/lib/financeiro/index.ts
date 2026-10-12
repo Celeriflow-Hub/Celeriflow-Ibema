@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { createHash } from "node:crypto";
+import { assertPublishedAccountClassification } from "./account-catalog";
 import { calculateRetentionDueDate, calculateRetentions, getActiveRetentionRules } from "./retencoes";
 import { assertPlanningPeriodAvailability, assertPlanningReservationYear, getPlanningBudgetRestrictions, lockPlanningBudgetForAppropriation, recordPlanningFinanceExecution } from "@/lib/planejamento/execution-bridge";
 import { lockPlanningRevenueBudget, recordPlanningRevenueCollection, recordPlanningRevenueReversal, recordPlanningRevenueRedistribution } from "@/lib/planejamento/revenue-execution-bridge";
@@ -1808,22 +1809,33 @@ export async function createTreasuryTransferInTransaction(
 ) {
   const value = money(input.value);
   if (input.sourceBankAccountId === input.destinationBankAccountId) throw new FinanceError("A transferência exige contas de origem e destino diferentes.");
-  if (input.idempotencyKey) {
-    const existing = await tx.treasuryTransfer.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
-    if (existing) return existing;
-  }
+  const key = input.idempotencyKey?.trim();
+  if (key) await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`TREASURY_TRANSFER:${key}`}, 0))::text`;
   const [source, destination] = await Promise.all([
     tx.bankAccount.findUnique({ where: { id: input.sourceBankAccountId }, select: { isActive: true, budgetUnitId: true } }),
     tx.bankAccount.findUnique({ where: { id: input.destinationBankAccountId }, select: { isActive: true, budgetUnitId: true } }),
   ]);
   if (!source?.isActive || !destination?.isActive) throw new FinanceError("As contas da transferência devem estar ativas.");
   if (!source.budgetUnitId || !destination.budgetUnitId) throw new FinanceError("As contas da transferência devem estar vinculadas a unidades gestoras.");
+  assertActorBudgetUnit(actor, source.budgetUnitId);
+  assertActorBudgetUnit(actor, destination.budgetUnitId);
+  if (key) {
+    const existing = await tx.treasuryTransfer.findUnique({ where: { idempotencyKey: key }, include: { sourceMovement: true } });
+    if (existing) {
+      if (existing.date.getTime() !== input.date.getTime() || !existing.valueDecimal.equals(value) || existing.sourceBankAccountId !== input.sourceBankAccountId || existing.destinationBankAccountId !== input.destinationBankAccountId || existing.history !== (input.history?.trim() || null) || existing.sourceMovement.sourceModule !== (input.sourceModule?.trim() || "FINANCEIRO") || existing.sourceMovement.sourceType !== (input.sourceType?.trim() || "TREASURY_TRANSFER") || existing.sourceMovement.sourceId !== (input.sourceId?.trim() || key) || existing.sourceMovement.eventType !== (input.eventType?.trim() || "TRANSFER")) throw new FinanceError("Transferência já registrada com outros dados.");
+      return existing;
+    }
+  }
   const [sourceEntity, destinationEntity] = await Promise.all([
     tx.planningEntityUnit.findUnique({ where: { budgetUnitId: source.budgetUnitId }, select: { governmentEntityId: true } }),
     tx.planningEntityUnit.findUnique({ where: { budgetUnitId: destination.budgetUnitId }, select: { governmentEntityId: true } }),
   ]);
-  if (sourceEntity?.governmentEntityId !== destinationEntity?.governmentEntityId) throw new FinanceError("A transferência entre entidades distintas exige fluxo interinstitucional próprio.");
+  if (!sourceEntity || !destinationEntity || sourceEntity.governmentEntityId !== destinationEntity.governmentEntityId) throw new FinanceError("A transferência entre entidades distintas exige fluxo interinstitucional próprio.");
   const year = await financialYearForPosting(tx, input.date, source.budgetUnitId);
+  await assertAccountingPeriodOpen(tx, year.id, input.date);
+  for (const id of [input.sourceBankAccountId, input.destinationBankAccountId].sort()) await lockBankAccount(tx, id);
+  const balance = await getBankAccountBalance(tx, input.sourceBankAccountId, input.date);
+  if (balance.lessThan(value)) throw new FinanceError("Saldo financeiro insuficiente para a transferência.");
   const common = {
     date: input.date,
     type: "Transfer",
@@ -1832,12 +1844,12 @@ export async function createTreasuryTransferInTransaction(
     financialYearId: year.id,
     sourceModule: input.sourceModule?.trim() || "FINANCEIRO",
     sourceType: input.sourceType?.trim() || "TREASURY_TRANSFER",
-    sourceId: input.sourceId?.trim() || input.idempotencyKey,
+    sourceId: input.sourceId?.trim() || key,
     eventType: input.eventType?.trim() || "TRANSFER",
     status: "Confirmado",
   };
-  const debit = await tx.treasuryMovement.create({ data: { ...common, direction: "Saída", bankAccountId: input.sourceBankAccountId, idempotencyKey: input.idempotencyKey ? `${input.idempotencyKey}:OUT` : undefined } });
-  const credit = await tx.treasuryMovement.create({ data: { ...common, direction: "Entrada", bankAccountId: input.destinationBankAccountId, idempotencyKey: input.idempotencyKey ? `${input.idempotencyKey}:IN` : undefined } });
+  const debit = await tx.treasuryMovement.create({ data: { ...common, direction: "Saída", bankAccountId: input.sourceBankAccountId, idempotencyKey: key ? `${key}:OUT` : undefined } });
+  const credit = await tx.treasuryMovement.create({ data: { ...common, direction: "Entrada", bankAccountId: input.destinationBankAccountId, idempotencyKey: key ? `${key}:IN` : undefined } });
   const transfer = await tx.treasuryTransfer.create({
     data: { date: input.date, valueDecimal: value, history: input.history?.trim() || undefined, sourceBankAccountId: input.sourceBankAccountId, destinationBankAccountId: input.destinationBankAccountId, sourceMovementId: debit.id, destinationMovementId: credit.id, idempotencyKey: input.idempotencyKey?.trim() || undefined },
   });
@@ -2459,6 +2471,8 @@ export async function postAccountingTransactionInTransaction(
   await assertAccountingPeriodOpen(tx, input.financialYearId, input.date);
   const accounts = await tx.accountingPlan.findMany({ where: { id: { in: input.lines.map((line) => line.accountId) } }, select: { id: true, code: true } });
   if (accounts.length !== new Set(input.lines.map((line) => line.accountId)).size) throw new FinanceError("Uma ou mais contas contabeis nao foram encontradas.");
+  try { await assertPublishedAccountClassification(tx, accounts, input.date); }
+  catch (error) { throw new FinanceError(error instanceof Error ? error.message : "Classificação contábil inválida."); }
   const childAccount = await tx.accountingPlan.findFirst({ where: { OR: accounts.map((account) => ({ code: { startsWith: `${account.code}.` } })) }, select: { id: true } });
   if (childAccount) throw new FinanceError("A postagem exige conta analítica de último nível; conta sintética com desdobramentos não aceita partidas.");
   const transaction = await tx.accountingTransaction.create({

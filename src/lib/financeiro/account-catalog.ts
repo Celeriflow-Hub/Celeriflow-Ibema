@@ -1,0 +1,16 @@
+import { Prisma } from "@prisma/client";
+
+/** Explicit catalogue attributes take precedence over the legacy code-prefix heuristic. */
+export async function assertPublishedAccountClassification(tx: Prisma.TransactionClient, accounts: { id: string }[], date: Date) {
+  const bindings = await tx.planningCatalogEntry.findMany({ where: { kind: "ACCOUNT", canonicalId: { in: accounts.map((account) => account.id) }, version: { status: "PUBLISHED" } }, include: { version: { select: { year: true } } } });
+  for (const account of accounts) {
+    const versions = bindings.filter((entry) => entry.canonicalId === account.id);
+    if (!versions.length) continue;
+    const candidates = versions.filter((entry) => entry.version.year === date.getUTCFullYear());
+    if (candidates.length !== 1) throw new Error("Conta contábil sem versão vigente única; concilie o catálogo antes da postagem.");
+    const attributes = candidates[0].attributes as Prisma.JsonObject;
+    if (attributes.postingAllowed !== true) throw new Error("Conta sintética ou sem autorização de escrituração na versão vigente.");
+    if (!attributes.effectiveFrom || !attributes.effectiveUntil || date.toISOString().slice(0, 10) < String(attributes.effectiveFrom) || date.toISOString().slice(0, 10) > String(attributes.effectiveUntil)) throw new Error("Conta contábil fora da vigência da classificação.");
+    if (!["D", "C", "X", "DC", "D/C"].includes(String(attributes.balanceNature))) throw new Error("Natureza D/C da conta não está conciliada.");
+  }
+}

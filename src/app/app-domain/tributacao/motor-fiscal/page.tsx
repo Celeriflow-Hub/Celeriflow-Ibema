@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
-import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
+import { taxAssessmentAccessFilter, taxAssessmentCompensatedValue } from "@/lib/tributacao/scope";
 import MotorFiscalClient from "./MotorFiscalClient";
 
 export const dynamic = "force-dynamic";
@@ -11,29 +12,42 @@ function taxpayerName(taxpayer: { person: { fullName: string } | null; company: 
 function object(value: Prisma.JsonValue) { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, Prisma.JsonValue> : {}; }
 
 export default async function MotorFiscalPage() {
-  const { prisma } = await getTenantContextForModule("TRIBUTACAO");
+  const { prisma, user } = await getTenantContextForModule("TRIBUTACAO");
+  const allowed = isSystemAdministrator(user) ? undefined : user.allowedBudgetUnitIds;
+  const assessmentAccess = taxAssessmentAccessFilter(allowed);
+  const registryAccess: Prisma.TaxRegistryEntryWhereInput = allowed ? { OR: allowed.map((budgetUnitId) => ({ data: { path: ["budgetUnitId"], equals: budgetUnitId } })) } : {};
+  if (allowed && !allowed.length) registryAccess.id = { in: [] };
+  const assessmentIds = allowed ? (await prisma.taxAssessment.findMany({ where: assessmentAccess, select: { id: true } })).map((assessment) => assessment.id) : undefined;
   const [taxes, taxpayers, parameters, assessments, guides, events, creditEvents, credits, refunds, agreements, reconciliations, bankAccounts, revenueNatures, resourceSources, processes, documents] = await Promise.all([
     prisma.tax.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     prisma.taxpayer.findMany({ where: { status: "Ativo" }, include: { person: true, company: true, realEstates: { select: { id: true, municipalInsc: true } }, economicRegistrations: { select: { id: true, municipalInsc: true } } }, orderBy: { createdAt: "desc" }, take: 300 }),
     prisma.taxParameter.findMany({ include: { tax: true }, orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }], take: 200 }),
-    prisma.taxAssessment.findMany({ include: { tax: true, taxpayer: { include: { person: true, company: true } }, guides: { include: { payments: { where: { status: "Confirmado" } } } } }, orderBy: { createdAt: "desc" }, take: 300 }),
-    prisma.taxGuide.findMany({ include: { assessment: { include: { tax: true, taxpayer: { include: { person: true, company: true } } } }, payments: { where: { status: "Confirmado" } } }, orderBy: { createdAt: "desc" }, take: 300 }),
+    prisma.taxAssessment.findMany({ where: assessmentAccess, include: { tax: true, taxpayer: { include: { person: true, company: true } }, guides: { include: { payments: { where: { status: "Confirmado" } } } } }, orderBy: { createdAt: "desc" }, take: 300 }),
+    prisma.taxGuide.findMany({ where: { assessment: assessmentAccess }, include: { assessment: { include: { tax: true, taxpayer: { include: { person: true, company: true } } } }, payments: { where: { status: "Confirmado" } } }, orderBy: { createdAt: "desc" }, take: 300 }),
     prisma.taxIntegrationEvent.findMany({ where: { integrationCode: { in: ["FISCAL_ENGINE", "PIX_ADAPTER", "BANK_RETURN", "ACCOUNTING", "TAX_CREDIT"] } }, orderBy: { createdAt: "desc" }, take: 200 }),
-    prisma.taxRegistryEntry.findMany({ where: { entityType: "TAX_ASSESSMENT", category: "CREDIT_EVENT", status: "ATIVO" }, orderBy: { createdAt: "asc" } }),
-    prisma.taxRegistryEntry.findMany({ where: { category: "TAX_CREDIT" }, orderBy: { createdAt: "desc" }, take: 200 }),
-    prisma.taxRegistryEntry.findMany({ where: { category: "REFUND_REQUEST" }, orderBy: { createdAt: "desc" }, take: 100 }),
+    prisma.taxRegistryEntry.findMany({ where: { entityType: "TAX_ASSESSMENT", category: "CREDIT_EVENT", status: "ATIVO", ...(assessmentIds ? { entityId: { in: assessmentIds } } : {}) }, orderBy: { createdAt: "asc" } }),
+    prisma.taxRegistryEntry.findMany({ where: { ...registryAccess, category: "TAX_CREDIT" }, orderBy: { createdAt: "desc" }, take: 200 }),
+    prisma.taxRegistryEntry.findMany({ where: { ...registryAccess, category: "REFUND_REQUEST" }, orderBy: { createdAt: "desc" }, take: 100 }),
     prisma.taxRegistryEntry.findMany({ where: { entityType: "COLLECTION_AGREEMENT", category: "AGREEMENT", status: "ATIVO" }, orderBy: { title: "asc" } }),
     prisma.taxRegistryEntry.findMany({ where: { category: "RECONCILIATION" }, orderBy: { createdAt: "desc" }, take: 200 }),
-    prisma.bankAccount.findMany({ where: { isActive: true }, orderBy: { bankName: "asc" }, select: { id: true, bankName: true, agency: true, accountNumber: true } }),
+    prisma.bankAccount.findMany({ where: { isActive: true, ...(allowed ? { budgetUnitId: { in: allowed } } : {}) }, orderBy: { bankName: "asc" }, select: { id: true, bankName: true, agency: true, accountNumber: true } }),
     prisma.revenueNature.findMany({ orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
     prisma.resourceSource.findMany({ orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
     prisma.process.findMany({ orderBy: { createdAt: "desc" }, take: 100, select: { id: true, protocolNumber: true } }),
     prisma.document.findMany({ where: { status: "Válido" }, orderBy: { createdAt: "desc" }, take: 100, select: { id: true, title: true } }),
   ]);
+  const compensated = new Map(await Promise.all(assessments.map(async (assessment) => [assessment.id, Number(await taxAssessmentCompensatedValue(prisma, assessment.id))] as const)));
+  const authorizedOrigins = new Set([...assessments.map((row) => row.id), ...guides.map((row) => row.id), ...credits.map((row) => row.id), ...refunds.map((row) => row.id)]);
+  const scopedEvents = allowed ? events.filter((event) => {
+    const payload = object(event.payload);
+    return [payload.guideId, payload.assessmentId, payload.creditId, payload.requestId].some((id) => typeof id === "string" && authorizedOrigins.has(id));
+  }) : events;
+  const visibleEventIds = new Set(scopedEvents.map((event) => event.id));
+  const visibleEvents = allowed ? events.filter((event) => visibleEventIds.has(event.id) || (event.integrationCode === "ACCOUNTING" && typeof object(event.payload).sourceId === "string" && visibleEventIds.has(String(object(event.payload).sourceId)))) : events;
   const assessmentRows = assessments.map((assessment) => {
     const total = Number(assessment.finalValueDecimal ?? assessment.originalValueDecimal ?? assessment.originalValue);
     const paid = assessment.guides.flatMap((guide) => guide.payments).reduce((sum, payment) => sum + Number(payment.amountPaidDecimal ?? payment.amountPaid), 0);
-    const extinct = creditEvents.filter((entry) => entry.entityId === assessment.id).reduce((sum, entry) => { const data = object(entry.data); return ["EXTINCAO_NAO_FINANCEIRA", "COMPENSACAO"].includes(String(data.eventType)) ? sum + Number(data.amount ?? 0) : sum; }, 0);
+    const extinct = creditEvents.filter((entry) => entry.entityId === assessment.id).reduce((sum, entry) => { const data = object(entry.data); return ["EXTINCAO_NAO_FINANCEIRA", "COMPENSACAO"].includes(String(data.eventType)) ? sum + Number(data.amount ?? 0) : sum; }, compensated.get(assessment.id) ?? 0);
     return { id: assessment.id, number: assessment.assessmentNumber ?? assessment.id, taxId: assessment.taxId, tax: assessment.tax.name, taxpayerId: assessment.taxpayerId, taxpayer: taxpayerName(assessment.taxpayer), year: assessment.year, competence: assessment.competence?.toISOString() ?? null, base: Number(assessment.taxableBaseDecimal ?? 0), principal: Number(assessment.originalValueDecimal ?? assessment.originalValue), correction: Number(assessment.correctionValueDecimal ?? 0), interest: Number(assessment.interestValueDecimal ?? 0), penalty: Number(assessment.penaltyValueDecimal ?? 0), total, paid, balance: Math.max(total - paid - extinct, 0), status: assessment.status, realEstateId: assessment.realEstateId, economicRegistrationId: assessment.economicRegistrationId };
   });
   return <MotorFiscalClient
@@ -42,7 +56,7 @@ export default async function MotorFiscalPage() {
     parameters={parameters.map((item) => ({ id: item.id, taxId: item.taxId, tax: item.tax.name, code: item.code, name: item.name, type: item.calculationType, configuration: item.configuration, effectiveFrom: item.effectiveFrom.toISOString(), effectiveUntil: item.effectiveUntil?.toISOString() ?? null, active: item.isActive }))}
     assessments={assessmentRows}
     guides={guides.map((guide) => { const total = Number(guide.totalValueDecimal ?? guide.totalValue); const paid = guide.payments.reduce((sum, payment) => sum + Number(payment.amountPaidDecimal ?? payment.amountPaid), 0); return { id: guide.id, number: guide.guideNumber ?? guide.id, assessmentId: guide.assessmentId, assessmentNumber: guide.assessment.assessmentNumber ?? guide.assessmentId, tax: guide.assessment.tax.name, taxpayer: taxpayerName(guide.assessment.taxpayer), total, paid, balance: Math.max(total - paid, 0), dueDate: guide.dueDate.toISOString(), status: guide.status }; })}
-    events={events.map((event) => ({ id: event.id, integration: event.integrationCode, type: event.eventType, key: event.idempotencyKey, status: event.status, reference: event.externalReference, result: event.result, date: event.createdAt.toISOString() }))}
+    events={visibleEvents.map((event) => ({ id: event.id, integration: event.integrationCode, type: event.eventType, key: event.idempotencyKey, status: event.status, reference: event.externalReference, result: event.result, date: event.createdAt.toISOString() }))}
     credits={credits.map((entry) => ({ id: entry.id, taxpayerId: entry.entityId, title: entry.title, status: entry.status, data: object(entry.data), date: entry.createdAt.toISOString() }))}
     refunds={refunds.map((entry) => ({ id: entry.id, taxpayerId: entry.entityId, title: entry.title, status: entry.status, data: object(entry.data), date: entry.createdAt.toISOString() }))}
     agreements={agreements.map((entry) => ({ id: entry.id, code: entry.entityId, name: entry.title, data: object(entry.data) }))}

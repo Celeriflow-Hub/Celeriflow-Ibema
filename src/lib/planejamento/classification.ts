@@ -68,6 +68,7 @@ export async function publishPlanningCatalogVersion(context: PlanningContext, ra
     const version = await tx.planningCatalogVersion.findUniqueOrThrow({ where: { id: input.versionId }, include: { entries: true } });
     if (version.status === "PUBLISHED") return version.id;
     if (!version.entries.length) throw new Error("Versão sem classificações.");
+    if (version.entries.some((entry) => entry.canonicalId.startsWith("UNMAPPED:"))) throw new Error("Conclua o de-para aos cadastros canônicos antes de publicar o catálogo oficial.");
     await tx.planningCatalogVersion.update({ where: { id: version.id }, data: { status: "PUBLISHED" } });
     await tx.financialAuditLog.create({ data: { action: "PLANNING_CATALOG_PUBLISH", entityType: "PLANNING_CATALOG", entityId: version.id, authorUsuarioId: context.user.id, payload: { sourceHash: version.sourceHash, rowsHash: contentHash(version.entries), normativeReference: version.normativeReference } } });
     return version.id;

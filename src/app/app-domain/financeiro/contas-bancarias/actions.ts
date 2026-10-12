@@ -124,7 +124,7 @@ export async function createTreasuryTransferAction(data: {
       throw new FinanceError("As contas da transferência devem possuir a mesma fonte de recursos.");
     }
 
-    await createTreasuryTransfer(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, {
+    await createTreasuryTransfer(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, {
       ...parsed.data,
       date,
     });

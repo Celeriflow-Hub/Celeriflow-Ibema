@@ -491,6 +491,8 @@ Obter documentos/parâmetros locais durante as primeiras fases. **Isso não é i
 
 ### P1 — fundação compartilhada, escopo e classificações
 
+**Continuação mais recente:** [bloco integrado P1–P4](poc-p0/EXECUCAO_P1_P4_BLOCO_INTEGRADO.md). Três versões oficiais TCE-PR de 2026 importadas em revisão (14.494 entradas), com origem/hash/atributos e código externo separado do vínculo canônico. De-para e homologação local permanecem pendentes.
+
 **Execução em andamento:** [P1 — fundação compartilhada](poc-p0/EXECUCAO_P1_ESCOPO_CONTABIL.md). Exercícios/fechamentos por entidade, receita com UG persistida, relatórios e Controle Interno com escopo autorizado; referência de retorno tributário reutiliza a partida canônica. Identidades de ensaio foram conciliadas e classificações sintéticas ganharam origem/vigência/hash. P1 permanece em andamento: revisão integral dos produtores restantes, relações CNAE/CBO/serviços, fonte/MSC e homologação dos catálogos oficiais ainda precisam ser concluídas.
 
 **Dependência:** P0. **Prioridade dos gaps:** estrutural.
@@ -506,6 +508,10 @@ Obter documentos/parâmetros locais durante as primeiras fases. **Isso não é i
 
 ### P2 — fechar Tributação ↔ Financeiro ↔ Contabilidade ↔ Planejamento
 
+**Continuação:** [crédito e restituição no bloco P1–P4](poc-p0/EXECUCAO_P1_P4_BLOCO_INTEGRADO.md). Excedente recebe ingresso extraorçamentário/obrigação; compensação extingue saldo sem caixa; restituição paga fecha tesouraria e partida própria. Eventos da matriz municipal, estornos tributários integrais e produtores fiscais restantes continuam pendentes.
+
+**Bloco integrado P1/P2 executado:** [cadeia tributária](poc-p0/EXECUCAO_P2_CADEIA_TRIBUTARIA.md). Motor parametrizado/guia/retorno usam escopo autorizado; arrecadação de débito histórico ocorre no exercício corrente; baixa e crédito excedente são atômicos. Dezesseis testes aprovados em validação conjunta, três de concorrência externa não executados. A fase continua em andamento, inclusive o ingresso financeiro do excedente, os estornos/compensações e os eventos contábeis específicos.
+
 **Dependência:** P1. **Requisitos centrais:** CF 177–181, Arrecadação 27–32/39–46, Dívida 25, Planejamento 75/81/99, NFS-e/Escrita e diagnóstico Controle 23.
 
 - Corrigir GAP-02–09: origem e estágio único, motor contábil comum, arrecadação histórica, excedente e crédito, vínculo dívida/guia, estorno completo, restituição e renúncia.
@@ -517,6 +523,8 @@ Obter documentos/parâmetros locais durante as primeiras fases. **Isso não é i
 **Saída:** cada evento é rastreável até origem/conta/tesouraria/realizado; replay não duplica; falha no fechamento da cadeia reverte ou mantém estado recuperável explícito; dívida de ano encerrado é recebida corretamente no corrente; nenhum crédito se perde.
 
 ### P3 — completar contabilidade, tesouraria, RP e abertura/fechamento
+
+**Bloco iniciado:** [P1–P4 integrado](poc-p0/EXECUCAO_P1_P4_BLOCO_INTEGRADO.md). Transferências bancárias conferem ambas as UGs, conteúdo do replay, vínculo de entidade, saldo e competência. A fase integral permanece em andamento.
 
 **Dependência:** P1–P2.
 
@@ -530,6 +538,8 @@ Obter documentos/parâmetros locais durante as primeiras fases. **Isso não é i
 **Saída:** fatos e reversões reconciliam banco/fonte/conta/dotação/competência; mês fechado recusa todas as origens; etapas do ano anterior e abertura corrente são reemitíveis e reexecutáveis sem duplicar saldo.
 
 ### P4 — integrações produtivas: folha, compras, patrimônio, estoque e instrumentos
+
+**Bloco iniciado:** [P1–P4 integrado](poc-p0/EXECUCAO_P1_P4_BLOCO_INTEGRADO.md). Alienação patrimonial usa classificação explícita e serviço financeiro canônico, com receita/tesouraria/partida/realizado na mesma transação da baixa. Os demais produtores e reversões permanecem em revisão.
 
 **Dependência:** P1–P3. Executar somente os comportamentos desses produtores necessários aos checklists analisados.
 
@@ -704,6 +714,8 @@ Data/executor/commit e conclusão individual
 Relatório que exige vários quadros/ações/filtros não é atendido pela existência de apenas um deles. Item de arquivo/integração não é atendido por JSON interno ou nome de provedor no catálogo. Não calcular percentual numérico de desenvolvimento a partir da quantidade de telas/funções.
 
 ### 11.2 Testes e checks vinculados ao risco real
+
+**Otimização autorizada:** agrupar mudanças relacionadas em blocos integrados e executar testes, lint, inventário e build no fechamento do bloco. Não repetir a validação completa a cada ajuste. Reexecutar somente em caso de falha ou alteração relevante posterior; migrations ainda não aplicadas podem ser agrupadas e as já aplicadas permanecem preservadas. Aproveitar a geração Prisma incluída no build quando uma execução isolada não for necessária para continuar o código/testes.
 
 - Integração PostgreSQL: atomicidade, duas sessões, locks em ordem estável, replay/conflito, estorno parcial, saldo/excedente e rollback da cadeia.
 - Autorização: dois entes/UGs e perfis distintos, acesso direto às actions/APIs/downloads/exportações e jobs; consolidação sem acesso a um dos entes deve falhar.

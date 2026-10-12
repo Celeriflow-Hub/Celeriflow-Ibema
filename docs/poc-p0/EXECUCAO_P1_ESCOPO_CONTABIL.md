@@ -37,6 +37,14 @@
 - Verificação read-only pós-migration: migrations concluídas, duas colunas e triggers presentes, 0 partidas, 0 sem vínculo, 0 mal vinculadas; fixtures P0 confirmadas (2 entidades, 42 UGs, 8 exercícios entidade/ano e 18 instrumentos; quatro exercícios legados permanecem preservados). Também foram criados exercícios em preparação para os entes operacionais atuais. Registro de execução: `AMBIENTE_ATUAL_VERIFICACAO.json`.
 - Conferência posterior em leitura: os registros `POC P0` continuam íntegros. A idempotência por entidade/ano está implementada na carga; a verificação de repetição com escrita registrada no fechamento P0 antecede estas migrations.
 
+## Continuação integrada com P2
+
+O motor tributário parametrizado passou a utilizar o mesmo resolvedor de ente/UG das constituições canônicas. As actions do bloco enviam a autorização de UG; consultas de guias e seletores de lançamentos filtram o snapshot persistido. Replays validam acesso e os campos de conteúdo cobertos pelo contrato. Regras fiscais sobrepostas são recusadas quando a versão aplicável não foi explicitamente selecionada.
+
+As correções de arrecadação histórica e atomicidade de retorno foram feitas no mesmo bloco, conforme a otimização solicitada, com testes/validações conjuntos ao final. Evidências e limites: [P2 — cadeia tributária](EXECUCAO_P2_CADEIA_TRIBUTARIA.md).
+
+P1 continua **em andamento**: este bloco fecha parte dos consumidores tributários, mas não homologa a matriz PCASP/MSC nem comprova todos os produtores, cadastros e saídas do critério integral.
+
 ## Ainda falta na P1
 
 1. A unicidade do exercício agora é por entidade, mantendo índice parcial separado para os exercícios legados sem entidade. Porém, os consumidores ainda precisam receber/selecionar a entidade em todos os fluxos de Financeiro, Planejamento e Tributação antes de declarar a migração integral concluída.
@@ -61,13 +69,15 @@
 - `tests/public-finance.test.ts`: 19/19 aprovados; preservação dos formatos de exportação e projeções públicas.
 - Total das suítes relacionadas: 43 cenários aprovados; 3 de concorrência externa não executados. A rodada conjunta escopo/execução/completion foi interrompida por timeout e teve uma falha do protocolo da fixture após erro SQL esperado; a verificação do guard passou a usar a conexão direta da fixture. Reexecução integral dessas três suítes: 16 aprovados/3 não executados, sem falhas.
 - `scripts/verify-poc-p1-scope.ts`: inventário de leitura apenas aprovado no banco atual.
-- `npm run build`: aprovado após as alterações de receita, referência tributária, snapshots, validação de conta, seletor orçamentário e autorização do exercício na definição de relatório. Revalidação posterior ao escopo do Controle Interno/indicadores em andamento.
+- `npm run build`: aprovado após as alterações de receita, referência tributária, snapshots, validação de conta, seletor orçamentário, autorização do exercício e escopo do Controle Interno/indicadores. O resultado do bloco tributário posterior está registrado separadamente na execução P2.
 - Auditoria Decimal/Float: não há registros em AccountingEntry, Revenue, Commitment, Settlement ou Payment na base atual; zero divergências, sem criação de saldos artificiais. Regras com movimentos são exercitadas nas fixtures isoladas.
 - Cargas de catálogo/identidade P1: aplicação e reaplicação aprovadas; verificação final registrada em `VERIFICACAO_P1.json`.
 - Verificação da matriz P0: aprovada; o hash do schema é conferido contra o commit histórico da baseline para preservar a evidência original após a evolução P1.
 - Navegação autenticada pelo navegador não foi executada nesta sessão.
 
 ## Próxima continuação da P1
+
+**Continuação executada:** [bloco integrado P1–P4](EXECUCAO_P1_P4_BLOCO_INTEGRADO.md), com importação das três versões oficiais TCE-PR de 2026 (14.494 entradas), validação contábil por metadados publicados e revisão adicional de consultas tributárias. De-para/homologação local e as demais pendências estruturais continuam abertos.
 
 - Concluir a propagação de exercício/entidade em todos os consumidores de `FinancialYear` e `MonthlyAccountingClose` (chamadas de Financeiro, Tributação, Planejamento e rotas de impressão); o modelo de dados agora permite fechamento independente por entidade/ano.
 - Completar dimensões de UG/ente nos fluxos e relatórios financeiros restantes, sem inferir escopo quando a origem não oferece vínculo.

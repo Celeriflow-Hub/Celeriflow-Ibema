@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { FinanceError, postAccountingEventInTransaction, type FinanceActor } from "@/lib/financeiro";
+import { FinanceError, postAccountingEventInTransaction, recordConfirmedRevenue, type FinanceActor } from "@/lib/financeiro";
 
 export class AssetLifecycleError extends Error {}
 
@@ -18,6 +18,7 @@ export type AssetDisposalInput = {
   justification: string;
   disposalValue?: number;
   actor?: FinanceActor;
+  financial?: { budgetUnitId: string; bankAccountId?: string; revenueNatureId?: string; resourceSourceId?: string };
 };
 
 export type AssetValueAdjustmentType = "REVALUATION" | "IMPAIRMENT" | "SUBSEQUENT_COST";
@@ -233,6 +234,7 @@ async function postDisposalGainLossOrRecordPending(
   tx: Prisma.TransactionClient,
   writeOff: { id: string; date: Date; gainLoss: number },
   actor?: FinanceActor,
+  budgetUnitId?: string,
 ) {
   if (writeOff.gainLoss === 0) return { accountingTransactionId: null, pending: false };
   const eventCode = writeOff.gainLoss > 0 ? "ASSET_DISPOSAL_GAIN" : "ASSET_DISPOSAL_LOSS";
@@ -240,7 +242,7 @@ async function postDisposalGainLossOrRecordPending(
     ? "A baixa não possui servidor responsável apto a postar o evento contábil."
     : undefined;
   const [year, event] = reason ? [null, null] : await Promise.all([
-    tx.financialYear.findFirst({ where: { status: "Aberto", startDate: { lte: writeOff.date }, endDate: { gte: writeOff.date } }, select: { id: true } }),
+    budgetUnitId ? tx.planningEntityUnit.findUnique({ where: { budgetUnitId }, select: { governmentEntityId: true } }).then(async (binding) => binding ? tx.financialYear.findFirst({ where: { governmentEntityId: binding.governmentEntityId, status: "Aberto", startDate: { lte: writeOff.date }, endDate: { gte: writeOff.date } }, select: { id: true } }) : null) : null,
     tx.accountingEventCatalog.findUnique({ where: { code: eventCode }, include: { rules: { where: { isActive: true }, select: { isReference: true } } } }),
   ]);
   const configurationReason = reason
@@ -256,6 +258,7 @@ async function postDisposalGainLossOrRecordPending(
   try {
     const transaction = await postAccountingEventInTransaction(tx, actor!, {
       financialYearId: year!.id,
+      budgetUnitId,
       date: writeOff.date,
       eventCode,
       value: Math.abs(writeOff.gainLoss),
@@ -293,11 +296,18 @@ export async function recordAssetDisposal(db: PrismaClient, input: AssetDisposal
   return db.$transaction(async (tx) => {
     const asset = await tx.asset.findUnique({
       where: { id: input.assetId },
-      select: { id: true, status: true, currentValue: true, name: true, maintenances: { where: { status: { in: ["Solicitada", "Em manutenção"] } }, select: { id: true }, take: 1 } },
+      select: { id: true, status: true, currentValue: true, name: true, department: { select: { secretariatId: true } }, maintenances: { where: { status: { in: ["Solicitada", "Em manutenção"] } }, select: { id: true }, take: 1 } },
     });
     if (!asset) throw new AssetLifecycleError("Bem patrimonial não encontrado.");
     if (asset.status === "Baixado" || asset.status === "Inativo") throw new AssetLifecycleError("Este bem está baixado ou inativo.");
     if (asset.maintenances.length) throw new AssetLifecycleError("Conclua as manutenções abertas antes da baixa patrimonial.");
+    if (input.actor) {
+      const unitId = input.financial?.budgetUnitId;
+      if (!unitId) throw new AssetLifecycleError("Selecione a unidade gestora responsável pela baixa.");
+      if (input.actor.allowedBudgetUnitIds && !input.actor.allowedBudgetUnitIds.includes(unitId)) throw new AssetLifecycleError("Baixa fora das unidades gestoras autorizadas.");
+      const unit = await tx.budgetUnit.findUnique({ where: { id: unitId }, select: { secretariatId: true, planningEntityUnit: { select: { governmentEntityId: true } } } });
+      if (!unit?.planningEntityUnit || (asset.department?.secretariatId && asset.department.secretariatId !== unit.secretariatId)) throw new AssetLifecycleError("A UG selecionada diverge da lotação administrativa do bem.");
+    }
 
     const existing = await tx.assetWriteOff.findFirst({ where: { assetId: asset.id }, select: { id: true } });
     if (existing) throw new AssetLifecycleError("Este bem já possui uma baixa registrada.");
@@ -319,62 +329,21 @@ export async function recordAssetDisposal(db: PrismaClient, input: AssetDisposal
     let alienationTreasuryMovementId: string | null = null;
 
     if (input.type === "Alienação" && disposalValue > 0 && input.actor) {
-      const [year, revenueNature, resourceSource, treasuryAccount] = await Promise.all([
-        tx.financialYear.findFirst({
-          where: { governmentEntityId: null, status: "Aberto", startDate: { lte: input.date }, endDate: { gte: input.date } },
-        }),
-        tx.revenueNature.findFirst(),
-        tx.resourceSource.findFirst(),
-        tx.bankAccount.findFirst({ where: { isActive: true } }),
-      ]);
-
-      if (year && revenueNature && resourceSource) {
-        // Registro de Receita Arrecadada de Alienação de Bens (Patrimonial)
-        const revenue = await tx.revenue.create({
-          data: {
-            financialYearId: year.id,
-            revenueNatureId: revenueNature.id,
-            resourceSourceId: resourceSource.id,
-            classification: "ORCAMENTARIA",
-            stage: "ARRECADADA",
-            date: input.date,
-            collectionDate: input.date,
-            valueDecimal: new Prisma.Decimal(disposalValue),
-            value: disposalValue,
-            history: `Receita de alienação do bem patrimonial ${asset.name}`,
-            sourceModule: "PATRIMONIO",
-            sourceType: "ASSET_ALIENATION",
-            sourceId: writeOff.id,
-            eventType: "REVENUE_COLLECTED",
-            idempotencyKey: `PATRIMONIO:ASSET_ALIENATION_REVENUE:${writeOff.id}`,
-          },
-        });
-        alienationRevenueId = revenue.id;
-
-        // Registro de Entrada em Tesouraria
-        if (treasuryAccount) {
-          const treasuryMovement = await tx.treasuryMovement.create({
-            data: {
-              type: "RECEITA",
-              direction: "ENTRADA",
-              date: input.date,
-              valueDecimal: new Prisma.Decimal(disposalValue),
-              bankAccountId: treasuryAccount.id,
-              financialYearId: year.id,
-              history: `Ingresso de receita de alienação do bem ${asset.name}`,
-              sourceModule: "PATRIMONIO",
-              sourceType: "ASSET_ALIENATION",
-              sourceId: writeOff.id,
-              eventType: "TREASURY_ENTRY",
-              idempotencyKey: `PATRIMONIO:ASSET_ALIENATION_TREASURY:${writeOff.id}`,
-            },
-          });
-          alienationTreasuryMovementId = treasuryMovement.id;
-        }
-      }
+      const financial = input.financial;
+      if (!financial?.bankAccountId || !financial.revenueNatureId || !financial.resourceSourceId) throw new AssetLifecycleError("Alienação recebida exige conta arrecadadora, natureza e fonte explicitamente selecionadas.");
+      const account = await tx.bankAccount.findUniqueOrThrow({ where: { id: financial.bankAccountId } });
+      if (account.budgetUnitId !== financial.budgetUnitId) throw new AssetLifecycleError("Conta de alienação pertence a outra unidade gestora.");
+      const revenue = await recordConfirmedRevenue(tx, input.actor, {
+        date: input.date, value: new Prisma.Decimal(String(disposalValue)),
+        revenueNatureId: financial.revenueNatureId, resourceSourceId: financial.resourceSourceId, bankAccountId: financial.bankAccountId,
+        history: `Receita de alienação do bem patrimonial ${asset.name}`, sourceModule: "PATRIMONIO", sourceType: "ASSET_ALIENATION",
+        sourceId: writeOff.id, eventType: "REVENUE_COLLECTED", idempotencyKey: `PATRIMONIO:ASSET_ALIENATION_REVENUE:${writeOff.id}`,
+      });
+      alienationRevenueId = revenue.id;
+      alienationTreasuryMovementId = revenue.treasuryMovement?.id ?? null;
     }
 
-    const integration = await postDisposalGainLossOrRecordPending(tx, writeOff, input.actor);
+    const integration = await postDisposalGainLossOrRecordPending(tx, writeOff, input.actor, input.financial?.budgetUnitId);
     await tx.asset.update({ where: { id: asset.id }, data: { status: "Baixado" } });
     return { ...writeOff, integration, alienationRevenueId, alienationTreasuryMovementId };
   });

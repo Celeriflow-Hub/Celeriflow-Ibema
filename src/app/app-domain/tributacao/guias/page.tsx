@@ -1,11 +1,13 @@
-import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
+import { taxAssessmentAccessFilter } from "@/lib/tributacao/scope";
 import GuiasClient from "./GuiasClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function GuiasPage() {
-  const { prisma } = await getTenantContextForModule("TRIBUTACAO");
+  const { prisma, user } = await getTenantContextForModule("TRIBUTACAO");
   const guias = await prisma.taxGuide.findMany({
+    where: { assessment: taxAssessmentAccessFilter(isSystemAdministrator(user) ? undefined : user.allowedBudgetUnitIds) },
     include: {
       assessment: {
         include: {

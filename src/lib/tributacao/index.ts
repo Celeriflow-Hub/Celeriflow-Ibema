@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { FinanceError, recordConfirmedRevenue, type FinanceActor } from "@/lib/financeiro";
+import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxScopeSnapshot, taxAssessmentCompensatedValue } from "./scope";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -40,12 +41,11 @@ async function assertAssessmentYearOpen(tx: Db, year: number, budgetUnitId?: str
 }
 
 async function assessmentYearScope(tx: Db, actor: TaxActor, year: number, taxId: string, snapshot?: Prisma.JsonValue | null) {
-  const stored = snapshot && typeof snapshot === "object" && !Array.isArray(snapshot) ? snapshot : {};
-  const mapping = await tx.taxFinancialMapping.findUnique({ where: { taxId }, select: { defaultBankAccount: { select: { budgetUnitId: true } } } });
-  const budgetUnitId = typeof stored.budgetUnitId === "string" ? stored.budgetUnitId : mapping?.defaultBankAccount.budgetUnitId;
-  if (actor.allowedBudgetUnitIds && (!budgetUnitId || !actor.allowedBudgetUnitIds.includes(budgetUnitId))) throw new TaxError("Lançamento tributário fora das unidades gestoras autorizadas.");
-  const financialYear = await assertAssessmentYearOpen(tx, year, budgetUnitId);
-  return { financialYear, budgetUnitId: budgetUnitId ?? null };
+  try {
+    const scope = await resolveTaxAssessmentScope(tx, actor, taxId, snapshot);
+    const financialYear = await resolveTaxFinancialYear(tx, year, scope);
+    return { financialYear, ...scope };
+  } catch (error) { throw new TaxError(error instanceof Error ? error.message : "Escopo tributário inválido."); }
 }
 
 async function nextNumber(tx: Prisma.TransactionClient, year: number, documentType: "ASSESSMENT" | "GUIDE") {
@@ -88,9 +88,12 @@ export async function configureTaxFinancialMapping(
       tx.tax.findUnique({ where: { id: input.taxId }, select: { id: true } }),
       tx.revenueNature.findUnique({ where: { id: input.revenueNatureId }, select: { id: true } }),
       tx.resourceSource.findUnique({ where: { id: input.resourceSourceId }, select: { id: true } }),
-      tx.bankAccount.findUnique({ where: { id: input.defaultBankAccountId }, select: { id: true, isActive: true } }),
+      tx.bankAccount.findUnique({ where: { id: input.defaultBankAccountId }, select: { id: true, isActive: true, budgetUnitId: true } }),
     ]);
     if (!tax || !nature || !source || !account?.isActive) throw new TaxError("Tributo, natureza, fonte e conta bancária ativa são obrigatórios para o mapeamento.");
+    if (actor.allowedBudgetUnitIds && (!account.budgetUnitId || !actor.allowedBudgetUnitIds.includes(account.budgetUnitId))) throw new TaxError("Conta do mapeamento fora das unidades gestoras autorizadas.");
+    const previous = await tx.taxFinancialMapping.findUnique({ where: { taxId: input.taxId }, select: { defaultBankAccount: { select: { budgetUnitId: true } } } });
+    if (previous && actor.allowedBudgetUnitIds && (!previous.defaultBankAccount.budgetUnitId || !actor.allowedBudgetUnitIds.includes(previous.defaultBankAccount.budgetUnitId))) throw new TaxError("Mapeamento existente fora das unidades gestoras autorizadas.");
     const mapping = await tx.taxFinancialMapping.upsert({
       where: { taxId: input.taxId },
       create: { taxId: input.taxId, revenueNatureId: input.revenueNatureId, resourceSourceId: input.resourceSourceId, defaultBankAccountId: input.defaultBankAccountId, isActive: input.isActive ?? true },
@@ -165,7 +168,8 @@ export async function generateTaxGuide(
       const document = await tx.document.findUnique({ where: { id: input.documentId }, select: { status: true } });
       if (document?.status !== "Válido") throw new TaxError("O documento GED da guia deve estar válido.");
     }
-    const total = assessment.finalValueDecimal ?? requiredAmount(assessment.originalValueDecimal, "TaxAssessment.originalValueDecimal");
+    const total = (assessment.finalValueDecimal ?? requiredAmount(assessment.originalValueDecimal, "TaxAssessment.originalValueDecimal")).minus(await taxAssessmentCompensatedValue(tx, assessment.id));
+    if (total.lte(0)) throw new TaxError("Lançamento integralmente extinto por compensação.");
     const guideNumber = await nextNumber(tx, assessment.year, "GUIDE");
     const guide = await tx.taxGuide.create({
       data: { assessmentId: assessment.id, guideNumber, totalValue: legacyAmount(total), totalValueDecimal: total, dueDate: input.dueDate, documentId: input.documentId, calculationSnapshot: assessment.calculationSnapshot ?? undefined, status: "Emitida" },
@@ -181,12 +185,24 @@ export async function confirmTaxPayment(
   actor: TaxActor,
   input: { guideId: string; amountPaid: Prisma.Decimal | string | number; paymentDate: Date; paymentMethod: string; idempotencyKey: string; bankAccountId?: string; proofDocumentId?: string },
 ) {
+  return db.$transaction((tx) => confirmTaxPaymentInTransaction(tx, actor, input));
+}
+
+export async function confirmTaxPaymentInTransaction(
+  tx: Prisma.TransactionClient,
+  actor: TaxActor,
+  input: { guideId: string; amountPaid: Prisma.Decimal | string | number; paymentDate: Date; paymentMethod: string; idempotencyKey: string; bankAccountId?: string; proofDocumentId?: string },
+) {
   const paidAmount = amount(input.amountPaid);
   if (!input.idempotencyKey.trim()) throw new TaxError("A confirmação de pagamento exige chave de idempotência.");
-  return db.$transaction(async (tx) => {
-    const existing = await tx.taxPayment.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { guide: true } });
-    if (existing) return existing.guide;
     await tx.$queryRaw`SELECT id FROM "TaxGuide" WHERE id = ${input.guideId} FOR UPDATE`;
+    const existing = await tx.taxPayment.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { guide: { include: { assessment: true } } } });
+    if (existing) {
+      try { await resolveTaxAssessmentScope(tx, actor, existing.guide.assessment.taxId, existing.guide.assessment.calculationSnapshot); }
+      catch (error) { throw new TaxError(error instanceof Error ? error.message : "Escopo tributário inválido."); }
+      if (existing.guideId !== input.guideId || !existing.amountPaidDecimal?.equals(paidAmount) || existing.paymentDate.getTime() !== input.paymentDate.getTime() || existing.paymentMethod !== input.paymentMethod.trim() || (input.bankAccountId && existing.bankAccountId !== input.bankAccountId) || existing.proofDocumentId !== (input.proofDocumentId ?? null)) throw new TaxError("Pagamento já registrado com outros dados.");
+      return existing.guide;
+    }
     const guide = await tx.taxGuide.findUnique({ where: { id: input.guideId }, include: { assessment: { include: { tax: { include: { financialMapping: true } } } }, payments: { where: { status: "Confirmado" }, select: { amountPaidDecimal: true } } } });
     if (!guide || ["Cancelada", "Paga"].includes(guide.status)) throw new TaxError("A guia não está disponível para baixa.");
     const mapping = guide.assessment.tax.financialMapping;
@@ -194,11 +210,12 @@ export async function confirmTaxPayment(
     const bankAccountId = input.bankAccountId ?? mapping.defaultBankAccountId;
     const account = await tx.bankAccount.findUnique({ where: { id: bankAccountId }, select: { isActive: true, budgetUnitId: true } });
     if (!account?.isActive) throw new TaxError("A baixa exige uma conta bancária ativa.");
-    const assessmentSnapshot = guide.assessment.calculationSnapshot;
-    const assessmentScope = assessmentSnapshot && typeof assessmentSnapshot === "object" && !Array.isArray(assessmentSnapshot) ? assessmentSnapshot : {};
+    try { await resolveTaxAssessmentScope(tx, actor, guide.assessment.taxId, guide.assessment.calculationSnapshot); }
+    catch (error) { throw new TaxError(error instanceof Error ? error.message : "Escopo tributário inválido."); }
+    const assessmentScope = taxScopeSnapshot(guide.assessment.calculationSnapshot);
     if (typeof assessmentScope.budgetUnitId === "string" && assessmentScope.budgetUnitId !== account.budgetUnitId) throw new TaxError("A conta arrecadadora diverge da unidade gestora do lançamento tributário.");
-    const year = await assertAssessmentYearOpen(tx, guide.assessment.year, account.budgetUnitId);
-    if (input.paymentDate < year.startDate || input.paymentDate > year.endDate) throw new TaxError("A data de pagamento está fora do exercício financeiro do lançamento.");
+    const year = await assertAssessmentYearOpen(tx, input.paymentDate.getUTCFullYear(), account.budgetUnitId);
+    if (input.paymentDate < year.startDate || input.paymentDate > year.endDate) throw new TaxError("A data de pagamento está fora do exercício financeiro de arrecadação.");
     if (input.proofDocumentId) {
       const proof = await tx.document.findUnique({ where: { id: input.proofDocumentId }, select: { status: true } });
       if (proof?.status !== "Válido") throw new TaxError("O comprovante GED deve estar válido.");
@@ -239,12 +256,11 @@ export async function confirmTaxPayment(
     });
     const assessmentPaidValue = assessmentPayments.reduce((sum, current) => sum.plus(requiredAmount(current.amountPaidDecimal, "TaxPayment.amountPaidDecimal")), new Prisma.Decimal(0));
     const assessmentTotal = guide.assessment.finalValueDecimal ?? requiredAmount(guide.assessment.originalValueDecimal, "TaxAssessment.originalValueDecimal");
-    const assessmentPaid = assessmentPaidValue.greaterThanOrEqualTo(assessmentTotal);
+    const assessmentPaid = assessmentPaidValue.plus(await taxAssessmentCompensatedValue(tx, guide.assessmentId)).greaterThanOrEqualTo(assessmentTotal);
     await tx.taxAssessment.update({ where: { id: guide.assessmentId }, data: { status: assessmentPaid ? "Pago" : "Parcial" } });
     if (!revenue.treasuryMovement) throw new TaxError("A integração financeira não gerou movimento de tesouraria.");
     await audit(tx, actor, "CONFIRM_PAYMENT", "TaxPayment", payment.id, { guideId: guide.id, amountPaid: paidAmount.toFixed(2), revenueId: revenue.id, treasuryMovementId: revenue.treasuryMovement.id, proofDocumentId: input.proofDocumentId ?? null });
     return tx.taxGuide.findUniqueOrThrow({ where: { id: guide.id } });
-  });
 }
 
 export async function cancelTaxGuide(db: PrismaClient, actor: TaxActor, guideId: string) {

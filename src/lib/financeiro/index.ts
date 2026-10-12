@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient, type BudgetReservation, type Commitment, type Settlement, type Payment } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { assertPublishedAccountClassification } from "./account-catalog";
 import { calculateRetentionDueDate, calculateRetentions, getActiveRetentionRules } from "./retencoes";
@@ -52,6 +52,14 @@ function jsonMoney(value: Prisma.Decimal) {
 
 function assertActorBudgetUnit(actor: FinanceActor, unitId: string) {
   if (actor.allowedBudgetUnitIds && !actor.allowedBudgetUnitIds.includes(unitId)) throw new FinanceError("Operação financeira fora das unidades autorizadas.");
+}
+
+async function assertAccountingYearScope(tx: Db, actor: FinanceActor, financialYearId: string) {
+  if (!actor.allowedBudgetUnitIds) return;
+  const year = await tx.financialYear.findUnique({ where: { id: financialYearId }, select: { governmentEntityId: true } });
+  if (!year?.governmentEntityId) throw new FinanceError("Fechamento de exercício legado exige escopo conciliado.");
+  const units = await tx.planningEntityUnit.findMany({ where: { governmentEntityId: year.governmentEntityId }, select: { budgetUnitId: true } });
+  if (!units.length || units.some((unit) => !actor.allowedBudgetUnitIds!.includes(unit.budgetUnitId))) throw new FinanceError("Fechamento ou reabertura exige autorização para todas as UGs da entidade.");
 }
 
 async function createFinancialDocument(
@@ -574,8 +582,11 @@ export async function createBudgetReservation(
   actor: FinanceActor,
   input: { number: string; date: Date; value: Prisma.Decimal | string | number; appropriationId: string; expenseId: string; justification?: string },
 ) {
+  return db.$transaction((tx) => createBudgetReservationInTransaction(tx, actor, input));
+}
+
+export async function createBudgetReservationInTransaction(tx: Prisma.TransactionClient, actor: FinanceActor, input: Parameters<typeof createBudgetReservation>[2]): Promise<BudgetReservation> {
   const value = money(input.value);
-  return db.$transaction(async (tx) => {
     await lockAppropriation(tx, input.appropriationId);
     const appropriation = await tx.budgetAppropriation.findUnique({
       where: { id: input.appropriationId },
@@ -601,7 +612,6 @@ export async function createBudgetReservation(
     await tx.expense.update({ where: { id: expense.id }, data: { status: "Reservada" } });
     await audit(tx, actor, "CREATE", "BudgetReservation", reservation.id, { value: jsonMoney(value), appropriationId: appropriation.id, expenseId: expense.id }, year.id, appropriation.budgetUnitId);
     return reservation;
-  });
 }
 
 export async function cancelBudgetReservation(db: PrismaClient, actor: FinanceActor, reservationId: string) {
@@ -644,10 +654,13 @@ export async function createCommitment(
     fundedDebtName?: string;
   },
 ) {
+  return db.$transaction((tx) => createCommitmentInTransaction(tx, actor, input));
+}
+
+export async function createCommitmentInTransaction(tx: Prisma.TransactionClient, actor: FinanceActor, input: Parameters<typeof createCommitment>[2]): Promise<Commitment> {
   const value = money(input.value);
   const obrasServiceId = input.obrasServiceId?.trim() || undefined;
   if (!["Ordinário", "Estimativo", "Global"].includes(input.type)) throw new FinanceError("Tipo de empenho inválido.");
-  return db.$transaction(async (tx) => {
     await lockAppropriation(tx, input.appropriationId);
     const [appropriation, reservation] = await Promise.all([
       tx.budgetAppropriation.findUnique({
@@ -821,7 +834,6 @@ export async function createCommitment(
     }
     await audit(tx, actor, "CREATE", "Commitment", commitment.id, { value: jsonMoney(value), reservationId: reservation.id, creditorId: creditor.id, processId: commitment.processId, purchaseProcessId: commitment.purchaseProcessId, purchaseReceiptId: commitment.purchaseReceiptId, contractId: commitment.contractId, obrasServiceId: obrasService?.id }, year.id);
     return commitment;
-  });
 }
 
 export async function cancelCommitment(db: PrismaClient, actor: FinanceActor, commitmentId: string) {
@@ -930,6 +942,10 @@ export async function createSettlement(db: PrismaClient, actor: FinanceActor, in
   serviceCode?: string;
   retentionRuleIds?: string[];
 }) {
+  return db.$transaction((tx) => createSettlementInTransaction(tx, actor, input));
+}
+
+export async function createSettlementInTransaction(tx: Prisma.TransactionClient, actor: FinanceActor, input: Parameters<typeof createSettlement>[2]): Promise<Settlement> {
   const value = money(input.value);
   const fiscalDocumentNumber = input.fiscalDocumentNumber?.trim() || undefined;
   const fiscalDocumentSeries = input.fiscalDocumentSeries?.trim() || undefined;
@@ -947,7 +963,6 @@ export async function createSettlement(db: PrismaClient, actor: FinanceActor, in
   if (fiscalDocumentAccessKey && !/^\d{44}$/.test(fiscalDocumentAccessKey)) {
     throw new FinanceError("A chave de acesso do documento fiscal deve conter 44 dígitos.");
   }
-  return db.$transaction(async (tx) => {
     const { commitment, year } = await commitmentForPosting(tx, input.commitmentId, input.date);
     assertActorBudgetUnit(actor, commitment.appropriation.budgetUnitId);
     if (!input.documentId) throw new FinanceError("Vincule o documento fiscal ou comprobatório já cadastrado no GED.");
@@ -1052,7 +1067,6 @@ export async function createSettlement(db: PrismaClient, actor: FinanceActor, in
     });
     await audit(tx, actor, "CREATE", "Settlement", settlement.id, { value: jsonMoney(value), retentionValue: jsonMoney(retentionTotal), commitmentId: commitment.id, documentId: document.id, authorId: input.authorId }, year.id);
     return settlement;
-  });
 }
 
 export async function cancelSettlement(db: PrismaClient, actor: FinanceActor, settlementId: string) {
@@ -1096,12 +1110,15 @@ export async function createPayment(
     retentionRuleIds?: string[];
   },
 ) {
+  return db.$transaction((tx) => createPaymentInTransaction(tx, actor, input));
+}
+
+export async function createPaymentInTransaction(tx: Prisma.TransactionClient, actor: FinanceActor, input: Parameters<typeof createPayment>[2]): Promise<Payment> {
   const value = money(input.value);
   if (!input.settlementId) {
     throw new FinanceError("O fluxo obrigatório exige liquidação prévia regular antes de qualquer emissão de pagamento.");
   }
 
-  return db.$transaction(async (tx) => {
     const { commitment, year } = await commitmentForPosting(tx, input.commitmentId, input.date);
     assertActorBudgetUnit(actor, commitment.appropriation.budgetUnitId);
     const bankAccount = await tx.bankAccount.findUnique({
@@ -1251,7 +1268,6 @@ export async function createPayment(
     await refreshCommitmentExecutionStatus(tx, commitment.id);
     await audit(tx, actor, "CREATE", "Payment", payment.id, { grossValue: jsonMoney(value), netValue: jsonMoney(netValue), retentionValue: jsonMoney(retentionTotal), commitmentId: commitment.id, settlementId: input.settlementId, creditorId: creditor.id }, year.id);
     return payment;
-  });
 }
 
 export async function reversePayment(
@@ -1479,7 +1495,10 @@ export async function settleWithholdingPayable(
 }
 
 export async function updatePaymentStatus(db: PrismaClient, actor: FinanceActor, paymentId: string, status: string) {
-  return db.$transaction(async (tx) => {
+  return db.$transaction((tx) => updatePaymentStatusInTransaction(tx, actor, paymentId, status));
+}
+
+export async function updatePaymentStatusInTransaction(tx: Prisma.TransactionClient, actor: FinanceActor, paymentId: string, status: string) {
     await lockPayment(tx, paymentId);
     const payment = await tx.payment.findUnique({
       include: {
@@ -1572,7 +1591,6 @@ export async function updatePaymentStatus(db: PrismaClient, actor: FinanceActor,
     }
     await audit(tx, actor, "STATUS_CHANGE", "Payment", paymentId, { previousStatus: payment.status, status }, year.id);
     return updated;
-  });
 }
 
 export async function setFinancialYearStatus(db: PrismaClient, actor: FinanceActor, financialYearId: string, status: string) {
@@ -1812,13 +1830,15 @@ export async function createTreasuryTransferInTransaction(
   const key = input.idempotencyKey?.trim();
   if (key) await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`TREASURY_TRANSFER:${key}`}, 0))::text`;
   const [source, destination] = await Promise.all([
-    tx.bankAccount.findUnique({ where: { id: input.sourceBankAccountId }, select: { isActive: true, budgetUnitId: true } }),
-    tx.bankAccount.findUnique({ where: { id: input.destinationBankAccountId }, select: { isActive: true, budgetUnitId: true } }),
+    tx.bankAccount.findUnique({ where: { id: input.sourceBankAccountId }, select: { isActive: true, budgetUnitId: true, accountingPlanId: true, resourceSourceId: true } }),
+    tx.bankAccount.findUnique({ where: { id: input.destinationBankAccountId }, select: { isActive: true, budgetUnitId: true, accountingPlanId: true, resourceSourceId: true } }),
   ]);
   if (!source?.isActive || !destination?.isActive) throw new FinanceError("As contas da transferência devem estar ativas.");
   if (!source.budgetUnitId || !destination.budgetUnitId) throw new FinanceError("As contas da transferência devem estar vinculadas a unidades gestoras.");
   assertActorBudgetUnit(actor, source.budgetUnitId);
   assertActorBudgetUnit(actor, destination.budgetUnitId);
+  if (!source.accountingPlanId || !destination.accountingPlanId) throw new FinanceError("As contas da transferência exigem conta contábil analítica configurada.");
+  if (!source.resourceSourceId || source.resourceSourceId !== destination.resourceSourceId) throw new FinanceError("As contas da transferência devem possuir a mesma fonte de recursos.");
   if (key) {
     const existing = await tx.treasuryTransfer.findUnique({ where: { idempotencyKey: key }, include: { sourceMovement: true } });
     if (existing) {
@@ -1853,6 +1873,27 @@ export async function createTreasuryTransferInTransaction(
   const transfer = await tx.treasuryTransfer.create({
     data: { date: input.date, valueDecimal: value, history: input.history?.trim() || undefined, sourceBankAccountId: input.sourceBankAccountId, destinationBankAccountId: input.destinationBankAccountId, sourceMovementId: debit.id, destinationMovementId: credit.id, idempotencyKey: input.idempotencyKey?.trim() || undefined },
   });
+  const accountingInput = {
+    financialYearId: year.id, governmentEntityId: sourceEntity.governmentEntityId,
+    date: input.date, value, history: common.history, sourceModule: common.sourceModule,
+    sourceType: common.sourceType, sourceId: common.sourceId ?? transfer.id,
+  };
+  const accountingKey = key ? `${key}:ACCOUNTING` : `TREASURY_TRANSFER:${transfer.id}:ACCOUNTING`;
+  if (source.budgetUnitId === destination.budgetUnitId) {
+    const eventCode = common.sourceType === "BANK_STATEMENT_INVESTMENT_TRANSFER"
+      ? ["APLICACAO", "TRANSFERENCIA_PARA_APLICACAO"].includes(common.eventType) ? "APLICACAO_FINANCEIRA" : "RESGATE_APLICACAO_FINANCEIRA"
+      : "TRANSFERENCIA_BANCARIA";
+    await postAccountingEventInTransaction(tx, actor, { ...accountingInput, budgetUnitId: source.budgetUnitId, eventCode, debitAccountId: destination.accountingPlanId, creditAccountId: source.accountingPlanId, idempotencyKey: accountingKey });
+  } else {
+    // Each UG has a balanced leg through the configured inter-unit clearing account.
+    const clearingEvents = await tx.accountingEventCatalog.findMany({ where: { code: { in: ["TRANSFERENCIA_UG_SAIDA", "TRANSFERENCIA_UG_ENTRADA"] }, isActive: true }, include: { rules: { where: { isActive: true } } } });
+    const outgoing = clearingEvents.find((event) => event.code === "TRANSFERENCIA_UG_SAIDA");
+    const incoming = clearingEvents.find((event) => event.code === "TRANSFERENCIA_UG_ENTRADA");
+    if (outgoing?.rules.length !== 1 || incoming?.rules.length !== 1) throw new FinanceError("Transferência entre UGs exige uma regra ativa para cada perna contábil.");
+    if (outgoing.rules[0].debitAccountId !== incoming.rules[0].creditAccountId || [source.accountingPlanId, destination.accountingPlanId].includes(outgoing.rules[0].debitAccountId)) throw new FinanceError("As pernas da transferência devem utilizar a mesma conta de trânsito, distinta das contas bancárias.");
+    await postAccountingEventInTransaction(tx, actor, { ...accountingInput, budgetUnitId: source.budgetUnitId, eventCode: "TRANSFERENCIA_UG_SAIDA", creditAccountId: source.accountingPlanId, idempotencyKey: `${accountingKey}:OUT` });
+    await postAccountingEventInTransaction(tx, actor, { ...accountingInput, budgetUnitId: destination.budgetUnitId, eventCode: "TRANSFERENCIA_UG_ENTRADA", debitAccountId: destination.accountingPlanId, idempotencyKey: `${accountingKey}:IN` });
+  }
   await audit(tx, actor, "CREATE", "TreasuryTransfer", transfer.id, { value: jsonMoney(value), sourceBankAccountId: input.sourceBankAccountId, destinationBankAccountId: input.destinationBankAccountId }, year.id);
   return transfer;
 }
@@ -1876,7 +1917,9 @@ export async function recordConfirmedRevenue(
   await lockBankAccount(tx, input.bankAccountId);
   const existing = await tx.revenue.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { treasuryMovement: true } });
   if (existing) {
-    if (!existing.valueDecimal?.equals(value) || existing.revenueNatureId !== input.revenueNatureId || existing.resourceSourceId !== input.resourceSourceId || existing.bankAccountId !== input.bankAccountId || existing.collectionDate?.getTime() !== input.date.getTime() || existing.sourceModule !== input.sourceModule.trim() || existing.sourceType !== input.sourceType.trim() || existing.sourceId !== (input.sourceId?.trim() || null)) throw new FinanceError("Arrecadação já registrada com outros dados.");
+    if (existing.budgetUnitId) assertActorBudgetUnit(actor, existing.budgetUnitId);
+    else if (actor.allowedBudgetUnitIds) throw new FinanceError("Arrecadação legada sem UG conciliada.");
+    if (!existing.valueDecimal?.equals(value) || existing.revenueNatureId !== input.revenueNatureId || existing.resourceSourceId !== input.resourceSourceId || existing.bankAccountId !== input.bankAccountId || existing.collectionDate?.getTime() !== input.date.getTime() || existing.sourceModule !== input.sourceModule.trim() || existing.sourceType !== input.sourceType.trim() || existing.sourceId !== (input.sourceId?.trim() || null) || existing.eventType !== input.eventType.trim() || existing.history !== (input.history?.trim() || null) || existing.classification !== (input.classification ?? "ORCAMENTARIA")) throw new FinanceError("Arrecadação já registrada com outros dados.");
     return existing;
   }
   const [bankAccount, nature, source] = await Promise.all([
@@ -2033,8 +2076,16 @@ export async function reverseRevenue(
   actor: FinanceActor,
   input: { revenueId: string; date: Date; justification: string },
 ) {
+  return db.$transaction((tx) => reverseRevenueInTransaction(tx, actor, input));
+}
+
+/** Tax callers supply the linked payment inside their encompassing transaction. */
+export async function reverseRevenueInTransaction(
+  tx: Prisma.TransactionClient,
+  actor: FinanceActor,
+  input: { revenueId: string; date: Date; justification: string; taxPaymentId?: string },
+) {
   if (!input.justification.trim()) throw new FinanceError("A justificativa do estorno da receita e obrigatoria.");
-  return db.$transaction(async (tx) => {
     await lockRevenue(tx, input.revenueId);
     const revenue = await tx.revenue.findUnique({
       where: { id: input.revenueId },
@@ -2044,7 +2095,8 @@ export async function reverseRevenue(
     if (revenue.stage !== "ARRECADADA" || !revenue.treasuryMovement || revenue.reversal) throw new FinanceError("Somente receitas arrecadadas sem estorno anterior podem ser estornadas.");
     if (revenue.budgetUnitId) assertActorBudgetUnit(actor, revenue.budgetUnitId);
     else if (actor.allowedBudgetUnitIds) throw new FinanceError("Receita legada sem unidade gestora conciliada.");
-    if (revenue.taxIntegration) throw new FinanceError("A receita originada de pagamento tributario deve ser estornada pelo fluxo tributario proprio.");
+    if (revenue.taxIntegration && revenue.taxIntegration.taxPaymentId !== input.taxPaymentId) throw new FinanceError("A receita originada de pagamento tributario deve ser estornada pelo fluxo tributario proprio.");
+    if (input.taxPaymentId && revenue.taxIntegration?.taxPaymentId !== input.taxPaymentId) throw new FinanceError("O pagamento tributário diverge da origem da receita.");
     if (revenue.resourceRedistributions.length) throw new FinanceError("A receita possui redistribuicoes por fonte. Regularize-as antes do estorno.");
     const value = requiredDecimal(revenue.valueDecimal, "Revenue.valueDecimal");
     const bankAccount = await tx.bankAccount.findUnique({
@@ -2064,7 +2116,12 @@ export async function reverseRevenue(
       data: { revenueId: revenue.id, date: input.date, valueDecimal: value, justification: input.justification.trim(), financialYearId: year.id, treasuryMovementId: movement.id },
     });
     const reversed = await tx.revenue.update({ where: { id: revenue.id }, data: { status: "Estornada", stage: "ESTORNADA", reversedAt: input.date } });
-    await postAccountingEventInTransaction(tx, actor, {
+    if (input.taxPaymentId) await reverseAccountingForSource(tx, actor, {
+      financialYearId: year.id, date: input.date, sourceType: revenue.sourceType, sourceId: revenue.id,
+      eventType: "TAX_PAYMENT_REVERSED", history: `Estorno tributário ${input.taxPaymentId}: ${input.justification.trim()}`,
+      idempotencyKey: `TRIBUTARIO:TAX_PAYMENT:${input.taxPaymentId}:REVERSAL:ACCOUNTING`,
+    });
+    else await postAccountingEventInTransaction(tx, actor, {
       financialYearId: year.id,
       budgetUnitId: bankAccount?.budgetUnitId ?? undefined,
       date: input.date,
@@ -2080,7 +2137,6 @@ export async function reverseRevenue(
     await recordPlanningRevenueReversal(tx, actor, revenue, input.date);
     await audit(tx, actor, "REVERSE", "Revenue", revenue.id, { stage: reversed.stage, reversalId: reversal.id, treasuryMovementId: movement.id, value: jsonMoney(value), justification: reversal.justification, originRevenueId: revenue.id }, year.id);
     return reversal;
-  });
 }
 
 export async function redistributeRevenueResourceSource(
@@ -2333,7 +2389,7 @@ function accountingMonth(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
 }
 
-async function assertAccountingPeriodOpen(tx: Db, financialYearId: string, date: Date) {
+export async function assertAccountingPeriodOpen(tx: Db, financialYearId: string, date: Date) {
   const close = await tx.monthlyAccountingClose.findUnique({
     where: { financialYearId_competence: { financialYearId, competence: accountingMonth(date) } },
     select: { status: true },
@@ -2627,6 +2683,7 @@ export async function closeAccountingMonth(db: PrismaClient, actor: FinanceActor
 
 export async function requestAccountingMonthClose(db: PrismaClient, actor: FinanceActor, financialYearId: string, competence: Date) {
   return db.$transaction(async (tx) => {
+    await assertAccountingYearScope(tx, actor, financialYearId);
     const year = await tx.financialYear.findUnique({ where: { id: financialYearId } });
     if (!year || !["Aberto", "Em Encerramento"].includes(year.status)) throw new FinanceError("O exercicio nao esta disponivel para fechamento contabil.");
     const month = accountingMonth(competence);
@@ -2649,6 +2706,7 @@ export async function requestAccountingMonthClose(db: PrismaClient, actor: Finan
 
 export async function authorizeAccountingMonthClose(db: PrismaClient, actor: FinanceActor, financialYearId: string, competence: Date) {
   return db.$transaction(async (tx) => {
+    await assertAccountingYearScope(tx, actor, financialYearId);
     const month = accountingMonth(competence);
     const close = await tx.monthlyAccountingClose.findUnique({ where: { financialYearId_competence: { financialYearId, competence: month } } });
     if (!close || close.status !== "PENDENTE_FECHAMENTO") throw new FinanceError("Nao ha solicitacao de fechamento mensal pendente para esta competencia.");
@@ -2686,6 +2744,7 @@ export async function authorizeAccountingMonthClose(db: PrismaClient, actor: Fin
 export async function requestAccountingMonthReopen(db: PrismaClient, actor: FinanceActor, financialYearId: string, competence: Date, justification: string) {
   if (!justification.trim()) throw new FinanceError("A justificativa para reabertura mensal e obrigatoria.");
   return db.$transaction(async (tx) => {
+    await assertAccountingYearScope(tx, actor, financialYearId);
     const year = await tx.financialYear.findUnique({ where: { id: financialYearId } });
     if (!year || !["Aberto", "Em Encerramento"].includes(year.status)) throw new FinanceError("O exercicio nao esta disponivel para reabertura contabil.");
     const month = accountingMonth(competence);
@@ -2704,6 +2763,7 @@ export async function requestAccountingMonthReopen(db: PrismaClient, actor: Fina
 
 export async function authorizeAccountingMonthReopen(db: PrismaClient, actor: FinanceActor, financialYearId: string, competence: Date) {
   return db.$transaction(async (tx) => {
+    await assertAccountingYearScope(tx, actor, financialYearId);
     const month = accountingMonth(competence);
     const close = await tx.monthlyAccountingClose.findUnique({ where: { financialYearId_competence: { financialYearId, competence: month } } });
     if (!close || close.status !== "PENDENTE_REABERTURA") throw new FinanceError("Nao ha solicitacao de reabertura mensal pendente para esta competencia.");
@@ -2724,6 +2784,7 @@ export async function authorizeAccountingMonthReopen(db: PrismaClient, actor: Fi
 
 export async function prepareAnnualAccountingClose(db: PrismaClient, actor: FinanceActor, financialYearId: string) {
   return db.$transaction(async (tx) => {
+    await assertAccountingYearScope(tx, actor, financialYearId);
     const year = await tx.financialYear.findUnique({ where: { id: financialYearId } });
     if (!year) throw new FinanceError("Exercicio financeiro nao encontrado.");
     const closes = await tx.monthlyAccountingClose.count({ where: { financialYearId, status: "FECHADO" } });
@@ -2795,14 +2856,23 @@ export async function trackPayableCarryForwardPayment(
       include: { originFinancialYear: true, events: { where: { action: "PAGAMENTO_RASTREADO" }, select: { valueDecimal: true } }, commitment: { include: { appropriation: { select: { budgetUnitId: true } } } } },
     });
     if (!payable) throw new FinanceError("Resto a pagar não encontrado.");
-    if (!["PENDENTE", "PAGAMENTO_PARCIAL_RASTREADO"].includes(payable.status)) throw new FinanceError("Somente restos a pagar pendentes podem receber acompanhamento de pagamento.");
+    assertActorBudgetUnit(actor, payable.commitment.appropriation.budgetUnitId);
     await lockPayment(tx, input.paymentId);
     const payment = await tx.payment.findUnique({ where: { id: input.paymentId }, select: { id: true, commitmentId: true, status: true, date: true, valueDecimal: true } });
     if (!payment || payment.status !== "Paga") throw new FinanceError("Selecione um pagamento interno já efetivado.");
     if (payment.commitmentId !== payable.commitmentId) throw new FinanceError("O pagamento selecionado não pertence ao empenho do resto a pagar.");
+    const paymentTracking = await tx.payableCarryForwardEvent.findMany({ where: { paymentId: payment.id, action: "PAGAMENTO_RASTREADO" }, select: { payableCarryForwardId: true, valueDecimal: true } });
+    const replay = paymentTracking.find((event) => event.payableCarryForwardId === payable.id);
+    if (replay) {
+      if (!requiredDecimal(replay.valueDecimal, "PayableCarryForwardEvent.valueDecimal").equals(value)) throw new FinanceError("Pagamento já acompanhado com outro valor neste resto a pagar.");
+      return payable;
+    }
+    if (paymentTracking.length) throw new FinanceError("O pagamento já está vinculado ao acompanhamento de outro resto a pagar.");
+    if (!["PENDENTE", "PAGAMENTO_PARCIAL_RASTREADO"].includes(payable.status)) throw new FinanceError("Somente restos a pagar pendentes podem receber acompanhamento de pagamento.");
     if (payment.date <= payable.originFinancialYear.endDate) throw new FinanceError("O pagamento acompanhado deve ser posterior ao exercício de origem do resto a pagar.");
     const paymentValue = requiredDecimal(payment.valueDecimal, "Payment.valueDecimal");
-    if (value.greaterThan(paymentValue)) throw new FinanceError("O valor acompanhado não pode exceder o valor bruto do pagamento.");
+    const alreadyAllocated = paymentTracking.reduce((sum, event) => sum.plus(requiredDecimal(event.valueDecimal, "PayableCarryForwardEvent.valueDecimal")), new Prisma.Decimal(0));
+    if (alreadyAllocated.plus(value).greaterThan(paymentValue)) throw new FinanceError("Os acompanhamentos acumulados não podem exceder o valor bruto do pagamento.");
     const tracked = payable.events.reduce((total, event) => total.plus(requiredDecimal(event.valueDecimal, "PayableCarryForwardEvent.valueDecimal")), new Prisma.Decimal(0));
     if (tracked.plus(value).greaterThan(payable.valueDecimal)) throw new FinanceError("O valor acompanhado excede o saldo inscrito do resto a pagar.");
     const status = tracked.plus(value).equals(payable.valueDecimal) ? "PAGO_RASTREADO" : "PAGAMENTO_PARCIAL_RASTREADO";
@@ -2823,6 +2893,7 @@ export async function cancelPayableCarryForward(
     await lockPayableCarryForward(tx, input.payableCarryForwardId);
     const payable = await tx.payableCarryForward.findUnique({ where: { id: input.payableCarryForwardId }, include: { commitment: { include: { appropriation: { select: { budgetUnitId: true } } } } } });
     if (!payable) throw new FinanceError("Resto a pagar não encontrado.");
+    assertActorBudgetUnit(actor, payable.commitment.appropriation.budgetUnitId);
     if (!["PENDENTE", "PAGAMENTO_PARCIAL_RASTREADO"].includes(payable.status)) throw new FinanceError("Somente restos a pagar pendentes podem ser cancelados neste acompanhamento interno.");
     const justification = input.justification.trim();
     await tx.payableCarryForwardEvent.create({ data: { payableCarryForwardId: payable.id, action: "CANCELAMENTO_REGISTRADO", justification, actorUsuarioId: actor.usuarioId } });
@@ -2850,11 +2921,14 @@ export async function reregisterPayableCarryForward(
       },
     });
     if (!payable) throw new FinanceError("Resto a pagar não encontrado.");
+    assertActorBudgetUnit(actor, payable.commitment.appropriation.budgetUnitId);
     if (payable.status !== "PENDENTE") throw new FinanceError("A reinscrição exige um resto a pagar ainda pendente e sem acompanhamento de pagamento.");
     if (payable.events.length) throw new FinanceError("Não é possível reinscrever um resto a pagar que já possui pagamento acompanhado.");
     if (payable.successorPayableCarryForward) throw new FinanceError("Este resto a pagar já possui reinscrição registrada.");
     const targetYear = await tx.financialYear.findUnique({ where: { id: input.targetFinancialYearId } });
     if (!targetYear || targetYear.status !== OPEN_STATUS) throw new FinanceError("O exercício de destino deve existir e estar aberto para reinscrição interna.");
+    const unit = await tx.planningEntityUnit.findUnique({ where: { budgetUnitId: payable.commitment.appropriation.budgetUnitId }, select: { governmentEntityId: true } });
+    if (!unit || targetYear.governmentEntityId !== unit.governmentEntityId || payable.financialYear.governmentEntityId !== unit.governmentEntityId) throw new FinanceError("Reinscrição exige exercícios da mesma entidade da UG de origem.");
     if (targetYear.id === payable.financialYearId || targetYear.year <= payable.financialYear.year) throw new FinanceError("A reinscrição deve apontar para um exercício posterior.");
     const existingTarget = await tx.payableCarryForward.findUnique({
       where: { financialYearId_commitmentId_type: { financialYearId: targetYear.id, commitmentId: payable.commitmentId, type: payable.type } },
@@ -2885,6 +2959,7 @@ export async function reregisterPayableCarryForward(
 
 export async function finalizeAnnualAccountingClose(db: PrismaClient, actor: FinanceActor, financialYearId: string) {
   return db.$transaction(async (tx) => {
+    await assertAccountingYearScope(tx, actor, financialYearId);
     const year = await tx.financialYear.findUnique({ where: { id: financialYearId } });
     if (!year || year.status !== "Em Encerramento") throw new FinanceError("O exercicio deve estar em encerramento para o fechamento anual final.");
     const closedMonths = await tx.monthlyAccountingClose.count({ where: { financialYearId, status: "FECHADO" } });

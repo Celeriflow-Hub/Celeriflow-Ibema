@@ -2,6 +2,7 @@
 
 import { TaxError, configureTaxFinancialMapping, configureTaxParameter, configureTaxServiceActivity, createTaxAssessment, createTaxServiceRequest, enrollAssessmentInActiveDebt, evaluateTaxCertificateSituation, generateTaxGuide, recordIssDeclaration } from "@/lib/tributacao";
 import { executeTaxRefund } from "@/lib/tributacao/credit-finance";
+import { reverseTaxCreditMovement } from "@/lib/tributacao/credit-reversal";
 import { FinanceError } from "@/lib/financeiro";
 import {
   approveRefundRequest,
@@ -27,6 +28,18 @@ type ActionResult = { error?: string };
 const taxActor = (context: AppContext) => ({ usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds });
 const message = (error: unknown) => error instanceof TaxError || error instanceof FinanceError ? error.message : "Nao foi possivel concluir a operacao tributaria interna.";
 
+export async function reverseCreditMovementAction(data: { movementId: string; date: string; reason: string; idempotencyKey: string }): Promise<ActionResult> {
+  try {
+    const context = await getTenantContextForModuleOperation("TRIBUTACAO", "update");
+    const date = new Date(`${data.date}T12:00:00.000Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data.date) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== data.date || data.reason.trim().length < 10) return { error: "Informe data válida e fundamento com ao menos dez caracteres." };
+    await reverseTaxCreditMovement(context.prisma, taxActor(context), { ...data, date });
+    revalidatePath("/tributacao/motor-fiscal");
+    revalidatePath("/tributacao/guias");
+    return {};
+  } catch (error) { return { error: error instanceof Error ? error.message : "Não foi possível reverter o movimento de crédito." }; }
+}
+
 export async function saveTaxParameter(data: { taxId: string; code: string; name: string; calculationType: string; configuration: string; effectiveFrom: string }): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("TRIBUTACAO", "create");
@@ -41,7 +54,7 @@ export async function saveTaxParameter(data: { taxId: string; code: string; name
 export async function saveTaxServiceRequest(data: { serviceType: string; taxpayerId: string; processId: string; documentId?: string; assessmentId?: string; notes?: string }): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("TRIBUTACAO", "create");
-    await createTaxServiceRequest(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, data);
+    await createTaxServiceRequest(context.prisma, taxActor(context), data);
     revalidatePath("/tributacao/operacoes");
     return {};
   } catch (error) { return { error: message(error) }; }
@@ -64,7 +77,7 @@ export async function saveServiceActivity(data: { taxId: string; code: string; n
 export async function saveIssDeclaration(data: { taxpayerId: string; activityId: string; competence: string; serviceValue: number; deductionValue: number }): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("TRIBUTACAO", "create");
-    await recordIssDeclaration(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, { ...data, competence: new Date(data.competence) });
+    await recordIssDeclaration(context.prisma, taxActor(context), { ...data, competence: new Date(data.competence) });
     revalidatePath("/tributacao/operacoes");
     return {};
   } catch (error) { return { error: message(error) }; }
@@ -85,7 +98,7 @@ export async function createAssessmentGuideAction(data: { year: number; taxId: s
 export async function enrollAssessment(assessmentId: string): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("TRIBUTACAO", "create");
-    await enrollAssessmentInActiveDebt(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, assessmentId);
+    await enrollAssessmentInActiveDebt(context.prisma, taxActor(context), assessmentId);
     revalidatePath("/tributacao/operacoes");
     return {};
   } catch (error) { return { error: message(error) }; }

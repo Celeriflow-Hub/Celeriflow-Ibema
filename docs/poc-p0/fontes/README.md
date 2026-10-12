@@ -43,4 +43,13 @@ Ela apresenta PCASP Federação/Estendido 2026 e 2027, com acesso ao SIGECONF e 
 
 ## Próximo bloco P1 de classificações
 
+### CNAE e CBO — captura oficial e revisão
+
+| Fonte preservada | Origem | SHA-256 | Entradas |
+|---|---|---|---|
+| `CNAE_IBGE_API_V2_SUBCLASSES.json` | https://servicodados.ibge.gov.br/api/v2/cnae/subclasses | `787e14982265b0ffedf5f0180cbec8a2ea64d117fca459b76608ebc99dd668a7` | 1.332 |
+| `CBO_MTE_OCUPACAO.csv` | https://www.gov.br/trabalho-e-emprego/pt-br/assuntos/cbo/servicos/downloads/cbo2002-ocupacao.csv | `ad6d51d5d139125b15ea746464b2a39fa832ae295cdb6aa63dc7eddf2d2bed00` | 2.694 |
+
+Capturas de 12/10/2026. Metadados adjacentes registram URL, data e hash; CSV CBO preservado em Windows-1252. Códigos CNAE de sete dígitos e CBO de seis dígitos são textuais, incluindo zeros iniciais. Importados em versões DRAFT com `UNMAPPED:`, sem alterar cadastros existentes. Versão de API não equivale a versão normativa; vigência individual não foi declarada pelas fontes e continua pendente. Evidências em `../CATALOGO_CNAE_P1.json` e `../CATALOGO_CBO_P1.json`.
+
 Selecionar as abas/linhas vigentes, preservar códigos textuais e origem por linha, criar versões e de-para aos IDs canônicos, validar analítico/sintético e D/C pelos atributos explícitos, definir dimensões de fonte/MSC e matriz de eventos local. Agrupar a mudança de schema necessária e validar o bloco somente depois de completá-lo. A posse de um catálogo oficial não comprova sua adoção local nem os saldos da entidade.

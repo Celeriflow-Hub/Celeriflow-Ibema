@@ -1,7 +1,9 @@
 "use server";
 
-import { getTenantContextForModuleOperation, isSystemAdministrator, type ModuleOperation } from "@/lib/platform/tenant-context";
+import { canPerformModuleOperation, getTenantContextForModuleOperation, isSystemAdministrator, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { cancelTaxGuide, confirmTaxPayment } from "@/lib/tributacao";
+import { reverseTaxPayment } from "@/lib/tributacao/payment-reversal";
+import { z } from "zod";
 import { revalidatePath } from "next/cache";
 
 async function getTenantPrisma(operation: ModuleOperation) {
@@ -30,4 +32,19 @@ export async function cancelGuide(guideId: string) {
 
   revalidatePath("/tributacao/guias");
   return result;
+}
+
+export async function reverseGuidePayment(data: { paymentId: string; date: string; reason: string; idempotencyKey: string }): Promise<{ error?: string }> {
+  try {
+    const input = z.object({ paymentId: z.string().min(1), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().min(10).max(2000), idempotencyKey: z.string().trim().min(1).max(200) }).strict().parse(data);
+    const date = new Date(`${input.date}T12:00:00.000Z`);
+    if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== input.date) return { error: "Data de estorno inválida." };
+    const context = await getTenantPrisma("update");
+    if (!canPerformModuleOperation(context.user, "FINANCEIRO", "update")) return { error: "O estorno exige alteração em Tributação e Financeiro." };
+    await reverseTaxPayment(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, { ...input, date });
+    revalidatePath("/tributacao/guias");
+    revalidatePath("/tributacao/motor-fiscal");
+    revalidatePath("/financeiro/receitas");
+    return {};
+  } catch (error) { return { error: error instanceof Error ? error.message : "Não foi possível estornar o pagamento." }; }
 }

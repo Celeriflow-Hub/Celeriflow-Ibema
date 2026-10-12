@@ -9,6 +9,7 @@ export async function assertPublishedAccountClassification(tx: Prisma.Transactio
     const candidates = versions.filter((entry) => entry.version.year === date.getUTCFullYear());
     if (candidates.length !== 1) throw new Error("Conta contábil sem versão vigente única; concilie o catálogo antes da postagem.");
     const attributes = candidates[0].attributes as Prisma.JsonObject;
+    if (attributes.pocOnly === true && process.env.CELERIFLOW_ACCOUNTING_MODE !== "POC") throw new Error("Classificação de ensaio disponível somente no modo POC; homologação municipal pendente.");
     if (attributes.postingAllowed !== true) throw new Error("Conta sintética ou sem autorização de escrituração na versão vigente.");
     if (!attributes.effectiveFrom || !attributes.effectiveUntil || date.toISOString().slice(0, 10) < String(attributes.effectiveFrom) || date.toISOString().slice(0, 10) > String(attributes.effectiveUntil)) throw new Error("Conta contábil fora da vigência da classificação.");
     if (!["D", "C", "X", "DC", "D/C"].includes(String(attributes.balanceNature))) throw new Error("Natureza D/C da conta não está conciliada.");

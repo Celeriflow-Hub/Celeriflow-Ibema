@@ -17,7 +17,7 @@ import { decideEmployeeHrRequest } from "@/lib/rh/portal-requests";
 import { adjustContractSalaries, changeContractsCollectively } from "@/lib/rh/workforce-service";
 import { generateAttendanceOvertime } from "@/lib/rh/attendance-payroll";
 import { decideRecertificationProposal } from "@/lib/rh/recertification";
-import { dispatchPayrollExpenseRequests } from "@/lib/rh/finance-bridge";
+import { dispatchPayrollExpenseRequests, commitPayrollExpenseRequests, settlePayrollCommitments, payPayrollSettlements, concludePayrollFinanceCycle } from "@/lib/rh/finance-bridge";
 import { simulateSpecialPayroll } from "@/lib/rh/special-simulation";
 import { reserveConsignmentAgreement, postConsignmentInstallment, cancelConsignmentInstallment } from "@/lib/rh/consignment-service";
 import { assertPayrollBudgetScope } from "@/lib/rh/payroll-access";
@@ -51,8 +51,26 @@ export async function executeWorkforceOperation(command: string, values: Record<
       return { id: result.id, message: "Pensões configuradas com beneficiários, bases, vigências e projeção de eventos.", error: "" };
     } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao configurar pensões." }; }
   }
-  const allowed = ["contrato", "movimento", "direito", "calcular", "fechar", "cancelar", "publicar", "vincular", "aquisitivos", "reservar-ferias", "importar", "beneficio", "decidir-solicitacao", "reajustar", "cancelar-ferias", "ponto-horas-extras", "decidir-recadastramento", "financeiro", "simular-especial", "consignacao-reservar", "consignacao-lancar", "consignacao-cancelar", "contratos-coletivos", "ponto-banco-horas", "estornar-banco-horas"];
-  if (![...allowed, "poc-pagamento", "diaria-solicitar", "diaria-decidir", "diaria-prestar", "poc-parametros", "poc-preparar", "calcular-poc", "ocorrencia", "cancelar-ocorrencia", "decidir-credito", "transferir-banco-horas", "estornar-transferencia-horas", "pagar-banco-horas", "estornar-pagamento-horas", "ferias-multiplos", "cancelar-ferias-multiplos", "licenca-adquirir", "licenca-reservar", "licenca-cancelar", "averbar-tempo", "estornar-averbacao", "apurar-ats", "estornar-ats", "provisionar", "estornar-provisao", "expirar-banco-horas", "baixar-provisao-empenho", "estornar-baixa-provisao"].includes(command)) return { error: "Operação inválida." };
+  if (command === "financeiro-pagar") {
+    try {
+      const context = await getTenantContextForModuleOperation("RH", "update");
+      const result = await payPayrollSettlements(context, { runId: values.runId, date: values.date, proofDocumentId: values.proofDocumentId, payments: JSON.parse(values.payments || "[]") });
+      revalidatePath("/rh/operacoes");
+      revalidatePath(`/rh/operacoes/calculos/${values.runId}`);
+      revalidatePath("/financeiro/pagamentos");
+      return { id: result.paymentIds.join(", "), message: "Pagamentos da folha confirmados com comprovante GED, tesouraria e partidas nativas.", error: "" };
+    } catch (error) { return { error: error instanceof Error ? error.message : "Falha no pagamento da folha." }; }
+  }
+  if (command === "financeiro-concluir") {
+    try {
+      const context = await getTenantContextForModuleOperation("RH", "update");
+      const result = await concludePayrollFinanceCycle(context, { runId: values.runId, documentId: values.documentId });
+      revalidatePath(`/rh/operacoes/calculos/${values.runId}`);
+      return { id: result.eventId, message: "Ciclo financeiro da folha concluído com pagamentos, obrigações retidas e documento GED conferidos.", error: "" };
+    } catch (error) { return { error: error instanceof Error ? error.message : "Falha na conclusão financeira da folha." }; }
+  }
+  const allowed = ["contrato", "movimento", "direito", "calcular", "fechar", "cancelar", "publicar", "vincular", "aquisitivos", "reservar-ferias", "importar", "beneficio", "decidir-solicitacao", "reajustar", "cancelar-ferias", "ponto-horas-extras", "decidir-recadastramento", "financeiro", "financeiro-empenhar", "simular-especial", "consignacao-reservar", "consignacao-lancar", "consignacao-cancelar", "contratos-coletivos", "ponto-banco-horas", "estornar-banco-horas"];
+  if (![...allowed, "financeiro-liquidar", "poc-pagamento", "diaria-solicitar", "diaria-decidir", "diaria-prestar", "poc-parametros", "poc-preparar", "calcular-poc", "ocorrencia", "cancelar-ocorrencia", "decidir-credito", "transferir-banco-horas", "estornar-transferencia-horas", "pagar-banco-horas", "estornar-pagamento-horas", "ferias-multiplos", "cancelar-ferias-multiplos", "licenca-adquirir", "licenca-reservar", "licenca-cancelar", "averbar-tempo", "estornar-averbacao", "apurar-ats", "estornar-ats", "provisionar", "estornar-provisao", "expirar-banco-horas", "baixar-provisao-empenho", "estornar-baixa-provisao"].includes(command)) return { error: "Operação inválida." };
   const context = await getTenantContextForModuleOperation("RH", ["contrato", "movimento", "direito", "aquisitivos", "reservar-ferias", "importar", "beneficio", "ponto-horas-extras", "ponto-banco-horas", "consignacao-reservar", "ocorrencia", "transferir-banco-horas", "pagar-banco-horas", "ferias-multiplos", "licenca-adquirir", "licenca-reservar", "averbar-tempo", "apurar-ats"].includes(command) && !values.id ? "create" : "update");
   try {
     let id = "";
@@ -212,6 +230,20 @@ export async function executeWorkforceOperation(command: string, values: Record<
       message = `${result.applied ? "Solicitações de despesa geradas" : "Prévia sem geração financeira"}: ${JSON.stringify(result.lines)}`;
       id = result.expenseIds.join(", ");
       revalidatePath("/financeiro/orcamento");
+    }
+    if (command === "financeiro-empenhar") {
+      const result = await commitPayrollExpenseRequests(context, { runId: values.runId, date: values.date, commitments: JSON.parse(values.commitments || "[]") });
+      id = result.commitmentIds.join(", ");
+      message = "Lote da folha empenhado com reservas, notas, partidas e consumo orçamentário nativos.";
+      revalidatePath("/financeiro/orcamento");
+      revalidatePath("/financeiro/empenhos");
+    }
+    if (command === "financeiro-liquidar") {
+      const result = await settlePayrollCommitments(context, { runId: values.runId, date: values.date, documents: JSON.parse(values.documents || "[]") });
+      id = result.settlementIds.join(", ");
+      message = "Lote da folha liquidado com documentos GED, notas e partidas nativas.";
+      revalidatePath("/financeiro/empenhos");
+      revalidatePath("/financeiro/liquidacoes");
     }
     if (command === "reajustar") {
       const result = await adjustContractSalaries(context.prisma, context.user.id, { ...values, contractIds: values.contractIds.split(/[\s,;]+/).filter(Boolean) });

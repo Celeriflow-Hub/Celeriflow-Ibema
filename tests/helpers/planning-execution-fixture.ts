@@ -6,11 +6,13 @@ import { transitionPlanningPiece } from "../../src/lib/planejamento/versions";
 import { generatePlanningSchedule } from "../../src/lib/planejamento/scheduling";
 import { approveExpenseRequest, createBudgetReservation, createExpenseRequest, type FinanceActor } from "../../src/lib/financeiro";
 
-export async function createPlanningExecutionFixture(year = 2026, periodMonths: 2 | 3 | 6 = 2) {
-  const f = await createPlanningAccountingFixture("EXECUTIVE", { year });
+export async function createPlanningExecutionFixture(year = 2026, periodMonths: 2 | 3 | 6 = 2, jurisdiction: "EXECUTIVE" | "LEGISLATIVE" = "EXECUTIVE") {
+  const f = await createPlanningAccountingFixture(jurisdiction, { year });
   try {
     const models = ["Expense", "Supplier", "Company", "Creditor", "Commitment", "CommitmentMovement", "Settlement", "Payment", "FinancialDocument", "SettlementRetention", "PaymentRetention", "WithholdingPayable", "RetentionRule", "Revenue", "RevenueReversal", "BankAccount", "TreasuryMovement", "TaxRevenueIntegrationEvent", "RevenueResourceRedistribution", "PurchaseRequest", "PurchaseRequestItem", "PurchaseRequestItemBudgetAllocation", "PurchaseProcess", "PurchaseProcessItem", "PurchaseProcessItemOrigin", "Contract", "ProcurementLifecycleEvent", "TaxFinancialMapping", "TaxAssessment", "TaxGuide", "TaxPayment", "TaxAuditLog", "TaxBenefitRule", "TaxBenefitGrant"];
     models.push("TaxIntegrationEvent", "TaxRegistryEntry", "Taxpayer", "TaxDocumentSequence", "TaxParameter");
+    models.push("ActiveDebt", "DebtInstallment", "DebtInstallmentSchedule");
+    models.push("Payroll", "HrPayrollRun", "HrIntegrationEvent", "SstBenefitPayrollScope");
     models.push("TreasuryTransfer", "Asset", "AssetCategory", "AssetMaintenance", "AssetWriteOff", "AssetIntegrationPendingConfiguration", "Department");
     const enums = new Set<string>();
     for (const name of models) {

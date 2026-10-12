@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-12T18:12:17.937Z",
+  "generatedAt": "2026-10-12T20:18:56.185Z",
   "mode": "READ_ONLY",
   "migrations": [
     {
@@ -84,8 +84,8 @@
     "mismatched": 0
   },
   "catalogReadiness": {
-    "versions": 4,
-    "entries": 252,
+    "versions": 10,
+    "entries": 18775,
     "sourcesWithoutYear": 21,
     "revenueNaturesWithoutYear": 21,
     "expenseNaturesWithoutVersion": 0

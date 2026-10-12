@@ -330,6 +330,10 @@ export async function createTaxServiceRequest(
     if (input.documentId && document?.status !== "Válido") throw new TaxError("O documento GED vinculado deve estar valido.");
     if (assessment && assessment.taxpayerId !== input.taxpayerId) throw new TaxError("O lancamento tributario deve pertencer ao contribuinte.");
     if (license && license.taxpayerId !== input.taxpayerId) throw new TaxError("A licenca deve pertencer ao contribuinte.");
+    if (input.assessmentId) {
+      const origin = await tx.taxAssessment.findUniqueOrThrow({ where: { id: input.assessmentId } });
+      await resolveTaxAssessmentScope(tx, actor, origin.taxId, origin.calculationSnapshot);
+    } else if (actor.allowedBudgetUnitIds) throw new TaxError("Selecione lançamento tributário com UG autorizada para a solicitação.");
     const request = await tx.taxServiceRequest.create({ data: { serviceType: input.serviceType.trim().toUpperCase(), taxpayerId: input.taxpayerId, processId: process.id, documentId: document?.id, assessmentId: assessment?.id, licenseId: license?.id, notes: input.notes?.trim() || undefined } });
     await audit(tx, actor, "CREATE", "TaxServiceRequest", request.id, { serviceType: request.serviceType, processId: request.processId, documentId: request.documentId, assessmentId: request.assessmentId, licenseId: request.licenseId });
     return request;
@@ -352,9 +356,10 @@ export async function recordIssDeclaration(
     ]);
     if (taxpayer?.status !== "Ativo" || !activity?.isActive || !activity.tax.isActive || !activity.issRate) throw new TaxError("Contribuinte, atividade e aliquota ISS ativos sao obrigatorios.");
     if (registration && (registration.taxpayerId !== input.taxpayerId || registration.status !== "Ativo")) throw new TaxError("A inscricao economica deve estar ativa e pertencer ao contribuinte.");
+    const scope = await assessmentYearScope(tx, actor, input.competence.getUTCFullYear(), activity.taxId);
     const taxable = serviceValue.minus(deductions);
     const issValue = taxable.mul(activity.issRate).div(100).toDecimalPlaces(2);
-    const declaration = await tx.taxDeclaration.create({ data: { taxpayerId: input.taxpayerId, economicRegistrationId: input.economicRegistrationId, activityId: input.activityId, competence: input.competence, serviceValueDecimal: serviceValue, deductionValueDecimal: deductions, issValueDecimal: issValue, calculationSnapshot: { tax: activity.tax.name, rate: activity.issRate.toString(), taxableBase: taxable.toFixed(2), issValue: issValue.toFixed(2), scope: "APURACAO_INTERNA" } } });
+    const declaration = await tx.taxDeclaration.create({ data: { taxpayerId: input.taxpayerId, economicRegistrationId: input.economicRegistrationId, activityId: input.activityId, competence: input.competence, serviceValueDecimal: serviceValue, deductionValueDecimal: deductions, issValueDecimal: issValue, calculationSnapshot: { tax: activity.tax.name, rate: activity.issRate.toString(), taxableBase: taxable.toFixed(2), issValue: issValue.toFixed(2), scope: "APURACAO_INTERNA", budgetUnitId: scope.budgetUnitId, governmentEntityId: scope.governmentEntityId, financialYearId: scope.financialYear.id } } });
     await audit(tx, actor, "CREATE", "TaxDeclaration", declaration.id, { activityId: activity.id, competence: input.competence.toISOString(), serviceValue: serviceValue.toFixed(2), issValue: issValue.toFixed(2) });
     return declaration;
   });
@@ -364,9 +369,14 @@ export async function enrollAssessmentInActiveDebt(db: PrismaClient, actor: TaxA
   return db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${assessmentId} FOR UPDATE`;
     const assessment = await tx.taxAssessment.findUnique({ where: { id: assessmentId }, include: { tax: { select: { name: true } }, activeDebt: true } });
-    if (!assessment || ["Pago", "Cancelado"].includes(assessment.status)) throw new TaxError("Somente lancamento tributario pendente pode seguir para base de divida ativa.");
+    if (!assessment) throw new TaxError("Lancamento tributario nao encontrado.");
+    await resolveTaxAssessmentScope(tx, actor, assessment.taxId, assessment.calculationSnapshot);
     if (assessment.activeDebt) return assessment.activeDebt;
-    const value = assessment.finalValueDecimal ?? requiredAmount(assessment.originalValueDecimal, "TaxAssessment.originalValueDecimal");
+    if (["Pago", "Cancelado", "Suspenso"].includes(assessment.status)) throw new TaxError("Somente lancamento tributario pendente pode seguir para base de divida ativa.");
+    const payments = await tx.taxPayment.findMany({ where: { guide: { assessmentId }, status: "Confirmado" }, select: { amountPaidDecimal: true } });
+    const collected = payments.reduce((sum, payment) => sum.plus(requiredAmount(payment.amountPaidDecimal, "TaxPayment.amountPaidDecimal")), new Prisma.Decimal(0));
+    const value = (assessment.finalValueDecimal ?? requiredAmount(assessment.originalValueDecimal, "TaxAssessment.originalValueDecimal")).minus(collected).minus(await taxAssessmentCompensatedValue(tx, assessment.id));
+    if (value.lte(0)) throw new TaxError("Lancamento sem saldo pendente para inscricao em divida ativa.");
     const debt = await tx.activeDebt.create({ data: { taxpayerId: assessment.taxpayerId, assessmentId: assessment.id, year: assessment.year, originDebtType: assessment.tax.name, originalValue: legacyAmount(value), originalValueDecimal: value, updatedValue: legacyAmount(value), updatedValueDecimal: value, status: "PENDENTE_DE_VALIDACAO" } });
     await tx.taxAssessment.update({ where: { id: assessment.id }, data: { status: "Dívida Ativa" } });
     await audit(tx, actor, "CREATE", "ActiveDebt", debt.id, { assessmentId: assessment.id, value: value.toFixed(2), status: debt.status });
@@ -382,8 +392,12 @@ export async function createDebtInstallmentPlan(
   if (!Number.isInteger(input.installmentsCount) || input.installmentsCount < 1) throw new TaxError("Informe ao menos uma parcela.");
   const downPayment = amount(input.downPayment ?? 0, true);
   return db.$transaction(async (tx) => {
-    const debt = await tx.activeDebt.findUnique({ where: { id: input.activeDebtId } });
+    await tx.$queryRaw`SELECT id FROM "ActiveDebt" WHERE id = ${input.activeDebtId} FOR UPDATE`;
+    const debt = await tx.activeDebt.findUnique({ where: { id: input.activeDebtId }, include: { assessment: true, installments: { where: { status: { notIn: ["Cancelado", "Cancelada", "Pago", "Paga"] } }, select: { id: true } } } });
     if (!debt || !["Inscrita", "PENDENTE_DE_VALIDACAO", "Parcelada"].includes(debt.status)) throw new TaxError("A divida ativa nao esta disponivel para avaliacao de parcelamento.");
+    if (debt.assessment) await resolveTaxAssessmentScope(tx, actor, debt.assessment.taxId, debt.assessment.calculationSnapshot);
+    else if (actor.allowedBudgetUnitIds) throw new TaxError("Divida legada sem origem/UG conciliada.");
+    if (debt.installments.length) throw new TaxError("Divida ja possui parcelamento ativo; regularize-o antes de emitir outro.");
     const total = requiredAmount(debt.updatedValueDecimal, "ActiveDebt.updatedValueDecimal");
     if (downPayment.greaterThanOrEqualTo(total)) throw new TaxError("A entrada deve ser menor que o valor atualizado da divida.");
     const balance = total.minus(downPayment);

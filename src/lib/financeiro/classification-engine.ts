@@ -1,6 +1,6 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import crypto from "crypto";
-import { createTreasuryTransferInTransaction, postAccountingEventInTransaction } from "@/lib/financeiro";
+import { createTreasuryTransferInTransaction } from "@/lib/financeiro";
 
 export type ClassificationType =
   | "APLICACAO"
@@ -248,17 +248,12 @@ export async function sendMovementToMunicipalSystem(
     }
 
     const destinationAccount = expectedSourceIsChecking
-      ? await tx.bankAccount.findUnique({ where: { id: sourceAccount.linkedInvestmentAccountId ?? "__sem-vinculo__" }, select: { id: true, accountingPlanId: true, isActive: true } })
-      : await tx.bankAccount.findFirst({ where: { linkedInvestmentAccountId: sourceAccount.id, isActive: true }, select: { id: true, accountingPlanId: true } });
+      ? await tx.bankAccount.findUnique({ where: { id: sourceAccount.linkedInvestmentAccountId ?? "__sem-vinculo__" }, select: { id: true, accountingPlanId: true, isActive: true, budgetUnitId: true } })
+      : await tx.bankAccount.findFirst({ where: { linkedInvestmentAccountId: sourceAccount.id, isActive: true }, select: { id: true, accountingPlanId: true, budgetUnitId: true } });
     if (!destinationAccount) throw new Error("A conta de contrapartida da aplicação não está cadastrada ou ativa na tesouraria.");
     if (!sourceAccount.accountingPlanId || !destinationAccount.accountingPlanId) {
       throw new Error("As contas da transferência devem possuir contas analíticas vinculadas para registrar o razão bancário.");
     }
-
-    const entityUnit = sourceAccount.budgetUnitId ? await tx.planningEntityUnit.findUnique({ where: { budgetUnitId: sourceAccount.budgetUnitId }, select: { governmentEntityId: true } }) : null;
-    if (!entityUnit) throw new Error("A unidade gestora da conta bancária não tem entidade vinculada.");
-    const year = await tx.financialYear.findFirst({ where: { year: item.date.getUTCFullYear(), governmentEntityId: entityUnit.governmentEntityId }, select: { id: true } });
-    if (!year) throw new Error("Não existe exercício financeiro aberto para a data do lançamento.");
 
     const idempotencyKey = `BANK:STATEMENT:${item.id}:INVESTMENT_TRANSFER`;
     const transfer = await createTreasuryTransferInTransaction(tx, { usuarioId: data.usuarioId, employeeId: data.employeeId }, {
@@ -286,21 +281,7 @@ export async function sendMovementToMunicipalSystem(
       });
     }
 
-    const accounting = await postAccountingEventInTransaction(tx, { usuarioId: data.usuarioId, employeeId: data.employeeId }, {
-      financialYearId: year.id,
-      governmentEntityId: entityUnit.governmentEntityId,
-      budgetUnitId: sourceAccount.budgetUnitId ?? undefined,
-      date: item.date,
-      eventCode: isInvestmentApplication(classification.category) ? "APLICACAO_FINANCEIRA" : "RESGATE_APLICACAO_FINANCEIRA",
-      value,
-      history: item.description || `Transferência de ${classification.category.toLowerCase().replace(/_/g, " ")}`,
-      sourceModule: "FINANCEIRO",
-      sourceType: "BANK_STATEMENT_INVESTMENT_TRANSFER",
-      sourceId: item.id,
-      idempotencyKey: `${idempotencyKey}:ACCOUNTING`,
-      debitAccountId: destinationAccount.accountingPlanId,
-      creditAccountId: sourceAccount.accountingPlanId,
-    });
+    const accounting = await tx.accountingTransaction.findUniqueOrThrow({ where: { idempotencyKey: sourceAccount.budgetUnitId === destinationAccount.budgetUnitId ? `${idempotencyKey}:ACCOUNTING` : `${idempotencyKey}:ACCOUNTING:OUT` } });
 
     const movement = await tx.treasuryMovement.findUnique({
       where: { id: transfer.sourceMovementId },

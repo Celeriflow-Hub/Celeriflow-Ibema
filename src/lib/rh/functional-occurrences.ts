@@ -9,6 +9,8 @@ export async function assertPersonnelActNotIntegrated(tx: Prisma.TransactionClie
   await tx.$queryRaw`SELECT id FROM "PersonnelAct" WHERE id=${actId} FOR UPDATE`;
   const linked = await tx.hrIntegrationEvent.findFirst({ where: { eventType: "OCORRENCIA_FUNCIONAL_REGISTRADA", payload: { path: ["input", "personnelActId"], equals: actId } }, select: { id: true } });
   if (linked) throw new Error("Ato com ocorrência funcional integrada exige correção compensatória; preserve o registro original.");
+  const lifecycle = await tx.hrIntegrationEvent.findFirst({ where: { eventType: "EFEITO_FUNCIONAL_RESCISAO", payload: { path: ["results"], array_contains: [{ actId }] } }, select: { id: true } });
+  if (lifecycle) throw new Error("Ato com desligamento/reintegração integrada exige correção compensatória; preserve o registro original.");
 }
 
 export async function registerFunctionalOccurrence(db: PrismaClient, actorId: string, raw: unknown) {

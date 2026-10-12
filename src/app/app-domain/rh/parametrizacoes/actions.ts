@@ -13,6 +13,8 @@ import { incomeTaxBandSchema, incomeTaxReductionSchema } from "@/lib/rh/income-t
 import { pocSpecialPolicySchema } from "@/lib/rh/poc-special-payroll";
 import { travelAllowancePolicySchema } from "@/lib/rh/travel-allowance";
 import { vacationEntitlementPolicySchema } from "@/lib/rh/vacation-entitlement";
+import { payrollPensionPolicySchema } from "@/lib/rh/payroll-pensions";
+import { monthlyProrationPolicySchema } from "@/lib/rh/monthly-proration";
 
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
@@ -267,6 +269,14 @@ export async function saveHrPayrollRule(
       const ruleSet = await getManagedRuleSet(tx, input.ruleSetId);
       assertRuleSetCanChange(ruleSet);
       const value = parseRuleValue(input.valueType, input.value);
+      if (input.code === "PENSOES_FOLHA") {
+        if (input.valueType !== "JSON") throw new Error("Pensões exigem política JSON.");
+        payrollPensionPolicySchema.parse(value);
+      }
+      if (input.code === "RATEIO_MENSAL_CIVIL") {
+        if (input.valueType !== "JSON") throw new Error("Rateio mensal exige política JSON.");
+        monthlyProrationPolicySchema.parse(value);
+      }
       if (input.code === "IRRF_FAIXAS") {
         if (input.valueType !== "JSON" || !Array.isArray(value) || !value.length) throw new Error("IRRF exige faixas em lista JSON.");
         value.forEach(band => incomeTaxBandSchema.parse(band));

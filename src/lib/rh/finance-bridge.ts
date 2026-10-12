@@ -4,6 +4,7 @@ import { createExpenseRequest } from "@/lib/financeiro";
 import { AccessError, assertBudgetUnitAccess, canPerformModuleOperation, type AppContext } from "@/lib/platform/tenant-context";
 import { assertPayrollBudgetScope } from "./payroll-access";
 import { enqueueHrIntegration } from "./workforce-service";
+import { allocateProratedStatementLocations } from "./prorated-statement-locations";
 
 const targetSchema = z.object({ appropriationId: z.string().min(1), supplierId: z.string().min(1), secretariatId: z.string().min(1) }).strict();
 const policySchema = z.object({ origin: z.literal("FOLHA_SOLICITACOES_DESPESA"), legalReference: z.string().min(3), mappings: z.array(z.object({ costCenterId: z.string().nullable(), gross: targetSchema, employer: targetSchema.optional() }).strict()).min(1) }).strict();
@@ -16,6 +17,13 @@ export function planPayrollExpenses(statements: { gross: Prisma.Decimal; employe
   if (new Set(policy.mappings.map(mapping => mapping.costCenterId)).size !== policy.mappings.length) throw new Error("Centro de custo duplicado no mapeamento financeiro.");
   const groups = new Map<string | null, { gross: Prisma.Decimal; employer: Prisma.Decimal }>();
   for (const statement of statements) {
+    if ((statement.snapshot as { proration?: unknown }).proration) {
+      for (const part of allocateProratedStatementLocations(statement.snapshot, statement.employer)) {
+        const current = groups.get(part.costCenterId) ?? { gross: new Prisma.Decimal(0), employer: new Prisma.Decimal(0) };
+        current.gross = current.gross.add(part.gross); current.employer = current.employer.add(part.employer); groups.set(part.costCenterId, current);
+      }
+      continue;
+    }
     const { contract } = z.object({ contract: z.object({ costCenterId: z.string().nullable() }) }).parse(statement.snapshot);
     const current = groups.get(contract.costCenterId) || { gross: new Prisma.Decimal(0), employer: new Prisma.Decimal(0) };
     current.gross = current.gross.add(statement.gross); current.employer = current.employer.add(statement.employer); groups.set(contract.costCenterId, current);

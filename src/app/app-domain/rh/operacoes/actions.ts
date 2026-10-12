@@ -29,8 +29,28 @@ import { decideEmployeeCreditRequest } from "@/lib/rh/credit-requests";
 import { installDocumentaryPocParameters, prepareDocumentaryPocDataset } from "@/lib/rh/poc-bootstrap";
 import { requestTravelAllowance, decideTravelAllowance, accountForTravelAllowance } from "@/lib/rh/travel-allowance";
 import { registerPocPayment } from "@/lib/rh/poc-payment";
+import { configurePayrollPensions } from "@/lib/rh/pension-configuration";
+import { applyPocEmploymentLifecycle } from "@/lib/rh/employment-lifecycle";
 
 export async function executeWorkforceOperation(command: string, values: Record<string, string>) {
+  if (command === "poc-vinculo") {
+    try {
+      const context = await getTenantContextForModuleOperation("RH", "update");
+      const run = await context.prisma.hrPayrollRun.findUniqueOrThrow({ where: { id: values.sourceRunId } });
+      await assertPayrollBudgetScope(context, run.payrollId);
+      const result = await applyPocEmploymentLifecycle(context.prisma, context.user.id, values);
+      revalidatePath("/rh/operacoes"); revalidatePath("/rh/atos"); revalidatePath("/rh/servidores");
+      return { id: result.id, message: "Efeito funcional registrado com ato, vigência e histórico preservado.", error: "" };
+    } catch (error) { return { error: error instanceof Error ? error.message : "Falha no efeito funcional." }; }
+  }
+  if (command === "pensoes-configurar") {
+    try {
+      const context = await getTenantContextForModuleOperation("RH", "update");
+      const result = await configurePayrollPensions(context.prisma, context.user.id, { ruleSetId: values.ruleSetId, requestKey: values.requestKey, policy: JSON.parse(values.policy || "{}") });
+      revalidatePath("/rh/pensoes"); revalidatePath("/rh/parametrizacoes");
+      return { id: result.id, message: "Pensões configuradas com beneficiários, bases, vigências e projeção de eventos.", error: "" };
+    } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao configurar pensões." }; }
+  }
   const allowed = ["contrato", "movimento", "direito", "calcular", "fechar", "cancelar", "publicar", "vincular", "aquisitivos", "reservar-ferias", "importar", "beneficio", "decidir-solicitacao", "reajustar", "cancelar-ferias", "ponto-horas-extras", "decidir-recadastramento", "financeiro", "simular-especial", "consignacao-reservar", "consignacao-lancar", "consignacao-cancelar", "contratos-coletivos", "ponto-banco-horas", "estornar-banco-horas"];
   if (![...allowed, "poc-pagamento", "diaria-solicitar", "diaria-decidir", "diaria-prestar", "poc-parametros", "poc-preparar", "calcular-poc", "ocorrencia", "cancelar-ocorrencia", "decidir-credito", "transferir-banco-horas", "estornar-transferencia-horas", "pagar-banco-horas", "estornar-pagamento-horas", "ferias-multiplos", "cancelar-ferias-multiplos", "licenca-adquirir", "licenca-reservar", "licenca-cancelar", "averbar-tempo", "estornar-averbacao", "apurar-ats", "estornar-ats", "provisionar", "estornar-provisao", "expirar-banco-horas", "baixar-provisao-empenho", "estornar-baixa-provisao"].includes(command)) return { error: "Operação inválida." };
   const context = await getTenantContextForModuleOperation("RH", ["contrato", "movimento", "direito", "aquisitivos", "reservar-ferias", "importar", "beneficio", "ponto-horas-extras", "ponto-banco-horas", "consignacao-reservar", "ocorrencia", "transferir-banco-horas", "pagar-banco-horas", "ferias-multiplos", "licenca-adquirir", "licenca-reservar", "averbar-tempo", "apurar-ats"].includes(command) && !values.id ? "create" : "update");
@@ -57,7 +77,12 @@ export async function executeWorkforceOperation(command: string, values: Record<
     if (command === "calcular-poc") {
       await assertPayrollBudgetScope(context, values.payrollId);
       const payroll = await context.prisma.payroll.findUniqueOrThrow({ where: { id: values.payrollId } });
-      const result = await calculatePayrollRun(context.prisma, context.user.id, { payrollId: values.payrollId, requestKey: values.requestKey, mode: values.mode, scope: "DEMONSTRACAO", contractIds: values.contractIds.split(/[\s,;]+/).filter(Boolean), ...(payroll.type !== "Mensal" ? { specialParameters: JSON.parse(values.parameters || "{}") } : {}) });
+      const specialParameters = payroll.type !== "Mensal" ? JSON.parse(values.parameters || "{}") : undefined;
+      if (specialParameters?.sourceRunId) {
+        const source = await context.prisma.hrPayrollRun.findUniqueOrThrow({ where: { id: specialParameters.sourceRunId } });
+        await assertPayrollBudgetScope(context, source.payrollId);
+      }
+      const result = await calculatePayrollRun(context.prisma, context.user.id, { payrollId: values.payrollId, requestKey: values.requestKey, mode: values.mode, scope: "DEMONSTRACAO", contractIds: values.contractIds.split(/[\s,;]+/).filter(Boolean), ...(specialParameters ? { specialParameters } : { monthlyProration: values.monthlyProration === "SIM" }) });
       id = result.id; message = "Cálculo POC persistido com memória. Abra o cálculo para conferir, fechar e publicar os demonstrativos.";
     }
     if (command === "baixar-provisao-empenho") {

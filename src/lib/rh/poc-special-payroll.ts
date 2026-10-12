@@ -9,6 +9,8 @@ export const pocSpecialParametersSchema = z.object({
   average: money.default("0.00"), variableAmount: money.default("0.00"), previousAdvance: money.default("0.00"),
   advanceRate: z.coerce.number().min(0).max(100).default(40), rraMonths: z.coerce.number().int().min(1).max(600).default(6),
   rraAmount: money.default("18000.00"), reason: z.string().trim().min(10).max(2000),
+  sourceRunId: z.string().min(1).optional(),
+  vacationEntryIds: z.record(z.string(), z.array(z.string().min(1)).min(1)).optional(),
 }).strict();
 export const pocSpecialPolicySchema = z.object({ origin: z.literal("FOLHAS_ESPECIAIS_POC"), legalReference: z.string().min(3), estimated: z.literal(true), version: z.literal(1) }).strict();
 
@@ -27,6 +29,7 @@ export function countThirteenthAvos(admittedAt: Date, through: Date, endsAt: Dat
 export function preparePocSpecialRubrics(input: {
   payrollType: string; competence: string; salary: Prisma.Decimal.Value; admittedAt: Date; endsAt: Date | null;
   parameters: z.infer<typeof pocSpecialParametersSchema>; rubrics: PayrollRubricInput[];
+  history?: { gross: string; advance: string };
 }) {
   if (!(HR_PAYROLL_TYPES as readonly string[]).includes(input.payrollType) || input.payrollType === "Mensal") throw new Error("Tipo especial inválido.");
   const p = input.parameters, D = (value: Prisma.Decimal.Value) => new Prisma.Decimal(value);
@@ -39,9 +42,18 @@ export function preparePocSpecialRubrics(input: {
     case "Adiantamento salarial": add("POC_ADIANTAMENTO", base.mul(p.advanceRate).div(100), "(SALARIO_BASE + MEDIA) * PERCENTUAL / 100"); break;
     case "1ª parcela 13º": add("POC_ADIANTAMENTO_13", base.mul(avos).div(12).div(2), "(SALARIO_BASE + MEDIA) * AVOS / 12 / 2"); break;
     case "13º":
-    case "Diferença 13º":
       add("POC_DECIMO_13", base.mul(avos).div(12), "(SALARIO_BASE + MEDIA) * AVOS / 12");
-      add("POC_ABATIMENTO", D(p.previousAdvance), "PARCELA_ANTERIOR_INFORMADA"); break;
+      add("POC_ABATIMENTO", D(input.history?.advance ?? p.previousAdvance), input.history ? "ADIANTAMENTO_DA_EXECUCAO_VINCULADA" : "PARCELA_ANTERIOR_INFORMADA"); break;
+    case "Diferença 13º":
+      if (input.history) {
+        const difference = base.mul(avos).div(12).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP).sub(input.history.gross);
+        if (difference.lt(0)) throw new Error("Diferença negativa exige restituição/compensação própria.");
+        add("POC_DECIMO_13", difference, "TOTAL_13_RECALCULADO - BRUTO_DA_EXECUCAO_VINCULADA");
+      } else {
+        add("POC_DECIMO_13", base.mul(avos).div(12), "(SALARIO_BASE + MEDIA) * AVOS / 12");
+        add("POC_ABATIMENTO", D(p.previousAdvance), "PARCELA_ANTERIOR_INFORMADA");
+      }
+      break;
     case "Férias":
       add("POC_FERIAS", base.mul(p.vacationDays).div(30), "(SALARIO_BASE + MEDIA) * DIAS_FERIAS / 30");
       add("POC_TERCO", amounts.POC_FERIAS.div(3), "REMUNERACAO_FERIAS / 3"); break;

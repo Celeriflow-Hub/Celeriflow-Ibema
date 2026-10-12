@@ -8,6 +8,9 @@ import { calculateTravelAllowance } from "../src/lib/rh/travel-allowance";
 import { calculateServiceAcquisitions } from "../src/lib/rh/service-rights";
 import { calculateServiceTimeAllowance } from "../src/lib/rh/service-time-allowance";
 import { vacationDaysForAbsences } from "../src/lib/rh/vacation-entitlement";
+import { calculatePayrollPensions, payrollPensionPolicySchema } from "../src/lib/rh/payroll-pensions";
+import { resolveMonthlyContractSegments, calculateProratedMonthlyRubrics } from "../src/lib/rh/monthly-proration";
+import type { HrEmploymentContract, HrEmploymentRevision } from "@prisma/client";
 
 test("casos ouro T11–T15: RGPS e IRRF 2026, redução pela renda antes de deduções", () => {
   const bands = [{ lowerLimit: "0", upperLimit: "1621", employeeRate: "7.5" }, { lowerLimit: "1621", upperLimit: "2902.84", employeeRate: "9" }, { lowerLimit: "2902.84", upperLimit: "4354.27", employeeRate: "12" }, { lowerLimit: "4354.27", upperLimit: null, employeeRate: "14" }];
@@ -77,4 +80,35 @@ test("diárias da cartilha: limites 8/12/24h, distância e truncamento explicita
 test("mescla de férias resolve fronteiras 6/15/24/33 em política demonstrativa explícita", () => {
   const policy = { origin: "FALTAS_FERIAS_POC", estimated: true, legalReference: "Ibema histórico + Campina art. 109; >=33 estimado", attendanceStatuses: ["Falta"], bands: [{ minimumAbsences: 0, maximumAbsences: 5, days: 30 }, { minimumAbsences: 6, maximumAbsences: 14, days: 24 }, { minimumAbsences: 15, maximumAbsences: 23, days: 18 }, { minimumAbsences: 24, maximumAbsences: 32, days: 12 }, { minimumAbsences: 33, maximumAbsences: null, days: 0 }] };
   assert.deepEqual([0, 5, 6, 14, 15, 23, 24, 32, 33, 99].map(count => vacationDaysForAbsences(policy, count)), [30, 30, 24, 24, 18, 18, 12, 12, 0, 0]);
+});
+
+test("pensão seleciona base, tipo de folha, vigência e dedução fiscal sem circularidade", () => {
+  const entry = { id: "MODELO", contractId: "c", beneficiaryPersonId: "p", courtReference: "PROCESSO POC-01", startsAt: "2026-01-01", endsAt: null, payrollTypes: ["Mensal"], method: "PERCENTUAL", value: "20", basis: "APOS_PREVIDENCIA", deductFromIncomeTax: true };
+  const policy = { origin: "PENSOES_FOLHA", legalReference: "Exemplo judicial estimado", entries: [entry] };
+  const input = { contractId: "c", payrollType: "Mensal", start: new Date("2026-10-01"), end: new Date("2026-10-31"), gross: "4400", socialContribution: "417.51", incomeTax: "0", phase: "ANTES_IRRF" as const };
+  assert.equal(calculatePayrollPensions(policy, input)[0].amount, "796.50");
+  assert.equal(calculatePayrollPensions(policy, { ...input, payrollType: "13º" }).length, 0);
+  assert.equal(calculatePayrollPensions(policy, { ...input, phase: "APOS_IRRF" }).length, 0);
+  assert.throws(() => payrollPensionPolicySchema.parse({ ...policy, entries: [{ ...entry, basis: "APOS_IRRF" }] }), /circular/);
+  assert.throws(() => calculatePayrollPensions({ ...policy, entries: [{ ...entry, startsAt: "2026-10-15" }] }, input), /intramês/);
+});
+
+test("rateio civil concilia revisões, admissão parcial, jornada, lotação e centavos", () => {
+  const contract = { id: "c", employeeId: "e", registration: "POC", regimeId: "r", roleId: "role", departmentId: null, costCenterId: null, workLocation: "A", salaryLevel: null, admittedAt: new Date("2020-01-01"), appointedAt: null, swornAt: null, endsAt: null, monthlyHours: 200, salary: new Prisma.Decimal(3000), status: "ATIVO", version: 1, details: {}, createdAt: new Date(), updatedAt: new Date() } as HrEmploymentContract;
+  const snapshot = (value: HrEmploymentContract) => JSON.parse(JSON.stringify(value));
+  const revisions = [{ id: "v1", contractId: "c", version: 1, effectiveFrom: new Date("2020-01-01"), snapshot: snapshot(contract) }, { id: "v2", contractId: "c", version: 2, effectiveFrom: new Date("2026-11-16"), snapshot: snapshot({ ...contract, version: 2, salary: new Prisma.Decimal(6000), monthlyHours: 100, workLocation: "B" }) }] as HrEmploymentRevision[];
+  const period = { start: new Date("2026-11-01"), end: new Date("2026-11-30T23:59:59.999Z") };
+  const segments = resolveMonthlyContractSegments(contract, revisions, period);
+  assert.deepEqual(segments.map(segment => segment.calendarDays), [15, 15]);
+  const policy = { origin: "RATEIO_MENSAL_CIVIL", divisor: "DIAS_CIVIS_MES", manualMovements: "VALOR_INTEGRAL_RATEADO", legalReference: "Modelo civil POC", estimated: true };
+  const rubrics = [{ code: "SALARIO", name: "Salário", type: "PROVENTO", calculationMethod: "FORMULA_CONTROLADA", formulaExpression: "SALARIO_BASE * DIAS / 30", calculationBaseCode: null, percentageRate: null, fixedValue: null, incidences: [{ incidenceType: "IRRF", isIncluded: true }] }, { code: "MANUAL", name: "Manual", type: "PROVENTO", calculationMethod: "MANUAL", formulaExpression: null, calculationBaseCode: null, percentageRate: null, fixedValue: null, incidences: [] }];
+  const result = calculateProratedMonthlyRubrics({ segments, period, policy, rubrics, movements: { MANUAL: new Prisma.Decimal("0.01") } });
+  assert.equal(result.result.gross.toFixed(2), "4500.01");
+  assert.equal(result.result.bases.IRRF.toFixed(2), "4500.00");
+  assert.deepEqual(result.memory.segments.map(segment => [segment.workLocation, segment.monthlyHours]), [["A", 200], ["B", 100]]);
+  const partial = { ...contract, admittedAt: new Date("2026-11-16") };
+  const admitted = resolveMonthlyContractSegments(partial, [{ ...revisions[0], effectiveFrom: partial.admittedAt, snapshot: snapshot(partial) }], period);
+  assert.equal(calculateProratedMonthlyRubrics({ segments: admitted, period, policy, rubrics, movements: {} }).result.gross.toFixed(2), "1500.00");
+  const inactive = { ...contract, status: "INATIVO" };
+  assert.equal(resolveMonthlyContractSegments(inactive, [{ ...revisions[0], snapshot: snapshot(inactive) }], period, true).length, 0, "um vínculo inativo do mesmo titular não pode bloquear o rateio dos vínculos ativos");
 });

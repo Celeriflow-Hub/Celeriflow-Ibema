@@ -42,6 +42,8 @@ import { registerFunctionalOccurrence, cancelFunctionalOccurrence, assertPersonn
 import { installDocumentaryPocParameters, prepareDocumentaryPocDataset } from "../src/lib/rh/poc-bootstrap";
 import { requestTravelAllowance, decideTravelAllowance, accountForTravelAllowance, buildTravelAllowanceDocument } from "../src/lib/rh/travel-allowance";
 import { registerPocPayment } from "../src/lib/rh/poc-payment";
+import { configurePayrollPensions } from "../src/lib/rh/pension-configuration";
+import { applyPocEmploymentLifecycle } from "../src/lib/rh/employment-lifecycle";
 
 test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamento, Portal e saldos", async () => {
   const pg = new PGlite();
@@ -891,5 +893,82 @@ test("PostgreSQL RH: simulação isolada, revisão, replay, movimentos, fechamen
     assert.deepEqual(await acquireVacationRights(db, "actor", poc.contractIds[0], "2020-12-31"), reducedVacation);
     await db.attendanceRecord.createMany({ data: Array.from({ length: 9 }, (_, i) => ({ employeeId: "rh-poc-employee-v1-0", date: new Date(Date.UTC(2020, 6, i + 1)), status: "Falta" })) });
     await assert.rejects(acquireVacationRights(db, "actor", poc.contractIds[0], "2020-12-31"), /mudaram após aquisição/);
+    const pensionPolicy = { origin: "PENSOES_FOLHA", legalReference: "POC judicial estimada, termos a substituir", entries: [{ id: "TESTE_01", contractId: poc.contractIds[0], beneficiaryPersonId: "rh-poc-person-v1-2", courtReference: "Processo fictício POC-001", startsAt: "2026-01-01", endsAt: null, payrollTypes: ["Mensal"], method: "PERCENTUAL", value: "20.00", basis: "APOS_PREVIDENCIA", deductFromIncomeTax: true }] };
+    const pensionInput = { ruleSetId: poc.ruleSetId, requestKey: "configure-pensions-test", policy: pensionPolicy };
+    const pensionRule = await configurePayrollPensions(db, "actor", pensionInput);
+    assert.equal((await configurePayrollPensions(db, "other-actor", pensionInput)).id, pensionRule.id);
+    await db.payroll.create({ data: { id: "pension-monthly-test", competence: "09/2026", type: "Mensal" } });
+    const pensionRun = await calculatePayrollRun(db, "actor", { payrollId: "pension-monthly-test", requestKey: "pension-test", contractIds: poc.contractIds, mode: "OFICIAL", scope: "DEMONSTRACAO" });
+    const pensionStatement = pensionRun.statements.find(statement => statement.contractId === poc.contractIds[0])!;
+    assert.equal((pensionStatement.snapshot as { pensions: { amount: string }[] }).pensions[0].amount, "796.50");
+    await closePayrollRun(db, "actor", pensionRun.id);
+    assert.equal((await buildHrReport(db, { kind: "PENSOES", format: "CSV", q: "", payrollId: "pension-monthly-test" })).rows[0][13], "796.50");
+    const storedPoc = await db.hrEmploymentContract.findUniqueOrThrow({ where: { id: poc.contractIds[0] } });
+    await saveEmploymentContract(db, "actor", { id: storedPoc.id, version: storedPoc.version, employeeId: storedPoc.employeeId, registration: storedPoc.registration, regimeId: storedPoc.regimeId, roleId: storedPoc.roleId, workLocation: "Local alterado POC", salaryLevel: storedPoc.salaryLevel || undefined, admittedAt: "2020-01-01", appointedAt: "2020-01-01", swornAt: "2020-01-01", endsAt: "", monthlyHours: 100, salary: "6400.00", details: storedPoc.details, reason: "Reajuste intramês de teste", effectiveFrom: "2026-11-16" });
+    await db.payroll.create({ data: { id: "prorated-monthly-test", competence: "11/2026", type: "Mensal" } });
+    const prorated = await calculatePayrollRun(db, "actor", { payrollId: "prorated-monthly-test", requestKey: "prorated-test", contractIds: poc.contractIds, mode: "OFICIAL", scope: "DEMONSTRACAO", monthlyProration: true });
+    assert.equal(prorated.statements.find(statement => statement.contractId === poc.contractIds[0])!.gross.toFixed(2), "5400.00");
+    await closePayrollRun(db, "actor", prorated.id);
+    const summaryProration = await buildHrReport(db, { kind: "RESUMO_CONTABIL", format: "CSV", q: "", payrollId: "prorated-monthly-test" });
+    assert.equal(summaryProration.rows.filter(row => row[6] === "TOTAL_BRUTO").reduce((sum, row) => sum.add(row[8]), new Prisma.Decimal(0)).toFixed(2), prorated.gross.toFixed(2));
+    assert.ok(summaryProration.rows.some(row => row[5] === "Administração — POC" && row[6] === "VENCIMENTO" && row[8] === "2200.00"));
+    assert.ok(summaryProration.rows.some(row => row[5] === "Local alterado POC" && row[6] === "VENCIMENTO" && row[8] === "3200.00"));
+    const firstRun = await db.hrPayrollRun.findUniqueOrThrow({ where: { requestKey: `poc-test:${poc.payrollIds[5]}` } });
+    await db.payroll.create({ data: { id: "linked-final-test", competence: "12/2026", type: "13º" } });
+    const linkedFinalInput = { payrollId: "linked-final-test", requestKey: "linked-final-test", contractIds: poc.contractIds, mode: "OFICIAL", scope: "DEMONSTRACAO", specialParameters: { sourceRunId: firstRun.id, avos: 12, reason: "Parcela final vinculada para teste" } };
+    const final = await calculatePayrollRun(db, "actor", linkedFinalInput);
+    assert.equal(final.gross.toFixed(2), "13021.00");
+    const finalSnapshot = final.statements.find(statement => statement.contractId === poc.contractIds[0])!.snapshot as { items: { code: string; value: string }[] };
+    assert.equal(finalSnapshot.items.find(item => item.code === "POC_ABATIMENTO")!.value, "1466.67");
+    await closePayrollRun(db, "actor", final.id);
+    await db.payroll.create({ data: { id: "linked-final-duplicate", competence: "12/2026", type: "13º" } });
+    const duplicateFinal = await calculatePayrollRun(db, "actor", { ...linkedFinalInput, payrollId: "linked-final-duplicate", requestKey: "linked-final-duplicate" });
+    await assert.rejects(closePayrollRun(db, "actor", duplicateFinal.id), /já utilizada/);
+    await db.payroll.create({ data: { id: "linked-difference-test", competence: "12/2026", type: "Diferença 13º" } });
+    const difference = await calculatePayrollRun(db, "actor", { payrollId: "linked-difference-test", requestKey: "linked-difference-test", contractIds: poc.contractIds, mode: "OFICIAL", scope: "DEMONSTRACAO", specialParameters: { sourceRunId: final.id, avos: 12, average: "300.00", reason: "Diferença vinculada para teste" } });
+    assert.equal(difference.gross.toFixed(2), "900.00");
+    await closePayrollRun(db, "actor", difference.id);
+    const fullTarget = await db.payroll.create({ data: { id: "linked-full-target", competence: "12/2026", type: "13º" } });
+    const fullResult = await calculatePayrollRun(db, "actor", { payrollId: fullTarget.id, requestKey: "linked-full-target", contractIds: poc.contractIds, mode: "SIMULACAO", scope: "DEMONSTRACAO", specialParameters: { avos: 12, average: "300.00", reason: "Total acumulado de conferência" } });
+    for (const contractId of poc.contractIds) {
+      const before = final.statements.find(statement => statement.contractId === contractId)!, delta = difference.statements.find(statement => statement.contractId === contractId)!, total = fullResult.statements.find(statement => statement.contractId === contractId)!;
+      const items = (statement: typeof before) => (statement.snapshot as { items: { code: string; value: string }[] }).items;
+      for (const code of ["IRRF", "PREVIDENCIA_RGPS_POC"]) assert.equal(new Prisma.Decimal(items(before).find(item => item.code === code)!.value).add(items(delta).find(item => item.code === code)!.value).toFixed(2), items(total).find(item => item.code === code)!.value, code);
+      assert.equal(before.employer.add(delta.employer).toFixed(2), total.employer.toFixed(2), "encargos acumulados menos anteriores reconciliam na diferença");
+    }
+    const vacationEntryIds: Record<string, string[]> = {};
+    for (const contractId of poc.contractIds) {
+      await recordHrRightEntry(db, "actor", { contractId, sourceKey: `VACATION_LINK_TEST:${contractId}`, kind: "FERIAS", periodStart: "2021-01-01", periodEnd: "2021-12-31", quantity: "30", amount: "0.00", details: { scope: "DEMONSTRACAO", reason: "Saldo documental fictício de teste" } });
+      const reservation = await reserveVacationRight(db, "actor", { contractId, sourceKey: `VACATION_RESERVATION_TEST:${contractId}`, periodStart: "2021-01-01", periodEnd: "2021-12-31", start: "2026-12-01", days: 10, kind: "GOZO", reason: "Programação demonstrativa vinculada à folha" });
+      vacationEntryIds[contractId] = [reservation.id];
+    }
+    await db.payroll.create({ data: { id: "linked-vacation-test", competence: "12/2026", type: "Férias" } });
+    const vacationInput = { payrollId: "linked-vacation-test", requestKey: "linked-vacation-test", contractIds: poc.contractIds, mode: "OFICIAL", scope: "DEMONSTRACAO", specialParameters: { vacationEntryIds, vacationDays: 30, reason: "Férias vinculadas às reservas de gozo" } };
+    const linkedVacation = await calculatePayrollRun(db, "actor", vacationInput);
+    const vacationMemory = linkedVacation.statements[0].snapshot as { specialPayroll: { vacationDays: number; rightsConsumed: boolean } };
+    assert.equal(vacationMemory.specialPayroll.vacationDays, 10); assert.equal(vacationMemory.specialPayroll.rightsConsumed, true);
+    await closePayrollRun(db, "actor", linkedVacation.id);
+    assert.equal((await db.hrRightEntry.aggregate({ where: { contractId: poc.contractIds[0], kind: "FERIAS", periodStart: new Date("2021-01-01") }, _sum: { quantity: true } }))._sum.quantity!.toString(), "20", "fechar folha não debita férias uma segunda vez");
+    await assert.rejects(cancelVacationReservation(db, "actor", { entryId: vacationEntryIds[poc.contractIds[0]][0], reason: "Cancelamento após conciliação de folha" }), /compensação financeira/);
+    await db.payroll.create({ data: { id: "linked-vacation-duplicate", competence: "12/2026", type: "Férias" } });
+    const duplicatedVacation = await calculatePayrollRun(db, "actor", { ...vacationInput, payrollId: "linked-vacation-duplicate", requestKey: "linked-vacation-duplicate" });
+    await assert.rejects(closePayrollRun(db, "actor", duplicatedVacation.id), /já conciliada/);
+    await db.payroll.create({ data: { id: "lifecycle-rescission-test", competence: "12/2026", type: "Rescisão" } });
+    const rescission = await calculatePayrollRun(db, "actor", { payrollId: "lifecycle-rescission-test", requestKey: "lifecycle-rescission-test", contractIds: poc.contractIds, mode: "OFICIAL", scope: "DEMONSTRACAO", specialParameters: { days: 30, avos: 12, vacationDays: 0, reason: "Rescisão para testar o ciclo funcional" } });
+    await closePayrollRun(db, "actor", rescission.id);
+    const terminationInput = { sourceRunId: rescission.id, operation: "DESLIGAR", date: "2026-12-31", actNumber: "POC-EXO-001", reason: "Ato fictício de desligamento demonstrativo" };
+    const termination = await applyPocEmploymentLifecycle(db, "actor", terminationInput);
+    assert.equal((await applyPocEmploymentLifecycle(db, "other-actor", terminationInput)).id, termination.id);
+    const terminationAct = (termination.payload as { results: { actId: string }[] }).results[0].actId;
+    await assert.rejects(db.$transaction(tx => assertPersonnelActNotIntegrated(tx, terminationAct)), /correção compensatória/);
+    assert.equal((await db.hrEmploymentContract.findUniqueOrThrow({ where: { id: poc.contractIds[0] } })).status, "INATIVO");
+    await db.payroll.create({ data: { id: "inactive-monthly-test", competence: "01/2027", type: "Mensal" } });
+    await assert.rejects(calculatePayrollRun(db, "actor", { payrollId: "inactive-monthly-test", requestKey: "inactive-monthly-test", contractIds: poc.contractIds, mode: "SIMULACAO", scope: "DEMONSTRACAO" }), /vínculo inválido/);
+    const reintegrationInput = { sourceRunId: rescission.id, operation: "REINTEGRAR", date: "2027-01-16", actNumber: "POC-REINT-001", reason: "Ato fictício de reintegração demonstrativa" };
+    const reintegration = await applyPocEmploymentLifecycle(db, "actor", reintegrationInput);
+    assert.equal((await applyPocEmploymentLifecycle(db, "other-actor", reintegrationInput)).id, reintegration.id);
+    const reintegrated = await calculatePayrollRun(db, "actor", { payrollId: "inactive-monthly-test", requestKey: "reintegrated-monthly-test", contractIds: poc.contractIds, mode: "SIMULACAO", scope: "DEMONSTRACAO", monthlyProration: true });
+    assert.equal(reintegrated.statements.find(statement => statement.contractId === poc.contractIds[0])!.gross.toFixed(2), "3303.23", "somente 16 dias ativos após reintegração são remunerados pelo modelo civil");
+    assert.equal((await db.hrPayrollRun.findUniqueOrThrow({ where: { id: rescission.id } })).gross.toFixed(2), rescission.gross.toFixed(2), "rescisão histórica preservada após o efeito funcional");
   } finally { await db?.$disconnect(); await server.stop(); await pg.close(); }
 });

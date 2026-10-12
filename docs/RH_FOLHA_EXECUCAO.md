@@ -1,5 +1,21 @@
 # RH/Folha — registro de execução
 
+## Continuação funcional — rateio, pensões e folhas vinculadas — 11/10/2026
+
+- Rateio mensal civil opcional em `/rh/poc`: salário/jornada/lotação por revisão, admissão/término/retorno parciais, reconciliação de centavos e bases fiscais/previdenciárias consolidadas. Divisor por dias civis e movimentos integrais rateados são políticas estimadas. Mudança de regime e ATS intramês permanecem pendentes.
+- `/rh/pensoes`: configuração demonstrativa com beneficiário central, processo, valor fixo/percentual, bases bruto/após previdência/após IRRF, vigência e dedução fiscal explícita. Recibos e relatório PDF/XLSX/CSV; não gera repasse automático.
+- 13º ligado à primeira parcela e diferença ligada ao final: valores anteriores por contrato, retenções e patronal acumulados menos anteriores; utilização única da fonte no fechamento. Seleção/escopo/ano/conjunto são conferidos; diferenças negativas e sucessivas exigem fluxos próprios.
+- Férias ligadas a reservas: dias obtidos dos aquisitivos/gozos, validação de programação/titular/cancelamentos, conciliação única no fechamento sem segundo débito do ledger; cancelamento posterior requer compensação financeira.
+- Rescisão fechada pode gerar desligamento demonstrativo ao fim da competência, ato e revisão de inativação. Reintegração vinculada cria nova vigência ativa e respeita quadro de cargos. Retroativos, TRCT oficial e direitos do intervalo não são apurados automaticamente.
+- Resumo contábil e planejamento de despesas conservam centros/lotação dos trechos; descontos automáticos e encargos são rateados por remuneração/dias. A aplicação no Financeiro nativo conserva as regras de acesso/escopo já existentes.
+- Corrigida a consulta de regimes na página POC para usar `regimeId`, conforme o schema real sem relação Prisma direta no contrato.
+
+Fontes, fórmulas e estimativas adicionais: seção 14 de [RH_FOLHA_PARAMETROS_ESTIMADOS_POC.md](RH_FOLHA_PARAMETROS_ESTIMADOS_POC.md).
+
+Banco configurado: script `seed-hr-poc-linked-workflows.ts --apply --publish` preparou Mensal 11/2026 (bruto 12.021,00/líquido 9.871,90), 13º 12/2026 vinculado (13.021,00/6.135,98), diferença vinculada (900,00/649,15) e férias com reservas (5.787,11/5.325,71): quatro fechamentos e 12 demonstrativos publicados. Mantido o histórico de outubro. Efeitos de desligamento/reintegração exercitados somente no banco isolado de testes.
+
+Verificação: teste transacional RH ampliado aprovado (pensões, vigências, resumos, vínculos de 13º/férias, repetição, prevenção de duplicidade e ciclo funcional), além de 39 testes RH/documentais/de direitos/SST aprovados; build reiniciado após o anterior ser cancelado pelo reinício do servidor. Resultado final de build/lint a registrar ao concluir.
+
 ## Incremento documental e parâmetros estimados para a POC — 11/10/2026
 
 Autorizada a mescla de referências históricas/externas e estimativas para demonstrar funcionalidades com dados fictícios. Registro completo de fórmulas, fontes, decisões estimadas e substituições necessárias em [RH_FOLHA_PARAMETROS_ESTIMADOS_POC.md](RH_FOLHA_PARAMETROS_ESTIMADOS_POC.md).

@@ -218,3 +218,90 @@ Executado `--apply --calculate --close` e depois `--publish` para **10/2026**, c
 Cada tipo representa **um cenário independente**, não uma cadeia de todos esses pagamentos devidos às mesmas pessoas. Na execução inicial, o abatimento anterior é zero e avos são automáticos (dez na competência outubro); por isso 13º e diferença 13º têm o mesmo resultado. Informar o valor anterior para demonstrar a diferença efetiva.
 
 Validação: 23 testes unitários/documentais/de direitos aprovados; um teste transacional PostgreSQL/PGlite aprovado com preparação repetível, nove cálculos/fechamentos/publicações, PDF, remessa, pagamento/informe anual, diárias e aquisição de férias com faltas; 14 testes de integração SST aprovados no lote anterior. Total de **38 testes aprovados em lotes**, após correções. ESLint aprovado. Verificação visual autenticada não executada: ferramenta de navegador sem conexão nesta sessão. Resultado final de build registrado em `RH_FOLHA_EXECUCAO.md`.
+
+## 14. Continuação: fluxos vinculados, rateio, pensões e efeitos funcionais
+
+Esta seção atualiza as limitações descritas nos itens anteriores para os novos **fluxos opcionais**. Os cenários antigos sem vínculo continuam sendo modelos independentes.
+
+### 14.1 Rateio mensal por dias civis
+
+Em `/rh/poc`, a opção **Aplicar rateio civil POC** seleciona a política `RATEIO_MENSAL_CIVIL`:
+
+- Particionar exercício por vigências de salário, jornada e lotação; mudanças de regime/previdência exigem política própria de transição.
+- Para cada trecho, calcular a remuneração de referência do mês com seus salário/jornada/fórmulas; multiplicar pelo fator `dias ativos do trecho / dias civis do mês`.
+- **Divisor estimado:** dias efetivos do mês (28/29/30/31). Não é confirmação do divisor municipal /30. A opção anterior /30 permanece disponível.
+- Valores manuais são tratados como **montantes integrais já autorizados**, distribuídos entre os trechos ativos; não recebem desconto automático pela admissão parcial. O operador deve informar o valor devido do movimento.
+- Rateio de centavos pelo maior resto, preservando o total da rubrica; bases previdenciárias/fiscais consolidadas antes de aplicar tetos por PF.
+- Admissão, término e reintegração delimitam dias ativos. Inativação e períodos sem exercício não geram segmentos remunerados.
+- Memória de cada segmento conserva salário, jornada, local, centro e valores. O resumo contábil mantém lotações históricas; descontos automáticos e encargos são distribuídos proporcionalmente aos proventos, com dias como fallback. O planejamento de despesas usa os centros dos segmentos.
+- Fechamento compara vigências e política novamente. Correção de dados depois da apuração exige recálculo.
+
+Exemplo executado: Ana recebe 4.400/200h até 15/11; a partir de 16/11, recebe **6.400/100h** em outra lotação. Novembro tem 30 dias: `4.400 × 15/30 + 6.400 × 15/30 = 5.400`. Valores/jornada da segunda vigência são **fictícios estimados** para o cenário.
+
+Pendências: transições de regime, movimentos cuja proporcionalidade dependa de horas/dias específicos, atualização automática do ATS intramês, critérios municipais de divisor e integração de toda a cadeia contábil.
+
+### 14.2 Pensões alimentícias
+
+Página `/rh/pensoes`, configurador demonstrativo, relatório `PENSOES` em PDF/XLSX/CSV e memória no recibo:
+
+- Beneficiário do Cadastro Único; identificador estável, processo/ato, início/fim e tipos de folha explicitamente selecionados.
+- Valor **FIXO** ou **PERCENTUAL**.
+- Bases **BRUTO**, **APOS_PREVIDENCIA** ou **APOS_IRRF**. A última significa bruto menos previdência e IRRF, sem deduzir consignações/outras pensões.
+- Dedução fiscal explícita, somente para pensões calculadas antes do IRRF. Base APOS_IRRF com dedução do próprio imposto é rejeitada por circularidade.
+- A política registra os termos estimados; não presume percentual ou incidência universal de uma decisão judicial real.
+- Não há redução silenciosa do desconto por limite de líquido; insuficiência segue a política de líquido negativo da folha. Vigência parcial intramês da pensão exige decisão específica, sem proporcionalidade inventada.
+- Configuração alterada após cálculo impede fechamento até recálculo. Histórico anterior conserva sua política/beneficiário.
+
+Modelo executado: **20%** do bruto após previdência de Ana, destinado a Carla (ambas identidades fictícias), processo **POC-002/2026 fictício**, aplicado somente à Mensal e dedutível de IRRF. Referência: 4.400 − 417,51 = 3.982,49; 20% → **796,50**. O relatório não comprova repasse ao beneficiário; conta/decisão judicial real ainda precisa ser recebida.
+
+### 14.3 Primeira parcela, final e diferença de 13º
+
+Adicionar `sourceRunId` aos parâmetros:
+
+- **13º**: fonte deve ser primeira parcela fechada; buscar o adiantamento por contrato automaticamente. `previousAdvance` manual deve permanecer zero.
+- **Diferença 13º**: fonte deve ser 13º final fechado. `provento da diferença = total proporcional recalculado − bruto da fonte`.
+- Fonte/destino exigem mesmo conjunto, escopo, ano e seleção exata de contratos; competência da origem não pode ser posterior.
+- Diferença previdenciária/patronal: recalcular sobre a base acumulada e subtrair o valor anterior. IRRF: recompor renda/deduções acumuladas e subtrair a retenção anterior. Ratear somente o incremento entre vínculos.
+- Imposto PF mostrado na memória da diferença corresponde ao **total acumulado**; o item IRRF e a coluna **IRRF alocado** do relatório mostram a retenção incremental dessa folha.
+- Fechamento registra utilização única da fonte para cada parcela/diferença. Outra execução pode ser simulada, mas não duplicar o fechamento da mesma fonte.
+- Diferenças negativas de remuneração, imposto ou encargos exigem restituição/compensação própria. Mudança de esquema previdenciário exige conciliação específica. Encadeamento de sucessivas diferenças ainda não foi implementado.
+
+Sem `sourceRunId`, mantém-se o cenário independente/manual anterior. A origem comprova **cálculo fechado**, não pagamento bancário.
+
+### 14.4 Férias vinculadas aos direitos
+
+Adicionar `vacationEntryIds`, objeto `ID_CONTRATO → lista de IDs das reservas de gozo`:
+
+- Todos os contratos selecionados devem ter reservas; somar os dias por contrato e substituir os dias manuais pelo total encontrado.
+- Validar titular, aquisitivo, programação, quantidade e cancelamentos; início do gozo deve estar na competência da folha.
+- As reservas já têm quantidade negativa no ledger. O fechamento **concilia a reserva com a folha**, sem debitar dias outra vez.
+- Cada reserva só pode integrar uma folha fechada. Cancelamento posterior exige compensação financeira; a programação e os dias são conferidos novamente no fechamento.
+- Férias por múltiplos aquisitivos podem fornecer vários IDs. Pecúnia não entra neste fluxo de gozo.
+- `rightsConsumed=true` neste cenário identifica aproveitamento das reservas **já debitadas**, com origem `RESERVAS_JA_DEBITADAS_NO_LEDGER`.
+
+Permanece pendente conciliar automaticamente a remuneração de férias com a mensal e demais regras tributárias/abonos. Os cenários livres sem reservas continuam sem efeitos no ledger.
+
+### 14.5 Desligamento e reintegração demonstrativos
+
+No detalhe da rescisão fechada, operação própria registra ato/número/fundamento e nova revisão contratual:
+
+- Desligamento automático deste modelo usa **último dia da competência**; inativação começa no dia seguinte. Desligamento intramês permanece pendente.
+- Reintegração exige o desligamento vinculado, data posterior e conferência do quadro de cargos; nova vigência volta a ATIVO. Rateio civil remunera somente os dias ativos após retorno.
+- Operação repetida não duplica ato/revisão; alterações concorrentes de contrato e competências posteriores fechadas impedem sobrescrever o histórico.
+- Demonstrativos antigos permanecem preservados. O cadastro global do empregado não é inativado indiscriminadamente, preservando outros vínculos e consulta histórica.
+- Não calcula salários retroativos, indenizações/restituições, TRCT oficial ou direitos do intervalo entre desligamento e reintegração. Os eventos registram essas pendências expressamente; o tratamento jurídico do intervalo precisa ser definido.
+
+### 14.6 Cenários adicionais preparados no banco
+
+Executado `npx tsx scripts/seed-hr-poc-linked-workflows.ts --apply --publish`:
+
+| Cenário | Competência | Bruto BRL | Líquido BRL |
+|---|---|---:|---:|
+| Mensal com segunda vigência e pensão | 11/2026 | 12.021,00 | 9.871,90 |
+| 13º com primeira parcela vinculada | 12/2026 | 13.021,00 | 6.135,98 |
+| Diferença vinculada, média estimada +300 por contrato | 12/2026 | 900,00 | 649,15 |
+| Férias de dez dias por titular, reservas vinculadas | 12/2026 | 5.787,11 | 5.325,71 |
+
+Quatro execuções fechadas e **12 demonstrativos adicionais publicados**. Cenários de outubro preservados. A rotina evita substituir contrato/pensões previamente ajustados por outro fluxo e pode concluir etapas remanescentes após falha. Desligamento/reintegração foram exercitados no banco isolado de testes, não aplicados aos titulares desta base demonstrativa.
+
+Comando sem `--apply` mostra prévia sem gravações. Para executar, a primeira parcela de outubro precisa estar fechada. O pacote continua marcado DEMONSTRACAO; configuração/credenciais externas e exportadores oficiais seguem pendentes.

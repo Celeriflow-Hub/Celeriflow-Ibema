@@ -16,6 +16,8 @@ const snapshotSchema = z.object({
   messages: receiptMessagesSnapshotSchema.optional().default([]),
   incomeTax: z.object({ income: z.string(), legalDeductions: z.string(), simplifiedDeduction: z.string(), deduction: z.string(), deductionMethod: z.string(), base: z.string(), preliminary: z.string(), reduction: z.string(), tax: z.string(), rraMonths: z.number().nullable(), referenceDate: z.string() }).nullable().optional().default(null),
   specialPayroll: z.record(z.string(), z.unknown()).nullable().optional().default(null),
+  proration: z.record(z.string(), z.unknown()).nullable().optional().default(null),
+  pensions: z.array(z.object({ id: z.string(), courtReference: z.string(), basis: z.string(), base: z.string(), amount: z.string(), deductFromIncomeTax: z.boolean(), beneficiary: z.object({ id: z.string(), fullName: z.string() }) })).optional().default([]),
 });
 
 export async function getPayrollStatement(db: PrismaClient, id: string, employeeId?: string) {
@@ -55,6 +57,8 @@ export async function renderPayrollStatementPdf(statement: Awaited<ReturnType<ty
     pdf.text(`Imposto preliminar R$ ${tax.preliminary} · redução R$ ${tax.reduction} · imposto R$ ${tax.tax}${tax.rraMonths ? ` · RRA ${tax.rraMonths} meses` : ""}`);
   }
   if (statement.specialPayroll) pdf.moveDown().text(`Folha especial POC — premissas e fórmulas: ${JSON.stringify(statement.specialPayroll)}`);
+  if (statement.proration) pdf.moveDown().text(`Rateio mensal por vigências: ${JSON.stringify(statement.proration)}`);
+  for (const pension of statement.pensions) pdf.moveDown().text(`Pensão ${pension.id} · beneficiário ${pension.beneficiary.fullName} · processo ${pension.courtReference} · base ${pension.basis} R$ ${pension.base} · desconto R$ ${pension.amount} · dedutível IRRF ${pension.deductFromIncomeTax ? "sim" : "não"}`);
   if (statement.consignmentMargin) {
     const margin = statement.consignmentMargin;
     pdf.moveDown().text(`Margem consignável agregada: base R$ ${margin.base} · limite ${margin.rate}% = R$ ${margin.limit} · utilizado R$ ${margin.used} · disponível R$ ${margin.available}`);

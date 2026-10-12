@@ -5,9 +5,10 @@ import { z } from "zod";
 import { resolveContractRevision } from "./contract-timeline";
 import { payrollPeriod } from "./calculation-engine";
 import { buildPocAnnualIncomeReport } from "./poc-payment";
+import { allocateProratedStatementLocations } from "./prorated-statement-locations";
 
 export const hrReportInputSchema = z.object({
-  kind: z.enum(["CONTRATOS", "FOLHA", "DIREITOS", "RESUMO_CONTABIL", "PREVIDENCIA", "IRRF", "REMESSA_SALARIAL_POC", "INFORME_ANUAL_POC", "CONTRATOS_MULTIPLOS", "SERVIDORES_ATIVOS", "QUANTIDADE_SERVIDORES"]), format: z.enum(["CSV", "XLSX", "PDF"]),
+  kind: z.enum(["CONTRATOS", "FOLHA", "DIREITOS", "RESUMO_CONTABIL", "PREVIDENCIA", "IRRF", "PENSOES", "REMESSA_SALARIAL_POC", "INFORME_ANUAL_POC", "CONTRATOS_MULTIPLOS", "SERVIDORES_ATIVOS", "QUANTIDADE_SERVIDORES"]), format: z.enum(["CSV", "XLSX", "PDF"]),
   q: z.string().max(200).default(""), competence: z.string().regex(/^(0[1-9]|1[0-2])\/\d{4}$/).optional(),
   referenceDate: z.iso.date().optional(),
   payrollId: z.string().min(1).optional(),
@@ -78,8 +79,15 @@ export async function buildHrReport(db: PrismaClient, input: z.infer<typeof hrRe
     const roleNames = new Map(roles.map(role => [role.id, role.name]));
     return { title: "Relação de servidores/vínculos ativos — referência documental Ibema; nomes de cargo/regime do cadastro atual", headers: ["Referência", "Matrícula", "Nome", "Cargo/Função", "Lotação", "Situação", "Regime", "Admissão", "Faixa salarial", "Jornada mensal (horas)", "Versão contratual"], rows: active.map(contract => [date, contract.registration, contract.employee.name, roleNames.get(contract.roleId) || contract.roleId, contract.workLocation, contract.status, regimeNames.get(contract.regimeId) || contract.regimeId, contract.admittedAt.toISOString().slice(0, 10), contract.salaryLevel || "", String(contract.monthlyHours), String(contract.version)]) };
   }
-  if (["FOLHA", "RESUMO_CONTABIL", "PREVIDENCIA", "IRRF", "REMESSA_SALARIAL_POC"].includes(input.kind)) {
+  if (["FOLHA", "RESUMO_CONTABIL", "PREVIDENCIA", "IRRF", "PENSOES", "REMESSA_SALARIAL_POC"].includes(input.kind)) {
     const rows = await db.hrPayrollStatement.findMany({ where: { contract: contractWhere, run: { mode: "OFICIAL", status: "FECHADA", ...(input.payrollId ? { payrollId: input.payrollId } : {}), payroll: { AND: [payrollScope, ...(input.competence ? [{ competence: input.competence }] : [])] } } }, include: { contract: { select: { registration: true, employee: { select: { name: true } } } }, run: { select: { payroll: { select: { competence: true, type: true } }, scope: true } } }, orderBy: [{ run: { createdAt: "asc" } }, { id: "asc" }] });
+    if (input.kind === "PENSOES") {
+      const pensionSnapshot = z.object({ pensions: z.array(z.object({ id: z.string(), courtReference: z.string(), method: z.string(), basis: z.string(), base: z.string(), value: z.string(), amount: z.string(), deductFromIncomeTax: z.boolean(), beneficiary: z.object({ id: z.string(), fullName: z.string(), cpf: z.string() }) })).optional().default([]) });
+      return { title: "Pensões calculadas — beneficiários e memória; não comprova repasse", headers: ["Competência", "Tipo", "Escopo", "Matrícula", "Servidor", "Pensão", "Beneficiário", "CPF beneficiário", "Processo", "Método", "Base", "Base BRL", "Parâmetro", "Desconto BRL", "Dedutível IRRF", "Demonstrativo"], rows: rows.flatMap(row => {
+        const snapshot = payrollSnapshot.parse(row.snapshot);
+        return pensionSnapshot.parse(row.snapshot).pensions.map(pension => [row.run.payroll.competence, row.run.payroll.type, row.run.scope, snapshot.contract.registration, snapshot.contract.employee.name, pension.id, pension.beneficiary.fullName, pension.beneficiary.cpf, pension.courtReference, pension.method, pension.basis, pension.base, pension.value, pension.amount, pension.deductFromIncomeTax ? "SIM" : "NAO", row.id]);
+      }) };
+    }
     if (input.kind === "IRRF") {
       const taxSchema = z.object({ incomeTax: z.object({ income: z.string(), deduction: z.string(), base: z.string(), preliminary: z.string(), reduction: z.string(), tax: z.string(), deductionMethod: z.string(), rraMonths: z.number().nullable() }).nullable().optional() });
       return { title: "IRRF — memória agregada por PF repetida nos vínculos; somar somente o imposto alocado", headers: ["Competência", "Tipo", "Escopo", "Matrícula", "Servidor", "Renda PF BRL", "Dedução PF BRL", "Método", "Base PF BRL", "Preliminar PF BRL", "Redução PF BRL", "Imposto PF BRL", "IRRF alocado BRL", "Meses RRA", "Versão"], rows: rows.map(row => {
@@ -105,6 +113,18 @@ export async function buildHrReport(db: PrismaClient, input: z.infer<typeof hrRe
       const grouped = new Map<string, { labels: string[]; value: Prisma.Decimal }>();
       for (const row of rows) {
         const snapshot = payrollSnapshot.parse(row.snapshot);
+        if ((row.snapshot as { proration?: unknown }).proration) {
+          for (const part of allocateProratedStatementLocations(row.snapshot, row.employer)) {
+            const prefix = [row.run.payroll.competence, row.run.payroll.type, row.run.scope, snapshot.regime.code, part.costCenterId || "SEM_CENTRO", part.workLocation];
+            const totals = [{ code: "TOTAL_BRUTO", type: "TOTAL", value: part.gross }, { code: "TOTAL_DESCONTOS", type: "TOTAL", value: part.deductions }, { code: "TOTAL_LIQUIDO", type: "TOTAL", value: part.net }, { code: "TOTAL_ENCARGOS", type: "TOTAL", value: part.employer }];
+            for (const item of [...part.items, ...totals]) {
+              const labels = [...prefix, item.code, item.type], key = JSON.stringify(labels);
+              const group = grouped.get(key) ?? { labels, value: new Prisma.Decimal(0) };
+              group.value = group.value.add(item.value); grouped.set(key, group);
+            }
+          }
+          continue;
+        }
         const prefix = [row.run.payroll.competence, row.run.payroll.type, row.run.scope, snapshot.regime.code, snapshot.contract.costCenterId || "SEM_CENTRO", snapshot.contract.workLocation];
         const totals = [{ code: "TOTAL_BRUTO", type: "TOTAL", value: row.gross }, { code: "TOTAL_DESCONTOS", type: "TOTAL", value: row.deductions }, { code: "TOTAL_LIQUIDO", type: "TOTAL", value: row.net }, { code: "TOTAL_ENCARGOS", type: "TOTAL", value: row.employer }];
         for (const item of [...snapshot.items, ...totals]) {

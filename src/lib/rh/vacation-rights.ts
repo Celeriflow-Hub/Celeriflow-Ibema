@@ -117,6 +117,7 @@ export async function cancelVacationReservation(db: PrismaClient, actorId: strin
       if ((previous.details as { reason: string }).reason !== input.reason) throw new Error("Reserva já cancelada com outro motivo; o histórico foi preservado.");
       return previous;
     }
+    if (await tx.hrIntegrationEvent.findUnique({ where: { sourceKey: `FERIAS:FOLHA:${original.id}` } })) throw new Error("Reserva conciliada em folha fechada exige compensação financeira antes de cancelar.");
     await tx.$queryRaw`SELECT id FROM "Vacation" WHERE id=${details.vacationId} FOR UPDATE`;
     const vacation = await tx.vacation.findUniqueOrThrow({ where: { id: details.vacationId } });
     const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");

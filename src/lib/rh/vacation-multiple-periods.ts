@@ -81,6 +81,7 @@ export async function cancelMultipleVacationPeriods(db: PrismaClient, actorId: s
     if (original.eventType !== "FERIAS_MULTIPLOS_RESERVADAS") throw new Error("Selecione uma reserva conjunta original.");
     const payload = z.object({ input: requestSchema, entryIds: z.array(z.string()), vacationIds: z.array(z.string()) }).parse(original.payload);
     const sourceKey = `CANCELAMENTO:${original.sourceKey}`;
+    if (await tx.hrIntegrationEvent.findFirst({ where: { sourceKey: { in: payload.entryIds.map(id => `FERIAS:FOLHA:${id}`) } } })) throw new Error("Reserva conjunta conciliada em folha fechada exige compensação financeira antes de cancelar.");
     const previous = await tx.hrIntegrationEvent.findUnique({ where: { sourceKey } });
     if (previous) {
       const memory = previous.payload as { reason: string; entryIds: string[] };

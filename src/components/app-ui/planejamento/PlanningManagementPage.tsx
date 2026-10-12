@@ -11,9 +11,12 @@ import { planningBasePath, type PlanningJurisdiction } from "@/lib/planejamento/
 import { planningCompatibility, planningConsistency } from "@/lib/planejamento/versions";
 import { PlanningForm, type PlanningField } from "./PlanningForm";
 import { PlanningReportForm } from "./PlanningReportForm";
+import { PlanningMaintenancePage } from "./PlanningMaintenancePage";
+import { PlanningDocumentUpload } from "./PlanningDocumentUpload";
+import { planningReportCatalog } from "@/lib/planejamento/report-catalog";
 
-export const planningManagementSections = { versoes: "Versões", consistencias: "Consistências", compatibilizacao: "Compatibilização", emendas: "Emendas legislativas", programacao: "Programação e cotas", creditos: "Créditos orçamentários", workflow: "Tramitação e implantação", documentos: "Documentos e assinaturas", relatorios: "Relatórios" };
-type Filters = { page?: string; linePage?: string; quotaPage?: string; legacyPage?: string; lineId?: string; sourceId?: string; targetId?: string; year?: string; creditId?: string };
+export const planningManagementSections = { manutencao: "Manutenção", versoes: "Versões", consistencias: "Consistências", compatibilizacao: "Compatibilização", emendas: "Emendas legislativas", programacao: "Programação e cotas", creditos: "Créditos orçamentários", workflow: "Tramitação e implantação", documentos: "Documentos e assinaturas", relatorios: "Relatórios" };
+type Filters = { page?: string; linePage?: string; quotaPage?: string; legacyPage?: string; lineId?: string; sourceId?: string; targetId?: string; year?: string; creditId?: string; entity?: string; q?: string };
 const field = (name: string, label: string, extra: Partial<PlanningField> = {}): PlanningField => ({ name, label, ...extra });
 const options = (values: [string, string][]) => values.map(([id, name]) => ({ id, name }));
 const amount = (value: { toString(): string }) => Number(value.toString()).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -21,6 +24,7 @@ const dateFields = [field("effectiveAt", "Vigência do ato", { type: "date" }), 
 
 export async function PlanningManagementPage({ jurisdiction, kind, id, section, filters }: { jurisdiction: PlanningJurisdiction; kind: string; id: string; section: string; filters: Filters }) {
   if (!Object.hasOwn(planningManagementSections, section)) notFound();
+  if (section === "manutencao") return <PlanningMaintenancePage jurisdiction={jurisdiction} kind={kind} id={id} filters={filters} />;
   const context = await getPlanningContext(jurisdiction);
   const piece = await context.prisma.planningInstrument.findFirstOrThrow({ where: { id, ...planningInstrumentWhere(context) }, include: { multiYearPlan: true, budgetGuideline: true, annualBudgetLaw: true } });
   if (piece.kind.toLowerCase() !== kind) notFound();
@@ -38,6 +42,10 @@ export async function PlanningManagementPage({ jurisdiction, kind, id, section, 
   const form = (title: string, operation: string, fields: PlanningField[], hidden: Record<string, string> = {}, allowed = writable) => allowed && <Card><CardHeader><CardTitle>{title}</CardTitle></CardHeader><CardContent><PlanningForm jurisdiction={jurisdiction} operation={operation} hidden={{ instrumentId: id, ...hidden }} fields={fields} /></CardContent></Card>;
   const blocks: React.ReactNode[] = [];
   if (section === "documentos") {
+    if (canPerformModuleOperation(context.user, "DOCUMENTOS", "create")) {
+      const classes = await context.prisma.documentClass.findMany({ where: { isActive: true, OR: [{ code: { startsWith: "PLANEJAMENTO" } }, { code: { startsWith: "PLANNING" } }] }, select: { code: true, label: true }, orderBy: { code: "asc" } });
+      blocks.push(<Card key="upload"><CardHeader><CardTitle>Ingresso de arquivo no GED</CardTitle></CardHeader><CardContent><PlanningDocumentUpload jurisdiction={jurisdiction} instrumentId={id} classes={classes} /></CardContent></Card>);
+    }
     const total = await context.prisma.planningDocumentLink.count({ where: { instrumentId: id } });
     page = Math.min(page, Math.max(1, Math.ceil(total / 20)));
     const links = await context.prisma.planningDocumentLink.findMany({ where: { instrumentId: id }, include: { document: true, hearing: true }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: 20, skip: (page - 1) * 20 });
@@ -109,6 +117,11 @@ export async function PlanningManagementPage({ jurisdiction, kind, id, section, 
     blocks.push(form("Cadastrar prévia com reserva de anulação", "credit", [field("number", "Número do lote"), field("type", "Modalidade", { type: "select", options: ["Suplementar", "Especial", "Extraordinário", "Remanejamento", "Transposição", "Transferência"].map((name) => ({ id: name, name })) }), field("origin", "Origem dos recursos", { type: "select", options: options([["CANCELLATION", "Anulação de dotações"], ["SURPLUS", "Superávit financeiro"], ["EXCESS", "Excesso de arrecadação"], ["LOAN", "Operação de crédito"]]) }), field("originEvidence", "Documento / memória da origem", { type: "textarea" }), field("originLimit", "Limite documentado da origem (R$)", { type: "money" }), field("justification", "Justificativa", { type: "textarea" }), itemField(false)], {}, creatable));
   }
   if (section === "workflow") {
+    if (canPerformModuleOperation(context.user, "CAMARA", "update")) {
+      const links = await context.prisma.planningLegislativeLink.findMany({ where: { instrumentId: id }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: 20 });
+      blocks.push(form("Vincular projeto/lei da Câmara", "legislativeLink", [field("reference", "Referência do processo legislativo"), field("propositionId", "Proposição", { type: "select", options: [], required: false }), field("lawId", "Lei / ato vigente", { type: "select", options: [], required: false })]));
+      for (const link of links) blocks.push(form(`Tramitar ${link.reference}`, "legislativeTransition", [field("stage", "Etapa legislativa", { type: "select", options: options([["ANALYZE", "Encaminhar à análise"], ["AGENDA", "Incluir em pauta"], ["APPROVE", "Registrar aprovação"], ["REJECT", "Registrar rejeição"], ["SANCTION", "Registrar sanção / lei"], ["PUBLISH", "Registrar publicação do ato"]]) }), field("date", "Data da etapa", { type: "date" }), field("reason", "Fundamento / referência da decisão", { type: "textarea" }), field("lawNumber", "Número da lei (sanção)", { required: false }), field("lawType", "Tipo do ato", { type: "select", options: ["Lei Ordinária", "Lei Complementar", "Decreto Legislativo", "Resolução"].map((name) => ({ id: name, name })) }), field("legalText", "Texto final (sanção)", { type: "textarea", required: false })], { linkId: link.id }));
+    }
     if (piece.kind === "LOA") {
       blocks.push(form("Conectar contabilização interna (matriz configurada no Financeiro)", "accountingConfigure", [field("enabled", "Contabilização transacional", { type: "select", options: options([["true", "Conectar após validar regras"], ["false", "Manter em preparação"]]) }), field("reason", "Fundamento da configuração", { type: "textarea" })]));
       blocks.push(form("Contabilizar comandos pendentes desta LOA", "accountingSynchronize", []));
@@ -130,6 +143,10 @@ export async function PlanningManagementPage({ jurisdiction, kind, id, section, 
   }
   if (section === "relatorios") {
     blocks.push(<PlanningReportForm key="reports" context={context} instrumentId={id} creditId={filters.creditId} />);
+    blocks.push(form("Referenciar modelo normativo GED da saída", "reportLayout", [field("type", "Relatório", { type: "select", options: planningReportCatalog.map((report) => ({ id: report.type, name: report.title })) }), field("linkId", "Modelo/documento normativo vinculado", { type: "select", options: [] }), field("title", "Título da edição"), field("normativeReference", "Norma e edição aplicáveis"), field("footnotes", "Notas e premissas do modelo", { type: "textarea", required: false })]));
+    blocks.push(form("Projetar os exercícios com memória reproduzível", "annualProjection", [field("kind", "Projeção", { type: "select", options: options([["REVENUE", "Receita"], ["EXPENSE", "Despesa"]]) }), field("sourceInstrumentId", "LOA histórica de origem (ou base informada)", { type: "select", options: [], required: false }), field("baseValue", "Base informada de implantação (R$)", { type: "money", required: false }), field("rates", "Uma taxa por ano, separadas por ponto e vírgula"), field("normativeReference", "Norma / fonte / edição"), field("methodology", "Metodologia e premissas", { type: "textarea" })], {}, creatable));
+    const waivers = await context.prisma.planningRevenueWaiver.findMany({ where: { instrumentId: id }, select: { id: true, description: true }, orderBy: [{ year: "asc" }, { id: "asc" }], take: 20 });
+    if (canPerformModuleOperation(context.user, "TRIBUTACAO", "issueReports")) blocks.push(form("Conferir realizado de renúncias na Tributação", "waiverSync", [field("waiverId", "Renúncia cadastrada", { type: "select", options: waivers.map((waiver) => ({ id: waiver.id, name: waiver.description })) }), field("asOf", "Data de corte", { type: "date" })]));
     blocks.push(form("Composição dos demonstrativos fiscais (na elaboração)", "fiscalRule", [field("type", "Demonstrativo", { type: "select", options: options([["MDE", "Ensino"], ["HEALTH", "Saúde"], ["PERSONNEL", "Pessoal"], ["RCL", "Receita corrente líquida projetada"]]) }), field("normativeReference", "Referência legal e memória"), field("revenueCodes", "Códigos das receitas da base, separados por vírgula"), field("expenseCodes", "Códigos das despesas da aplicação", { required: false }), field("excludedRevenueCodes", "Receitas excluídas da base", { required: false }), field("excludedExpenseCodes", "Despesas excluídas da aplicação", { required: false }), field("threshold", "Parâmetro percentual aprovado", { type: "number", step: "0.000001", required: false }), field("comparison", "Verificação do parâmetro", { type: "select", options: options([["MINIMUM", "Aplicação mínima"], ["MAXIMUM", "Limite máximo"]]) })]));
     blocks.push(form("Programar obra ou conservação", "work", [field("title", "Obra / serviço"), field("type", "Tipo", { type: "select", options: options([["WORK", "Obra"], ["CONSERVATION", "Conservação do patrimônio"]]) }), field("location", "Local"), field("legalReference", "Referência"), field("year", "Exercício", { type: "number", value: String(piece.startYear) }), field("value", "Valor previsto (R$)", { type: "money" })], {}, creatable));
   }

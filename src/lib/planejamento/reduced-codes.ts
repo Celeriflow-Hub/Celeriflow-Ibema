@@ -6,7 +6,7 @@ import { lockPlanningInstrument } from "./service";
 
 export async function setPlanningReducedCode(context: PlanningContext, raw: unknown) {
   assertPlanningOperation(context, "update");
-  const input = z.object({ instrumentId: z.string().min(1), lineId: z.string().min(1), reducedCode: z.string().trim().min(1).max(30) }).parse(raw);
+  const input = z.object({ instrumentId: z.string().min(1), lineId: z.string().min(1), reducedCode: z.string().trim().min(1).max(80) }).parse(raw);
   return context.prisma.$transaction(async (tx) => {
     const piece = await lockPlanningInstrument(tx, context, input.instrumentId);
     if (piece.implantedAt) throw new Error("Códigos não podem ser alterados após implantação.");

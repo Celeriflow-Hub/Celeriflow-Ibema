@@ -9,7 +9,7 @@ import { AccessError } from "@/lib/platform/tenant-context";
 import { createPlanningCatalog, saveRevenueAllocation } from "@/lib/planejamento/catalog";
 import { addAllocatedPlanningRevenue, addApprovedPlanningLine, addPlanningTransfer } from "@/lib/planejamento/service";
 import { decideCommunityDemand, registerCommunityDemand, registerPlanningHearing } from "@/lib/planejamento/hearings";
-import { importPlanningLines } from "@/lib/planejamento/imports";
+import { importPlanningLines, importPlanningStructure, previewPlanningImport } from "@/lib/planejamento/imports";
 import { registerPlanningMovement } from "@/lib/planejamento/revisions";
 import { applyPlanningCompatibility, propagatePlanningCompatibility, transitionPlanningPiece, updatePlanningPhysical } from "@/lib/planejamento/versions";
 import { createLegislativePlanningAmendment, decideLegislativePlanningAmendment, setPlanningAmendmentBlock } from "@/lib/planejamento/amendments";
@@ -20,6 +20,23 @@ import { reorderPlanningExpenseCodes, setPlanningReducedCode } from "@/lib/plane
 import { reconcilePlanningLegacyAppropriation } from "@/lib/planejamento/legacy-reconciliation";
 import { configurePlanningInternalAccounting, configurePlanningInternalExecution, synchronizePlanningAccounting } from "@/lib/planejamento/accounting-bridge";
 import { linkPlanningDocument, requestPlanningDocumentSignatures } from "@/lib/planejamento/documents";
+import { importPlanningCatalogVersion, publishPlanningCatalogVersion } from "@/lib/planejamento/classification";
+import { maintainPlanningRecord } from "@/lib/planejamento/maintenance";
+import { planningLookup } from "@/lib/planejamento/lookups";
+import { advancePlanningLegislativeProcedure, linkPlanningLegislativeProcedure } from "@/lib/planejamento/legislative-bridge";
+import { synchronizePlanningWaiver } from "@/lib/planejamento/fiscal-execution";
+import { projectPlanningAnnualMemory } from "@/lib/planejamento/projections";
+import { configurePlanningReportLayout } from "@/lib/planejamento/report-layouts";
+
+export async function searchPlanningOptions(jurisdiction: string, input: Record<string, string>) {
+  try { const context = await getPlanningContext(jurisdictionSchema.parse(jurisdiction)); return { ...await planningLookup(context, input), error: undefined }; }
+  catch (error) { return { options: [], total: 0, page: 1, error: error instanceof Error ? error.message : "Não foi possível consultar as opções." }; }
+}
+
+export async function previewPlanningImportAction(jurisdiction: string, input: Record<string, string>) {
+  try { const context = await getPlanningContext(jurisdictionSchema.parse(jurisdiction)); const clean = Object.fromEntries(Object.entries(input).filter(([, value]) => value !== "")); return { data: await previewPlanningImport(context, clean), error: undefined }; }
+  catch (error) { return { data: undefined, error: error instanceof Error && !error.message.includes("Invalid `") ? error.message : "Não foi possível calcular a prévia." }; }
+}
 
 export async function savePlanningRecord(jurisdiction: string, operation: string, input: Record<string, string>): Promise<{ error?: string; id?: string }> {
   try {
@@ -34,11 +51,15 @@ export async function savePlanningRecord(jurisdiction: string, operation: string
       case "line": id = await addPlanningLine(context, clean); break;
       case "allocatedRevenue": id = await addAllocatedPlanningRevenue(context, clean); break;
       case "catalog": id = await createPlanningCatalog(context, clean); break;
+      case "catalogVersion": id = await importPlanningCatalogVersion(context, clean); break;
+      case "catalogPublish": id = await publishPlanningCatalogVersion(context, clean); break;
+      case "maintenance": id = await maintainPlanningRecord(context, clean); break;
       case "allocation": id = await saveRevenueAllocation(context, clean); break;
       case "hearing": id = await registerPlanningHearing(context, clean); break;
       case "demand": id = await registerCommunityDemand(context, clean); break;
       case "demandDecision": id = await decideCommunityDemand(context, clean); break;
       case "import": id = await importPlanningLines(context, clean); break;
+      case "structureImport": id = await importPlanningStructure(context, clean); break;
       case "movement": id = await registerPlanningMovement(context, clean); break;
       case "approvedLine": id = await addApprovedPlanningLine(context, clean); break;
       case "transfer": id = await addPlanningTransfer(context, clean); break;
@@ -65,6 +86,11 @@ export async function savePlanningRecord(jurisdiction: string, operation: string
       case "executionConfigure": id = await configurePlanningInternalExecution(context, clean); break;
       case "documentLink": id = await linkPlanningDocument(context, clean); break;
       case "documentSignatures": id = await requestPlanningDocumentSignatures(context, clean); break;
+      case "legislativeLink": id = await linkPlanningLegislativeProcedure(context, clean); break;
+      case "legislativeTransition": id = await advancePlanningLegislativeProcedure(context, clean); break;
+      case "waiverSync": id = await synchronizePlanningWaiver(context, clean); break;
+      case "annualProjection": id = await projectPlanningAnnualMemory(context, clean); break;
+      case "reportLayout": id = await configurePlanningReportLayout(context, clean); break;
       case "memory": id = await addPlanningMemory(context, clean); break;
       case "waiver": id = await addPlanningWaiver(context, clean); break;
       case "scope": await configurePlanningEntity(context, clean.governmentEntityId, clean.budgetUnitId); break;

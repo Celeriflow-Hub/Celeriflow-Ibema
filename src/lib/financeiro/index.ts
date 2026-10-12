@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { calculateRetentionDueDate, calculateRetentions, getActiveRetentionRules } from "./retencoes";
 import { assertPlanningPeriodAvailability, assertPlanningReservationYear, getPlanningBudgetRestrictions, lockPlanningBudgetForAppropriation, recordPlanningFinanceExecution } from "@/lib/planejamento/execution-bridge";
+import { lockPlanningRevenueBudget, recordPlanningRevenueCollection, recordPlanningRevenueReversal, recordPlanningRevenueRedistribution } from "@/lib/planejamento/revenue-execution-bridge";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -46,6 +47,10 @@ function requiredDecimal(value: Prisma.Decimal | null, field: string) {
 
 function jsonMoney(value: Prisma.Decimal) {
   return value.toFixed(2);
+}
+
+function assertActorBudgetUnit(actor: FinanceActor, unitId: string) {
+  if (actor.allowedBudgetUnitIds && !actor.allowedBudgetUnitIds.includes(unitId)) throw new FinanceError("Operação financeira fora das unidades autorizadas.");
 }
 
 async function createFinancialDocument(
@@ -111,10 +116,14 @@ async function lockAppropriation(tx: Prisma.TransactionClient, appropriationId: 
 }
 
 async function lockExpense(tx: Prisma.TransactionClient, expenseId: string) {
+  const source = await tx.expense.findUnique({ where: { id: expenseId }, select: { appropriationId: true } });
+  if (source) await lockAppropriation(tx, source.appropriationId);
   await tx.$queryRaw`SELECT id FROM "Expense" WHERE id = ${expenseId} FOR UPDATE`;
 }
 
 async function lockCommitment(tx: Prisma.TransactionClient, commitmentId: string) {
+  const source = await tx.commitment.findUnique({ where: { id: commitmentId }, select: { appropriationId: true } });
+  if (source) await lockAppropriation(tx, source.appropriationId);
   await tx.$queryRaw`SELECT id FROM "Commitment" WHERE id = ${commitmentId} FOR UPDATE`;
 }
 
@@ -130,6 +139,16 @@ async function lockBankAccount(tx: Prisma.TransactionClient, bankAccountId: stri
   await tx.$queryRaw`SELECT id FROM "BankAccount" WHERE id = ${bankAccountId} FOR UPDATE`;
 }
 
+async function lockBankAssignment(tx: Prisma.TransactionClient, bankAccountId: string, nextUnit?: string) {
+  const previous = await tx.bankAccount.findUnique({ where: { id: bankAccountId }, select: { budgetUnitId: true } });
+  if (!previous) return;
+  const [runtime] = await tx.$queryRaw<{ ready: boolean }[]>`SELECT to_regclass('"PlanningEntityUnit"') IS NOT NULL AS ready`;
+  if (runtime?.ready) await tx.$queryRaw`SELECT p.id FROM "PlanningInstrument" p JOIN "PlanningEntityUnit" u ON u."governmentEntityId" = p."governmentEntityId" WHERE u."budgetUnitId" = ${previous.budgetUnitId} OR u."budgetUnitId" = ${nextUnit ?? previous.budgetUnitId} ORDER BY p.id FOR UPDATE OF p`;
+  await lockBankAccount(tx, bankAccountId);
+  const current = await tx.bankAccount.findUniqueOrThrow({ where: { id: bankAccountId }, select: { budgetUnitId: true } });
+  if (current.budgetUnitId !== previous.budgetUnitId) throw new FinanceError("A vinculação da conta mudou; refaça a operação com os dados atuais.");
+}
+
 async function lockBankStatementItem(tx: Prisma.TransactionClient, statementItemId: string) {
   await tx.$queryRaw`SELECT id FROM "BankStatementItem" WHERE id = ${statementItemId} FOR UPDATE`;
 }
@@ -143,10 +162,14 @@ async function lockWithholdingPayable(tx: Prisma.TransactionClient, payableId: s
 }
 
 async function lockPayment(tx: Prisma.TransactionClient, paymentId: string) {
+  const source = await tx.payment.findUnique({ where: { id: paymentId }, select: { commitmentId: true } });
+  if (source) await lockCommitment(tx, source.commitmentId);
   await tx.$queryRaw`SELECT id FROM "Payment" WHERE id = ${paymentId} FOR UPDATE`;
 }
 
 async function lockRevenue(tx: Prisma.TransactionClient, revenueId: string) {
+  const source = await tx.revenue.findUnique({ where: { id: revenueId }, select: { bankAccountId: true, collectionDate: true } });
+  if (source?.bankAccountId && source.collectionDate) await lockPlanningRevenueBudget(tx, source.bankAccountId, source.collectionDate);
   await tx.$queryRaw`SELECT id FROM "Revenue" WHERE id = ${revenueId} FOR UPDATE`;
 }
 
@@ -360,9 +383,15 @@ export async function createExpenseRequest(
 ) {
   const value = money(input.value);
   return db.$transaction(async (tx) => {
+    await lockAppropriation(tx, input.appropriationId);
     if (input.idempotencyKey) {
       const existing = await tx.expense.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
-      if (existing) return existing;
+      if (existing) {
+        const source = await tx.budgetAppropriation.findUniqueOrThrow({ where: { id: existing.appropriationId }, select: { budgetUnitId: true } });
+        assertActorBudgetUnit(actor, source.budgetUnitId);
+        if (existing.appropriationId !== input.appropriationId || existing.supplierId !== input.supplierId || !existing.valueDecimal?.equals(value) || existing.date.getTime() !== input.date.getTime() || existing.sourceModule !== input.sourceModule.trim() || existing.sourceType !== input.sourceType.trim() || existing.sourceId !== (input.sourceId?.trim() || null)) throw new FinanceError("Solicitação de despesa já registrada com outros dados.");
+        return existing;
+      }
     }
     const [appropriation, supplier, purchaseReceipt] = await Promise.all([
       tx.budgetAppropriation.findUnique({
@@ -376,6 +405,7 @@ export async function createExpenseRequest(
     ]);
     if (!appropriation) throw new FinanceError("Dotação orçamentária não encontrada.");
     if (!supplier || supplier.status !== "Ativo") throw new FinanceError("Selecione um fornecedor ativo para a solicitação de despesa.");
+    assertActorBudgetUnit(actor, appropriation.budgetUnitId);
     if (input.purchaseReceiptId && (!purchaseReceipt || purchaseReceipt.status !== "APPROVED")) {
       throw new FinanceError("A despesa de compra exige um recebimento aprovado.");
     }
@@ -445,6 +475,7 @@ export async function approveExpenseRequest(db: PrismaClient, actor: FinanceActo
     await lockExpense(tx, expenseId);
     const expense = await tx.expense.findUnique({ include: { appropriation: true }, where: { id: expenseId } });
     if (!expense) throw new FinanceError("Solicitação de despesa não encontrada.");
+    assertActorBudgetUnit(actor, expense.appropriation.budgetUnitId);
     const candidateYear = await tx.financialYear.findUniqueOrThrow({ where: { id: expense.appropriation.financialYearId } });
     const year = candidateYear.status === "Preparação" ? await assertPlanningReservationYear(tx, expense.appropriationId, candidateYear.id, expense.date) : await assertFinancialYearOpen(tx, expense.appropriation.financialYearId, new Date());
     if (expense.status !== "Solicitada") throw new FinanceError("Somente solicitações pendentes podem ser aprovadas.");
@@ -550,6 +581,7 @@ export async function createBudgetReservation(
       select: { id: true, financialYearId: true, budgetUnitId: true, annualBudgetExpenseFixationId: true },
     });
     if (!appropriation) throw new FinanceError("Dotação orçamentária não encontrada.");
+    assertActorBudgetUnit(actor, appropriation.budgetUnitId);
     const candidateYear = await tx.financialYear.findUniqueOrThrow({ where: { id: appropriation.financialYearId } });
     const year = candidateYear.status === "Preparação" ? await assertPlanningReservationYear(tx, appropriation.id, appropriation.financialYearId, input.date) : await assertFinancialYearOpen(tx, appropriation.financialYearId, input.date);
     await assertAccountingPeriodOpen(tx, year.id, input.date);
@@ -573,9 +605,11 @@ export async function createBudgetReservation(
 
 export async function cancelBudgetReservation(db: PrismaClient, actor: FinanceActor, reservationId: string) {
   return db.$transaction(async (tx) => {
-    const reservation = await tx.budgetReservation.findUnique({ include: { appropriation: true }, where: { id: reservationId } });
-    if (!reservation) throw new FinanceError("Reserva orçamentária não encontrada.");
-    await lockAppropriation(tx, reservation.appropriationId);
+    const source = await tx.budgetReservation.findUnique({ where: { id: reservationId }, select: { appropriationId: true } });
+    if (!source) throw new FinanceError("Reserva orçamentária não encontrada.");
+    await lockAppropriation(tx, source.appropriationId);
+    const reservation = await tx.budgetReservation.findUniqueOrThrow({ include: { appropriation: true }, where: { id: reservationId } });
+    assertActorBudgetUnit(actor, reservation.appropriation.budgetUnitId);
     const candidateYear = await tx.financialYear.findUniqueOrThrow({ where: { id: reservation.appropriation.financialYearId } });
     const year = candidateYear.status === "Preparação" ? await assertPlanningReservationYear(tx, reservation.appropriationId, candidateYear.id, reservation.date) : await assertFinancialYearOpen(tx, reservation.appropriation.financialYearId, reservation.date);
     if (reservation.status !== ACTIVE_RESERVATION_STATUS) throw new FinanceError("Somente reservas ativas podem ser canceladas.");
@@ -622,6 +656,7 @@ export async function createCommitment(
       tx.budgetReservation.findUnique({ where: { id: input.reservationId }, include: { expense: { select: { purchaseReceiptId: true } } } }),
     ] as const);
     if (!appropriation) throw new FinanceError("Dotação orçamentária não encontrada.");
+    assertActorBudgetUnit(actor, appropriation.budgetUnitId);
     const year = await assertFinancialYearOpen(tx, appropriation.financialYearId, input.date);
     await assertAccountingPeriodOpen(tx, year.id, input.date);
     if (!reservation || reservation.appropriationId !== appropriation.id || reservation.status !== ACTIVE_RESERVATION_STATUS) throw new FinanceError("Selecione uma reserva ativa da mesma dotação.");
@@ -794,23 +829,19 @@ export async function cancelCommitment(db: PrismaClient, actor: FinanceActor, co
     const commitment = await tx.commitment.findUnique({ include: { appropriation: true, movements: true, settlements: { where: { status: ACTIVE_SETTLEMENT_STATUS } }, payments: { where: { status: { in: ACTIVE_PAYMENT_STATUSES } } } }, where: { id: commitmentId } });
     if (!commitment) throw new FinanceError("Empenho não encontrado.");
     await lockAppropriation(tx, commitment.appropriationId);
+    assertActorBudgetUnit(actor, commitment.appropriation.budgetUnitId);
     const year = await assertFinancialYearOpen(tx, commitment.appropriation.financialYearId, new Date());
     if (commitment.status === "Anulado") throw new FinanceError("O empenho já está anulado.");
     if (commitment.settlements.length || commitment.payments.length) throw new FinanceError("Empenhos com liquidações ou pagamentos ativos não podem ser anulados integralmente.");
     const effectiveValue = commitmentValue(commitment.valueDecimal, commitment.movements);
-    await tx.commitmentMovement.create({ data: { date: new Date(), type: "Anulação", valueDecimal: effectiveValue, justification: "Anulação integral do empenho", commitmentId } });
-    await reverseAccountingForSource(tx, actor, {
-      financialYearId: year.id,
-      date: new Date(),
-      sourceType: "COMMITMENT",
-      sourceId: commitment.id,
-      eventType: "EMPENHO_ANULADO",
-      history: `Anulação do empenho ${commitment.number}`,
-      idempotencyKey: `FINANCEIRO:COMMITMENT:${commitment.id}:EMPENHO_ANULADO`,
-    });
+    const canceledAt = new Date();
+    if (effectiveValue.greaterThan(0)) {
+      await tx.commitmentMovement.create({ data: { date: canceledAt, type: "Anulação", valueDecimal: effectiveValue, justification: "Anulação integral do empenho", commitmentId } });
+      await postCommitmentBalanceChange(tx, actor, commitment, year.id, { date: canceledAt, value: effectiveValue, reverse: true, sourceType: "COMMITMENT_REVERSAL", sourceId: commitment.id, eventType: "EMPENHO_ANULADO", key: `FINANCEIRO:COMMITMENT:${commitment.id}:EMPENHO_ANULADO` });
+    }
     const canceled = await tx.commitment.update({ where: { id: commitmentId }, data: { status: "Anulado" } });
     await refreshCommittedMirror(tx, commitment.appropriationId);
-    await recordPlanningFinanceExecution(tx, actor, { appropriationId: commitment.appropriationId, operation: "REVERSE", date: new Date(), value: effectiveValue, key: `finance:cancel:${commitment.id}`, originPrefix: `finance:commit:${commitment.id}:` });
+    if (effectiveValue.greaterThan(0)) await recordPlanningFinanceExecution(tx, actor, { appropriationId: commitment.appropriationId, operation: "REVERSE", date: canceledAt, value: effectiveValue, key: `finance:cancel:${commitment.id}`, originPrefix: `finance:commit:${commitment.id}:` });
     await audit(tx, actor, "CANCEL", "Commitment", commitmentId, { previousStatus: commitment.status, value: jsonMoney(effectiveValue) }, year.id);
     return canceled;
   });
@@ -825,23 +856,33 @@ export async function createCommitmentMovement(db: PrismaClient, actor: FinanceA
     const commitment = await tx.commitment.findUnique({ include: { appropriation: true, movements: true, settlements: { where: { status: ACTIVE_SETTLEMENT_STATUS }, select: { valueDecimal: true } } }, where: { id: input.commitmentId } });
     if (!commitment) throw new FinanceError("Empenho não encontrado.");
     await lockAppropriation(tx, commitment.appropriationId);
+    assertActorBudgetUnit(actor, commitment.appropriation.budgetUnitId);
     const year = await assertFinancialYearOpen(tx, commitment.appropriation.financialYearId, input.date);
     if (!ACTIVE_COMMITMENT_STATUSES.includes(commitment.status)) throw new FinanceError("Somente empenhos ativos podem receber movimentos.");
     const effectiveValue = commitmentValue(commitment.valueDecimal, commitment.movements);
     if (input.type === "Reforço") {
       const availability = await getBudgetAvailability(tx, commitment.appropriationId);
       if (availability.available.lessThan(value)) throw new FinanceError("O reforço excede a disponibilidade da dotação.");
+      await assertCmdAvailability(tx, commitment.appropriation, input.date, value);
       if (commitment.contractId) await contractForCommitment(tx, commitment.contractId, input.date, value);
     } else {
       const settled = commitment.settlements.reduce((total, settlement) => total.plus(requiredDecimal(settlement.valueDecimal, "Settlement.valueDecimal")), new Prisma.Decimal(0));
       if (effectiveValue.minus(value).lessThan(settled)) throw new FinanceError("A anulação não pode reduzir o empenho abaixo do valor liquidado.");
     }
     const movement = await tx.commitmentMovement.create({ data: { date: input.date, type: input.type, valueDecimal: value, justification: input.justification.trim(), commitmentId: commitment.id } });
+    await postCommitmentBalanceChange(tx, actor, commitment, year.id, { date: input.date, value, reverse: input.type === "Anulação", sourceType: "COMMITMENT_MOVEMENT", sourceId: movement.id, eventType: input.type === "Reforço" ? "EMPENHO_REFORCADO" : "EMPENHO_ANULACAO_PARCIAL", key: `FINANCEIRO:COMMITMENT_MOVEMENT:${movement.id}` });
     await refreshCommittedMirror(tx, commitment.appropriationId);
     await recordPlanningFinanceExecution(tx, actor, { appropriationId: commitment.appropriationId, operation: input.type === "Reforço" ? "CONSUME" : "REVERSE", date: input.date, value, key: input.type === "Reforço" ? `finance:commit:${commitment.id}:movement:${movement.id}` : `finance:reversal:${movement.id}`, originPrefix: `finance:commit:${commitment.id}:` });
     await audit(tx, actor, "CREATE", "CommitmentMovement", movement.id, { type: movement.type, value: jsonMoney(value), commitmentId: commitment.id, resultingEffectiveValue: jsonMoney(input.type === "Reforço" ? effectiveValue.plus(value) : effectiveValue.minus(value)) }, year.id);
     return movement;
   });
+}
+
+async function postCommitmentBalanceChange(tx: Prisma.TransactionClient, actor: FinanceActor, commitment: { id: string; number: string; valueDecimal: Prisma.Decimal | null }, financialYearId: string, input: { date: Date; value: Prisma.Decimal; reverse: boolean; sourceType: string; sourceId: string; eventType: string; key: string }) {
+  const originals = await tx.accountingTransaction.findMany({ where: { financialYearId, sourceType: "COMMITMENT", sourceId: commitment.id, eventType: "EMPENHO_EMITIDO", status: "POSTADO" }, include: { entries: true }, take: 2 });
+  const original = originals.length === 1 ? originals[0] : undefined;
+  if (!original || original.entries.length !== 2 || original.entries.some((entry) => !entry.valueDecimal?.equals(requiredDecimal(commitment.valueDecimal, "Commitment.valueDecimal")) || !["Débito", "Crédito"].includes(entry.type)) || new Set(original.entries.map((entry) => entry.type)).size !== 2) throw new FinanceError("Reconcilie a postagem original do empenho antes de reforçar ou anular seu saldo.");
+  return postAccountingTransactionInTransaction(tx, actor, { financialYearId, date: input.date, history: `${input.eventType} · empenho ${commitment.number}`, sourceModule: "FINANCEIRO", sourceType: input.sourceType, sourceId: input.sourceId, eventType: input.eventType, idempotencyKey: input.key, reversalOfId: input.sourceType === "COMMITMENT_REVERSAL" ? original.id : undefined, lines: original.entries.map((entry) => ({ accountId: entry.accountId, type: input.reverse ? entry.type === "Débito" ? "Crédito" : "Débito" : entry.type as "Débito" | "Crédito", value: input.value })) });
 }
 
 async function commitmentForPosting(tx: Prisma.TransactionClient, commitmentId: string, date: Date) {
@@ -907,6 +948,7 @@ export async function createSettlement(db: PrismaClient, actor: FinanceActor, in
   }
   return db.$transaction(async (tx) => {
     const { commitment, year } = await commitmentForPosting(tx, input.commitmentId, input.date);
+    assertActorBudgetUnit(actor, commitment.appropriation.budgetUnitId);
     if (!input.documentId) throw new FinanceError("Vincule o documento fiscal ou comprobatório já cadastrado no GED.");
     const [document, author, settled] = await Promise.all([
       tx.document.findUnique({ where: { id: input.documentId } }),
@@ -1017,6 +1059,7 @@ export async function cancelSettlement(db: PrismaClient, actor: FinanceActor, se
     const settlement = await tx.settlement.findUnique({ include: { commitment: { include: { appropriation: true } } }, where: { id: settlementId } });
     if (!settlement) throw new FinanceError("Liquidação não encontrada.");
     await lockCommitment(tx, settlement.commitmentId);
+    assertActorBudgetUnit(actor, settlement.commitment.appropriation.budgetUnitId);
     const year = await assertFinancialYearOpen(tx, settlement.commitment.appropriation.financialYearId, new Date());
     if (settlement.status !== ACTIVE_SETTLEMENT_STATUS) throw new FinanceError("Somente liquidações ativas podem ser canceladas.");
     if ((await activePaymentTotal(tx, { settlementId })).greaterThan(0)) throw new FinanceError("Não é possível cancelar uma liquidação com pagamentos ativos.");
@@ -1059,6 +1102,7 @@ export async function createPayment(
 
   return db.$transaction(async (tx) => {
     const { commitment, year } = await commitmentForPosting(tx, input.commitmentId, input.date);
+    assertActorBudgetUnit(actor, commitment.appropriation.budgetUnitId);
     const bankAccount = await tx.bankAccount.findUnique({
       where: { id: input.bankAccountId },
       select: { id: true, isActive: true, resourceSourceId: true, budgetUnitId: true, externalId: true },
@@ -1228,6 +1272,7 @@ export async function reversePayment(
     });
     if (!payment) throw new FinanceError("Pagamento não encontrado.");
     await lockCommitment(tx, payment.commitmentId);
+    assertActorBudgetUnit(actor, payment.commitment.appropriation.budgetUnitId);
     const reversalDate = new Date();
     const year = await assertFinancialYearOpen(tx, payment.commitment.appropriation.financialYearId, reversalDate);
     if (payment.status !== "Paga") throw new FinanceError("Somente pagamentos efetivados (Paga) podem ser estornados.");
@@ -1443,6 +1488,8 @@ export async function updatePaymentStatus(db: PrismaClient, actor: FinanceActor,
       where: { id: paymentId },
     });
     if (!payment) throw new FinanceError("Pagamento não encontrado.");
+
+    assertActorBudgetUnit(actor, payment.commitment.appropriation.budgetUnitId);
 
     // Tratamento de dupla confirmação concorrente (idempotência perfeita para cliques múltiplos)
     if (status === "Paga" && payment.status === "Paga") {
@@ -1688,6 +1735,11 @@ export async function updateBankAccountDetails(
   input: { bankName?: string; agency?: string; bankId?: string | null; bankBranchId?: string | null; accountNumber?: string; accountType?: string; resourceSourceId?: string; budgetUnitId?: string; accountingPlanId?: string; isActive?: boolean },
 ) {
   return db.$transaction(async (tx) => {
+    await lockBankAssignment(tx, id, input.budgetUnitId?.trim());
+    if (input.budgetUnitId !== undefined) {
+      const currentUnit = await tx.bankAccount.findUnique({ where: { id }, select: { budgetUnitId: true } });
+      if (currentUnit && currentUnit.budgetUnitId !== (input.budgetUnitId.trim() || null) && await tx.treasuryMovement.count({ where: { bankAccountId: id } })) throw new FinanceError("A Unidade Gestora da conta bancária não pode ser alterada após movimentações; preserve o histórico em uma nova conta.");
+    }
     if (input.accountingPlanId) {
       const [current, next] = await Promise.all([
         tx.bankAccount.findUnique({ where: { id }, select: { accountingPlanId: true } }),
@@ -1798,8 +1850,13 @@ export async function recordConfirmedRevenue(
 ) {
   const value = money(input.value);
   if (!input.idempotencyKey.trim()) throw new FinanceError("A arrecadacao exige chave de idempotencia.");
+  await lockPlanningRevenueBudget(tx, input.bankAccountId, input.date);
+  await lockBankAccount(tx, input.bankAccountId);
   const existing = await tx.revenue.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { treasuryMovement: true } });
-  if (existing) return existing;
+  if (existing) {
+    if (!existing.valueDecimal?.equals(value) || existing.revenueNatureId !== input.revenueNatureId || existing.resourceSourceId !== input.resourceSourceId || existing.bankAccountId !== input.bankAccountId || existing.collectionDate?.getTime() !== input.date.getTime() || existing.sourceModule !== input.sourceModule.trim() || existing.sourceType !== input.sourceType.trim() || existing.sourceId !== (input.sourceId?.trim() || null)) throw new FinanceError("Arrecadação já registrada com outros dados.");
+    return existing;
+  }
   const [year, bankAccount, nature, source] = await Promise.all([
     financialYearForPosting(tx, input.date),
     tx.bankAccount.findUnique({ where: { id: input.bankAccountId }, select: { isActive: true, resourceSourceId: true, accountingPlanId: true } }),
@@ -1827,6 +1884,7 @@ export async function recordConfirmedRevenue(
       idempotencyKey: `${input.idempotencyKey}:RECEITA_ARRECADADA`,
       debitAccountId: bankAccount.accountingPlanId ?? undefined,
   });
+  await recordPlanningRevenueCollection(tx, actor, revenue);
   await audit(tx, actor, "CREATE", "Revenue", revenue.id, { stage: revenue.stage, classification: revenue.classification, value: jsonMoney(value), treasuryMovementId: movement.id, sourceModule: revenue.sourceModule, sourceType: revenue.sourceType, sourceId: revenue.sourceId }, year.id);
   return { ...revenue, treasuryMovement: movement };
 }
@@ -1898,6 +1956,8 @@ export async function collectLaunchedRevenue(
 ) {
   if (!input.idempotencyKey.trim()) throw new FinanceError("A arrecadacao exige chave de idempotencia.");
   return db.$transaction(async (tx) => {
+    await lockPlanningRevenueBudget(tx, input.bankAccountId, input.date);
+    await lockBankAccount(tx, input.bankAccountId);
     await lockRevenue(tx, input.revenueId);
     const revenue = await tx.revenue.findUnique({ where: { id: input.revenueId }, include: { treasuryMovement: true } });
     if (!revenue) throw new FinanceError("Receita nao encontrada.");
@@ -1928,6 +1988,7 @@ export async function collectLaunchedRevenue(
       idempotencyKey: `${input.idempotencyKey}:RECEITA_ARRECADADA`,
       debitAccountId: account.accountingPlanId ?? undefined,
     });
+    await recordPlanningRevenueCollection(tx, actor, collected);
     await audit(tx, actor, "COLLECT", "Revenue", collected.id, { stage: collected.stage, value: jsonMoney(value), treasuryMovementId: movement.id }, year.id);
     return { ...collected, treasuryMovement: movement };
   });
@@ -1956,6 +2017,8 @@ export async function reverseRevenue(
       where: { id: revenue.treasuryMovement.bankAccountId },
       select: { accountingPlanId: true },
     });
+    if (revenue.collectionDate && input.date < revenue.collectionDate) throw new FinanceError("O estorno não pode anteceder a arrecadação.");
+    await lockBankAccount(tx, revenue.treasuryMovement.bankAccountId);
     const balance = await getBankAccountBalance(tx, revenue.treasuryMovement.bankAccountId, input.date);
     if (balance.lessThan(value)) throw new FinanceError("Saldo financeiro insuficiente para estornar a receita.");
     const movement = await tx.treasuryMovement.create({
@@ -1977,6 +2040,7 @@ export async function reverseRevenue(
       idempotencyKey: `FINANCEIRO:REVENUE:${revenue.id}:RECEITA_ESTORNADA`,
       creditAccountId: bankAccount?.accountingPlanId ?? undefined,
     });
+    await recordPlanningRevenueReversal(tx, actor, revenue, input.date);
     await audit(tx, actor, "REVERSE", "Revenue", revenue.id, { stage: reversed.stage, reversalId: reversal.id, treasuryMovementId: movement.id, value: jsonMoney(value), justification: reversal.justification, originRevenueId: revenue.id }, year.id);
     return reversal;
   });
@@ -1995,7 +2059,7 @@ export async function redistributeRevenueResourceSource(
       if (existing) return existing;
     }
     await lockRevenue(tx, input.revenueId);
-    const revenue = await tx.revenue.findUnique({ where: { id: input.revenueId }, select: { id: true, stage: true, valueDecimal: true, resourceSourceId: true, financialYearId: true } });
+    const revenue = await tx.revenue.findUnique({ where: { id: input.revenueId }, select: { id: true, stage: true, valueDecimal: true, resourceSourceId: true, financialYearId: true, bankAccountId: true, collectionDate: true, revenueNatureId: true } });
     if (!revenue || revenue.stage !== "ARRECADADA") throw new FinanceError("Somente receitas arrecadadas podem ter fonte redistribuida.");
     if (revenue.resourceSourceId === input.destinationResourceSourceId) throw new FinanceError("A fonte de destino deve ser diferente da fonte de origem.");
     const [year, destination, redistributed] = await Promise.all([
@@ -2021,6 +2085,7 @@ export async function redistributeRevenueResourceSource(
       sourceId: redistribution.id,
       idempotencyKey: `FINANCEIRO:REVENUE_REDISTRIBUTION:${redistribution.id}`,
     });
+    await recordPlanningRevenueRedistribution(tx, actor, revenue, redistribution);
     await audit(tx, actor, "REDISTRIBUTE_RESOURCE_SOURCE", "Revenue", revenue.id, { redistributionId: redistribution.id, sourceResourceSourceId: revenue.resourceSourceId, destinationResourceSourceId: destination.id, value: jsonMoney(value), history: redistribution.history }, year.id);
     return redistribution;
   });

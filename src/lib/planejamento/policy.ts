@@ -11,6 +11,7 @@ export const instrumentInput = z.object({
   governmentEntityId: id, kind: instrumentKindSchema, code: text.max(60), title: text.max(200),
   startYear: z.coerce.number().int().min(1900).max(2197), endYear: z.coerce.number().int().min(1900).max(2200),
   revenueDegree: z.coerce.number().int().min(1).max(10), expenseLevel: z.enum(["ELEMENT_SOURCE", "SOURCE"]),
+  expenseDegree: z.coerce.number().int().min(1).max(10).default(6), catalogVersionId: id.optional(),
   projectNumber: z.string().trim().max(100).optional(), legalText: z.string().trim().max(20000).optional(),
   parentId: id.optional(),
 }).superRefine((input, ctx) => {
@@ -29,11 +30,12 @@ export const lineInput = z.object({
   functionCode: z.string().regex(/^\d{2}$/).optional(), subfunctionCode: z.string().regex(/^\d{3}$/).optional(),
   product: text.optional(), productUnit: text.optional(),
   physicalTarget: z.string().regex(/^\d{1,14}(\.\d{1,4})?$/).default("0"), originalValue: moneySchema,
+  expenseBudgetLevel: z.enum(["ELEMENT_SOURCE", "SOURCE"]).default("ELEMENT_SOURCE"),
 }).superRefine((input, ctx) => {
   if (input.kind === "REVENUE" && (!input.revenueNatureId || input.expenseNatureId)) {
     ctx.addIssue({ code: "custom", path: ["revenueNatureId"], message: "Selecione a natureza de receita." });
   }
-  if (input.kind === "EXPENSE" && (!input.expenseNatureId || input.revenueNatureId || !input.programId || !input.actionId || !input.functionCode || !input.subfunctionCode || !input.product || !input.productUnit)) {
+  if (input.kind === "EXPENSE" && (input.expenseBudgetLevel === "ELEMENT_SOURCE" && !input.expenseNatureId || input.revenueNatureId || !input.programId || !input.actionId || !input.functionCode || !input.subfunctionCode || !input.product || !input.productUnit)) {
     ctx.addIssue({ code: "custom", path: ["expenseNatureId"], message: "Complete natureza, programa, ação, função, subfunção, produto e unidade." });
   }
 });
@@ -44,6 +46,10 @@ export const programInput = z.object({
   financing: text, managerName: text.max(200), indicatorName: text.max(200), indicatorUnit: text.max(100),
   baselineValue: z.coerce.number().finite().nonnegative(), targetValue: z.coerce.number().finite().nonnegative(),
 });
+
+export function planningLineData(input: z.infer<typeof lineInput>) {
+  return { instrumentId: input.instrumentId, kind: input.kind, code: input.code, description: input.description, year: input.year, budgetUnitId: input.budgetUnitId, resourceSourceId: input.resourceSourceId, revenueNatureId: input.revenueNatureId, expenseNatureId: input.expenseNatureId, programId: input.programId, actionId: input.actionId, functionCode: input.functionCode, subfunctionCode: input.subfunctionCode, product: input.product, productUnit: input.productUnit, physicalTarget: input.physicalTarget, originalValue: input.originalValue };
+}
 export const actionInput = z.object({
   instrumentId: id, programId: id, code: text.max(60), name: text.max(200),
   type: z.enum(["Projeto", "Atividade", "Operação Especial"]),

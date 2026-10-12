@@ -11,6 +11,9 @@ import { readConstructionPdf } from "@/lib/obras/construction-document-storage";
 import { assertConstructionProjectStampDownload, findConstructionProjectStampByFile } from "@/lib/obras/construction-project-stamp";
 import { resolveConstructionAccess } from "@/lib/obras/construction-access";
 import { constructionCaseWhere } from "@/lib/obras/construction-policy";
+import { getPlanningContext } from "@/lib/planejamento/access";
+import { readPlanningDocument } from "@/lib/planejamento/documents";
+import { planningDocumentResponse } from "@/lib/planejamento/document-response";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +48,15 @@ export async function GET(request: NextRequest) {
     if (occupational) {
       const sst = await getTenantContextForModule("SST");
       await assertSstClinicalAccess(sst, occupational.certificate.budgetUnitId);
+    }
+    const [planningRuntime] = await context.prisma.$queryRaw<{ ready: boolean }[]>`SELECT to_regclass('"PlanningDocumentLink"') IS NOT NULL AS ready`;
+    if (planningRuntime?.ready) {
+      const owners = await context.prisma.planningDocumentLink.findMany({ where: { documentVersion: { fileUrl: url } }, select: { id: true, instrument: { select: { governmentEntity: { select: { planningScope: { select: { jurisdiction: true } } } } } } } });
+      let first: { id: string; jurisdiction: "EXECUTIVE" | "LEGISLATIVE" } | undefined;
+      const hashes = new Set<string>();
+      for (const owner of owners) { const jurisdiction = owner.instrument.governmentEntity.planningScope?.jurisdiction; if (!jurisdiction) throw new AccessError("Documento de entidade sem escopo ativo.", 403); const planning = await getPlanningContext(jurisdiction); const link = await readPlanningDocument(planning, owner.id); hashes.add(link.version.hashSha256); first ??= { id: owner.id, jurisdiction }; }
+      if (hashes.size > 1) throw new AccessError("Versões vinculadas divergem quanto à integridade do arquivo.", 423);
+      if (first) return planningDocumentResponse(first.jurisdiction, first.id);
     }
     let auditTarget: { type: string; id: string } | null = null;
     const document = await context.prisma.document.findFirst({

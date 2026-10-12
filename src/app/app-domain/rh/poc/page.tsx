@@ -13,7 +13,8 @@ export default async function RhPocPage({ searchParams }: { searchParams: Promis
   const competence = value && /^(0[1-9]|1[0-2])\/2026$/.test(value) ? value : "10/2026";
   const set = await context.prisma.hrPayrollRuleSet.findFirst({ where: { code: RH_POC_CODE, scope: "DEMONSTRACAO", isDemo: true }, include: { rules: { orderBy: { code: "asc" } } } });
   const payrolls = await context.prisma.payroll.findMany({ where: { AND: [accessiblePayrollWhere(context.user), { competence, id: { startsWith: "rh-poc-payroll-v1-" } }] }, orderBy: { id: "asc" } });
-  const contracts = set ? await context.prisma.hrEmploymentContract.findMany({ where: { regime: { ruleSetId: set.id }, details: { path: ["pocPackage"], equals: RH_POC_CODE } }, include: { employee: true }, orderBy: { registration: "asc" } }) : [];
+  const regimes = set ? await context.prisma.hrEmploymentRegime.findMany({ where: { ruleSetId: set.id }, select: { id: true } }) : [];
+  const contracts = set ? await context.prisma.hrEmploymentContract.findMany({ where: { regimeId: { in: regimes.map(regime => regime.id) }, details: { path: ["pocPackage"], equals: RH_POC_CODE } }, include: { employee: true }, orderBy: { registration: "asc" } }) : [];
   return <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
     <ErpPageTitle title="RH/Folha — demonstração documental POC" description="Modelos municipais, regras de referência e parâmetros estimados com memória persistida." action={<Link href="/rh/operacoes">Operações</Link>} />
     <p className="rounded border bg-blue-50 p-3 text-sm">Pacote versionado: três pessoas fictícias, referências salariais, RGPS/IRRF 2026 e nove tipos de folha. O modo OFICIAL permite fechar e publicar o cálculo dentro do escopo DEMONSTRAÇÃO.</p>

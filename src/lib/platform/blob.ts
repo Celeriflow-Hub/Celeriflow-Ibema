@@ -1,4 +1,4 @@
-import { get, put } from "@vercel/blob";
+import { del, get, put } from "@vercel/blob";
 import { getCeleriFlowInstanceId } from "@/lib/platform/instance";
 
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
@@ -74,6 +74,11 @@ export async function uploadFile(file: File) {
     access: "private",
     token: getBlobToken(),
   });
+}
+
+export async function deleteUploadedDocument(blob: { url: string; pathname: string }) {
+  if (!isInstanceDocumentPath(blob.pathname)) throw new Error("Arquivo fora do armazenamento da instância.");
+  await del(blob.url, { token: getBlobToken() });
 }
 
 export async function uploadProcessFile(file: File) {

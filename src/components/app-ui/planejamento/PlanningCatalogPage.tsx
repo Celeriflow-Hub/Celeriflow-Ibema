@@ -9,10 +9,12 @@ import { canPerformModuleOperation } from "@/lib/platform/tenant-context";
 import { getPlanningContext } from "@/lib/planejamento/access";
 import { planningBasePath, type PlanningJurisdiction } from "@/lib/planejamento/policy";
 import { PlanningForm, type PlanningField } from "./PlanningForm";
+import { PlanningReferencePage } from "./PlanningReferencePage";
 
 export async function PlanningCatalogPage({ jurisdiction, catalog, filters }: {
-  jurisdiction: PlanningJurisdiction; catalog: string; filters: { page?: string; q?: string };
+  jurisdiction: PlanningJurisdiction; catalog: string; filters: { page?: string; q?: string; versionId?: string };
 }) {
+  if (catalog === "versions") return <PlanningReferencePage jurisdiction={jurisdiction} filters={filters} />;
   const names: Record<string, string> = { source: "Fontes de recursos", revenue: "Naturezas de receita", expense: "Naturezas de despesa" };
   if (!Object.hasOwn(names, catalog)) notFound();
   const context = await getPlanningContext(jurisdiction);

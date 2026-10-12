@@ -796,7 +796,10 @@ model PlanningInstrument {
   startYear Int
   endYear Int
   revenueDegree Int @default(6)
+  expenseDegree Int @default(6)
   expenseLevel String @default("ELEMENT_SOURCE")
+  catalogVersionId String?
+  catalogVersion PlanningCatalogVersion? @relation(fields: [catalogVersionId], references: [id], onDelete: Restrict)
   projectNumber String?
   legalText String?
   parentId String?
@@ -825,6 +828,9 @@ model PlanningInstrument {
   fiscalRules PlanningFiscalRule[]
   plannedWorks PlanningPlannedWork[]
   documentLinks PlanningDocumentLink[]
+  sourceBindings PlanningInstrumentSource[]
+  annualPrograms PlanningAnnualProgram[]
+  legislativeLinks PlanningLegislativeLink[]
   implantedAt DateTime?
   implantedById String?
   @@unique([governmentEntityId, kind, code])
@@ -869,6 +875,9 @@ model PlanningPlannedWork {
   legalReference String
   year Int
   value Decimal @db.Decimal(18,2)
+  startsAt DateTime? @db.Date
+  conservationValue Decimal @default(0) @db.Decimal(18,2)
+  newProjectsValue Decimal @default(0) @db.Decimal(18,2)
   createdById String
   createdAt DateTime @default(now())
 }
@@ -985,6 +994,9 @@ model PlanningImportBatch {
   mode String
   selectedLineIds String[]
   targetYear Int
+  sourceYear Int?
+  realizedStage String?
+  mapping Json?
   fingerprint String
   submissionKey String @unique
   importedCount Int
@@ -1018,6 +1030,7 @@ model PlanningBudgetLine {
   kind PlanningLineKind
   code String
   reducedCode String?
+  classificationSnapshot Json?
   description String
   year Int
   budgetUnitId String
@@ -1155,6 +1168,8 @@ model PlanningCalculationMemory {
   baseValue Decimal @db.Decimal(18, 2)
   rate Decimal @db.Decimal(12, 6)
   resultValue Decimal @db.Decimal(18, 2)
+  year Int?
+  calculation Json?
   createdById String
   createdAt DateTime @default(now())
   @@index([instrumentId])
@@ -1172,9 +1187,76 @@ model PlanningRevenueWaiver {
   compensation String
   compensationValue Decimal @db.Decimal(18, 2)
   methodology String
+  taxId String?
+  originKey String?
+  realizedValue Decimal? @db.Decimal(18,2)
+  realizedThrough DateTime? @db.Date
   createdById String
   createdAt DateTime @default(now())
   @@index([instrumentId, year])
+}
+
+model PlanningCatalogVersion {
+  id String @id @default(cuid())
+  year Int
+  label String
+  normativeReference String
+  sourceHash String
+  status String @default("DRAFT")
+  createdById String
+  createdAt DateTime @default(now())
+  entries PlanningCatalogEntry[]
+  instruments PlanningInstrument[]
+  @@unique([year, sourceHash])
+}
+
+model PlanningCatalogEntry {
+  id String @id @default(cuid())
+  versionId String
+  version PlanningCatalogVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  kind String
+  code String
+  name String
+  parentCode String?
+  degree Int
+  canonicalId String
+  attributes Json
+  sourceBindings PlanningInstrumentSource[]
+  @@unique([versionId, kind, code])
+  @@unique([versionId, kind, canonicalId])
+}
+
+model PlanningInstrumentSource {
+  id String @id @default(cuid())
+  instrumentId String
+  instrument PlanningInstrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  resourceSourceId String
+  catalogEntryId String?
+  catalogEntry PlanningCatalogEntry? @relation(fields: [catalogEntryId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  @@unique([instrumentId, resourceSourceId])
+}
+
+model PlanningAnnualProgram {
+  id String @id @default(cuid())
+  instrumentId String
+  instrument PlanningInstrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  programId String
+  year Int
+  priority String?
+  @@unique([instrumentId, programId, year])
+}
+
+model PlanningLegislativeLink {
+  id String @id @default(cuid())
+  instrumentId String
+  instrument PlanningInstrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  propositionId String?
+  lawId String?
+  reference String
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([instrumentId, reference])
 }
 
 model GovernmentEntity {

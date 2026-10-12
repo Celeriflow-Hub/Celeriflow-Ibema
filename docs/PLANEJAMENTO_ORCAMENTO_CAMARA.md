@@ -24,6 +24,8 @@ O [plano principal](PLANO_IMPLEMENTACAO_PLANEJAMENTO_ORCAMENTO.md) contém a tra
 
 ## Controle individual dos requisitos da Câmara
 
+**Diagnóstico técnico atualizado:** [revisão do código e plano S1–S9](PLANEJAMENTO_ORCAMENTO_DIAGNOSTICO_ATUAL_E_PLANO_EXECUCAO.md), com 99 itens e complementos para a próxima execução. Os estados B/P dessa revisão não promovem os aceites LEG abaixo; os números 49/50 no estado inicial são históricos.
+
 **Progresso técnico F4–F8:** os fluxos internos são expostos em `/camara/planejamento/[kind]/[id]/gestao/[section]`, com contexto legislativo obrigatório. Testes executam operação de emenda/programação/relatório legislativo e recusam consolidação cruzada não autorizada. Evidências e dependências: [PLANEJAMENTO_F4_F8_EVIDENCIAS.md](PLANEJAMENTO_F4_F8_EVIDENCIAS.md). Migrations, ensaio completo da Câmara, conexões F9 e aceite independente F10 continuam necessários; nenhuma caixa integral foi promovida automaticamente.
 
 Cada caixa abaixo é **pendente de entrega e demonstração integral do Legislativo**; não representa inexistência das bases parciais já auditadas. Desenvolvimento interno indicado por fase; todos passam por F0/F1 transversais, F9 quando houver integração/dependência, e F10 para aceite final.
@@ -131,6 +133,8 @@ Cada caixa abaixo é **pendente de entrega e demonstração integral do Legislat
 | LEG-01.99 | Renúncia/compensação e relatório LRF | F2/F8/F9 | [ ] |
 
 ## Evidência e conclusão
+
+**Continuação técnica S3–S7:** [registro de implementação, testes e dependências](PLANEJAMENTO_S3_S7_EVIDENCIAS.md). Domínio compartilhado e entradas legislativas não substituem ensaio próprio da Câmara; nenhuma caixa LEG é promovida por esse registro.
 
 Para marcar cada caixa: registrar cenário legislativo, dados/exercício/UG/versão/data, perfil, rota `/camara/planejamento/*`, efeito persistido, saída emitida, testes relevantes e evidência da demonstração; requisitos com integração exigem prova de conexão real. Demonstrar também retorno/navegação dentro da Câmara e tentativa de acesso indevido a dados executivos.
 

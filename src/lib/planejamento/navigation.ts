@@ -14,6 +14,7 @@ export function planningNavigation(jurisdiction: PlanningJurisdiction): ModuleNa
       { title: "Fontes de recursos", href: `${base}/cadastros/source`, icon: "landmark" },
       { title: "Naturezas de receita", href: `${base}/cadastros/revenue`, icon: "fileText" },
       { title: "Naturezas de despesa", href: `${base}/cadastros/expense`, icon: "fileText" },
+      { title: "Catálogos por exercício", href: `${base}/cadastros/versions`, icon: "fileText" },
       { title: "Entidades e unidades", href: `${base}/entidades`, icon: "settings" },
     ] },
     { title: "Participação", items: [{ title: "Audiências e solicitações", href: `${base}/audiencias`, icon: "mic" }] },

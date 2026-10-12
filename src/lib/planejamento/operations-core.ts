@@ -52,7 +52,12 @@ export async function snapshotVersion(tx: PlanningTx, context: PlanningContext, 
   const destinations = await tx.governmentEntity.findMany({ where: { id: { in: lines.flatMap((line) => line.destinationEntityId ? [line.destinationEntityId] : []) } }, select: { id: true, name: true } });
   const programs = await planningProgramCatalog(tx, piece);
   const documentLinks = await tx.planningDocumentLink.findMany({ where: { instrumentId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
-  const snapshot = jsonValue({ piece: { ...piece, programs, documentLinks }, lines: lines.map((line) => ({ ...line, destinationEntity: destinations.find((entity) => entity.id === line.destinationEntityId) ?? null })) });
+  const sourceBindings = await tx.planningInstrumentSource.findMany({ where: { instrumentId }, include: { catalogEntry: true }, orderBy: { resourceSourceId: "asc" } });
+  const annualPrograms = await tx.planningAnnualProgram.findMany({ where: { instrumentId }, orderBy: [{ year: "asc" }, { programId: "asc" }] });
+  const legislativeLinks = await tx.planningLegislativeLink.findMany({ where: { instrumentId }, orderBy: { createdAt: "asc" } });
+  const propositions = await tx.camProposicao.findMany({ where: { id: { in: legislativeLinks.flatMap((link) => link.propositionId ? [link.propositionId] : []) } } });
+  const laws = await tx.camLei.findMany({ where: { id: { in: legislativeLinks.flatMap((link) => link.lawId ? [link.lawId] : []) } } });
+  const snapshot = jsonValue({ piece: { ...piece, programs, documentLinks, sourceBindings, annualPrograms, legislativeLinks: legislativeLinks.map((link) => ({ ...link, proposition: propositions.find((proposal) => proposal.id === link.propositionId) ?? null, law: laws.find((law) => law.id === link.lawId) ?? null })) }, lines: lines.map((line) => ({ ...line, destinationEntity: destinations.find((entity) => entity.id === line.destinationEntityId) ?? null })) });
   const version = await tx.planningVersion.create({ data: { instrumentId, number: piece.revision, effectiveAt, legalActNumber, reason, snapshot, hash: contentHash(snapshot), createdById: context.user.id } });
   return version.id;
 }

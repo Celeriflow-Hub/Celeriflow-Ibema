@@ -61,6 +61,22 @@ Os testes com adaptador PostgreSQL emitiram aviso de depreciação de consultas 
 
 **Retomada:** comprovar abertura/alterações contábeis conectadas e falha com rollback; completar reservas futuras e concorrência dos consumidores; concluir Tributação/renúncia, tramitação Câmara e publicação/Transparência; completar pesquisa/paginação de seletores GED; registrar dependências oficiais por requisito e executar o ensaio autenticado dos dois entes. As migrations `170000`, `180000` e a nova `190000` exigem conferência/implantação antes do uso operacional destas conexões. A consulta de status anterior abaixo é histórica e não inclui a migration nova.
 
+### S1 — contabilização transacional validada
+
+Concluída a implementação e verificação técnica de S1: [evidências detalhadas](PLANEJAMENTO_S1_CONTABILIDADE_EVIDENCIAS.md). Preservação da base original de abertura, recuperação de comandos antigos pelo snapshot/hash, verificação da abertura legada sem duplicação, tratamento do comando de vínculo legado e integridade SQL dos comandos. Testes executaram o motor contábil real, seis eventos nas duas jornadas, falhas com rollback integral, crédito multifonte, permissões, replay/conflito e orçamento futuro.
+
+**48 testes aprovados; lint/TypeScript/Prisma/build aprovados, 57 páginas estáticas.** Migration `20261011200000_planning_accounting_command_integrity` aplicada somente nas fixtures isoladas. Aceite operacional continua separado; próxima etapa **S2**. A base municipal descrita a seguir não foi carregada por esta execução.
+
+### S2 — Financeiro/Compras e arrecadação validados
+
+Registro: [PLANEJAMENTO_S2_EXECUCAO_FINANCEIRO_COMPRAS_EVIDENCIAS.md](PLANEJAMENTO_S2_EXECUCAO_FINANCEIRO_COMPRAS_EVIDENCIAS.md). Fluxos reais de reserva futura, empenho/reforço/anulação, liquidação/pagamento/estorno, confirmação tributária, metas de arrecadação e redistribuição de fonte; contrato mensal e avaliação PPA→LOA com estados de não apuração. Corrigidas ordem de locks, releitura da reserva, contabilização dos movimentos de empenho e disponibilidade do contingenciamento.
+
+**9 cenários S2 aprovados em PostgreSQL local real, 43 regressões aprovadas, lint/TypeScript/build aprovados (57 páginas estáticas).** Concorrência demonstrada com sessões distintas: reservas concorrentes, crédito versus compra e cancelamento versus empenho. S1 também foi conferida no backend real, com 5 cenários aprovados. Nenhuma implantação no banco operacional; próxima etapa **S3**. Limites normativos, históricos e de ensaio estão no registro detalhado.
+
+### S3–S7 — execução contínua
+
+Registro atual: [PLANEJAMENTO_S3_S7_EVIDENCIAS.md](PLANEJAMENTO_S3_S7_EVIDENCIAS.md). Catálogos por edição/árvore/hash, grau da despesa/código composto, manutenção completa dos cadastros tratados pelo serviço, campos de obras/prioridades/riscos, importação com ano/realizado/prévia, ingresso GED e tramitação Câmara, RCL executada/renúncia/memórias e referência de modelos normativos. **62 testes/cenários nas suítes identificadas aprovados; Prisma/lint/TypeScript/build aprovados, 59 páginas estáticas.** Migration `20261011210000_planning_catalog_maintenance` executada somente em bases isoladas. Materiais oficiais, storage/provedor operacional, histórico reconciliado e aceites individuais continuam separados; próxima frente S8/S9.
+
 ## Base municipal plausível
 
 - Dataset: `src/lib/planejamento/municipal-data.ts`.
@@ -114,6 +130,10 @@ Em 11/10/2026 foram analisados os checklists oficiais **EXE-04, 31 itens (págin
 
 ### Próximas etapas do checklist de Planejamento
 
+**Ordem atual de retomada, após pedido de revisão do checklist e do sistema:** seguir [PLANEJAMENTO_ORCAMENTO_DIAGNOSTICO_ATUAL_E_PLANO_EXECUCAO.md](PLANEJAMENTO_ORCAMENTO_DIAGNOSTICO_ATUAL_E_PLANO_EXECUCAO.md), blocos **S1 → S2 → S3 → S4 → S5 → S6 → S7 → S8 → S9**. A primeira implementação é a contabilização transacional com o motor real em banco isolado. O plano inclui as lacunas F0–F3 remanescentes; Custos/Controle Interno permanecem em seus planos próprios. A revisão é documental e não executou novos testes, build ou migrations.
+
+**Registro histórico da sequência anterior:** a lista abaixo preserva a organização F0–F12 antes da retomada atual; para ordem de execução e estado das conexões, prevalecem o plano S1–S9 e o registro F9 desta página.
+
 1. Concluir F0/F1: manutenção completa dos cadastros, árvore/classificações/vigências oficiais, códigos automáticos/reordenação, migração explícita dos registros antigos, revisão da paginação de seções secundárias e perfis das duas jornadas.
 2. Concluir as pendências F2 de manutenção, prioridades/riscos, anexos e cenários completos. Transferências, obras/conservação e realizado receberam serviços nesta continuação, mas dados/ensaios completos continuam necessários.
 3. Concluir F3: importação de realizado, mapeamento completo de exercícios/configurações e migração de históricos antigos. Reconciliação recusa divergências em vez de inferir saldos.
@@ -123,4 +143,4 @@ Em 11/10/2026 foram analisados os checklists oficiais **EXE-04, 31 itens (págin
 6. F9: conectar consumidores Financeiro/Tributação/Compras/Câmara/GED/transparência e serviços externos; solicitar materiais pendentes na etapa final; retirar rotinas duplicadas dos menus após a troca validada.
 7. F10: validar 99/99 por ente e preencher evidências individualmente. Código parcial, build e testes não substituem esse aceite.
 
-As integrações e a retirada das rotinas financeiras/tributárias ainda não foram executadas neste bloco. O estado foi registrado para permitir commit do progresso e continuidade da execução integral, conforme solicitado pelo usuário.
+No bloco anterior a F9, as integrações e a retirada das rotinas financeiras/tributárias ainda não haviam sido executadas. A continuação F9 acima registra as pontes adicionadas e seus limites de verificação; a troca operacional completa permanece pendente.

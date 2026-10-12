@@ -3,9 +3,10 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { AccessError, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { assertPlanningOperation, planningEntityWhere, planningInstrumentWhere, planningLineWhere, planningUnitWhere, type PlanningContext } from "./access";
-import { actionInput, allocateRevenue, instrumentInput, lineInput, memoryInput, moneySchema, programInput, projectedValue, waiverInput } from "./policy";
+import { actionInput, allocateRevenue, instrumentInput, lineInput, memoryInput, moneySchema, planningLineData, programInput, projectedValue, waiverInput } from "./policy";
 import { planningDateSchema } from "./revisions";
 import { applyLineDelta, canonicalPiece, contentHash, finalizeLegalRevision, lockLegalInstrument, planningAppropriationCode, planningAudit, snapshotVersion } from "./operations-core";
+import { automaticPlanningReducedCode, planningLineClassification } from "./classification";
 
 type Tx = Prisma.TransactionClient;
 async function audit(tx: Tx, context: PlanningContext, entityId: string, action: string, payload: Prisma.InputJsonValue) {
@@ -31,6 +32,10 @@ export async function createPlanningInstrument(context: PlanningContext, raw: un
   return context.prisma.$transaction(async (tx) => {
     const entity = await tx.governmentEntity.findFirst({ where: { id: input.governmentEntityId, ...planningEntityWhere(context) } });
     if (!entity) throw new AccessError("Entidade não autorizada para esta jornada.", 403);
+    if (input.catalogVersionId) {
+      const catalog = await tx.planningCatalogVersion.findUniqueOrThrow({ where: { id: input.catalogVersionId } });
+      if (catalog.status !== "PUBLISHED" || catalog.year < input.startYear || catalog.year > input.endYear) throw new Error("Selecione catálogo publicado e vigente no período da peça.");
+    }
     const parent = input.parentId ? await tx.planningInstrument.findFirst({ where: { id: input.parentId, governmentEntityId: entity.id, ...planningInstrumentWhere(context) } }) : null;
     if (input.kind !== "PPA" && (!parent || parent.kind !== (input.kind === "LDO" ? "PPA" : "LDO") || input.startYear < parent.startYear || input.endYear > parent.endYear)) throw new Error("A peça anterior deve pertencer à mesma entidade, cadeia e vigência.");
     const year = input.kind !== "PPA" ? await tx.financialYear.findUnique({ where: { year: input.startYear } }) : null;
@@ -92,9 +97,10 @@ export async function addPlanningAction(context: PlanningContext, raw: unknown) 
 
 export async function addPlanningLine(context: PlanningContext, raw: unknown) {
   assertPlanningOperation(context, "create");
-  const input = lineInput.parse(raw);
+  const supplied = z.object({ instrumentId: z.string().min(1) }).passthrough().parse(raw);
   return context.prisma.$transaction(async (tx) => {
-    const instrument = await lockPlanningInstrument(tx, context, input.instrumentId);
+    const instrument = await lockPlanningInstrument(tx, context, supplied.instrumentId);
+    const input = lineInput.parse({ ...supplied, expenseBudgetLevel: instrument.kind === "LOA" ? "ELEMENT_SOURCE" : instrument.expenseLevel });
     return savePlanningLine(tx, context, instrument, input);
   });
 }
@@ -134,7 +140,10 @@ export async function addApprovedPlanningLine(context: PlanningContext, raw: unk
     if (!unit) throw new AccessError("Unidade não autorizada na entidade da peça.", 403);
     if (input.kind === "EXPENSE" && !await tx.actionPPA.findFirst({ where: { id: input.actionId, programId: input.programId, program: { multiYearPlanId: ppaId(piece) } } })) throw new Error("Programa/ação não pertencem ao PPA da peça.");
     await snapshotVersion(tx, context, piece.id, canonical.sanctionedAt, canonical.legalActNumber ?? legal.legalActNumber, "Antes da inclusão formal de classificação");
-    const line = await tx.planningBudgetLine.create({ data: { ...input, originalValue: 0, physicalTarget: input.physicalTarget } });
+    const lineData = planningLineData(input);
+    const classificationSnapshot = await planningLineClassification(tx, piece, input);
+    const reducedCode = await automaticPlanningReducedCode(tx, piece.id, input);
+    const line = await tx.planningBudgetLine.create({ data: { ...lineData, reducedCode, classificationSnapshot: classificationSnapshot ?? undefined, originalValue: 0, physicalTarget: input.physicalTarget } });
     if (piece.annualBudgetLawId) {
       if (input.kind === "REVENUE") await tx.annualBudgetRevenueForecast.create({ data: { annualBudgetLawId: piece.annualBudgetLawId, code: line.code, name: line.description, estimatedValue: 0 } });
       else {
@@ -161,7 +170,11 @@ async function savePlanningLine(tx: Tx, context: PlanningContext, instrument: Aw
       const action = await tx.actionPPA.findFirst({ where: { id: input.actionId, programId: input.programId, program: { multiYearPlanId: ppaId(instrument) } } });
       if (!action) throw new Error("Programa/ação não pertencem ao PPA da peça.");
     }
-    const line = await tx.planningBudgetLine.create({ data: { ...input, originalValue: new Prisma.Decimal(input.originalValue), physicalTarget: new Prisma.Decimal(input.physicalTarget) } });
+    const data = planningLineData(input);
+    if (input.kind === "EXPENSE" && !input.expenseNatureId && (instrument.expenseLevel !== "SOURCE" || instrument.kind === "LOA")) throw new Error("Informe o elemento de despesa nesta peça.");
+    const classificationSnapshot = await planningLineClassification(tx, instrument, input);
+    const reducedCode = await automaticPlanningReducedCode(tx, instrument.id, input);
+    const line = await tx.planningBudgetLine.create({ data: { ...data, reducedCode, classificationSnapshot: classificationSnapshot ?? undefined, originalValue: new Prisma.Decimal(input.originalValue), physicalTarget: new Prisma.Decimal(input.physicalTarget) } });
     if (instrument.annualBudgetLawId) {
       if (input.kind === "REVENUE") await tx.annualBudgetRevenueForecast.create({ data: { annualBudgetLawId: instrument.annualBudgetLawId, code: input.code, name: input.description, estimatedValue: line.originalValue } });
       else await tx.annualBudgetExpenseFixation.create({ data: { annualBudgetLawId: instrument.annualBudgetLawId, code: input.code, name: input.description, fixedValue: line.originalValue } });

@@ -4,7 +4,9 @@ Data da análise: **11/10/2026**. Escopo: **EXE-01 (Prefeitura) e LEG-01 (Câmar
 
 Diretriz atualizada do usuário: **entrega de 100% funcional**, com demonstração completa para ambos os entes; domínio de Planejamento no módulo novo; integrações e dependências externas na última etapa de implementação.
 
-## 1. Conclusão e prioridade
+**Revisão atual após F0–F8 e início de F9:** [Diagnóstico atual e plano de execução S1–S9](PLANEJAMENTO_ORCAMENTO_DIAGNOSTICO_ATUAL_E_PLANO_EXECUCAO.md), baseado no código `b965d82`. Contém confronto dos 99 itens, lacunas funcionais confirmadas e sequência de retomada. A conclusão/inventário P/N abaixo preservam o diagnóstico original anterior às entregas; não representam a quantidade atual de funcionalidades implementadas. O texto integral da seção 4 permanece como referência de escopo.
+
+## 1. Conclusão e prioridade — diagnóstico original
 
 **Prioridade recomendada: alta. Existe uma base reaproveitável no Financeiro, mas o módulo novo ainda não constitui uma jornada operacional própria e a cobertura integral do checklist não está comprovada.**
 

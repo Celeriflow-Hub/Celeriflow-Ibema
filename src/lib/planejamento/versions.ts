@@ -25,7 +25,7 @@ export async function inspectPlanningPiece(tx: PlanningTx, context: PlanningCont
     totals.set(line.year, year);
     if (line.year < piece.startYear || line.year > piece.endYear) add("YEAR", line.code, "Exercício fora da vigência.");
     if (value.isNegative()) add("NEGATIVE", line.code, "Saldo financeiro negativo.");
-    if (line.kind === "EXPENSE" && (!line.expenseNatureId || !line.functionCode || !line.subfunctionCode || !line.product || !line.productUnit || line.action?.programId !== line.programId)) add("CLASSIFICATION", line.code, "Complete a classificação funcional, programa, ação e produto.");
+    if (line.kind === "EXPENSE" && ((piece.expenseLevel !== "SOURCE" || piece.kind === "LOA") && !line.expenseNatureId || !line.functionCode || !line.subfunctionCode || !line.product || !line.productUnit || line.action?.programId !== line.programId)) add("CLASSIFICATION", line.code, "Complete a classificação funcional, programa, ação e produto.");
     if (line.kind === "EXPENSE" && line.physicalTarget.isZero() && value.greaterThan(0)) add("TARGET", line.code, "Informe a meta física ou justifique a ausência de produto mensurável.", "WARNING");
     const allocations = line.revenueNature?.planningAllocations ?? [];
     if (allocations.length && !allocations.reduce((sum, row) => sum.plus(row.percentage), new Prisma.Decimal(0)).equals(100)) add("ALLOCATION", line.code, "Os percentuais da natureza de receita não totalizam 100%.");
@@ -58,6 +58,14 @@ export async function transitionPlanningPiece(context: PlanningContext, raw: unk
     await assertWholePiece(tx, context, piece.id);
     if (input.stage !== "SUBMIT" && !isSystemAdministrator(context.user) && await tx.planningEntityUnit.count({ where: { governmentEntityId: piece.governmentEntityId, budgetUnitId: { notIn: context.user.allowedBudgetUnitIds } } })) throw new AccessError("Tramitação legal exige acesso a todas as unidades da entidade.", 403);
     const canonical = canonicalPiece(piece)!;
+    if (["APPROVE", "SANCTION", "PUBLISH"].includes(input.stage)) {
+      const linked = await tx.planningLegislativeLink.findMany({ where: { instrumentId: piece.id } });
+      for (const reference of linked) {
+        if (reference.propositionId) { const proposal = await tx.camProposicao.findUniqueOrThrow({ where: { id: reference.propositionId } }); if (!["Aprovada", "Sancionada"].includes(proposal.status)) throw new Error("Conclua a aprovação da proposição vinculada na Câmara."); }
+        if (["SANCTION", "PUBLISH"].includes(input.stage) && reference.propositionId && !reference.lawId) throw new Error("Vincule o ato sancionado da proposição antes da sanção orçamentária.");
+        if (reference.lawId) { const law = await tx.camLei.findUniqueOrThrow({ where: { id: reference.lawId } }); if (law.status !== "Vigente" || input.stage === "PUBLISH" && !law.dataPublicacao) throw new Error("Ato legislativo ainda não vigente/publicado."); }
+      }
+    }
     const stages = { SUBMIT: ["DRAFT", "SUBMITTED"], APPROVE: ["SUBMITTED", "APPROVED"], SANCTION: ["APPROVED", "SANCTIONED"], PUBLISH: ["SANCTIONED", "PUBLISHED"], IMPLANT: ["PUBLISHED", "PUBLISHED"] };
     const [expected, status] = stages[input.stage];
     if (input.stage === "IMPLANT" && piece.implantedAt) return piece.id;
@@ -93,7 +101,8 @@ export async function transitionPlanningPiece(context: PlanningContext, raw: unk
         newAppropriationIds.push(appropriation.id);
       }
       await tx.planningInstrument.update({ where: { id: piece.id }, data: { implantedAt: date, implantedById: context.user.id } });
-      const command = await tx.planningIntegrationCommand.create({ data: { type: "BUDGET_OPENING", sourceId: piece.id, idempotencyKey: `implant:${piece.id}`, payload: jsonValue({ governmentEntityId: piece.governmentEntityId, instrumentId: piece.id, year: year.year, revision: piece.revision + 1, newAppropriationIds, reconciledAppropriationIds, accountingRule: "POST_NEW_ONLY_VERIFY_RECONCILED_OPENING_WITHOUT_DUPLICATION" }) } });
+      const openingLines = await tx.planningBudgetLine.findMany({ where: { instrumentId: piece.id, kind: { in: ["REVENUE", "EXPENSE"] } }, select: { id: true, kind: true, year: true, budgetUnitId: true, appropriationId: true, originalValue: true }, orderBy: [{ year: "asc" }, { code: "asc" }, { id: "asc" }] });
+      const command = await tx.planningIntegrationCommand.create({ data: { type: "BUDGET_OPENING", sourceId: piece.id, idempotencyKey: `implant:${piece.id}`, payload: jsonValue({ governmentEntityId: piece.governmentEntityId, instrumentId: piece.id, year: year.year, revision: piece.revision + 1, openingLines: openingLines.map((line) => ({ ...line, originalValue: line.originalValue.toFixed(2) })), newAppropriationIds, reconciledAppropriationIds, accountingRule: "POST_NEW_ONLY_VERIFY_RECONCILED_OPENING_WITHOUT_DUPLICATION" }) } });
       await deliverPlanningAccountingCommand(tx, context, command.id);
       await finalizeLegalRevision(tx, context, piece, date, canonical.legalActNumber ?? "Implantação orçamentária", "Implantação e cópia de configurações do exercício");
     } else {

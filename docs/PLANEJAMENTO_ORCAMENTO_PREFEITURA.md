@@ -19,6 +19,8 @@ O [plano principal](PLANO_IMPLEMENTACAO_PLANEJAMENTO_ORCAMENTO.md) contém a tra
 
 ## Controle individual dos requisitos da Prefeitura
 
+**Diagnóstico técnico atualizado:** [revisão do código e plano S1–S9](PLANEJAMENTO_ORCAMENTO_DIAGNOSTICO_ATUAL_E_PLANO_EXECUCAO.md), com 99 itens e complementos para a próxima execução. Os estados B/P dessa revisão não promovem os aceites EXE abaixo; os números 49/50 no estado inicial são históricos.
+
 **Progresso técnico F4–F8:** versões/histórico/compatibilização, emendas, programação/cotas, créditos/implantação e catálogo PDF/CSV possuem implementação interna e testes PostgreSQL. Evidências e dependências estão em [PLANEJAMENTO_F4_F8_EVIDENCIAS.md](PLANEJAMENTO_F4_F8_EVIDENCIAS.md). As duas novas migrations, ensaio da jornada executiva, conexões F9 e aceite F10 permanecem separados; nenhuma caixa integral abaixo foi promovida por build/teste.
 
 Cada caixa abaixo é **pendente de entrega e demonstração integral do Executivo**; não representa inexistência das bases parciais já auditadas. Desenvolvimento interno indicado por fase; todos passam por F0/F1 transversais, F9 quando houver integração/dependência, e F10 para aceite final.
@@ -126,6 +128,8 @@ Cada caixa abaixo é **pendente de entrega e demonstração integral do Executiv
 | EXE-01.99 | Renúncia/compensação e relatório LRF | F2/F8/F9 | [ ] |
 
 ## Evidência e conclusão
+
+**Continuação técnica S3–S7:** [registro de implementação, testes e dependências](PLANEJAMENTO_S3_S7_EVIDENCIAS.md). Não promove as caixas EXE; materiais oficiais, implantação e demonstração independente continuam necessários.
 
 Para marcar cada caixa: registrar cenário, dados/exercício/UG/versão/data, perfil, rota, efeito persistido, saída emitida, testes relevantes e evidência da demonstração; requisitos com integração exigem prova de conexão real.
 

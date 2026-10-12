@@ -27,6 +27,7 @@ export async function getPlanningBudgetRestrictions(db: Db, appropriationId: str
 async function adoptedLine(db: Db, appropriationId: string) {
   if (!await hasPlanningRuntime(db)) return null;
   const line = await db.planningBudgetLine.findUnique({ where: { appropriationId }, include: { instrument: { include: { annualBudgetLaw: true } }, quotas: { orderBy: { month: "asc" } } } });
+  if (line?.instrument.implantedAt && !enabled(line.instrument.annualBudgetLaw?.metadata ?? null)) throw new Error("Conecte a execução da LOA no Planejamento antes de reservar ou executar esta dotação.");
   return line && enabled(line.instrument.annualBudgetLaw?.metadata ?? null) ? line : null;
 }
 
@@ -34,20 +35,21 @@ async function adoptedLine(db: Db, appropriationId: string) {
 export async function assertPlanningReservationYear(db: Db, appropriationId: string, financialYearId: string, date: Date) {
   const line = await adoptedLine(db, appropriationId);
   const year = await db.financialYear.findUniqueOrThrow({ where: { id: financialYearId } });
-  if (!line || !line.instrument.implantedAt || !["Preparação", "Aberto"].includes(year.status) || date.getUTCFullYear() !== year.year || date < year.startDate || date > year.endDate) throw new Error("Reserva futura exige orçamento implantado, conectado e data dentro do exercício de destino.");
+  if (!line || !line.instrument.implantedAt || line.instrument.annualBudgetLaw?.financialYearId !== year.id || line.year !== year.year || !["Preparação", "Aberto"].includes(year.status) || date.getUTCFullYear() !== year.year || date < year.startDate || date > year.endDate) throw new Error("Reserva futura exige orçamento implantado, conectado e data dentro do exercício de destino.");
   return year;
 }
 
 export async function assertPlanningPeriodAvailability(tx: Tx, appropriationId: string, date: Date, value: Prisma.Decimal, excludeReservationId?: string) {
   const line = await adoptedLine(tx, appropriationId);
   if (!line) return false;
+  if (date.getUTCFullYear() !== line.year || !value.isFinite() || !value.greaterThan(0)) throw new Error("Data ou valor incompatível com a cota do exercício.");
   const quota = line.quotas.find((row) => row.month === date.getUTCMonth() + 1);
   if (!quota || line.quotas.length !== 12 || quota.closedAt) throw new Error("Cadastre os doze meses e utilize um período de cota aberto.");
   const first = Math.floor((quota.month - 1) / quota.periodMonths) * quota.periodMonths + 1;
   const period = line.quotas.filter((row) => row.month >= first && row.month < first + quota.periodMonths && !row.closedAt);
   const start = new Date(Date.UTC(line.year, first - 1, 1)), end = new Date(Date.UTC(line.year, first - 1 + quota.periodMonths, 1));
   const reservations = await tx.budgetReservation.findMany({ where: { appropriationId, status: "Ativa", date: { gte: start, lt: end }, ...(excludeReservationId ? { id: { not: excludeReservationId } } : {}) }, select: { valueDecimal: true } });
-  const reserved = reservations.reduce((sum, row) => sum.plus(row.valueDecimal ?? 0), new Prisma.Decimal(0));
+  const reserved = reservations.reduce((sum, row) => { if (row.valueDecimal === null) throw new Error("Reconcilie o valor Decimal das reservas antes de executar a cota."); return sum.plus(row.valueDecimal); }, new Prisma.Decimal(0));
   const available = period.reduce((sum, row) => sum.plus(row.planned).minus(row.consumed).minus(row.blocked), new Prisma.Decimal(0)).minus(reserved);
   if (value.greaterThan(available)) throw new Error("O lançamento excede a cota do período de Planejamento, considerando reservas e contingenciamento.");
   return true;
@@ -57,7 +59,12 @@ export async function recordPlanningFinanceExecution(tx: Tx, actor: Actor, input
   await lockPlanningBudgetForAppropriation(tx, input.appropriationId);
   const line = await adoptedLine(tx, input.appropriationId);
   if (!line) return;
-  if (await tx.planningQuotaEvent.findUnique({ where: { submissionKey: input.key } })) return;
+  if (!input.value.isFinite() || !input.value.greaterThan(0)) throw new Error("Execução financeira exige valor positivo.");
+  const duplicate = await tx.planningQuotaEvent.findUnique({ where: { submissionKey: input.key }, include: { quota: { select: { lineId: true } } } });
+  if (duplicate) {
+    if (duplicate.quota.lineId !== line.id || duplicate.type !== input.operation || !duplicate.value.equals(input.value) || duplicate.effectiveAt.getTime() !== input.date.getTime()) throw new Error("Execução já registrada com outros dados.");
+    return;
+  }
   if (input.date.getUTCFullYear() !== line.year) throw new Error("Execução financeira fora do exercício da cota.");
   if (["REVERSE", "REVERSE_PAYMENT"].includes(input.operation)) {
     const replay = await tx.planningQuotaEvent.findMany({ where: { submissionKey: { startsWith: `${input.key}:` }, quota: { lineId: line.id } } });
@@ -106,23 +113,47 @@ export async function readPlanningFinancialExecution(context: AppContext, refere
   if (!canViewModule(context.user, "FINANCEIRO")) return { status: "RESTRICTED" as const, rows: [] };
   const [runtime] = await context.prisma.$queryRaw<{ ready: boolean }[]>`SELECT (to_regclass('"Commitment"') IS NOT NULL AND to_regclass('"CommitmentMovement"') IS NOT NULL AND to_regclass('"TreasuryMovement"') IS NOT NULL AND to_regclass('"Revenue"') IS NOT NULL) AS ready`;
   if (!runtime.ready) return { status: "UNAVAILABLE" as const, rows: [] };
-  const rows = [];
+  type ExecutionRow = { lineId: string; status: "CONNECTED" | "UNMAPPED" | "AMBIGUOUS" | "UNRECONCILED"; committed: string | null; collected: string | null; paidNet: string | null; paidGross: string | null; appropriationId: string | null };
+  const rows: ExecutionRow[] = [];
+  const mapped = new Map<string, ExecutionRow>();
   for (const line of references) {
     if (!isSystemAdministrator(context.user) && !context.user.allowedBudgetUnitIds.includes(line.budgetUnitId)) throw new Error("Execução financeira fora das unidades autorizadas.");
+    const source = await context.prisma.planningBudgetLine.findUnique({ where: { id: line.id }, include: { instrument: { include: { parent: { include: { parent: true } } } } } });
+    if (!source || source.year !== line.year || source.kind !== line.kind || source.budgetUnitId !== line.budgetUnitId || source.resourceSourceId !== line.resourceSourceId) throw new Error("Referência de execução fora da classificação autorizada.");
     const from = new Date(Date.UTC(line.year, 0, 1)), until = new Date(Math.min(asOf.getTime(), Date.UTC(line.year + 1, 0, 1) - 1));
-    let committed = new Prisma.Decimal(0), collected = new Prisma.Decimal(0), paid = new Prisma.Decimal(0);
-    if (line.kind === "EXPENSE" && line.appropriationId) {
-      const commitments = await context.prisma.commitment.findMany({ where: { appropriationId: line.appropriationId, date: { gte: from, lte: until } }, select: { valueDecimal: true, movements: { where: { date: { lte: until } }, select: { type: true, valueDecimal: true } } } });
-      committed = commitments.reduce((sum, row) => sum.plus(row.movements.reduce((value, movement) => movement.type === "Reforço" ? value.plus(movement.valueDecimal) : value.minus(movement.valueDecimal), row.valueDecimal ?? new Prisma.Decimal(0))), new Prisma.Decimal(0));
-      const payments = await context.prisma.payment.findMany({ where: { commitment: { appropriationId: line.appropriationId } }, select: { id: true } });
-      const cash = await context.prisma.treasuryMovement.findMany({ where: { date: { gte: from, lte: until }, sourceType: "PAYMENT", sourceId: { in: payments.map((payment) => payment.id) } }, select: { type: true, valueDecimal: true } });
-      paid = cash.reduce((sum, row) => row.type === "PaymentReversal" ? sum.minus(row.valueDecimal) : row.type === "Payment" ? sum.plus(row.valueDecimal) : sum, new Prisma.Decimal(0));
-    } else if (line.kind === "REVENUE" && line.revenueNature) {
-      const revenueWhere = { revenueNatureId: line.revenueNature.id, resourceSourceId: line.resourceSourceId, bankAccount: { is: { budgetUnitId: line.budgetUnitId } } };
-      const receipts = await context.prisma.treasuryMovement.findMany({ where: { date: { gte: from, lte: until }, OR: [{ revenue: { is: revenueWhere } }, { revenueReversal: { is: { revenue: revenueWhere } } }] }, select: { type: true, valueDecimal: true } });
-      collected = receipts.reduce((sum, row) => row.type === "RevenueReversal" ? sum.minus(row.valueDecimal) : row.type === "Revenue" ? sum.plus(row.valueDecimal) : sum, new Prisma.Decimal(0));
+    let committed = new Prisma.Decimal(0), collected = new Prisma.Decimal(0), paid = new Prisma.Decimal(0), paidGross = new Prisma.Decimal(0);
+    let appropriationId = source.appropriationId;
+    if (line.kind === "EXPENSE" && !appropriationId) {
+      const root = source.instrument.multiYearPlanId ?? source.instrument.parent?.multiYearPlanId ?? source.instrument.parent?.parent?.multiYearPlanId;
+      const matches = await context.prisma.planningBudgetLine.findMany({ where: { kind: "EXPENSE", year: source.year, budgetUnitId: source.budgetUnitId, resourceSourceId: source.resourceSourceId, programId: source.programId, actionId: source.actionId, expenseNatureId: source.expenseNatureId, functionCode: source.functionCode, subfunctionCode: source.subfunctionCode, product: source.product, productUnit: source.productUnit, appropriationId: { not: null }, instrument: { kind: "LOA", governmentEntityId: source.instrument.governmentEntityId, implantedAt: { not: null }, annualBudgetLaw: { is: { budgetGuideline: { is: { multiYearPlanId: root ?? "" } } } } } }, select: { code: true, appropriationId: true } });
+      const sameCode = matches.filter((candidate) => candidate.code === source.code);
+      const candidates = sameCode.length ? sameCode : matches;
+      if (candidates.length !== 1) { rows.push({ lineId: line.id, status: candidates.length ? "AMBIGUOUS" : "UNMAPPED", committed: null, collected: null, paidNet: null, paidGross: null, appropriationId: null }); continue; }
+      appropriationId = candidates[0].appropriationId;
     }
-    rows.push({ lineId: line.id, committed: committed.toFixed(2), collected: collected.toFixed(2), paidNet: paid.toFixed(2) });
+    if (line.kind === "EXPENSE" && appropriationId) {
+      const commitments = await context.prisma.commitment.findMany({ where: { appropriationId, date: { gte: from, lte: until } }, select: { valueDecimal: true, movements: { where: { date: { lte: until } }, select: { type: true, valueDecimal: true } } } });
+      if (commitments.some((row) => row.valueDecimal === null || row.movements.some((movement) => !["Reforço", "Anulação"].includes(movement.type)))) { rows.push({ lineId: line.id, status: "UNRECONCILED", committed: null, collected: null, paidNet: null, paidGross: null, appropriationId }); continue; }
+      committed = commitments.reduce((sum, row) => sum.plus(row.movements.reduce((value, movement) => movement.type === "Reforço" ? value.plus(movement.valueDecimal) : value.minus(movement.valueDecimal), row.valueDecimal!)), new Prisma.Decimal(0));
+      const payments = await context.prisma.payment.findMany({ where: { commitment: { appropriationId } }, select: { id: true, valueDecimal: true } });
+      const cash = await context.prisma.treasuryMovement.findMany({ where: { status: "Confirmado", date: { gte: from, lte: until }, sourceType: "PAYMENT", sourceId: { in: payments.map((payment) => payment.id) } }, select: { type: true, valueDecimal: true, sourceId: true } });
+      const amounts = new Map(payments.map((payment) => [payment.id, payment.valueDecimal]));
+      if (cash.some((movement) => !amounts.get(movement.sourceId ?? ""))) { rows.push({ lineId: line.id, status: "UNRECONCILED", committed: committed.toFixed(2), collected: null, paidNet: null, paidGross: null, appropriationId }); continue; }
+      paidGross = cash.reduce((sum, row) => row.type === "PaymentReversal" ? sum.minus(amounts.get(row.sourceId!)!) : row.type === "Payment" ? sum.plus(amounts.get(row.sourceId!)!) : sum, new Prisma.Decimal(0));
+      paid = cash.reduce((sum, row) => row.type === "PaymentReversal" ? sum.minus(row.valueDecimal) : row.type === "Payment" ? sum.plus(row.valueDecimal) : sum, new Prisma.Decimal(0));
+    } else if (line.kind === "REVENUE" && source.revenueNatureId) {
+      const revenueWhere = { revenueNatureId: source.revenueNatureId, resourceSourceId: line.resourceSourceId, bankAccount: { is: { budgetUnitId: line.budgetUnitId } } };
+      const receipts = await context.prisma.treasuryMovement.findMany({ where: { status: "Confirmado", date: { gte: from, lte: until }, OR: [{ revenue: { is: revenueWhere } }, { revenueReversal: { is: { revenue: revenueWhere } } }] }, select: { type: true, valueDecimal: true } });
+      collected = receipts.reduce((sum, row) => row.type === "RevenueReversal" ? sum.minus(row.valueDecimal) : row.type === "Revenue" ? sum.plus(row.valueDecimal) : sum, new Prisma.Decimal(0));
+      const adjustments = await context.prisma.revenueResourceRedistribution.findMany({ where: { date: { gte: from, lte: until }, revenue: { revenueNatureId: source.revenueNatureId, bankAccount: { is: { budgetUnitId: line.budgetUnitId } } }, OR: [{ sourceResourceSourceId: line.resourceSourceId }, { destinationResourceSourceId: line.resourceSourceId }] }, select: { sourceResourceSourceId: true, valueDecimal: true } });
+      collected = adjustments.reduce((sum, adjustment) => adjustment.sourceResourceSourceId === line.resourceSourceId ? sum.minus(adjustment.valueDecimal) : sum.plus(adjustment.valueDecimal), collected);
+    }
+    const row: ExecutionRow = { lineId: line.id, status: "CONNECTED", committed: committed.toFixed(2), collected: collected.toFixed(2), paidNet: paid.toFixed(2), paidGross: paidGross.toFixed(2), appropriationId };
+    const key = appropriationId ?? `${source.year}:${source.budgetUnitId}:${source.resourceSourceId}:${source.revenueNatureId}`;
+    const prior = mapped.get(key);
+    if (prior) { prior.status = row.status = "AMBIGUOUS"; prior.committed = row.committed = null; prior.collected = row.collected = null; prior.paidNet = row.paidNet = null; prior.paidGross = row.paidGross = null; }
+    mapped.set(key, row);
+    rows.push(row);
   }
   return { status: "CONNECTED" as const, rows };
 }

@@ -23,7 +23,7 @@ export function distributePlanningMonths(total: string, weights: string[]) {
 
 export async function generatePlanningSchedule(context: PlanningContext, raw: unknown) {
   assertPlanningOperation(context, "update");
-  const input = z.object({ instrumentId: z.string().min(1), lineId: z.string().min(1), method: z.enum(["TWELFTHS", "PERCENTAGES", "PREVIOUS_YEAR", "THREE_YEARS"]), periodMonths: z.coerce.number().refine((value) => [2, 3, 6].includes(value)), percentages: z.string().optional(), reason: z.string().trim().min(1) }).parse(raw);
+   const input = z.object({ instrumentId: z.string().min(1), lineId: z.string().min(1), method: z.enum(["TWELFTHS", "PERCENTAGES", "PREVIOUS_YEAR", "THREE_YEARS"]), periodMonths: z.coerce.number().refine((value) => [2, 3, 6].includes(value)), percentages: z.string().optional(), effectiveAt: planningDateSchema.optional(), reason: z.string().trim().min(1) }).parse(raw);
   return context.prisma.$transaction(async (tx) => {
     const piece = await lockLegalInstrument(tx, context, input.instrumentId);
     if (piece.kind !== "LOA") throw new Error("Programação mensal exige LOA.");
@@ -48,7 +48,9 @@ export async function generatePlanningSchedule(context: PlanningContext, raw: un
     }
     const total = await linePosition(tx, line.id);
     const monthly = distributePlanningMonths(total.toFixed(2), weights);
-    for (const [index, planned] of monthly.entries()) await tx.planningQuota.create({ data: { lineId: line.id, kind: line.kind, month: index + 1, planned, disbursementPlanned: line.kind === "EXPENSE" ? planned : 0, periodMonths: input.periodMonths, method: input.method, calculation: jsonValue({ total: total.toFixed(2), initialPlanned: planned.toFixed(2), initialDisbursement: line.kind === "EXPENSE" ? planned.toFixed(2) : "0.00", weights, historical, reason: input.reason, stage: line.kind === "REVENUE" ? "ARRECADADA" : "EMPENHADA", disbursementStage: "PAGA", rounding: "LARGEST_REMAINDER" }) } });
+    const generatedAt = input.effectiveAt ?? new Date().toISOString().slice(0, 10);
+    if (generatedAt > new Date().toISOString().slice(0, 10)) throw new Error("A vigência da programação ainda não pode ser futura.");
+    for (const [index, planned] of monthly.entries()) await tx.planningQuota.create({ data: { lineId: line.id, kind: line.kind, month: index + 1, planned, disbursementPlanned: line.kind === "EXPENSE" ? planned : 0, periodMonths: input.periodMonths, method: input.method, calculation: jsonValue({ generatedAt, total: total.toFixed(2), initialPlanned: planned.toFixed(2), initialDisbursement: line.kind === "EXPENSE" ? planned.toFixed(2) : "0.00", weights, historical, reason: input.reason, stage: line.kind === "REVENUE" ? "ARRECADADA" : "EMPENHADA", disbursementStage: "PAGA", rounding: "LARGEST_REMAINDER" }) } });
     await planningAudit(tx, context, piece.id, "PLANNING_SCHEDULE", { ...input, total: total.toFixed(2), monthly: monthly.map((value) => value.toFixed(2)) });
     return line.id;
   });
@@ -120,13 +122,29 @@ export async function contingencyPlanningBudget(context: PlanningContext, raw: u
     const prior = await tx.financialAuditLog.findFirst({ where: { entityId: piece.id, action: "PLANNING_CONTINGENCY", payload: { path: ["submissionKey"], equals: input.submissionKey } } });
     if (prior) { if (contentHash(prior.payload) !== contentHash(input)) throw new Error("Solicitação repetida com dados diferentes."); return piece.id; }
     for (const line of lines) {
-      const quotas = await tx.planningQuota.findMany({ where: { lineId: line.id, closedAt: null }, orderBy: { month: "asc" } });
+      const allQuotas = await tx.planningQuota.findMany({ where: { lineId: line.id }, orderBy: { month: "asc" } });
+      const quotas = allQuotas.filter((quota) => !quota.closedAt);
       if (!quotas.length) throw new Error(`Cadastre cotas abertas para ${line.code}.`);
       const amount = (await linePosition(tx, line.id)).mul(percentage).div(100).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+      const reservations = line.appropriationId ? await tx.budgetReservation.findMany({ where: { appropriationId: line.appropriationId, status: "Ativa" }, select: { valueDecimal: true, date: true } }) : [];
+      if (reservations.some((reservation) => reservation.valueDecimal === null)) throw new Error("Reconcilie as reservas antes de contingenciar.");
+      const credit = await tx.planningCreditLine.aggregate({ where: { lineId: line.id, batch: { status: { in: ["DRAFT", "APPROVED", "SANCTIONED", "PUBLISHED"] } } }, _sum: { reserved: true } });
+      const available = (await linePosition(tx, line.id)).minus(allQuotas.reduce((sum, quota) => sum.plus(quota.consumed).plus(quota.blocked), new Prisma.Decimal(0))).minus(reservations.reduce((sum, reservation) => sum.plus(reservation.valueDecimal!), new Prisma.Decimal(0))).minus(credit._sum.reserved ?? 0);
+      if (amount.greaterThan(available)) throw new Error(`Saldo insuficiente para contingenciar ${line.code}, considerando reservas de compra e crédito.`);
+      const periodAvailable = new Map<number, Prisma.Decimal>();
+      for (const quota of quotas) {
+        const first = Math.floor((quota.month - 1) / quota.periodMonths) * quota.periodMonths + 1;
+        if (periodAvailable.has(first)) continue;
+        const period = quotas.filter((peer) => peer.month >= first && peer.month < first + quota.periodMonths);
+        const reserved = reservations.filter((reservation) => reservation.date.getUTCFullYear() === line.year && reservation.date.getUTCMonth() + 1 >= first && reservation.date.getUTCMonth() + 1 < first + quota.periodMonths).reduce((sum, reservation) => sum.plus(reservation.valueDecimal!), new Prisma.Decimal(0));
+        periodAvailable.set(first, period.reduce((sum, peer) => sum.plus(peer.planned).minus(peer.consumed).minus(peer.blocked), new Prisma.Decimal(0)).minus(reserved));
+      }
       let remaining = amount;
       for (const quota of quotas) {
-        const value = Prisma.Decimal.min(remaining, quota.planned.minus(quota.consumed).minus(quota.blocked)); remaining = remaining.minus(value);
+        const first = Math.floor((quota.month - 1) / quota.periodMonths) * quota.periodMonths + 1;
+        const value = Prisma.Decimal.max(0, Prisma.Decimal.min(remaining, quota.planned.minus(quota.consumed).minus(quota.blocked), periodAvailable.get(first)!)); remaining = remaining.minus(value);
         if (value.greaterThan(0)) {
+          periodAvailable.set(first, periodAvailable.get(first)!.minus(value));
           await tx.planningQuota.update({ where: { id: quota.id }, data: { blocked: { increment: value } } });
           await tx.planningQuotaEvent.create({ data: { quotaId: quota.id, type: "BLOCK", value, reason: input.reason, submissionKey: `${input.submissionKey}:${quota.id}`, createdById: context.user.id } });
         }

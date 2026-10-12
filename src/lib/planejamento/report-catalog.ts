@@ -29,6 +29,7 @@ export const planningReportCatalog = [
   { type: "HEALTH", title: "Receitas de impostos e despesas próprias com saúde", items: [31, 51, 98], family: "FISCAL" },
   { type: "PERSONNEL", title: "Despesa com pessoal", items: [31, 51, 98], family: "FISCAL" },
   { type: "RCL", title: "Receita corrente líquida — projeção orçamentária", items: [31], family: "FISCAL" },
+  { type: "RCL_EXECUTED", title: "Receita corrente líquida — execução de doze competências", items: [31], family: "RCL_EXECUTED" },
   { type: "LAW4320_1", title: "Lei 4.320 — Anexo 1: receita e despesa por categorias econômicas", items: [85], family: "ECONOMIC" },
   { type: "LAW4320_2", title: "Lei 4.320 — Anexo 2: natureza da despesa", items: [85], family: "NATURE" },
   { type: "LAW4320_6", title: "Lei 4.320 — Anexo 6: programa de trabalho", items: [85], family: "WORK_PROGRAM" },

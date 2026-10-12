@@ -6,7 +6,13 @@ export async function assertPublishedAccountClassification(tx: Prisma.Transactio
   for (const account of accounts) {
     const versions = bindings.filter((entry) => entry.canonicalId === account.id);
     if (!versions.length) continue;
-    const candidates = versions.filter((entry) => entry.version.year === date.getUTCFullYear());
+    const current = versions.filter((entry) => entry.version.year === date.getUTCFullYear());
+    // A municipal adoption supersedes its explicitly linked reference, preserving both immutable editions.
+    const replaced = new Set(current.flatMap((entry) => {
+      const attributes = entry.attributes as Prisma.JsonObject;
+      return attributes.operational === true && attributes.pocOnly === false && typeof attributes.predecessorEntryId === "string" ? [attributes.predecessorEntryId] : [];
+    }));
+    const candidates = current.filter((entry) => !replaced.has(entry.id));
     if (candidates.length !== 1) throw new Error("Conta contábil sem versão vigente única; concilie o catálogo antes da postagem.");
     const attributes = candidates[0].attributes as Prisma.JsonObject;
     if (attributes.pocOnly === true && process.env.CELERIFLOW_ACCOUNTING_MODE !== "POC") throw new Error("Classificação de ensaio disponível somente no modo POC; homologação municipal pendente.");

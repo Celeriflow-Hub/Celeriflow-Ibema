@@ -16,7 +16,8 @@ await new Promise((accept, reject) => { probe.once("error", reject); probe.liste
 const port = probe.address().port;
 await new Promise((accept, reject) => probe.close((error) => error ? reject(error) : accept()));
 const password = randomUUID();
-const database = new EmbeddedPostgres({ databaseDir: join(temporaryParent, `planning-pg-${randomUUID()}`), user: "postgres", password, port, persistent: false, createPostgresUser: false, postgresFlags: ["-h", "127.0.0.1"], onLog: () => {}, onError: (error) => console.error(String(error).replaceAll(password, "[redacted]")) });
+const database = new EmbeddedPostgres({ databaseDir: join(temporaryParent, `planning-pg-${randomUUID()}`), user: "postgres", password, port, persistent: false, createPostgresUser: false, initdbFlags: ["--encoding=UTF8"], postgresFlags: ["-h", "127.0.0.1"], onLog: () => {}, onError: (error) => console.error(String(error).replaceAll(password, "[redacted]")) });
+let testExitCode = 1;
 try {
   await database.initialise();
   await database.start();
@@ -25,5 +26,11 @@ try {
   if (!tests.length) tests.push("tests/planning-execution.test.ts");
   console.log("PostgreSQL local isolado iniciado; execução com múltiplas conexões reais.");
   const child = spawn(process.execPath, ["--conditions=react-server", "--import", "tsx", "--test", "--test-concurrency=1", "--test-reporter=spec", ...tests], { stdio: "inherit", env: { ...process.env, CELERIFLOW_PLANNING_TEST_POSTGRES_URL: `postgresql://postgres:${password}@127.0.0.1:${port}/planning_s2` } });
-  process.exitCode = await new Promise((accept, reject) => { child.once("error", reject); child.once("exit", (code) => accept(code ?? 1)); });
-} finally { await database.stop(); }
+  testExitCode = await new Promise((accept, reject) => { child.once("error", reject); child.once("exit", (code) => accept(code ?? 1)); });
+} finally {
+  await database.stop();
+  // The embedded server's shutdown may change process.exitCode; retain the test result.
+  process.exitCode = testExitCode;
+}
+// async-exit-hook uses code 0 on natural beforeExit; pass the actual result explicitly.
+process.exit(testExitCode);

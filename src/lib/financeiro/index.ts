@@ -837,19 +837,23 @@ export async function createCommitmentInTransaction(tx: Prisma.TransactionClient
 }
 
 export async function cancelCommitment(db: PrismaClient, actor: FinanceActor, commitmentId: string) {
-  return db.$transaction(async (tx) => {
+  return db.$transaction((tx) => cancelCommitmentInTransaction(tx, actor, commitmentId));
+}
+
+export async function cancelCommitmentInTransaction(tx: Prisma.TransactionClient, actor: FinanceActor, commitmentId: string, date = new Date(), reason = "Anulação integral do empenho"): Promise<Commitment> {
     await lockCommitment(tx, commitmentId);
     const commitment = await tx.commitment.findUnique({ include: { appropriation: true, movements: true, settlements: { where: { status: ACTIVE_SETTLEMENT_STATUS } }, payments: { where: { status: { in: ACTIVE_PAYMENT_STATUSES } } } }, where: { id: commitmentId } });
     if (!commitment) throw new FinanceError("Empenho não encontrado.");
     await lockAppropriation(tx, commitment.appropriationId);
     assertActorBudgetUnit(actor, commitment.appropriation.budgetUnitId);
-    const year = await assertFinancialYearOpen(tx, commitment.appropriation.financialYearId, new Date());
+    const year = await assertFinancialYearOpen(tx, commitment.appropriation.financialYearId, date);
+    await assertAccountingPeriodOpen(tx, year.id, date);
     if (commitment.status === "Anulado") throw new FinanceError("O empenho já está anulado.");
     if (commitment.settlements.length || commitment.payments.length) throw new FinanceError("Empenhos com liquidações ou pagamentos ativos não podem ser anulados integralmente.");
     const effectiveValue = commitmentValue(commitment.valueDecimal, commitment.movements);
-    const canceledAt = new Date();
+    const canceledAt = date;
     if (effectiveValue.greaterThan(0)) {
-      await tx.commitmentMovement.create({ data: { date: canceledAt, type: "Anulação", valueDecimal: effectiveValue, justification: "Anulação integral do empenho", commitmentId } });
+      await tx.commitmentMovement.create({ data: { date: canceledAt, type: "Anulação", valueDecimal: effectiveValue, justification: reason.trim(), commitmentId } });
       await postCommitmentBalanceChange(tx, actor, commitment, year.id, { date: canceledAt, value: effectiveValue, reverse: true, sourceType: "COMMITMENT_REVERSAL", sourceId: commitment.id, eventType: "EMPENHO_ANULADO", key: `FINANCEIRO:COMMITMENT:${commitment.id}:EMPENHO_ANULADO` });
     }
     const canceled = await tx.commitment.update({ where: { id: commitmentId }, data: { status: "Anulado" } });
@@ -857,7 +861,6 @@ export async function cancelCommitment(db: PrismaClient, actor: FinanceActor, co
     if (effectiveValue.greaterThan(0)) await recordPlanningFinanceExecution(tx, actor, { appropriationId: commitment.appropriationId, operation: "REVERSE", date: canceledAt, value: effectiveValue, key: `finance:cancel:${commitment.id}`, originPrefix: `finance:commit:${commitment.id}:` });
     await audit(tx, actor, "CANCEL", "Commitment", commitmentId, { previousStatus: commitment.status, value: jsonMoney(effectiveValue) }, year.id);
     return canceled;
-  });
 }
 
 export async function createCommitmentMovement(db: PrismaClient, actor: FinanceActor, input: { commitmentId: string; date: Date; type: "Reforço" | "Anulação"; value: Prisma.Decimal | string | number; justification: string }) {
@@ -1070,17 +1073,25 @@ export async function createSettlementInTransaction(tx: Prisma.TransactionClient
 }
 
 export async function cancelSettlement(db: PrismaClient, actor: FinanceActor, settlementId: string) {
-  return db.$transaction(async (tx) => {
-    const settlement = await tx.settlement.findUnique({ include: { commitment: { include: { appropriation: true } } }, where: { id: settlementId } });
+  return db.$transaction((tx) => cancelSettlementInTransaction(tx, actor, settlementId));
+}
+
+export async function cancelSettlementInTransaction(tx: Prisma.TransactionClient, actor: FinanceActor, settlementId: string): Promise<Settlement> {
+     const origin = await tx.settlement.findUnique({ where: { id: settlementId }, select: { commitmentId: true } });
+     if (!origin) throw new FinanceError("Liquidação não encontrada.");
+     await lockCommitment(tx, origin.commitmentId);
+     const settlement = await tx.settlement.findUnique({ include: { commitment: { include: { appropriation: true } } }, where: { id: settlementId } });
     if (!settlement) throw new FinanceError("Liquidação não encontrada.");
     await lockCommitment(tx, settlement.commitmentId);
     assertActorBudgetUnit(actor, settlement.commitment.appropriation.budgetUnitId);
-    const year = await assertFinancialYearOpen(tx, settlement.commitment.appropriation.financialYearId, new Date());
+     const date = new Date();
+     const year = await assertFinancialYearOpen(tx, settlement.commitment.appropriation.financialYearId, date);
+     await assertAccountingPeriodOpen(tx, year.id, date);
     if (settlement.status !== ACTIVE_SETTLEMENT_STATUS) throw new FinanceError("Somente liquidações ativas podem ser canceladas.");
     if ((await activePaymentTotal(tx, { settlementId })).greaterThan(0)) throw new FinanceError("Não é possível cancelar uma liquidação com pagamentos ativos.");
     await reverseAccountingForSource(tx, actor, {
       financialYearId: year.id,
-      date: new Date(),
+       date,
       sourceType: "SETTLEMENT",
       sourceId: settlement.id,
       eventType: "LIQUIDACAO_CANCELADA",
@@ -1090,8 +1101,7 @@ export async function cancelSettlement(db: PrismaClient, actor: FinanceActor, se
     const canceled = await tx.settlement.update({ where: { id: settlementId }, data: { status: "Cancelado" } });
     await refreshCommitmentExecutionStatus(tx, settlement.commitmentId);
     await audit(tx, actor, "CANCEL", "Settlement", settlementId, { previousStatus: settlement.status }, year.id);
-    return canceled;
-  });
+     return canceled;
 }
 
 export async function createPayment(
@@ -2389,7 +2399,14 @@ function accountingMonth(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
 }
 
+async function lockAccountingPeriod(tx: Db, financialYearId: string, date: Date) {
+  if (!Number.isFinite(date.getTime())) throw new FinanceError("Competência contábil inválida.");
+  const key = `ACCOUNTING_PERIOD:${financialYearId}:${accountingMonth(date).toISOString()}`;
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))::text`;
+}
+
 export async function assertAccountingPeriodOpen(tx: Db, financialYearId: string, date: Date) {
+  await lockAccountingPeriod(tx, financialYearId, date);
   const close = await tx.monthlyAccountingClose.findUnique({
     where: { financialYearId_competence: { financialYearId, competence: accountingMonth(date) } },
     select: { status: true },
@@ -2510,6 +2527,7 @@ export async function postAccountingTransactionInTransaction(
   const yearScope = await tx.financialYear.findUnique({ where: { id: input.financialYearId }, select: { governmentEntityId: true } });
   if (accountingScope && yearScope?.governmentEntityId !== accountingScope.governmentEntityId) throw new FinanceError("A entidade do lançamento contábil deve corresponder à entidade do exercício financeiro.");
   if (!accountingScope && yearScope?.governmentEntityId) throw new FinanceError("O exercício da entidade exige lançamento com entidade e unidade gestora identificadas.");
+  await lockAccountingPeriod(tx, input.financialYearId, input.date);
   if (input.idempotencyKey) {
     const existing = await tx.accountingTransaction.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
     if (existing) {
@@ -2684,6 +2702,7 @@ export async function closeAccountingMonth(db: PrismaClient, actor: FinanceActor
 export async function requestAccountingMonthClose(db: PrismaClient, actor: FinanceActor, financialYearId: string, competence: Date) {
   return db.$transaction(async (tx) => {
     await assertAccountingYearScope(tx, actor, financialYearId);
+    await lockAccountingPeriod(tx, financialYearId, competence);
     const year = await tx.financialYear.findUnique({ where: { id: financialYearId } });
     if (!year || !["Aberto", "Em Encerramento"].includes(year.status)) throw new FinanceError("O exercicio nao esta disponivel para fechamento contabil.");
     const month = accountingMonth(competence);
@@ -2707,6 +2726,7 @@ export async function requestAccountingMonthClose(db: PrismaClient, actor: Finan
 export async function authorizeAccountingMonthClose(db: PrismaClient, actor: FinanceActor, financialYearId: string, competence: Date) {
   return db.$transaction(async (tx) => {
     await assertAccountingYearScope(tx, actor, financialYearId);
+    await lockAccountingPeriod(tx, financialYearId, competence);
     const month = accountingMonth(competence);
     const close = await tx.monthlyAccountingClose.findUnique({ where: { financialYearId_competence: { financialYearId, competence: month } } });
     if (!close || close.status !== "PENDENTE_FECHAMENTO") throw new FinanceError("Nao ha solicitacao de fechamento mensal pendente para esta competencia.");
@@ -2745,6 +2765,7 @@ export async function requestAccountingMonthReopen(db: PrismaClient, actor: Fina
   if (!justification.trim()) throw new FinanceError("A justificativa para reabertura mensal e obrigatoria.");
   return db.$transaction(async (tx) => {
     await assertAccountingYearScope(tx, actor, financialYearId);
+    await lockAccountingPeriod(tx, financialYearId, competence);
     const year = await tx.financialYear.findUnique({ where: { id: financialYearId } });
     if (!year || !["Aberto", "Em Encerramento"].includes(year.status)) throw new FinanceError("O exercicio nao esta disponivel para reabertura contabil.");
     const month = accountingMonth(competence);
@@ -2764,6 +2785,7 @@ export async function requestAccountingMonthReopen(db: PrismaClient, actor: Fina
 export async function authorizeAccountingMonthReopen(db: PrismaClient, actor: FinanceActor, financialYearId: string, competence: Date) {
   return db.$transaction(async (tx) => {
     await assertAccountingYearScope(tx, actor, financialYearId);
+    await lockAccountingPeriod(tx, financialYearId, competence);
     const month = accountingMonth(competence);
     const close = await tx.monthlyAccountingClose.findUnique({ where: { financialYearId_competence: { financialYearId, competence: month } } });
     if (!close || close.status !== "PENDENTE_REABERTURA") throw new FinanceError("Nao ha solicitacao de reabertura mensal pendente para esta competencia.");

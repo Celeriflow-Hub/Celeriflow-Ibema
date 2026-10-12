@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createPlanningExecutionFixture } from "./helpers/planning-execution-fixture";
 import { approveExpenseRequest, createExpenseRequest, createRevenue, getBankAccountBalance } from "../src/lib/financeiro";
-import { commitPayrollExpenseRequests, settlePayrollCommitments, payPayrollSettlements, concludePayrollFinanceCycle } from "../src/lib/rh/finance-bridge";
+import { commitPayrollExpenseRequests, settlePayrollCommitments, payPayrollSettlements, concludePayrollFinanceCycle, reversePayrollCommitments } from "../src/lib/rh/finance-bridge";
 import type { AppContext } from "../src/lib/platform/tenant-context";
 
 for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) test(`P4 ${jurisdiction}: folha empenha todo o plano em lote nativo; falha tardia reverte reserva, nota, partida e cota`, async () => {
@@ -34,7 +34,7 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) test(`P4 ${jur
     assert.equal(await f.db.accountingTransaction.count(), entriesBefore);
     assert.equal(await f.db.hrIntegrationEvent.count({ where: { eventType: "EMPENHOS_FOLHA" } }), 0);
     await f.pg.exec(`DROP TRIGGER fail_second_payroll_commitment ON "Commitment"; DROP FUNCTION fail_second_payroll_commitment();`);
-    const committed = await commitPayrollExpenseRequests(context, input);
+    let committed = await commitPayrollExpenseRequests(context, input);
     assert.equal(committed.commitmentIds.length, 2);
     assert.deepEqual(await commitPayrollExpenseRequests(context, input), committed);
     await assert.rejects(commitPayrollExpenseRequests(context, { ...input, date: "2026-09-02" }), /outros números, tipos ou data/i);
@@ -42,11 +42,31 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) test(`P4 ${jur
     assert.equal(await f.db.financialDocument.count({ where: { documentType: "NOTA_DE_EMPENHO" } }), 2);
     assert.equal(await f.db.accountingTransaction.count({ where: { sourceType: "COMMITMENT" } }), 2);
     assert.equal(await f.db.expense.count({ where: { status: "Empenhada" } }), 2);
+    const firstEvent = await f.db.hrIntegrationEvent.findUniqueOrThrow({ where: { sourceKey: "FINANCEIRO:EMPENHOS:run-cycle" } });
+    const undo = { runId: "run-cycle", commitmentEventId: firstEvent.id, date: "2026-09-02", reason: "Regeração autorizada da competência", idempotencyKey: "undo-cycle" };
+    await f.pg.exec(`CREATE FUNCTION fail_payroll_reversal_event() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.status='ESTORNADA' AND NEW."eventType"='EMPENHOS_FOLHA' THEN RAISE EXCEPTION 'injected payroll reversal failure'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER fail_payroll_reversal_event BEFORE UPDATE ON "HrIntegrationEvent" FOR EACH ROW EXECUTE FUNCTION fail_payroll_reversal_event();`);
+    await assert.rejects(reversePayrollCommitments(context, undo), /injected payroll reversal failure/i);
+    assert.equal(await f.db.commitment.count({ where: { status: "Anulado" } }), 0);
+    assert.equal(await f.db.expense.count({ where: { status: "Empenhada" } }), 2);
+    assert.equal(await f.db.accountingTransaction.count({ where: { reversalOfId: { not: null } } }), 0);
+    await f.pg.exec(`DROP TRIGGER fail_payroll_reversal_event ON "HrIntegrationEvent"; DROP FUNCTION fail_payroll_reversal_event();`);
+    const reversed = await reversePayrollCommitments(context, undo);
+    assert.deepEqual(await reversePayrollCommitments(context, undo), reversed);
+    assert.equal(await f.db.commitment.count({ where: { status: "Anulado" } }), 2);
+    assert.equal(await f.db.expense.count({ where: { status: "Aprovada" } }), 2);
+    await assert.rejects(commitPayrollExpenseRequests(context, input), /anteceder a desmovimentação/i);
+    committed = await commitPayrollExpenseRequests(context, { ...input, date: "2026-09-02", commitments: input.commitments.map((row) => ({ ...row, number: `${row.number}-R2` })) });
+    assert.equal(await f.db.commitment.count(), 4);
+    assert.equal(await f.db.hrIntegrationEvent.count({ where: { eventType: "EMPENHOS_FOLHA" } }), 2);
+    const currentEvent = await f.db.hrIntegrationEvent.findUniqueOrThrow({ where: { sourceKey: "FINANCEIRO:EMPENHOS:run-cycle:CYCLE:2" } });
     const settlementInput = { runId: "run-cycle", date: "2026-09-02", documents: committed.commitmentIds.map((commitmentId) => ({ commitmentId, documentId: "documento-fiscal", documentRef: "Demonstrativo da folha" })) };
     const settled = await settlePayrollCommitments(context, settlementInput);
     assert.equal(settled.settlementIds.length, 2);
     assert.deepEqual(await settlePayrollCommitments(context, settlementInput), settled);
     assert.equal(await f.db.financialDocument.count({ where: { documentType: "NOTA_DE_LIQUIDACAO" } }), 2);
+    await assert.rejects(reversePayrollCommitments(context, { ...undo, commitmentEventId: currentEvent.id, idempotencyKey: "undo-liquidated" }), /liquidações ou pagamentos ativos/i);
+    assert.equal((await f.db.hrIntegrationEvent.findUniqueOrThrow({ where: { id: currentEvent.id } })).status, "CONCLUIDA");
     const funding = { date: new Date("2026-09-03"), value: "3.00", revenueNatureId: "receita", resourceSourceId: "livre", bankAccountId: "banco", sourceModule: "TEST", sourceType: "PAYROLL_FUNDING", eventType: "RECEIPT", idempotencyKey: "payroll-funding" };
     await createRevenue(f.db, f.actor, funding);
     const paymentInput = { runId: "run-cycle", date: "2026-09-03", proofDocumentId: "documento-fiscal", payments: settled.settlementIds.map((settlementId, index) => ({ settlementId, bankAccountId: "banco", orderNumber: `OP-RH-${index}`, paymentMethod: "Transferência" })) };
@@ -61,6 +81,7 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) test(`P4 ${jur
     assert.equal(await f.db.payment.count({ where: { status: "Paga" } }), 2);
     assert.equal((await getBankAccountBalance(f.db, "banco", funding.date)).toFixed(2), "0.00");
     assert.equal(await f.db.accountingTransaction.count({ where: { sourceType: "PAYMENT" } }), 2);
+    await assert.rejects(reversePayrollCommitments(context, { ...undo, commitmentEventId: currentEvent.id, date: "2026-09-03", idempotencyKey: "undo-paid" }), /liquidações ou pagamentos ativos/i);
     const completion = { runId: "run-cycle", documentId: "documento-fiscal" };
     const concluded = await concludePayrollFinanceCycle(context, completion);
     assert.deepEqual(await concludePayrollFinanceCycle(context, completion), concluded);

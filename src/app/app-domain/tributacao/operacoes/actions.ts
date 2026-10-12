@@ -28,7 +28,7 @@ type ActionResult = { error?: string };
 const taxActor = (context: AppContext) => ({ usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds });
 const message = (error: unknown) => error instanceof TaxError || error instanceof FinanceError ? error.message : "Nao foi possivel concluir a operacao tributaria interna.";
 
-export async function reverseCreditMovementAction(data: { movementId: string; date: string; reason: string; idempotencyKey: string }): Promise<ActionResult> {
+export async function reverseCreditMovementAction(data: { movementId: string; date: string; reason: string; idempotencyKey: string; proofDocumentId?: string }): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("TRIBUTACAO", "update");
     const date = new Date(`${data.date}T12:00:00.000Z`);
@@ -36,6 +36,8 @@ export async function reverseCreditMovementAction(data: { movementId: string; da
     await reverseTaxCreditMovement(context.prisma, taxActor(context), { ...data, date });
     revalidatePath("/tributacao/motor-fiscal");
     revalidatePath("/tributacao/guias");
+    revalidatePath("/financeiro/contabilidade");
+    revalidatePath("/financeiro/contas-bancarias");
     return {};
   } catch (error) { return { error: error instanceof Error ? error.message : "Não foi possível reverter o movimento de crédito." }; }
 }
@@ -188,7 +190,7 @@ export async function saveTaxFinancialMappingAction(data: { taxId: string; reven
   try { const context = await getTenantContextForModuleOperation("TRIBUTACAO", "update"); await configureTaxFinancialMapping(context.prisma, taxActor(context), data); refreshS2(); return {}; } catch (error) { return { error: message(error) }; }
 }
 
-export async function applyTaxCreditAction(data: { creditId: string; operation: "COMPENSAR" | "TRANSFERIR" | "RESTITUIR"; amount: number; assessmentId?: string; destinationTaxpayerId?: string; reason: string; idempotencyKey: string }): Promise<ActionResult> {
+export async function applyTaxCreditAction(data: { creditId: string; operation: "COMPENSAR" | "TRANSFERIR" | "RESTITUIR"; amount: number; assessmentId?: string; destinationTaxpayerId?: string; reason: string; idempotencyKey: string; authorizationDocumentId?: string }): Promise<ActionResult> {
   try { const context = await getTenantContextForModuleOperation("TRIBUTACAO", "update"); await applyTaxCredit(context.prisma, taxActor(context), data); refreshS2(); return {}; } catch (error) { return { error: message(error) }; }
 }
 

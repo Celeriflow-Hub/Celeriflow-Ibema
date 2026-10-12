@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { createExpenseRequest, createBudgetReservationInTransaction, createCommitmentInTransaction, createSettlementInTransaction, createPaymentInTransaction, updatePaymentStatusInTransaction } from "@/lib/financeiro";
+import { createExpenseRequest, createBudgetReservationInTransaction, createCommitmentInTransaction, createSettlementInTransaction, createPaymentInTransaction, updatePaymentStatusInTransaction, cancelCommitmentInTransaction } from "@/lib/financeiro";
 import { AccessError, assertBudgetUnitAccess, canPerformModuleOperation, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
 import { assertPayrollBudgetScope } from "./payroll-access";
 import { enqueueHrIntegration } from "./workforce-service";
@@ -12,6 +12,11 @@ type PlanLine = z.infer<typeof targetSchema> & { key: string; costCenterId: stri
 const planLineSchema = targetSchema.extend({ key: z.string(), costCenterId: z.string().nullable(), component: z.enum(["GROSS", "EMPLOYER"]), value: z.string() });
 const preparedSchema = z.object({ runId: z.string(), ruleId: z.string(), date: z.string(), legalReference: z.string(), lines: z.array(planLineSchema) });
 const commitmentBatchSchema = z.object({ runId: z.string().min(1), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), commitments: z.array(z.object({ expenseId: z.string().min(1), number: z.string().trim().min(1).max(120), type: z.enum(["Ordinário", "Estimativo", "Global"]) }).strict()).min(1).max(1000) }).strict();
+
+function payrollCommitmentKeys(runId: string): Prisma.HrIntegrationEventWhereInput {
+  const key = `FINANCEIRO:EMPENHOS:${runId}`;
+  return { eventType: "EMPENHOS_FOLHA", OR: [{ sourceKey: key }, { sourceKey: { startsWith: `${key}:CYCLE:` } }] };
+}
 
 export function planPayrollExpenses(statements: { gross: Prisma.Decimal; employer: Prisma.Decimal; snapshot: Prisma.JsonValue }[], rawPolicy: unknown): PlanLine[] {
   const policy = policySchema.parse(rawPolicy);
@@ -129,13 +134,21 @@ export async function commitPayrollExpenseRequests(context: AppContext, raw: unk
       const line = prepared.lines[index];
       if (expense.sourceModule !== "RH" || expense.sourceType !== "PAYROLL_RUN" || expense.sourceId !== run.id || expense.appropriationId !== line.appropriationId || expense.supplierId !== line.supplierId || expense.secretariatId !== line.secretariatId || !expense.valueDecimal?.eq(line.value)) throw new Error("Despesa diverge do plano imutável da folha.");
     }
-    const sourceKey = `FINANCEIRO:EMPENHOS:${run.id}`;
-    const previous = await tx.hrIntegrationEvent.findUnique({ where: { sourceKey } });
-    if (previous) {
+    const eventFilter = payrollCommitmentKeys(run.id);
+    const previous = await tx.hrIntegrationEvent.findFirst({ where: eventFilter, orderBy: { createdAt: "desc" } });
+    if (previous && previous.status !== "ESTORNADA") {
+      if (previous.status !== "CONCLUIDA") throw new Error("Lote anterior de empenhos ainda não está concluído.");
       const stored = z.object({ input: commitmentBatchSchema }).parse(previous.payload);
       if (JSON.stringify(stored.input) !== JSON.stringify(input)) throw new Error("Folha já empenhada com outros números, tipos ou data.");
       return z.object({ commitmentIds: z.array(z.string()) }).parse(previous.result);
     }
+    if (previous?.status === "ESTORNADA") {
+      const inverse = await tx.hrIntegrationEvent.findFirstOrThrow({ where: { eventType: "DESMOVIMENTACAO_FOLHA", status: "CONCLUIDA", payload: { path: ["commitmentEventId"], equals: previous.id } } });
+      const reversedAt = z.object({ date: z.string() }).parse(inverse.payload).date;
+      if (input.date < reversedAt) throw new Error("Nova geração não pode anteceder a desmovimentação do lote anterior.");
+    }
+    const cycle = await tx.hrIntegrationEvent.count({ where: eventFilter }) + 1;
+    const sourceKey = cycle === 1 ? `FINANCEIRO:EMPENHOS:${run.id}` : `FINANCEIRO:EMPENHOS:${run.id}:CYCLE:${cycle}`;
     const commitmentIds: string[] = [];
     for (const expense of expenses) {
       if (expense.status !== "Aprovada" || !expense.supplierId || !expense.valueDecimal) throw new Error("Todas as despesas da folha devem estar aprovadas e possuir credor/Decimal conciliado.");
@@ -144,7 +157,7 @@ export async function commitPayrollExpenseRequests(context: AppContext, raw: unk
       const commitment = await createCommitmentInTransaction(tx, actor, { number: row.number, date, value: expense.valueDecimal, type: row.type, history: expense.description, appropriationId: expense.appropriationId, supplierId: expense.supplierId, reservationId: reservation.id });
       commitmentIds.push(commitment.id);
     }
-    const event = await enqueueHrIntegration(tx, { sourceKey, domain: "FINANCEIRO", environment: current.scope, eventType: "EMPENHOS_FOLHA", payload: { input, originEventId: origin.id } });
+    const event = await enqueueHrIntegration(tx, { sourceKey, domain: "FINANCEIRO", environment: current.scope, eventType: "EMPENHOS_FOLHA", payload: { input, originEventId: origin.id, cycle, previousEventId: previous?.id ?? null } });
     await tx.hrIntegrationEvent.update({ where: { id: event.id }, data: { status: "CONCLUIDA", result: { commitmentIds, committed: true, settled: false, paid: false } } });
     return { commitmentIds };
   }, { timeout: 120000 });
@@ -166,7 +179,7 @@ export async function settlePayrollCommitments(context: AppContext, raw: unknown
     await tx.$queryRaw`SELECT id FROM "HrPayrollRun" WHERE id = ${run.id} FOR UPDATE`;
     const current = await tx.hrPayrollRun.findUniqueOrThrow({ where: { id: run.id } });
     if (current.mode !== "OFICIAL" || current.status !== "FECHADA" || current.scope !== "PRODUCAO") throw new Error("Liquidação exige folha oficial fechada de produção.");
-    const source = await tx.hrIntegrationEvent.findUniqueOrThrow({ where: { sourceKey: `FINANCEIRO:EMPENHOS:${run.id}` } });
+    const source = await tx.hrIntegrationEvent.findFirstOrThrow({ where: { ...payrollCommitmentKeys(run.id), status: "CONCLUIDA" }, orderBy: { createdAt: "desc" } });
     if (source.eventType !== "EMPENHOS_FOLHA" || source.status !== "CONCLUIDA") throw new Error("Conclua o empenhamento da folha antes da liquidação.");
     const committed = z.object({ commitmentIds: z.array(z.string()) }).parse(source.result);
     if (JSON.stringify([...committed.commitmentIds].sort()) !== JSON.stringify(input.documents.map((row) => row.commitmentId))) throw new Error("Liquidação deve incluir todos os empenhos do plano da folha.");
@@ -296,4 +309,46 @@ export async function concludePayrollFinanceCycle(context: AppContext, raw: unkn
     await tx.hrIntegrationEvent.update({ where: { id: event.id }, data: { status: "CONCLUIDA", result: { documentId: document.id, payrollCompleted: true, paymentIds: result.paymentIds } } });
     return { eventId: event.id };
   }, { timeout: 60000 });
+}
+
+export async function reversePayrollCommitments(context: AppContext, raw: unknown) {
+  if (!canPerformModuleOperation(context.user, "RH", "update") || !canPerformModuleOperation(context.user, "FINANCEIRO", "update")) throw new AccessError("Desmovimentação exige alteração RH e Financeiro.", 403);
+  const input = z.object({ runId: z.string().min(1), commitmentEventId: z.string().min(1), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().min(10).max(2000), idempotencyKey: z.string().trim().min(1).max(200) }).strict().parse(raw);
+  const date = new Date(`${input.date}T00:00:00Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== input.date) throw new Error("Data de desmovimentação inválida.");
+  const run = await context.prisma.hrPayrollRun.findUniqueOrThrow({ where: { id: input.runId } });
+  await assertPayrollBudgetScope(context, run.payrollId);
+  const actor = { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds };
+  return context.prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "HrPayrollRun" WHERE id = ${run.id} FOR UPDATE`;
+    const source = await tx.hrIntegrationEvent.findFirstOrThrow({ where: { ...payrollCommitmentKeys(run.id), id: input.commitmentEventId } });
+    const plan = z.object({ input: commitmentBatchSchema }).parse(source.payload);
+    const result = z.object({ commitmentIds: z.array(z.string()).min(1) }).parse(source.result);
+    if (plan.input.runId !== run.id) throw new Error("Lote de empenhos não pertence à folha.");
+    const commitments = await tx.commitment.findMany({ where: { id: { in: result.commitmentIds } }, include: { appropriation: true, reservation: { include: { expense: true } } }, orderBy: [{ appropriationId: "asc" }, { id: "asc" }] });
+    if (commitments.length !== result.commitmentIds.length) throw new Error("Lote possui empenhos ausentes.");
+    for (const commitment of commitments) {
+      assertBudgetUnitAccess(context.user, commitment.appropriation.budgetUnitId);
+      const expense = commitment.reservation?.expense;
+      if (!expense || expense.sourceModule !== "RH" || expense.sourceType !== "PAYROLL_RUN" || expense.sourceId !== run.id || date < commitment.date) throw new Error("Origem ou data de empenho incompatível com a desmovimentação.");
+    }
+    const sourceKey = `FINANCEIRO:DESMOVIMENTACAO:${input.idempotencyKey}`;
+    const previous = await tx.hrIntegrationEvent.findUnique({ where: { sourceKey } });
+    if (previous) {
+      const stored = z.object({ runId: z.string(), commitmentEventId: z.string(), date: z.string(), reason: z.string(), idempotencyKey: z.string() }).parse(previous.payload);
+      if (JSON.stringify(stored) !== JSON.stringify(input)) throw new Error("Desmovimentação já registrada com outros dados.");
+      return { eventId: previous.id };
+    }
+    if (source.status !== "CONCLUIDA" || run.mode !== "OFICIAL" || run.status !== "FECHADA" || run.scope !== "PRODUCAO") throw new Error("Lote ou folha não está disponível para desmovimentação.");
+    // Native cancellation locks commitment before appropriation; lock the full batch in ID order.
+    for (const id of [...result.commitmentIds].sort()) await tx.$queryRaw`SELECT id FROM "Commitment" WHERE id = ${id} FOR UPDATE`;
+    for (const commitment of commitments) {
+      await cancelCommitmentInTransaction(tx, actor, commitment.id, date, input.reason);
+      await tx.expense.update({ where: { id: commitment.reservation!.expense!.id }, data: { status: "Aprovada" } });
+    }
+    await tx.hrIntegrationEvent.update({ where: { id: source.id }, data: { status: "ESTORNADA" } });
+    const event = await enqueueHrIntegration(tx, { sourceKey, domain: "FINANCEIRO", environment: run.scope, eventType: "DESMOVIMENTACAO_FOLHA", payload: input });
+    await tx.hrIntegrationEvent.update({ where: { id: event.id }, data: { status: "CONCLUIDA", result: { reversedCommitmentIds: result.commitmentIds, previousEventId: source.id, newGenerationAllowed: true } } });
+    return { eventId: event.id };
+  }, { timeout: 120000 });
 }

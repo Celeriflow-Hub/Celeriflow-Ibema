@@ -11,12 +11,12 @@ import { reverseTaxCreditMovement } from "../src/lib/tributacao/credit-reversal"
 import { taxAssessmentAccessFilter } from "../src/lib/tributacao/scope";
 
 type Fixture = Awaited<ReturnType<typeof createPlanningExecutionFixture>>;
-async function scenario(body: (fixture: Fixture) => Promise<void>) {
+async function scenario(body: (fixture: Fixture) => Promise<void>, jurisdiction: "EXECUTIVE" | "LEGISLATIVE" = "EXECUTIVE") {
   const mode = process.env.CELERIFLOW_ACCOUNTING_MODE;
   process.env.CELERIFLOW_ACCOUNTING_MODE = "POC";
   let fixture: Fixture | undefined;
   try {
-    fixture = await createPlanningExecutionFixture();
+    fixture = await createPlanningExecutionFixture(2026, 2, jurisdiction);
     await fixture.db.financialYear.update({ where: { id: "ano" }, data: { status: "Aberto" } });
     await fixture.db.tax.create({ data: { id: "tax-chain", name: "Tributo de ensaio", taxType: "Taxa", isActive: true } });
     await fixture.db.taxpayer.create({ data: { id: "taxpayer-chain", taxpayerType: "PJ", companyId: "empresa", status: "Ativo" } });
@@ -198,6 +198,81 @@ test("P2: compensação extingue saldo sem nova arrecadação e a guia cobra som
   await reverseTaxPayment(f.db, f.actor, collectionReversal);
   assert.equal((await getBankAccountBalance(f.db, "banco", inverse.date)).toFixed(2), "2.00");
 }));
+
+for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) test(`P2 ${jurisdiction}: compensação autorizada entre contribuintes conserva caixa, saldo, replay e reversão`, async () => scenario(async (f) => {
+  const origin = await createTaxAssessment(f.db, f.actor, { year: 2026, taxId: "tax-chain", taxpayerId: "taxpayer-chain", taxableBase: "100.00", rate: "4" });
+  const guide = await generateTaxGuide(f.db, f.actor, { assessmentId: origin.id, dueDate: new Date("2026-03-31") });
+  await processCollectionReturn(f.db, f.actor, { guideNumber: guide.guideNumber!, amount: "6.00", occurredAt: new Date("2026-03-01"), status: "CONFIRMADO", idempotencyKey: "authorized-origin" });
+  const credit = await f.db.taxRegistryEntry.findFirstOrThrow({ where: { category: "TAX_CREDIT" } });
+  await f.db.taxpayer.create({ data: { id: "authorized-destination", taxpayerType: "PJ", companyId: "empresa", status: "Ativo" } });
+  const target = await createTaxAssessment(f.db, f.actor, { year: 2026, taxId: "tax-chain", taxpayerId: "authorized-destination", taxableBase: "100.00", rate: "4" });
+  const input = { creditId: credit.id, operation: "COMPENSAR" as const, assessmentId: target.id, amount: "2.00", reason: "Compensação autorizada do crédito de outro contribuinte", idempotencyKey: "authorized-compensation", authorizationDocumentId: "documento-fiscal" };
+  await assert.rejects(applyTaxCredit(f.db, f.actor, { ...input, authorizationDocumentId: undefined }), /autorização GED válida/i);
+  await assert.rejects(applyTaxCredit(f.db, { ...f.actor, allowedBudgetUnitIds: [] }, input), /autorizadas/i);
+  await f.pg.exec(`CREATE FUNCTION fail_authorized_compensation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.category='CREDIT_MOVEMENT' THEN RAISE EXCEPTION 'injected authorized compensation failure'; END IF; RETURN NEW; END $$;
+    CREATE TRIGGER fail_authorized_compensation BEFORE INSERT ON "TaxRegistryEntry" FOR EACH ROW EXECUTE FUNCTION fail_authorized_compensation();`);
+  await assert.rejects(applyTaxCredit(f.db, f.actor, input), /injected authorized compensation failure/i);
+  assert.equal((await getAssessmentAccount(f.db, target.id)).position.balance.toFixed(2), "4.00");
+  assert.equal(await f.db.accountingTransaction.count({ where: { eventType: "TAX_CREDIT_COMPENSATED" } }), 0);
+  assert.equal(((await f.db.taxRegistryEntry.findUniqueOrThrow({ where: { id: credit.id } })).data as Prisma.JsonObject).available, "2.00");
+  await f.pg.exec(`DROP TRIGGER fail_authorized_compensation ON "TaxRegistryEntry"; DROP FUNCTION fail_authorized_compensation();`);
+  const event = await applyTaxCredit(f.db, f.actor, input);
+  assert.equal((await applyTaxCredit(f.db, f.actor, input)).id, event.id);
+  await assert.rejects(applyTaxCredit(f.db, f.actor, { ...input, authorizationDocumentId: "other" }), /outros dados/i);
+  assert.equal((await getAssessmentAccount(f.db, target.id)).position.balance.toFixed(2), "2.00");
+  const movementId = String((event.result as Prisma.JsonObject).movementId);
+  const movement = await f.db.taxRegistryEntry.findUniqueOrThrow({ where: { id: movementId } });
+  assert.equal((movement.data as Prisma.JsonObject).sourceTaxpayerId, "taxpayer-chain");
+  assert.equal((movement.data as Prisma.JsonObject).authorizationDocumentId, "documento-fiscal");
+  await reverseTaxCreditMovement(f.db, f.actor, { movementId, date: new Date("2026-12-01"), reason: "Revogação da compensação autorizada", idempotencyKey: "authorized-reversal" });
+  assert.equal((await getAssessmentAccount(f.db, target.id)).position.balance.toFixed(2), "4.00");
+  assert.equal(((await f.db.taxRegistryEntry.findUniqueOrThrow({ where: { id: credit.id } })).data as Prisma.JsonObject).available, "2.00");
+  assert.equal((await getBankAccountBalance(f.db, "banco", new Date("2026-12-01"))).toFixed(2), "6.00");
+  assert.equal(await f.db.revenue.count(), 1);
+}, jurisdiction));
+
+for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) test(`P2 ${jurisdiction}: estorno de restituição paga recompõe caixa/crédito atomicamente com GED e preserva histórico`, async () => scenario(async (f) => {
+  const assessment = await createTaxAssessment(f.db, f.actor, { year: 2026, taxId: "tax-chain", taxpayerId: "taxpayer-chain", taxableBase: "100.00", rate: "4" });
+  const guide = await generateTaxGuide(f.db, f.actor, { assessmentId: assessment.id, dueDate: new Date("2026-03-31") });
+  await processCollectionReturn(f.db, f.actor, { idempotencyKey: "paid-undo-origin", guideNumber: guide.guideNumber!, amount: "6.00", occurredAt: new Date("2026-03-01"), status: "CONFIRMADO" });
+  const credit = await f.db.taxRegistryEntry.findFirstOrThrow({ where: { category: "TAX_CREDIT" } });
+  const requested = await applyTaxCredit(f.db, f.actor, { creditId: credit.id, operation: "RESTITUIR", amount: "2.00", reason: "Devolver excedente", idempotencyKey: "paid-undo-request" });
+  const requestId = String((requested.result as Prisma.JsonObject).movementId);
+  await approveRefundRequest(f.db, f.actor, { requestId, approved: true, reason: "Aprovação" });
+  await executeTaxRefund(f.db, f.actor, { requestId, bankAccountId: "banco", proofDocumentId: "documento-fiscal", date: new Date("2026-03-02"), idempotencyKey: "paid-undo" });
+  const inverse = { movementId: requestId, date: new Date("2026-03-03"), reason: "Retorno comprovado dos recursos pagos indevidamente", idempotencyKey: "paid-undo-reversal", proofDocumentId: "documento-fiscal" };
+  await assert.rejects(reverseTaxCreditMovement(f.db, { ...f.actor, allowedBudgetUnitIds: [] }, inverse), /autorizadas/i);
+  await assert.rejects(reverseTaxCreditMovement(f.db, f.actor, { ...inverse, proofDocumentId: undefined }), /comprovante GED válido/i);
+  await assert.rejects(reverseTaxCreditMovement(f.db, f.actor, { ...inverse, date: new Date("2026-03-01") }), /data incompatível/i);
+  await f.db.monthlyAccountingClose.create({ data: { financialYearId: "ano", competence: new Date("2026-03-01"), status: "FECHADO" } });
+  await assert.rejects(reverseTaxCreditMovement(f.db, f.actor, inverse), /competencia contabil nao esta aberta/i);
+  await f.db.monthlyAccountingClose.updateMany({ data: { status: "ABERTO" } });
+  const baseline = await f.db.accountingTransaction.count();
+  await f.pg.exec(`CREATE FUNCTION fail_refund_reversal_event() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW."eventType"='CREDIT_MOVEMENT_REVERSED' THEN RAISE EXCEPTION 'injected refund reversal failure'; END IF; RETURN NEW; END $$;
+    CREATE TRIGGER fail_refund_reversal_event BEFORE INSERT ON "TaxIntegrationEvent" FOR EACH ROW EXECUTE FUNCTION fail_refund_reversal_event();`);
+  await assert.rejects(reverseTaxCreditMovement(f.db, f.actor, inverse), /injected refund reversal failure/i);
+  assert.equal((await getBankAccountBalance(f.db, "banco", inverse.date)).toFixed(2), "4.00");
+  assert.equal((await f.db.taxRegistryEntry.findUniqueOrThrow({ where: { id: requestId } })).status, "RESTITUIDA");
+  assert.equal(((await f.db.taxRegistryEntry.findUniqueOrThrow({ where: { id: credit.id } })).data as Prisma.JsonObject).available, "0.00");
+  assert.equal(await f.db.accountingTransaction.count(), baseline);
+  assert.equal(await f.db.treasuryMovement.count({ where: { sourceType: "TAX_REFUND_REVERSAL" } }), 0);
+  await f.pg.exec(`DROP TRIGGER fail_refund_reversal_event ON "TaxIntegrationEvent"; DROP FUNCTION fail_refund_reversal_event();`);
+  const event = await reverseTaxCreditMovement(f.db, f.actor, inverse);
+  assert.equal((await reverseTaxCreditMovement(f.db, f.actor, inverse)).id, event.id);
+  await assert.rejects(reverseTaxCreditMovement(f.db, { ...f.actor, allowedBudgetUnitIds: [] }, inverse), /autorizadas/i);
+  await assert.rejects(reverseTaxCreditMovement(f.db, f.actor, { ...inverse, proofDocumentId: "outro-documento" }), /outros dados/i);
+  await assert.rejects(reverseTaxCreditMovement(f.db, f.actor, { ...inverse, idempotencyKey: "second-reversal" }), /não está disponível/i);
+  assert.equal((await getBankAccountBalance(f.db, "banco", new Date("2026-03-02"))).toFixed(2), "4.00");
+  assert.equal((await getBankAccountBalance(f.db, "banco", inverse.date)).toFixed(2), "6.00");
+  assert.equal(((await f.db.taxRegistryEntry.findUniqueOrThrow({ where: { id: credit.id } })).data as Prisma.JsonObject).available, "2.00");
+  assert.equal(await f.db.revenue.count(), 1);
+  assert.equal(await f.db.treasuryMovement.count({ where: { sourceType: "TAX_REFUND" } }), 1);
+  assert.equal(await f.db.treasuryMovement.count({ where: { sourceType: "TAX_REFUND_REVERSAL" } }), 1);
+  assert.equal(await f.db.accountingTransaction.count({ where: { eventType: "TAX_REFUND_REVERSED" } }), 1);
+  const payment = await f.db.taxPayment.findFirstOrThrow();
+  await reverseTaxPayment(f.db, f.actor, { paymentId: payment.id, date: inverse.date, reason: "Estorno da origem após recuperação do excedente", idempotencyKey: "paid-undo-collection" });
+  assert.equal((await getBankAccountBalance(f.db, "banco", inverse.date)).toFixed(2), "0.00");
+}, jurisdiction));
 
 test("P2: reversão de crédito transferido e restituição não paga recompõe saldo sem movimentar caixa", async () => scenario(async (f) => {
   const assessment = await createTaxAssessment(f.db, f.actor, { year: 2026, taxId: "tax-chain", taxpayerId: "taxpayer-chain", taxableBase: "100.00", rate: "4" });

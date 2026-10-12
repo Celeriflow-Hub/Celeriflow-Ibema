@@ -17,7 +17,7 @@ import { decideEmployeeHrRequest } from "@/lib/rh/portal-requests";
 import { adjustContractSalaries, changeContractsCollectively } from "@/lib/rh/workforce-service";
 import { generateAttendanceOvertime } from "@/lib/rh/attendance-payroll";
 import { decideRecertificationProposal } from "@/lib/rh/recertification";
-import { dispatchPayrollExpenseRequests, commitPayrollExpenseRequests, settlePayrollCommitments, payPayrollSettlements, concludePayrollFinanceCycle } from "@/lib/rh/finance-bridge";
+import { dispatchPayrollExpenseRequests, commitPayrollExpenseRequests, settlePayrollCommitments, payPayrollSettlements, concludePayrollFinanceCycle, reversePayrollCommitments } from "@/lib/rh/finance-bridge";
 import { simulateSpecialPayroll } from "@/lib/rh/special-simulation";
 import { reserveConsignmentAgreement, postConsignmentInstallment, cancelConsignmentInstallment } from "@/lib/rh/consignment-service";
 import { assertPayrollBudgetScope } from "@/lib/rh/payroll-access";
@@ -68,6 +68,16 @@ export async function executeWorkforceOperation(command: string, values: Record<
       revalidatePath(`/rh/operacoes/calculos/${values.runId}`);
       return { id: result.eventId, message: "Ciclo financeiro da folha concluído com pagamentos, obrigações retidas e documento GED conferidos.", error: "" };
     } catch (error) { return { error: error instanceof Error ? error.message : "Falha na conclusão financeira da folha." }; }
+  }
+  if (command === "financeiro-desmovimentar") {
+    try {
+      const context = await getTenantContextForModuleOperation("RH", "update");
+      const result = await reversePayrollCommitments(context, { runId: values.runId, commitmentEventId: values.commitmentEventId, date: values.date, reason: values.reason, idempotencyKey: values.idempotencyKey });
+      revalidatePath(`/rh/operacoes/calculos/${values.runId}`);
+      revalidatePath("/financeiro/empenhos");
+      revalidatePath("/financeiro/orcamento");
+      return { id: result.eventId, message: "Competência desmovimentada; empenhos anulados e despesas aprovadas disponíveis para nova geração rastreável.", error: "" };
+    } catch (error) { return { error: error instanceof Error ? error.message : "Falha na desmovimentação da folha." }; }
   }
   const allowed = ["contrato", "movimento", "direito", "calcular", "fechar", "cancelar", "publicar", "vincular", "aquisitivos", "reservar-ferias", "importar", "beneficio", "decidir-solicitacao", "reajustar", "cancelar-ferias", "ponto-horas-extras", "decidir-recadastramento", "financeiro", "financeiro-empenhar", "simular-especial", "consignacao-reservar", "consignacao-lancar", "consignacao-cancelar", "contratos-coletivos", "ponto-banco-horas", "estornar-banco-horas"];
   if (![...allowed, "financeiro-liquidar", "poc-pagamento", "diaria-solicitar", "diaria-decidir", "diaria-prestar", "poc-parametros", "poc-preparar", "calcular-poc", "ocorrencia", "cancelar-ocorrencia", "decidir-credito", "transferir-banco-horas", "estornar-transferencia-horas", "pagar-banco-horas", "estornar-pagamento-horas", "ferias-multiplos", "cancelar-ferias-multiplos", "licenca-adquirir", "licenca-reservar", "licenca-cancelar", "averbar-tempo", "estornar-averbacao", "apurar-ats", "estornar-ats", "provisionar", "estornar-provisao", "expirar-banco-horas", "baixar-provisao-empenho", "estornar-baixa-provisao"].includes(command)) return { error: "Operação inválida." };

@@ -3,6 +3,7 @@ import { getTenantContextForModule, isSystemAdministrator } from "@/lib/platform
 import { taxAssessmentAccessFilter, taxAssessmentCompensatedValue } from "@/lib/tributacao/scope";
 import MotorFiscalClient from "./MotorFiscalClient";
 import { CreditMovementReversalForm } from "./CreditMovementReversalForm";
+import { AuthorizedCompensationForm } from "./AuthorizedCompensationForm";
 
 export const dynamic = "force-dynamic";
 
@@ -51,9 +52,10 @@ export default async function MotorFiscalPage() {
     const extinct = creditEvents.filter((entry) => entry.entityId === assessment.id).reduce((sum, entry) => { const data = object(entry.data); return ["EXTINCAO_NAO_FINANCEIRA", "COMPENSACAO"].includes(String(data.eventType)) ? sum + Number(data.amount ?? 0) : sum; }, compensated.get(assessment.id) ?? 0);
     return { id: assessment.id, number: assessment.assessmentNumber ?? assessment.id, taxId: assessment.taxId, tax: assessment.tax.name, taxpayerId: assessment.taxpayerId, taxpayer: taxpayerName(assessment.taxpayer), year: assessment.year, competence: assessment.competence?.toISOString() ?? null, base: Number(assessment.taxableBaseDecimal ?? 0), principal: Number(assessment.originalValueDecimal ?? assessment.originalValue), correction: Number(assessment.correctionValueDecimal ?? 0), interest: Number(assessment.interestValueDecimal ?? 0), penalty: Number(assessment.penaltyValueDecimal ?? 0), total, paid, balance: Math.max(total - paid - extinct, 0), status: assessment.status, realEstateId: assessment.realEstateId, economicRegistrationId: assessment.economicRegistrationId };
   });
-  const reversibleMovements = await prisma.taxRegistryEntry.findMany({ where: { AND: [registryAccess, { OR: [{ category: "CREDIT_MOVEMENT", status: "EFETIVADO" }, { category: "REFUND_REQUEST", status: { in: ["PENDENTE_APROVACAO", "APROVADA_AGUARDANDO_TESOURARIA"] } }] }] }, orderBy: { createdAt: "desc" }, take: 200 });
+  const reversibleMovements = await prisma.taxRegistryEntry.findMany({ where: { AND: [registryAccess, { OR: [{ category: "CREDIT_MOVEMENT", status: "EFETIVADO" }, { category: "REFUND_REQUEST", status: { in: ["PENDENTE_APROVACAO", "APROVADA_AGUARDANDO_TESOURARIA", "RESTITUIDA"] } }] }] }, orderBy: { createdAt: "desc" }, take: 200 });
   return <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
     <CreditMovementReversalForm movements={reversibleMovements.map((movement) => ({ id: movement.id, label: `${movement.title} · ${object(movement.data).amount ?? ""} · ${movement.entityId}` }))} />
+    <AuthorizedCompensationForm credits={credits.filter((entry) => entry.status === "DISPONIVEL").map((entry) => ({ id: entry.id, label: `${entry.title} · ${object(entry.data).available ?? ""} · ${entry.entityId}` }))} assessments={assessmentRows.filter((entry) => entry.balance > 0 && !["Cancelado", "Pago", "Suspenso", "Dívida Ativa"].includes(entry.status)).map((entry) => ({ id: entry.id, label: `${entry.number} · ${entry.taxpayer}` }))} documents={documents.map((entry) => ({ id: entry.id, label: entry.title }))} />
     <MotorFiscalClient
     taxes={taxes.map((item) => ({ id: item.id, name: item.name }))}
     taxpayers={taxpayers.map((item) => ({ id: item.id, name: taxpayerName(item), realEstates: item.realEstates, registrations: item.economicRegistrations }))}

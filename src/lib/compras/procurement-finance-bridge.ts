@@ -1,11 +1,11 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import {
-  cancelCommitment,
-  cancelSettlement,
-  createBudgetReservation,
-  createCommitment,
+  cancelCommitmentInTransaction,
+  cancelSettlementInTransaction,
+  createBudgetReservationInTransaction,
+  createCommitmentInTransaction,
   createExpenseRequest,
-  createSettlement,
+  createSettlementInTransaction,
   type FinanceActor,
 } from "@/lib/financeiro";
 
@@ -114,7 +114,7 @@ function assertSameLifecycleEvent<T extends { eventType: string; entityType: str
   return event;
 }
 
-async function ensureLifecycleEvent(db: Db, input: ReturnType<typeof eventInput>) {
+async function ensureLifecycleEvent(db: Db | Prisma.TransactionClient, input: ReturnType<typeof eventInput>) {
   const select = {
     eventType: true,
     entityType: true,
@@ -465,7 +465,7 @@ function receiptValue(items: Array<{ quantity: number; unitCost: number }>, opti
 }
 
 export async function recordPurchaseReceiptLiquidationAuthorization(
-  db: Db,
+  db: Db | Prisma.TransactionClient,
   actor: FinanceActor,
   purchaseReceiptId: string,
 ) {
@@ -491,7 +491,7 @@ export async function recordPurchaseReceiptLiquidationAuthorization(
 }
 
 export async function recordInstrumentMeasurementLiquidationAuthorization(
-  db: Db,
+  db: Db | Prisma.TransactionClient,
   actor: FinanceActor,
   measurementId: string,
 ) {
@@ -515,7 +515,7 @@ export async function recordInstrumentMeasurementLiquidationAuthorization(
   return { eventId: event.id, valueDecimal };
 }
 
-async function contractForExpenseAuthorization(db: Db, expenseId: string) {
+async function contractForExpenseAuthorization(db: Db | Prisma.TransactionClient, expenseId: string) {
   const expense = await db.expense.findUnique({
     where: { id: requiredText(expenseId, "AE") },
     select: {
@@ -549,7 +549,7 @@ async function contractForExpenseAuthorization(db: Db, expenseId: string) {
   return { expense, contract };
 }
 
-async function recordCommitmentEvent(db: Db, actor: FinanceActor, commitmentId: string, contractId: string) {
+async function recordCommitmentEvent(db: Db | Prisma.TransactionClient, actor: FinanceActor, commitmentId: string, contractId: string) {
   return ensureLifecycleEvent(db, eventInput(
     procurementFinanceEventTypes.commitmentCreated,
     "COMMITMENT",
@@ -577,7 +577,15 @@ export async function createCommitmentFromExpenseAuthorization(
   const date = validDate(input.date, "Data do empenho");
   const reservationNumber = requiredText(input.reservationNumber, "Número da reserva");
   const commitmentNumber = requiredText(input.commitmentNumber, "Número do empenho");
+  return db.$transaction(async (tx) => {
+  const db = tx;
+  const origin = await db.expense.findUniqueOrThrow({ where: { id: input.expenseId }, select: { appropriationId: true } });
+  // Native reservation/commitment commands use appropriation before expense locks.
+  await db.$queryRaw`SELECT id FROM "BudgetAppropriation" WHERE id = ${origin.appropriationId} FOR UPDATE`;
+  await db.$queryRaw`SELECT id FROM "Expense" WHERE id = ${input.expenseId} FOR UPDATE`;
   const { expense, contract } = await contractForExpenseAuthorization(db, input.expenseId);
+  const appropriation = await db.budgetAppropriation.findUniqueOrThrow({ where: { id: expense.appropriationId }, select: { budgetUnitId: true } });
+  if (actor.allowedBudgetUnitIds && !actor.allowedBudgetUnitIds.includes(appropriation.budgetUnitId)) throw new ProcurementFinanceBridgeError("Operação financeira fora das unidades autorizadas.");
   const valueDecimal = decimal(expense.valueDecimal ?? "0", "Valor da AE", { positive: true });
   if (input.value !== undefined && !decimal(input.value, "Valor do empenho", { positive: true }).equals(valueDecimal)) {
     throw new ProcurementFinanceBridgeError("O empenho deve corresponder integralmente ao valor da AE.");
@@ -609,6 +617,9 @@ export async function createCommitmentFromExpenseAuthorization(
     if (existingReservation.commitment.status === "Anulado") {
       throw new ProcurementFinanceBridgeError("O empenho anterior da AE está anulado; emita uma nova AE antes de gerar outro empenho.");
     }
+    const previous = existingReservation.commitment;
+    const expectedHistory = input.history?.trim() || `Empenho da AE do contrato ${contract.number}: ${contract.object}`;
+    if (previous.date.getTime() !== date.getTime() || previous.type !== input.type || previous.history !== expectedHistory || !previous.valueDecimal?.equals(valueDecimal) || previous.appropriationId !== expense.appropriationId || previous.supplierId !== expense.supplierId || previous.contractId !== contract.id) throw new ProcurementFinanceBridgeError("A AE já possui empenho com outros dados; preserve a origem.");
     const event = await recordCommitmentEvent(db, actor, existingReservation.commitment.id, contract.id);
     return { commitment: existingReservation.commitment, eventId: event.id };
   }
@@ -616,7 +627,7 @@ export async function createCommitmentFromExpenseAuthorization(
     throw new ProcurementFinanceBridgeError("A emissão do empenho exige uma AE aprovada pelo fluxo financeiro.");
   }
 
-  const reservation = existingReservation ?? await createBudgetReservation(db, actor, {
+  const reservation = existingReservation ?? await createBudgetReservationInTransaction(db, actor, {
     number: reservationNumber,
     date,
     value: valueDecimal,
@@ -628,9 +639,7 @@ export async function createCommitmentFromExpenseAuthorization(
     throw new ProcurementFinanceBridgeError("A reserva da AE não está ativa para emissão do empenho.");
   }
 
-  let commitment: Awaited<ReturnType<typeof createCommitment>>;
-  try {
-    commitment = await createCommitment(db, actor, {
+  const commitment = await createCommitmentInTransaction(db, actor, {
       number: commitmentNumber,
       date,
       value: valueDecimal,
@@ -641,14 +650,9 @@ export async function createCommitmentFromExpenseAuthorization(
       reservationId: reservation.id,
       contractId: contract.id,
     });
-  } catch (error) {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-    const concurrent = await db.budgetReservation.findUnique({ where: { id: reservation.id }, include: { commitment: true } });
-    if (!concurrent?.commitment || concurrent.commitment.number !== commitmentNumber || concurrent.commitment.status === "Anulado") throw error;
-    commitment = concurrent.commitment;
-  }
   const event = await recordCommitmentEvent(db, actor, commitment.id, contract.id);
   return { commitment, eventId: event.id };
+  }, { timeout: 60000 });
 }
 
 function assertCommitmentSource(
@@ -661,7 +665,7 @@ function assertCommitmentSource(
   if (!belongs) throw new ProcurementFinanceBridgeError("O empenho não pertence à origem da AL.");
 }
 
-async function recordSettlementEvent(db: Db, actor: FinanceActor, settlementId: string, source: InstrumentSource, sourceEntityId: string) {
+async function recordSettlementEvent(db: Db | Prisma.TransactionClient, actor: FinanceActor, settlementId: string, source: InstrumentSource, sourceEntityId: string) {
   return ensureLifecycleEvent(db, eventInput(
     procurementFinanceEventTypes.settlementCreated,
     "SETTLEMENT",
@@ -691,6 +695,10 @@ export async function createSettlementFromPurchaseReceiptAuthorization(
     retentionRuleIds?: string[];
   },
 ) {
+  return db.$transaction(async (tx) => {
+  const db = tx;
+  await db.$queryRaw`SELECT id FROM "Commitment" WHERE id = ${requiredText(input.commitmentId, "Empenho")} FOR UPDATE`;
+  await db.$queryRaw`SELECT id FROM "PurchaseReceipt" WHERE id = ${requiredText(input.purchaseReceiptId, "Recebimento")} FOR UPDATE`;
   const receipt = await db.purchaseReceipt.findUnique({
     where: { id: requiredText(input.purchaseReceiptId, "Recebimento") },
     select: {
@@ -707,14 +715,15 @@ export async function createSettlementFromPurchaseReceiptAuthorization(
   if (!receipt || !isPurchaseReceiptLiquidationAuthorizationEligible(receipt.status)) {
     throw new ProcurementFinanceBridgeError("A liquidação exige um recebimento aprovado.");
   }
-  await recordPurchaseReceiptLiquidationAuthorization(db, actor, receipt.id);
   const source: InstrumentSource = { sourceType: "CONTRACT", sourceId: receipt.contractId };
   const commitment = await db.commitment.findUnique({
     where: { id: requiredText(input.commitmentId, "Empenho") },
-    select: { id: true, contractId: true, covenantId: true },
+    select: { id: true, contractId: true, covenantId: true, appropriation: { select: { budgetUnitId: true } } },
   });
   if (!commitment) throw new ProcurementFinanceBridgeError("Empenho não encontrado.");
   assertCommitmentSource(commitment, source);
+  if (actor.allowedBudgetUnitIds && !actor.allowedBudgetUnitIds.includes(commitment.appropriation.budgetUnitId)) throw new ProcurementFinanceBridgeError("Operação financeira fora das unidades autorizadas.");
+  await recordPurchaseReceiptLiquidationAuthorization(db, actor, receipt.id);
   const valueDecimal = receiptValue(receipt.items);
   const date = validDate(input.date ?? receipt.receivedAt, "Data da liquidação");
   const documentRef = `AL-${receipt.number}`;
@@ -729,17 +738,18 @@ export async function createSettlementFromPurchaseReceiptAuthorization(
   }
   const existing = await db.settlement.findFirst({
     where: { commitmentId: commitment.id, documentId: receipt.documentId, documentRef },
-    select: { id: true, valueDecimal: true, authorId: true, status: true },
+    include: { retentions: true },
   });
   if (existing) {
     if (!sameMoney(existing.valueDecimal, valueDecimal) || existing.authorId !== receipt.attesterId || existing.status !== "Liquidado") {
       throw new ProcurementFinanceBridgeError("A liquidação existente não corresponde à AL do recebimento.");
     }
+    assertSettlementReplay(existing, { ...input, date });
     const event = await recordSettlementEvent(db, actor, existing.id, source, receipt.id);
     return { settlement: existing, eventId: event.id };
   }
 
-  const settlement = await createSettlement(db, actor, {
+  const settlement = await createSettlementInTransaction(db, actor, {
     date,
     value: valueDecimal,
     documentRef,
@@ -756,6 +766,7 @@ export async function createSettlementFromPurchaseReceiptAuthorization(
   });
   const event = await recordSettlementEvent(db, actor, settlement.id, source, receipt.id);
   return { settlement, eventId: event.id };
+  }, { timeout: 60000 });
 }
 
 export async function createSettlementFromInstrumentMeasurementAuthorization(
@@ -778,6 +789,10 @@ export async function createSettlementFromInstrumentMeasurementAuthorization(
     retentionRuleIds?: string[];
   },
 ) {
+  return db.$transaction(async (tx) => {
+  const db = tx;
+  await db.$queryRaw`SELECT id FROM "Commitment" WHERE id = ${requiredText(input.commitmentId, "Empenho")} FOR UPDATE`;
+  await db.$queryRaw`SELECT id FROM "InstrumentMeasurement" WHERE id = ${requiredText(input.measurementId, "Medição")} FOR UPDATE`;
   const measurement = await db.instrumentMeasurement.findUnique({
     where: { id: requiredText(input.measurementId, "Medição") },
     select: { id: true, number: true, status: true, measuredAt: true, valueDecimal: true, documentId: true, contractId: true, covenantId: true },
@@ -790,10 +805,11 @@ export async function createSettlementFromInstrumentMeasurementAuthorization(
   const source = sourceForMeasurement(measurement);
   const commitment = await db.commitment.findUnique({
     where: { id: requiredText(input.commitmentId, "Empenho") },
-    select: { id: true, contractId: true, covenantId: true },
+    select: { id: true, contractId: true, covenantId: true, appropriation: { select: { budgetUnitId: true } } },
   });
   if (!commitment) throw new ProcurementFinanceBridgeError("Empenho não encontrado.");
   assertCommitmentSource(commitment, source);
+  if (actor.allowedBudgetUnitIds && !actor.allowedBudgetUnitIds.includes(commitment.appropriation.budgetUnitId)) throw new ProcurementFinanceBridgeError("Operação financeira fora das unidades autorizadas.");
   const documentId = input.documentId?.trim() || measurement.documentId;
   if (!documentId) throw new ProcurementFinanceBridgeError("A liquidação da medição exige documento GED válido.");
   const authorId = requiredText(input.authorId, "Responsável pelo ateste");
@@ -807,17 +823,18 @@ export async function createSettlementFromInstrumentMeasurementAuthorization(
   }
   const existing = await db.settlement.findFirst({
     where: { commitmentId: commitment.id, documentId, documentRef },
-    select: { id: true, valueDecimal: true, authorId: true, status: true },
+    include: { retentions: true },
   });
   if (existing) {
     if (!sameMoney(existing.valueDecimal, authorization.valueDecimal) || existing.authorId !== authorId || existing.status !== "Liquidado") {
       throw new ProcurementFinanceBridgeError("A liquidação existente não corresponde à AL da medição.");
     }
+    assertSettlementReplay(existing, { ...input, date });
     const event = await recordSettlementEvent(db, actor, existing.id, source, measurement.id);
     return { settlement: existing, eventId: event.id };
   }
 
-  const settlement = await createSettlement(db, actor, {
+  const settlement = await createSettlementInTransaction(db, actor, {
     date,
     value: authorization.valueDecimal,
     documentRef,
@@ -834,9 +851,21 @@ export async function createSettlementFromInstrumentMeasurementAuthorization(
   });
   const event = await recordSettlementEvent(db, actor, settlement.id, source, measurement.id);
   return { settlement, eventId: event.id };
+  }, { timeout: 60000 });
+}
+
+function assertSettlementReplay(settlement: Prisma.SettlementGetPayload<{ include: { retentions: true } }>, input: { date: Date; notes?: string; fiscalDocumentNumber?: string; fiscalDocumentSeries?: string; fiscalDocumentIssueDate?: Date; fiscalDocumentAccessKey?: string; retentionRuleIds?: string[] }) {
+  const text = (value: string | null | undefined) => value?.trim() || null;
+  const requestedRules = [...new Set(input.retentionRuleIds ?? [])].sort();
+  const previousRules = settlement.retentions.map((item) => item.retentionRuleId).sort();
+  if (settlement.date.getTime() !== input.date.getTime() || text(settlement.notes) !== text(input.notes) || text(settlement.fiscalDocumentNumber) !== text(input.fiscalDocumentNumber) || text(settlement.fiscalDocumentSeries) !== text(input.fiscalDocumentSeries) || (settlement.fiscalDocumentIssueDate?.getTime() ?? null) !== (input.fiscalDocumentIssueDate?.getTime() ?? null) || text(settlement.fiscalDocumentAccessKey) !== (input.fiscalDocumentAccessKey?.replace(/\D/g, "") || null) || JSON.stringify(previousRules) !== JSON.stringify(requestedRules)) throw new ProcurementFinanceBridgeError("Liquidação já registrada com outros dados; preserve documento fiscal, competência e retenções.");
 }
 
 export async function cancelSupplyAuthorizationForContract(db: Db, actor: FinanceActor, contractId: string) {
+  return cancelSupplyAuthorizationForContractInTransaction(db, actor, contractId);
+}
+
+async function cancelSupplyAuthorizationForContractInTransaction(db: Db | Prisma.TransactionClient, actor: FinanceActor, contractId: string) {
   const contract = await db.contract.findUnique({
     where: { id: requiredText(contractId, "Contrato") },
     select: {
@@ -868,7 +897,7 @@ export async function cancelSupplyAuthorizationForContract(db: Db, actor: Financ
   ));
 }
 
-export async function cancelPurchaseReceiptLiquidationAuthorization(db: Db, actor: FinanceActor, purchaseReceiptId: string) {
+export async function cancelPurchaseReceiptLiquidationAuthorization(db: Db | Prisma.TransactionClient, actor: FinanceActor, purchaseReceiptId: string) {
   const receipt = await db.purchaseReceipt.findUnique({
     where: { id: requiredText(purchaseReceiptId, "Recebimento") },
     select: { id: true, status: true, contractId: true },
@@ -890,7 +919,7 @@ export async function cancelPurchaseReceiptLiquidationAuthorization(db: Db, acto
   ));
 }
 
-export async function cancelInstrumentMeasurementLiquidationAuthorization(db: Db, actor: FinanceActor, measurementId: string) {
+export async function cancelInstrumentMeasurementLiquidationAuthorization(db: Db | Prisma.TransactionClient, actor: FinanceActor, measurementId: string) {
   const measurement = await db.instrumentMeasurement.findUnique({
     where: { id: requiredText(measurementId, "Medição") },
     select: { id: true, status: true, contractId: true, covenantId: true },
@@ -914,16 +943,20 @@ export async function cancelInstrumentMeasurementLiquidationAuthorization(db: Db
 }
 
 export async function cancelCommitmentForCancelledContract(db: Db, actor: FinanceActor, commitmentId: string) {
-  const commitment = await db.commitment.findUnique({
+  return db.$transaction(async (tx) => {
+  await tx.$queryRaw`SELECT id FROM "Commitment" WHERE id = ${requiredText(commitmentId, "Empenho")} FOR UPDATE`;
+  const commitment = await tx.commitment.findUnique({
     where: { id: requiredText(commitmentId, "Empenho") },
-    select: { id: true, contractId: true, status: true },
+    select: { id: true, contractId: true, status: true, appropriation: { select: { budgetUnitId: true } } },
   });
   if (!commitment?.contractId) throw new ProcurementFinanceBridgeError("O empenho não possui contrato de origem para anulação pelo bridge.");
-  await cancelSupplyAuthorizationForContract(db, actor, commitment.contractId);
+  if (actor.allowedBudgetUnitIds && !actor.allowedBudgetUnitIds.includes(commitment.appropriation.budgetUnitId)) throw new ProcurementFinanceBridgeError("Operação financeira fora das unidades autorizadas.");
+  await tx.$queryRaw`SELECT id FROM "Contract" WHERE id = ${commitment.contractId} FOR UPDATE`;
+  await cancelSupplyAuthorizationForContractInTransaction(tx, actor, commitment.contractId);
   const cancelled = commitment.status === "Anulado"
     ? commitment
-    : await cancelCommitment(db, actor, commitment.id);
-  const event = await ensureLifecycleEvent(db, eventInput(
+    : await cancelCommitmentInTransaction(tx, actor, commitment.id);
+  const event = await ensureLifecycleEvent(tx, eventInput(
     procurementFinanceEventTypes.commitmentCancelled,
     "COMMITMENT",
     cancelled.id,
@@ -932,10 +965,11 @@ export async function cancelCommitmentForCancelledContract(db: Db, actor: Financ
     eventKey("COMMITMENT_CANCEL", "CONTRACT", commitment.contractId, cancelled.id),
   ));
   return { commitment: cancelled, eventId: event.id };
+  }, { timeout: 60000 });
 }
 
 async function cancelSettlementForSource(
-  db: Db,
+  db: Prisma.TransactionClient,
   actor: FinanceActor,
   settlementId: string,
   source: InstrumentSource,
@@ -943,13 +977,16 @@ async function cancelSettlementForSource(
 ) {
   const settlement = await db.settlement.findUnique({
     where: { id: requiredText(settlementId, "Liquidação") },
-    select: { id: true, status: true, commitment: { select: { contractId: true, covenantId: true } } },
+    select: { id: true, status: true, commitment: { select: { contractId: true, covenantId: true, appropriation: { select: { budgetUnitId: true } } } } },
   });
   if (!settlement) throw new ProcurementFinanceBridgeError("Liquidação não encontrada.");
   assertCommitmentSource(settlement.commitment, source);
+  if (actor.allowedBudgetUnitIds && !actor.allowedBudgetUnitIds.includes(settlement.commitment.appropriation.budgetUnitId)) throw new ProcurementFinanceBridgeError("Operação financeira fora das unidades autorizadas.");
+  const origin = await db.procurementLifecycleEvent.findUnique({ where: { idempotencyKey: eventKey("SETTLEMENT", source.sourceType, sourceEntityId, settlement.id) } });
+  if (!origin || origin.eventType !== procurementFinanceEventTypes.settlementCreated || origin.entityType !== "SETTLEMENT" || origin.entityId !== settlement.id || origin.sourceType !== source.sourceType || origin.sourceId !== source.sourceId) throw new ProcurementFinanceBridgeError("Liquidação sem vínculo conciliado com este recebimento/medição.");
   const cancelled = settlement.status === "Cancelado"
     ? settlement
-    : await cancelSettlement(db, actor, settlement.id);
+    : await cancelSettlementInTransaction(db, actor, settlement.id);
   const event = await ensureLifecycleEvent(db, eventInput(
     procurementFinanceEventTypes.settlementCancelled,
     "SETTLEMENT",
@@ -966,6 +1003,11 @@ export async function cancelSettlementAfterPurchaseReceiptCancellation(
   actor: FinanceActor,
   input: { purchaseReceiptId: string; settlementId: string },
 ) {
+  return db.$transaction(async (tx) => {
+  const db = tx;
+  const settlement = await db.settlement.findUniqueOrThrow({ where: { id: input.settlementId }, select: { commitmentId: true } });
+  await db.$queryRaw`SELECT id FROM "Commitment" WHERE id = ${settlement.commitmentId} FOR UPDATE`;
+  await db.$queryRaw`SELECT id FROM "PurchaseReceipt" WHERE id = ${input.purchaseReceiptId} FOR UPDATE`;
   const receipt = await db.purchaseReceipt.findUnique({
     where: { id: requiredText(input.purchaseReceiptId, "Recebimento") },
     select: { id: true, contractId: true },
@@ -974,6 +1016,7 @@ export async function cancelSettlementAfterPurchaseReceiptCancellation(
   const cancellation = await cancelPurchaseReceiptLiquidationAuthorization(db, actor, receipt.id);
   if (!cancellation) throw new ProcurementFinanceBridgeError("Não existe AL de recebimento para anular.");
   return cancelSettlementForSource(db, actor, input.settlementId, { sourceType: "CONTRACT", sourceId: receipt.contractId }, receipt.id);
+  }, { timeout: 60000 });
 }
 
 export async function cancelSettlementAfterInstrumentMeasurementCancellation(
@@ -981,6 +1024,11 @@ export async function cancelSettlementAfterInstrumentMeasurementCancellation(
   actor: FinanceActor,
   input: { measurementId: string; settlementId: string },
 ) {
+  return db.$transaction(async (tx) => {
+  const db = tx;
+  const settlement = await db.settlement.findUniqueOrThrow({ where: { id: input.settlementId }, select: { commitmentId: true } });
+  await db.$queryRaw`SELECT id FROM "Commitment" WHERE id = ${settlement.commitmentId} FOR UPDATE`;
+  await db.$queryRaw`SELECT id FROM "InstrumentMeasurement" WHERE id = ${input.measurementId} FOR UPDATE`;
   const measurement = await db.instrumentMeasurement.findUnique({
     where: { id: requiredText(input.measurementId, "Medição") },
     select: { id: true, contractId: true, covenantId: true },
@@ -989,4 +1037,5 @@ export async function cancelSettlementAfterInstrumentMeasurementCancellation(
   const cancellation = await cancelInstrumentMeasurementLiquidationAuthorization(db, actor, measurement.id);
   if (!cancellation) throw new ProcurementFinanceBridgeError("Não existe AL de medição para anular.");
   return cancelSettlementForSource(db, actor, input.settlementId, sourceForMeasurement(measurement), measurement.id);
+  }, { timeout: 60000 });
 }

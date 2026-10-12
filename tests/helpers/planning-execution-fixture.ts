@@ -12,6 +12,7 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
     const models = ["Expense", "Supplier", "Company", "Creditor", "Commitment", "CommitmentMovement", "Settlement", "Payment", "FinancialDocument", "SettlementRetention", "PaymentRetention", "WithholdingPayable", "RetentionRule", "Revenue", "RevenueReversal", "BankAccount", "TreasuryMovement", "TaxRevenueIntegrationEvent", "RevenueResourceRedistribution", "PurchaseRequest", "PurchaseRequestItem", "PurchaseRequestItemBudgetAllocation", "PurchaseProcess", "PurchaseProcessItem", "PurchaseProcessItemOrigin", "Contract", "ProcurementLifecycleEvent", "TaxFinancialMapping", "TaxAssessment", "TaxGuide", "TaxPayment", "TaxAuditLog", "TaxBenefitRule", "TaxBenefitGrant"];
     models.push("TaxIntegrationEvent", "TaxRegistryEntry", "Taxpayer", "TaxDocumentSequence", "TaxParameter");
     models.push("ActiveDebt", "DebtInstallment", "DebtInstallmentSchedule");
+    models.push("PurchaseReceipt", "PurchaseReceiptItem", "InstrumentMeasurement");
     models.push("Payroll", "HrPayrollRun", "HrIntegrationEvent", "SstBenefitPayrollScope");
     models.push("TreasuryTransfer", "Asset", "AssetCategory", "AssetMaintenance", "AssetWriteOff", "AssetIntegrationPendingConfiguration", "Department");
     const enums = new Set<string>();

@@ -4,7 +4,7 @@ import { calculateAccountBalance, evaluateFiscalRule, parseFiscalRuleConfigurati
 import { confirmTaxPaymentInTransaction, TaxError, type TaxActor } from "./index";
 import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxAssessmentCompensatedValue } from "./scope";
 import { assertTaxCreditScope, recordTaxExcessInTransaction, resolveCreditDestinationScope } from "./credit-finance";
-import { postAccountingEventInTransaction } from "@/lib/financeiro";
+import { assertAccountingPeriodOpen, postAccountingEventInTransaction } from "@/lib/financeiro";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -318,12 +318,21 @@ export async function processCollectionReturn(db: PrismaClient, actor: TaxActor,
 }
 
 export async function applyTaxCredit(db: PrismaClient, actor: TaxActor, input: {
-  creditId: string; operation: "COMPENSAR" | "TRANSFERIR" | "RESTITUIR"; amount: string | number; assessmentId?: string; destinationTaxpayerId?: string; reason: string; idempotencyKey: string;
+  creditId: string; operation: "COMPENSAR" | "TRANSFERIR" | "RESTITUIR"; amount: string | number; assessmentId?: string; destinationTaxpayerId?: string; reason: string; idempotencyKey: string; authorizationDocumentId?: string;
 }) {
   const requested = money(input.amount);
   if (!input.reason.trim() || !input.idempotencyKey.trim()) throw new TaxError("Informe motivo e chave da movimentação do crédito.");
   return db.$transaction(async (tx) => {
     const key = `TAX_CREDIT:${input.idempotencyKey.trim()}`;
+    const date = new Date();
+    if (input.operation === "COMPENSAR") {
+      const origin = await tx.taxRegistryEntry.findUniqueOrThrow({ where: { id: input.creditId } });
+      const originScope = await assertTaxCreditScope(tx, actor, origin.data);
+      if (!await tx.taxIntegrationEvent.findUnique({ where: { idempotencyKey: key } })) {
+        const year = await resolveTaxFinancialYear(tx, date.getUTCFullYear(), originScope);
+        await assertAccountingPeriodOpen(tx, year.id, date);
+      }
+    }
     await tx.$queryRaw`SELECT id FROM "TaxRegistryEntry" WHERE id = ${input.creditId} FOR UPDATE`;
     const credit = await tx.taxRegistryEntry.findUnique({ where: { id: input.creditId } });
     if (!credit || credit.category !== "TAX_CREDIT") throw new TaxError("Crédito tributário disponível não encontrado.");
@@ -333,7 +342,7 @@ export async function applyTaxCredit(db: PrismaClient, actor: TaxActor, input: {
     if (prior) {
       const payload = jsonObject(prior.payload);
       const targetId = input.operation === "COMPENSAR" ? input.assessmentId : input.operation === "TRANSFERIR" ? input.destinationTaxpayerId : credit.entityId;
-      if (prior.eventType !== input.operation || payload.creditId !== credit.id || payload.amount !== requested.toFixed(2) || payload.targetId !== targetId || payload.reason !== input.reason.trim()) throw new TaxError("Movimento do crédito já registrado com outros dados.");
+      if (prior.eventType !== input.operation || payload.creditId !== credit.id || payload.amount !== requested.toFixed(2) || payload.targetId !== targetId || payload.reason !== input.reason.trim() || (payload.authorizationDocumentId ?? null) !== (input.authorizationDocumentId?.trim() || null)) throw new TaxError("Movimento do crédito já registrado com outros dados.");
       return prior;
     }
     if (!data.ingressTransactionId || !data.ingressMovementId) throw new TaxError("Crédito sem ingresso financeiro conciliado.");
@@ -350,11 +359,16 @@ export async function applyTaxCredit(db: PrismaClient, actor: TaxActor, input: {
     if (input.operation === "COMPENSAR") {
       await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${input.assessmentId!} FOR UPDATE`;
       const { assessment, scope: destination } = await resolveCreditDestinationScope(tx, actor, input.assessmentId!);
-      if (assessment.taxpayerId !== credit.entityId || destination.budgetUnitId !== scope.budgetUnitId) throw new TaxError("Compensação exige débito do mesmo contribuinte e UG.");
+      if (destination.budgetUnitId !== scope.budgetUnitId || destination.governmentEntityId !== scope.governmentEntityId) throw new TaxError("Compensação exige débito da mesma entidade e UG.");
+      if (assessment.taxpayerId !== credit.entityId) {
+        const authorization = input.authorizationDocumentId?.trim() ? await tx.document.findUnique({ where: { id: input.authorizationDocumentId.trim() } }) : null;
+        if (!authorization || authorization.status !== "Válido") throw new TaxError("Compensação entre contribuintes exige autorização GED válida.");
+        const taxpayer = await tx.taxpayer.findUniqueOrThrow({ where: { id: assessment.taxpayerId } });
+        if (taxpayer.status !== "Ativo") throw new TaxError("Contribuinte de destino deve estar ativo.");
+      }
       if (["Cancelado", "Pago", "Suspenso", "Dívida Ativa"].includes(assessment.status)) throw new TaxError("Débito não está disponível para compensação.");
       const position = await assessmentPosition(tx, assessment.id);
       if (requested.gt(position.availableForGuide)) throw new TaxError("Compensação excede o saldo livre; cancele as guias abertas antes de compensar.");
-      const date = new Date();
       const year = await resolveTaxFinancialYear(tx, date.getUTCFullYear(), scope);
       const transaction = await postAccountingEventInTransaction(tx, actor, { financialYearId: year.id, ...scope, date, value: requested, eventCode: "TAX_CREDIT_COMPENSATED", history: `Compensação tributária ${credit.id} → ${assessment.id}`, sourceModule: "TRIBUTACAO", sourceType: "TAX_CREDIT_COMPENSATION", sourceId: credit.id, idempotencyKey: `${key}:ACCOUNTING` });
       accountingTransactionId = transaction.id;
@@ -364,9 +378,9 @@ export async function applyTaxCredit(db: PrismaClient, actor: TaxActor, input: {
     await tx.taxRegistryEntry.update({ where: { id: credit.id }, data: { data: { ...data, available: remaining.toFixed(2) }, status: remaining.equals(0) ? "UTILIZADO" : "DISPONIVEL" } });
     const targetType = input.operation === "COMPENSAR" ? "TAX_ASSESSMENT" : "TAXPAYER";
     const targetId = (input.operation === "COMPENSAR" ? input.assessmentId : input.operation === "TRANSFERIR" ? input.destinationTaxpayerId : credit.entityId)!;
-    const movement = await tx.taxRegistryEntry.create({ data: { entityType: targetType, entityId: targetId, category: input.operation === "RESTITUIR" ? "REFUND_REQUEST" : "CREDIT_MOVEMENT", title: input.operation, data: { ...scope, operation: input.operation, sourceCreditId: credit.id, sourceTaxpayerId: credit.entityId, destinationId: targetId, amount: requested.toFixed(2), accountingTransactionId, reason: input.reason.trim(), status: input.operation === "RESTITUIR" ? "PENDENTE_APROVACAO" : "EFETIVADO" }, status: input.operation === "RESTITUIR" ? "PENDENTE_APROVACAO" : "EFETIVADO", source: "INTERNO", actorUsuarioId: actor.usuarioId } });
+    const movement = await tx.taxRegistryEntry.create({ data: { entityType: targetType, entityId: targetId, category: input.operation === "RESTITUIR" ? "REFUND_REQUEST" : "CREDIT_MOVEMENT", title: input.operation, data: { ...scope, operation: input.operation, sourceCreditId: credit.id, sourceTaxpayerId: credit.entityId, destinationId: targetId, amount: requested.toFixed(2), accountingTransactionId, authorizationDocumentId: input.authorizationDocumentId?.trim() || null, reason: input.reason.trim(), status: input.operation === "RESTITUIR" ? "PENDENTE_APROVACAO" : "EFETIVADO" }, status: input.operation === "RESTITUIR" ? "PENDENTE_APROVACAO" : "EFETIVADO", source: "INTERNO", actorUsuarioId: actor.usuarioId } });
     if (input.operation === "TRANSFERIR") await tx.taxRegistryEntry.create({ data: { entityType: "TAXPAYER", entityId: targetId, category: "TAX_CREDIT", title: `Crédito transferido de ${credit.entityId}`, data: { ...data, ...scope, amount: requested.toFixed(2), available: requested.toFixed(2), sourceCreditId: credit.id, movementId: movement.id }, status: "DISPONIVEL", source: "TRANSFERENCIA", actorUsuarioId: actor.usuarioId } });
-    const event = await tx.taxIntegrationEvent.create({ data: { integrationCode: "TAX_CREDIT", eventType: input.operation, idempotencyKey: key, status: input.operation === "RESTITUIR" ? "PENDENTE" : "PROCESSADO", evidenceLevel: "L1", taxpayerId: credit.entityId, payload: { creditId: credit.id, amount: requested.toFixed(2), targetId, reason: input.reason.trim() }, result: { movementId: movement.id, remaining: remaining.toFixed(2), accountingTransactionId }, processedAt: input.operation === "RESTITUIR" ? null : new Date() } });
+    const event = await tx.taxIntegrationEvent.create({ data: { integrationCode: "TAX_CREDIT", eventType: input.operation, idempotencyKey: key, status: input.operation === "RESTITUIR" ? "PENDENTE" : "PROCESSADO", evidenceLevel: "L1", taxpayerId: credit.entityId, payload: { creditId: credit.id, amount: requested.toFixed(2), targetId, reason: input.reason.trim(), authorizationDocumentId: input.authorizationDocumentId?.trim() || null }, result: { movementId: movement.id, remaining: remaining.toFixed(2), accountingTransactionId }, processedAt: input.operation === "RESTITUIR" ? null : new Date() } });
     await audit(tx, actor, input.operation, "TaxRegistryEntry", movement.id, { creditId: credit.id, amount: requested.toFixed(2), remaining: remaining.toFixed(2), targetId });
     return event;
   });
@@ -412,11 +426,15 @@ export async function resolveReconciliation(db: PrismaClient, actor: TaxActor, i
 
 export async function approveRefundRequest(db: PrismaClient, actor: TaxActor, input: { requestId: string; approved: boolean; reason: string }) {
   return db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "TaxRegistryEntry" WHERE id = ${input.requestId} FOR UPDATE`;
     const request = await tx.taxRegistryEntry.findUnique({ where: { id: input.requestId } });
     if (!request || request.category !== "REFUND_REQUEST" || request.status !== "PENDENTE_APROVACAO") throw new TaxError("Pedido de restituição não está pendente de aprovação.");
     const data = jsonObject(request.data);
     await assertTaxCreditScope(tx, actor, request.data);
+    if (typeof data.sourceCreditId !== "string") throw new TaxError("Restituição sem crédito de origem conciliado.");
+    await tx.$queryRaw`SELECT id FROM "TaxRegistryEntry" WHERE id = ${data.sourceCreditId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "TaxRegistryEntry" WHERE id = ${request.id} FOR UPDATE`;
+    const current = await tx.taxRegistryEntry.findUniqueOrThrow({ where: { id: request.id } });
+    if (current.status !== request.status || JSON.stringify(current.data) !== JSON.stringify(request.data)) throw new TaxError("Pedido alterado; atualize antes de decidir.");
     if (!input.reason.trim()) throw new TaxError("Informe o motivo da decisão sobre a restituição.");
     const status = input.approved ? "APROVADA_AGUARDANDO_TESOURARIA" : "REJEITADA";
     if (!input.approved && typeof data.sourceCreditId === "string") {

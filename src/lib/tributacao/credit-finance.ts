@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { getBankAccountBalance, postAccountingEventInTransaction } from "@/lib/financeiro";
+import { assertAccountingPeriodOpen, getBankAccountBalance, postAccountingEventInTransaction } from "@/lib/financeiro";
 import { TaxError, type TaxActor } from "./index";
 import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxScopeSnapshot } from "./scope";
 
@@ -49,7 +49,6 @@ export async function executeTaxRefund(db: PrismaClient, actor: TaxActor, input:
 }) {
   if (!input.idempotencyKey.trim() || Number.isNaN(input.date.getTime())) throw new TaxError("Informe chave e data válidas para restituição.");
   return db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "TaxRegistryEntry" WHERE id = ${input.requestId} FOR UPDATE`;
     const request = await tx.taxRegistryEntry.findUniqueOrThrow({ where: { id: input.requestId } });
     const data = taxScopeSnapshot(request.data);
     const scope = await assertTaxCreditScope(tx, actor, request.data);
@@ -62,7 +61,21 @@ export async function executeTaxRefund(db: PrismaClient, actor: TaxActor, input:
     }
     if (request.category !== "REFUND_REQUEST" || request.status !== "APROVADA_AGUARDANDO_TESOURARIA") throw new TaxError("Restituição não está aprovada e disponível para pagamento.");
     if (typeof data.sourceCreditId !== "string") throw new TaxError("Restituição sem crédito de origem.");
+    const year = await resolveTaxFinancialYear(tx, input.date.getUTCFullYear(), scope);
+    await assertAccountingPeriodOpen(tx, year.id, input.date);
+    // Share period -> credit -> request -> bank order with credit reversal.
+    await tx.$queryRaw`SELECT id FROM "TaxRegistryEntry" WHERE id = ${data.sourceCreditId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "TaxRegistryEntry" WHERE id = ${request.id} FOR UPDATE`;
+    const current = await tx.taxRegistryEntry.findUniqueOrThrow({ where: { id: request.id } });
+    const concurrent = await tx.taxIntegrationEvent.findUnique({ where: { idempotencyKey: key } });
+    if (concurrent) {
+      const payload = taxScopeSnapshot(concurrent.payload);
+      if (payload.requestId !== request.id || payload.bankAccountId !== input.bankAccountId || payload.date !== input.date.toISOString() || payload.proofDocumentId !== input.proofDocumentId) throw new TaxError("Restituição já registrada com outros dados.");
+      return concurrent;
+    }
+    if (current.status !== request.status || JSON.stringify(current.data) !== JSON.stringify(request.data)) throw new TaxError("Restituição alterada; atualize antes de pagar.");
     const credit = await tx.taxRegistryEntry.findUniqueOrThrow({ where: { id: data.sourceCreditId } });
+    await assertTaxCreditScope(tx, actor, credit.data);
     const origin = taxScopeSnapshot(credit.data);
     if (typeof origin.ingressTransactionId !== "string") throw new TaxError("Crédito sem ingresso financeiro conciliado.");
     await tx.$queryRaw`SELECT id FROM "BankAccount" WHERE id = ${input.bankAccountId} FOR UPDATE`;
@@ -73,7 +86,6 @@ export async function executeTaxRefund(db: PrismaClient, actor: TaxActor, input:
     const amount = new Prisma.Decimal(String(data.amount));
     if (!amount.isFinite() || amount.lte(0)) throw new TaxError("Valor de restituição inválido.");
     if ((await getBankAccountBalance(tx, account.id, input.date)).lt(amount)) throw new TaxError("Saldo insuficiente para restituição.");
-    const year = await resolveTaxFinancialYear(tx, input.date.getUTCFullYear(), scope);
     const transaction = await postAccountingEventInTransaction(tx, actor, {
       financialYearId: year.id, ...scope, date: input.date, value: amount, eventCode: "TAX_CREDIT_REFUNDED",
       history: `Restituição tributária ${request.id}`, sourceModule: "TRIBUTACAO", sourceType: "TAX_REFUND",

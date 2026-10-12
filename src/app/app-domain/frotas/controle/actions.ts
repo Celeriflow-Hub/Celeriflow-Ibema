@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
-import { fleetScope } from "@/lib/frotas/service";
+import { fleetScope, FleetError } from "@/lib/frotas/service";
+import { deleteFleetAttachment, FLEET_ATTACHMENT_OWNER_TYPES, uploadFleetAttachment, type FleetAttachmentOwnerType } from "@/lib/frotas/attachments";
 import { authorizationCode, driverEligibility, fineStatusAfterPayment, gateTransition, policyOn, scheduleConflict } from "@/lib/frotas/tr-rules";
 
 class UserError extends Error {}
@@ -38,7 +39,7 @@ async function run(tab: string, op: "create" | "update", fn: (ctx: Ctx) => Promi
     const target = await fn(ctx);
     await writeAuditEvent(ctx.prisma, { actorUsuarioId: ctx.user.id, eventType: auditEventTypes.formSubmit, targetType: target.type, targetId: target.id });
   } catch (error) {
-    const text = error instanceof UserError ? error.message : error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" ? "Já existe um registro com esse identificador." : error instanceof Error && "status" in error ? error.message : "Não foi possível salvar. Confira os dados.";
+    const text = error instanceof UserError || error instanceof FleetError ? error.message : error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" ? "Já existe um registro com esse identificador." : error instanceof Error && "status" in error ? error.message : "Não foi possível salvar. Confira os dados.";
     message = `erro=${encodeURIComponent(text)}`;
   }
   revalidatePath("/frotas/controle");
@@ -241,5 +242,28 @@ export async function saveDestination(f: FormData) {
   await run("agenda", "create", async (ctx) => {
     const d = await ctx.prisma.fleetDestination.create({ data: { name: req(f, "name", "o destino"), city: str(f, "city") || null, distanceKm: num(f, "distanceKm") } });
     return { type: "FLEET_DESTINATION", id: d.id };
+  });
+}
+
+/** 1.578 — upload de anexo (veículo, motorista, multa, sinistro ou autorização), validando extensão e 20 MB. */
+export async function uploadFleetAttachmentAction(f: FormData) {
+  await run("anexos", "create", async (ctx) => {
+    const scope = fleetScope(ctx);
+    const [ownerType, ownerId] = str(f, "ownerRef").split("|");
+    if (!(FLEET_ATTACHMENT_OWNER_TYPES as readonly string[]).includes(ownerType)) throw new UserError("Selecione o registro para anexar o arquivo.");
+    if (!ownerId) throw new UserError("Selecione o registro para anexar o arquivo.");
+    const file = f.get("file");
+    if (!(file instanceof File)) throw new UserError("Selecione um arquivo.");
+    const row = await ctx.prisma.$transaction((tx) => uploadFleetAttachment(tx, scope, { ownerType: ownerType as FleetAttachmentOwnerType, ownerId, file }));
+    return { type: "FLEET_ATTACHMENT", id: row.id };
+  });
+}
+
+/** Exclusão de anexo: somente quem enviou (ou administrador), dentro do setor do registro. */
+export async function deleteFleetAttachmentAction(f: FormData) {
+  await run("anexos", "update", async (ctx) => {
+    const scope = fleetScope(ctx);
+    const row = await ctx.prisma.$transaction((tx) => deleteFleetAttachment(tx, scope, req(f, "id", "o anexo")));
+    return { type: "FLEET_ATTACHMENT", id: row.id };
   });
 }

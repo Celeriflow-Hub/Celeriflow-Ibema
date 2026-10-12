@@ -8,7 +8,7 @@ import * as A from "./actions";
 
 export const dynamic = "force-dynamic";
 
-const TABS = [["painel", "Painel e alertas"], ["veiculos", "Medidores e consumo"], ["motoristas", "Motoristas"], ["postos", "Postos credenciados"], ["cotas", "Cotas"], ["ordens", "Ordens de abastecimento"], ["viagens", "Diário de bordo"], ["pneus", "Pneus"], ["multas", "Multas"], ["oficinas", "Oficinas (portal)"], ["custos", "Custos"]] as const;
+const TABS = [["painel", "Painel e alertas"], ["veiculos", "Medidores e consumo"], ["motoristas", "Motoristas"], ["postos", "Postos credenciados"], ["cotas", "Cotas"], ["ordens", "Ordens de abastecimento"], ["viagens", "Diário de bordo"], ["pneus", "Pneus"], ["multas", "Multas"], ["oficinas", "Oficinas (portal)"], ["custos", "Custos"], ["combustivel", "Saldo Licitação"]] as const;
 const inp = "h-8 rounded-md border border-slate-300 bg-white px-2 text-xs dark:bg-slate-900";
 const btn = "h-8 rounded-md bg-emerald-700 px-3 text-xs font-semibold text-white";
 const money = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -30,7 +30,7 @@ export default async function FrotaGestaoPage({ searchParams }: { searchParams: 
   const scope = fleetScope(context);
   const units = await prisma.fleetUnit.findMany({ where: { status: "ATIVO", ...departmentWhere(scope) }, orderBy: { code: "asc" }, take: 500 });
   const unitIds = units.map((u) => u.id);
-  const [drivers, stations, quotas, orders, trips, tires, fines, fuel, expenses, departments] = await Promise.all([
+  const [drivers, stations, quotas, orders, trips, tires, fines, fuel, expenses, departments, fuelBalances, contracts] = await Promise.all([
     prisma.fleetDriver.findMany({ where: { active: true, ...(scope.administrator ? {} : { departmentId: scope.departmentId }) }, orderBy: { name: "asc" } }),
     prisma.fleetFuelStation.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     prisma.fleetFuelQuota.findMany({ where: { unitId: { in: unitIds } }, orderBy: { period: "desc" }, take: 200 }),
@@ -41,6 +41,8 @@ export default async function FrotaGestaoPage({ searchParams }: { searchParams: 
     prisma.fleetFuelOrder.findMany({ where: { unitId: { in: unitIds }, status: "ABASTECIDA" }, select: { unitId: true, reading: true, litersFilled: true } }),
     prisma.fleetExpense.findMany({ where: { unitId: { in: unitIds } }, select: { unitId: true, nature: true, amount: true, sourceType: true, sourceId: true } }),
     prisma.department.findMany({ select: { id: true, name: true } }),
+    prisma.fleetFuelBalance.findMany({ include: { contract: true } }),
+    prisma.contract.findMany({ where: { status: "Vigente" }, select: { id: true, number: true, object: true } }),
   ]);
   const scopedWorkOrderIds = aba === "oficinas" ? (await prisma.fleetWorkOrder.findMany({ where: { unitId: { in: unitIds } }, select: { id: true } })).map(w => w.id) : [];
   const [workOrders, reports] = aba === "oficinas" ? await Promise.all([
@@ -89,6 +91,7 @@ export default async function FrotaGestaoPage({ searchParams }: { searchParams: 
         <Card title={`CNH vencida ou a vencer (${cnhAlerts.length})`}><Table head={["Motorista", "Validade", "Situação"]} rows={cnhAlerts.map((x) => [x.d.name, date(x.d.cnhExpiresAt), x.status === "VENCIDA" ? <b key="s" className="text-red-700">Vencida</b> : `Vence em ${x.days} dia(s)`])} /></Card>
         <Card title={`Consumo fora do padrão (${consumption.filter((c) => c.alert).length})`}><Table head={["Veículo", "Média", "Esperado", "Desvio"]} rows={consumption.filter((c) => c.alert).map((c) => [label(c.u.id), `${c.avg} ${CONSUMPTION_UNIT[c.meter]}`, `${c.u.expectedConsumption} ${CONSUMPTION_UNIT[c.meter]}`, `${c.deviationPct}%`])} /></Card>
         <Card title={`Pneus perto do fim da vida útil (${tireAlerts.length})`}><Table head={["Fogo", "Veículo"]} rows={tireAlerts.map((t) => [t.fireNumber, label(t.unitId)])} /></Card>
+        <Card title={`Saldos baixos de combustível (${fuelBalances.filter(b => Number(b.quantityContracted) - Number(b.quantityConsumed) <= Number(b.alertThreshold)).length})`}><Table head={["Contrato", "Tipo", "Saldo"]} rows={fuelBalances.filter(b => Number(b.quantityContracted) - Number(b.quantityConsumed) <= Number(b.alertThreshold)).map(b => [b.contract.number, b.fuelType, <b key="s" className="text-red-700">{Number(b.quantityContracted) - Number(b.quantityConsumed)} L</b>])} /></Card>
         <Card title="Pendências"><ul className="list-disc pl-4"><li>{orders.filter((o) => o.status === "EMITIDA").length} ordem(ns) de abastecimento aguardando baixa</li><li>{trips.filter((t) => !t.returnedAt).length} veículo(s) em viagem</li><li>{fines.filter((f) => f.status === "PENDENTE").length} multa(s) pendentes</li></ul></Card>
       </div>}
 

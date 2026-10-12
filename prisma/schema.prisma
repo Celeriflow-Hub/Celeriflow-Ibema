@@ -5274,6 +5274,7 @@ model Contract {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  fuelBalances         FleetFuelBalance[]
 }
 
 model ContractAmendment {
@@ -14267,6 +14268,7 @@ model FleetUnit {
   expenses          FleetExpense[]
   documents         FleetDocument[]
   occurrences       FleetOccurrence[]
+  serviceAuthorizations FleetServiceAuthorization[]
   assetEvents       FleetAssetEvent[]
   createdById       String
   createdAt         DateTime           @default(now())
@@ -16407,6 +16409,7 @@ model FleetDriver {
   active       Boolean  @default(true)
   createdById  String
   createdAt    DateTime @default(now())
+  serviceAuthorizations FleetServiceAuthorization[]
   updatedAt    DateTime @updatedAt
 }
 
@@ -16450,6 +16453,8 @@ model FleetFuelOrder {
   portalToken      String?
   confirmedVia     String?
   createdById      String
+  balanceId        String?
+  balance          FleetFuelBalance? @relation(fields: [balanceId], references: [id])
 
   @@index([unitId, status, issuedAt])
 }
@@ -16732,6 +16737,7 @@ model FleetServiceAuthorization {
   id           String   @id @default(cuid())
   code         String   @unique
   unitId       String
+  unit         FleetUnit @relation(fields: [unitId], references: [id])
   supplierName String
   supplierCnpj String?
   description  String
@@ -16744,6 +16750,9 @@ model FleetServiceAuthorization {
   expenseId    String?  @unique
   createdById  String
   createdAt    DateTime @default(now())
+  driverId     String?
+  driver       FleetDriver? @relation(fields: [driverId], references: [id])
+  destination  String?
   executedAt   DateTime?
 
   @@index([unitId, status])
@@ -16777,4 +16786,20 @@ model FleetAttachment {
   createdAt   DateTime @default(now())
 
   @@index([unitId, ownerType])
+}
+
+model FleetFuelBalance {
+  id                 String   @id @default(cuid())
+  contractId         String
+  contract           Contract @relation(fields: [contractId], references: [id])
+  fuelType           String
+  quantityContracted Decimal  @db.Decimal(14, 3)
+  quantityConsumed   Decimal  @db.Decimal(14, 3) @default(0)
+  alertThreshold     Decimal  @db.Decimal(14, 3) @default(100)
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  orders             FleetFuelOrder[]
+  @@unique([contractId, fuelType])
 }

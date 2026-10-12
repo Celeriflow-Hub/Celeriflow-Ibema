@@ -29,7 +29,7 @@ function documentStatus(v: { kind: string; status: string; dueAt: Date; startsAt
 
 export async function queryFleet(context: AppContext, q: FleetQuery, full = false): Promise<FleetList> {
   const db = context.prisma, scope = fleetScope(context);
-  const area = q.area === "relatorios" ? ({ frota: "frota", vencimentos: "documentos", abastecimentos: "consumos", gastos: "gastos", manutencoes: "manutencoes" } as const)[q.report] : q.area;
+  const area = q.area === "relatorios" ? ({ frota: "frota", vencimentos: "documentos", abastecimentos: "consumos", gastos: "gastos", manutencoes: "manutencoes", dossie: "frota" } as const)[q.report] : q.area;
   const unit: Prisma.FleetUnitWhereInput = { ...departmentWhere(scope), ...(q.unitId ? { id: q.unitId, ...(q.unitIds ? { AND: [{ id: { in: q.unitIds.split(",") } }] } : {}) } : q.unitIds ? { id: { in: q.unitIds.split(",") } } : {}), ...(q.category ? { category: q.category } : {}) };
   const search = q.q ? { contains: q.q, mode: "insensitive" as const } : undefined;
   const byUnitSearch = search ? [{ unit: { code: search } }, { unit: { name: search } }, { unit: { plate: search } }] : [];

@@ -10,6 +10,7 @@ import { fleetScope } from "@/lib/frotas/service";
 import { confirmFuelOrderOnce, FuelOrderError } from "@/lib/frotas/fuel-order";
 import { requireValidCpf, requireValidCnpj } from "@/lib/identifiers/brazilian-identifiers";
 import { cnhAllows, cnhStatus, newFuelOrderCode, quotaCheck, validateReading, type MeterType } from "@/lib/frotas/gestao-engine";
+import { fuelBalanceCheck } from "@/lib/frotas/gestao-engine";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const num = (f: FormData, k: string) => { const v = str(f, k).replace(",", "."); return v === "" ? null : Number(v); };
@@ -110,6 +111,22 @@ export async function saveQuota(f: FormData) {
 
 function periodOf(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }
 
+export async function saveFuelBalance(f: FormData) {
+  await run("combustivel", "create", async (ctx) => {
+    const { prisma } = ctx;
+    const contractId = req(f, "contractId", "o contrato");
+    const fuelType = req(f, "fuelType", "o tipo de combustível");
+    const quantity = num(f, "quantityContracted");
+    if (quantity == null || quantity <= 0) throw new UserError("Informe a quantidade contratada.");
+    await prisma.fleetFuelBalance.upsert({
+      where: { contractId_fuelType: { contractId, fuelType } },
+      create: { contractId, fuelType, quantityContracted: quantity, alertThreshold: num(f, "alertThreshold") ?? 100 },
+      update: { quantityContracted: quantity, alertThreshold: num(f, "alertThreshold") ?? 100 },
+    });
+    return { type: "FLEET_FUEL_BALANCE", id: contractId + fuelType };
+  });
+}
+
 export async function issueFuelOrder(f: FormData) {
   await run("ordens", "create", async (ctx) => {
     const { prisma, user } = ctx, scope = fleetScope(ctx);
@@ -143,9 +160,14 @@ export async function issueFuelOrder(f: FormData) {
       });
       const usedLiters = used.reduce((sum, order) => sum + Number(order.litersFilled ?? order.litersAuthorized), 0);
       const check = quotaCheck(quota ? Number(quota.litersLimit) : null, usedLiters, liters);
+      const balance = await tx.fleetFuelBalance.findFirst({ where: { fuelType: str(f, "fuelType") || unit.fuelType || "DIESEL", active: true } });
+      if (balance) {
+        const bCheck = fuelBalanceCheck(Number(balance.quantityContracted), Number(balance.quantityConsumed), liters);
+        if (!bCheck.allowed) throw new UserError(`Saldo de contrato insuficiente: restam ${bCheck.remaining} L.`);
+      }
       if (!check.allowed) throw new UserError(`Cota mensal excedida: restam ${check.remaining} L para ${unit.code}.`);
       const order = await tx.fleetFuelOrder.create({
-        data: { code: newFuelOrderCode(now), unitId, driverId, stationId, fuelType: str(f, "fuelType") || unit.fuelType || "DIESEL", litersAuthorized: liters, portalToken: generatePortalToken(), createdById: user.id },
+        data: { code: newFuelOrderCode(now), unitId, driverId, stationId, fuelType: str(f, "fuelType") || unit.fuelType || "DIESEL", litersAuthorized: liters, portalToken: generatePortalToken(), createdById: user.id, balanceId: balance?.id },
       });
       return { type: "FLEET_FUEL_ORDER", id: order.id };
     });

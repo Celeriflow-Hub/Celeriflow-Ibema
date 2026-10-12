@@ -78,3 +78,8 @@ export function groupCosts(entries: CostEntry[], key: "unitLabel" | "department"
 
 function round(v: number, d: number) { const f = 10 ** d; return Math.round(v * f) / f; }
 function startOfDay(d: Date) { return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())); }
+
+export function fuelBalanceCheck(contracted: number, consumed: number, requested: number) {
+  const remaining = round(contracted - consumed, 3);
+  return { allowed: requested <= remaining, remaining };
+}

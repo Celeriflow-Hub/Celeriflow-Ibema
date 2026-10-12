@@ -7,28 +7,61 @@ import type { AppContext } from "@/lib/platform/tenant-context";
 import { areaTitles, money, queryFleet } from "./queries";
 import { departmentWhere, FleetError, fleetScope } from "./service";
 import { labels, type FleetQuery } from "./contract";
+import { renderOfficialDocument } from "@/lib/platform/official-document";
 
-type Input = { query: FleetQuery; documentType?: "plan" | "order"; documentId?: string };
-const titles = { frota: "Listagem geral da frota", vencimentos: "Vencimentos de documentos", abastecimentos: "Abastecimentos por período e veículo", gastos: "Gastos realizados da frota", manutencoes: "Manutenções efetuadas" };
+type Input = { query: FleetQuery; documentType?: "plan" | "order" | "auth"; documentId?: string };
+const titles = { frota: "Listagem geral da frota", vencimentos: "Vencimentos de documentos", abastecimentos: "Abastecimentos por período e veículo", gastos: "Gastos realizados da frota", manutencoes: "Manutenções efetuadas", dossie: "Dossiê multi-veículo consolidado" };
+
 export async function createFleetReportDataset(context: AppContext, input: Input): Promise<InternalReportDataset> {
   const q = input.query, scope = fleetScope(context);
   let title: string, sections: InternalReportDataset["sections"];
   const warnings: string[] = [];
+  const date = (v: Date | null | undefined) => v?.toISOString().slice(0, 10) || "Não informado";
+
   if (input.documentType) {
-    if (!input.documentId) throw new FleetError("Selecione o plano ou a ordem de serviço.");
-    const order = input.documentType === "order" ? await context.prisma.fleetWorkOrder.findFirst({ where: { id: input.documentId, unit: departmentWhere(scope) }, include: { unit: true } }) : null;
-    const plan = input.documentType === "plan" ? await context.prisma.fleetPlan.findFirst({ where: { id: input.documentId, unit: departmentWhere(scope) }, include: { unit: true } }) : null;
-    const doc = order || plan;
-    if (!doc) throw new FleetError("Documento não encontrado ou fora do seu setor.");
-    title = `${order ? "Ordem de serviço" : "Plano de manutenção"} · ${doc.title}`;
-    const date = (v: Date | null | undefined) => v?.toISOString().slice(0, 10) || "Não informado";
-    sections = [{ title: "Identificação", rows: [{ "Identificação": doc.id, "Unidade": `${doc.unit.code} · ${doc.unit.name}`, "Categoria": labels[doc.unit.category], "Tipo": labels[doc.type], "Programação": order ? date(order.scheduledAt) : date(plan!.nextDueAt), "Periodicidade": `${doc.intervalDays} dias`, "Previsto": money(doc.estimatedCost), ...(order ? { "Plano de origem": order.planId, "Situação": labels[order.status], "Conclusão": date(order.completedAt), "Custo dos serviços realizados": order.status === "CONCLUIDA" ? money(order.actualCost) : "Ainda não realizado" } : {}) }] },
-      { title: "Serviços programados", rows: doc.services.split(/\r?\n/).filter(Boolean).map((service, i) => ({ "Item": i + 1, "Serviço": service })) },
-      ...(order?.performed ? [{ title: "Execução", rows: [{ "Serviços realizados": order.performed, "Resultado": order.result || "—" }] }] : [])];
+    if (!input.documentId) throw new FleetError("Selecione o documento (plano, ordem ou autorização).");
+    if (input.documentType === "auth") {
+      const auth = await context.prisma.fleetServiceAuthorization.findFirst({ where: { id: input.documentId, unit: departmentWhere(scope) }, include: { unit: true } });
+      if (!auth) throw new FleetError("Autorização não encontrada.");
+      title = `Autorização de Serviço nº ${auth.code}`;
+      sections = [
+        { title: "Identificação da Autorização", rows: [{ "Código": auth.code, "Situação": auth.status, "Emissão": date(auth.createdAt), "Validade": date(auth.validUntil), "Execução": auth.executedAt ? date(auth.executedAt) : "Pendente" }] },
+        { title: "Dados do Veículo", rows: [{ "Código/Placa": `${auth.unit.code}${auth.unit.plate ? ` / ${auth.unit.plate}` : ""}`, "Descrição": auth.unit.name, "Marca/Modelo": `${auth.unit.brand || "—"} / ${auth.unit.model || "—"}`, "RENAVAM": auth.unit.renavam || "—" }] },
+        { title: "Serviço e Fornecedor", rows: [{ "Fornecedor": auth.supplierName, "CNPJ": auth.supplierCnpj || "—", "Descrição do Serviço": auth.description, "Valor Limite": money(auth.amountLimit), "Valor Executado": auth.amountActual ? money(auth.amountActual) : "—" }] },
+        { title: "Contratação", rows: [{ "Tipo": auth.procurementKind || "Não informado", "Referência": auth.procurementRef || "—" }] }
+      ];
+    } else {
+      const order = input.documentType === "order" ? await context.prisma.fleetWorkOrder.findFirst({ where: { id: input.documentId, unit: departmentWhere(scope) }, include: { unit: true } }) : null;
+      const plan = input.documentType === "plan" ? await context.prisma.fleetPlan.findFirst({ where: { id: input.documentId, unit: departmentWhere(scope) }, include: { unit: true } }) : null;
+      const doc = order || plan;
+      if (!doc) throw new FleetError("Documento não encontrado ou fora do seu setor.");
+      title = `${order ? "Ordem de serviço" : "Plano de manutenção"} · ${doc.title}`;
+      sections = [{ title: "Identificação", rows: [{ "Identificação": doc.id, "Unidade": `${doc.unit.code} · ${doc.unit.name}`, "Categoria": labels[doc.unit.category], "Tipo": labels[doc.type], "Programação": order ? date(order.scheduledAt) : date(plan!.nextDueAt), "Periodicidade": `${doc.intervalDays} dias`, "Previsto": money(doc.estimatedCost), ...(order ? { "Plano de origem": order.planId, "Situação": labels[order.status], "Conclusão": date(order.completedAt), "Custo dos serviços realizados": order.status === "CONCLUIDA" ? money(order.actualCost) : "Ainda não realizado" } : {}) }] },
+        { title: "Serviços programados", rows: doc.services.split(/\r?\n/).filter(Boolean).map((service, i) => ({ "Item": i + 1, "Serviço": service })) },
+        ...(order?.performed ? [{ title: "Execução", rows: [{ "Serviços realizados": order.performed, "Resultado": order.result || "—" }] }] : [])];
+    }
+  } else if (q.area === "relatorios" && q.report === "dossie") {
+    const unitIds = q.unitIds ? q.unitIds.split(",") : q.unitId ? [q.unitId] : [];
+    if (!unitIds.length) throw new FleetError("Selecione ao menos um veículo para o dossiê.");
+    const units = await context.prisma.fleetUnit.findMany({ where: { id: { in: unitIds }, ...departmentWhere(scope) }, include: { consumptions: { take: 20, orderBy: { occurredAt: "desc" } }, expenses: { where: { nature: "MANUTENCAO" }, take: 20, orderBy: { occurredAt: "desc" } }, usages: { take: 10, orderBy: { startedAt: "desc" } } }, orderBy: { code: "asc" } });
+    const fines = await context.prisma.fleetFine.findMany({ where: { unitId: { in: unitIds } } });
+    const occurrences = await context.prisma.fleetOccurrence.findMany({ where: { unitId: { in: unitIds } } });
+    title = titles.dossie;
+    sections = [];
+    const dt = (d: Date | null) => d ? d.toLocaleDateString("pt-BR") : "—";
+    for (const u of units) {
+      sections.push({ title: `Veículo: ${u.code}${u.plate ? ` / ${u.plate}` : ""} — ${u.name}`, rows: [{ "Categoria": labels[u.category], "Situação": labels[u.status], "Marca/Modelo/Ano": `${u.brand || "—"} / ${u.model || "—"} / ${u.year || "—"}`, "RENAVAM": u.renavam || "—" }] });
+      const uFines = fines.filter(f => f.unitId === u.id);
+      if (uFines.length) sections.push({ title: `Multas — ${u.code}`, rows: uFines.map(f => ({ "Data": dt(f.occurredAt), "Auto": f.aitNumber, "Infração": f.infraction, "Valor": money(f.amount), "Situação": f.status })) });
+      const uOccs = occurrences.filter(o => o.unitId === u.id);
+      if (uOccs.length) sections.push({ title: `Ocorrências/Sinistros — ${u.code}`, rows: uOccs.map(o => ({ "Data": dt(o.occurredAt), "Tipo": labels[o.type], "Descrição": o.description, "Valor envolvido": money(o.involvedValue) })) });
+      if (u.consumptions.length) sections.push({ title: `Últimos Abastecimentos — ${u.code}`, rows: u.consumptions.map(c => ({ "Data": dt(c.occurredAt), "Material": c.material, "Qtd": `${c.quantity} ${c.measurementUnit}`, "Custo": money(c.cost) })) });
+      if (u.expenses.length) sections.push({ title: `Últimas Manutenções — ${u.code}`, rows: u.expenses.map(e => ({ "Data": dt(e.occurredAt), "Descrição": e.description, "Valor": money(e.amount) })) });
+    }
   } else {
     if (q.area === "relatorios" && ["vencimentos", "abastecimentos"].includes(q.report) && (!q.from || !q.to)) throw new FleetError("Informe as duas datas do período para emitir este relatório.");
     const list = await queryFleet(context, q, true);
-    title = q.area === "relatorios" ? titles[q.report] : areaTitles[q.area];
+    title = q.area === "relatorios" ? titles[q.report as keyof typeof titles] : areaTitles[q.area];
     const table = list.rows.map(v => Object.fromEntries(list.columns.map(c => [c.label, v.cells[c.key] || "—"])));
     const totals: Record<string, string | number> = { "Registros do recorte completo": list.total };
     if (list.amount !== null) totals["Gasto realizado conhecido"] = money(new (await import("@prisma/client")).Prisma.Decimal(list.amount));
@@ -42,6 +75,7 @@ export async function createFleetReportDataset(context: AppContext, input: Input
   const filters = [q.from || q.to ? `${q.from || "Sem início"} a ${q.to || "Sem fim"} (datas inclusivas)` : "Sem limite de período", q.q ? `Busca: ${q.q}` : null, filterIds.length ? `Unidades: ${filteredUnits.map(v => `${v.code} · ${v.name}`).join("; ") || "nenhuma unidade autorizada encontrada"}` : "Todas as unidades autorizadas", q.category ? `Categoria: ${labels[q.category]}` : null, q.status ? `Situação: ${labels[q.status] || q.status}` : null, q.type ? `Tipo: ${labels[q.type] || q.type}` : null, q.origin ? `Origem: ${labels[q.origin]}` : null].filter(Boolean).join(" | ");
   return { title, year: Number((q.from || new Date().toISOString()).slice(0, 4)), warnings, metadata: { status: warnings.length ? "INTERNAL_PARTIAL" : "INTERNAL_REVIEW", scope: scope.administrator ? "Frotas · todos os setores autorizados" : "Frotas · setor do usuário", referencePeriod: filters, statutoryCompleteness: "NOT_STATUTORY", publicSnapshotEligible: false, publicSnapshotCondition: "Relatório operacional interno" }, sections };
 }
+
 const definition: ReportDefinition<Input, InternalReportDataset> = { key: "frotas-operacional", moduleCode: "FROTAS", createDataset: createFleetReportDataset, auditTarget: () => ({ targetType: "FLEET_REPORT", targetId: "frotas-operacional" }) };
 
 export async function renderFleetPdf(dataset: InternalReportDataset, presentation: TabularReportPresentation): Promise<Uint8Array> {
@@ -58,7 +92,6 @@ export async function renderFleetPdf(dataset: InternalReportDataset, presentatio
     if (pdf.y > pdf.page.height - 120) pdf.addPage();
     pdf.fillColor("#173c60").font("Helvetica-Bold").fontSize(12).text(section.title).moveDown(0.5);
     for (const row of section.rows) {
-      // PDFKit wraps long services and continues across pages; no row/page truncation.
       if (pdf.y > pdf.page.height - 100) pdf.addPage();
       pdf.font("Helvetica").fontSize(10).fillColor("#0f172a").text(Object.entries(row).map(([k, v]) => `${k}: ${v}`).join("\n")).moveDown(0.7);
     }
@@ -77,13 +110,29 @@ export async function issueFleetReport(input: Input, format: ReportFormat) {
   const presentation: TabularReportPresentation = { institution, template: templatePresentation, emission: templatePresentation.includeEmissionMetadata ? { issuedAt: new Date().toISOString(), issuedBy: execution.context.user.name } : null };
   const dataset = execution.dataset;
   let body: string | Uint8Array, contentType: string;
-  switch (format) {
-    case "pdf": body = await renderFleetPdf(dataset, presentation); contentType = "application/pdf"; break;
-    case "xlsx": body = await renderTabularXlsx(dataset, presentation); contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"; break;
-    case "csv": body = "\uFEFF" + renderTabularCsv(dataset, presentation); contentType = "text/csv; charset=utf-8"; break;
-    case "txt": body = renderTabularTxt(dataset, presentation); contentType = "text/plain; charset=utf-8"; break;
-    case "print": body = renderTabularPrintHtml(dataset, presentation); contentType = "text/html; charset=utf-8"; break;
-    default: throw new FleetError("Formato de emissão inválido.");
+
+  if (input.documentType === "auth" && format === "print") {
+    const sections = dataset.sections.map(s => ({
+      title: s.title,
+      head: s.rows.length > 0 ? Object.keys(s.rows[0]) : [],
+      rows: s.rows.map(r => Object.values(r) as (string | number)[])
+    }));
+    body = renderOfficialDocument({
+      title: dataset.title,
+      sections,
+      code: input.documentId,
+      department: "Departamento de Frotas"
+    });
+    contentType = "text/html; charset=utf-8";
+  } else {
+    switch (format) {
+      case "pdf": body = await renderFleetPdf(dataset, presentation); contentType = "application/pdf"; break;
+      case "xlsx": body = await renderTabularXlsx(dataset, presentation); contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"; break;
+      case "csv": body = "\uFEFF" + renderTabularCsv(dataset, presentation); contentType = "text/csv; charset=utf-8"; break;
+      case "txt": body = renderTabularTxt(dataset, presentation); contentType = "text/plain; charset=utf-8"; break;
+      case "print": body = renderTabularPrintHtml(dataset, presentation); contentType = "text/html; charset=utf-8"; break;
+      default: throw new FleetError("Formato de emissão inválido.");
+    }
   }
   await writeReportIssuanceAudit(execution);
   return { body, contentType };

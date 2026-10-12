@@ -71,3 +71,6 @@ export default function MapaDoSitePage() {
     </main>
   );
 }
+
+// Render on request: the shared portal layout queries the database.
+export const dynamic = "force-dynamic";

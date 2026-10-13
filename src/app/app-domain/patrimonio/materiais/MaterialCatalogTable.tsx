@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { deleteMaterialAction, setMaterialActiveAction, updateMaterialAction } from "./catalog-actions";
 
 type Category = { id: string; name: string };
+type Subcategory = { id: string; categoryId: string; name: string };
 type MaterialRow = {
   id: string;
   code: string;
@@ -18,6 +19,8 @@ type MaterialRow = {
   minStock: number;
   categoryId: string;
   categoryName: string;
+  subcategoryId: string | null;
+  subcategoryName: string | null;
   status: "Ativo" | "Inativo" | "Sem estoque";
   totalStock: number;
   warehouseLabel: string;
@@ -29,16 +32,16 @@ function currency(value: number | null) {
   return value === null ? "-" : value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-export function MaterialCatalogTable({ materials, categories, canUpdate, canDelete }: { materials: MaterialRow[]; categories: Category[]; canUpdate: boolean; canDelete: boolean }) {
+export function MaterialCatalogTable({ materials, categories, subcategories, canUpdate, canDelete }: { materials: MaterialRow[]; categories: Category[]; subcategories: Subcategory[]; canUpdate: boolean; canDelete: boolean }) {
   const [descriptionMaterial, setDescriptionMaterial] = useState<MaterialRow | null>(null);
   const [editingMaterial, setEditingMaterial] = useState<MaterialRow | null>(null);
-  const [editValues, setEditValues] = useState({ description: "", categoryId: "", type: "MATERIAL" as "MATERIAL" | "PATRIMONIO", unitOfMeasure: "" });
+  const [editValues, setEditValues] = useState({ description: "", categoryId: "", subcategoryId: "", type: "MATERIAL" as "MATERIAL" | "PATRIMONIO", unitOfMeasure: "" });
   const [editError, setEditError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function startEdit(material: MaterialRow) {
     setEditingMaterial(material);
-    setEditValues({ description: material.description || "", categoryId: material.categoryId, type: material.type, unitOfMeasure: material.unitOfMeasure });
+    setEditValues({ description: material.description || "", categoryId: material.categoryId, subcategoryId: material.subcategoryId ?? "", type: material.type, unitOfMeasure: material.unitOfMeasure });
     setEditError(null);
   }
 
@@ -93,7 +96,7 @@ export function MaterialCatalogTable({ materials, categories, canUpdate, canDele
                 <td className="px-3 py-0 font-semibold text-emerald-800"><span className="block truncate">{material.code}</span></td>
                 <td className="px-3 py-0 font-medium"><span className="block truncate">{material.name}</span></td>
                 <td className="px-1 py-0 text-center"><button type="button" aria-label={`Ver descrição de ${material.name}`} title="Ver descrição detalhada" onClick={() => setDescriptionMaterial(material)} className="inline-flex size-6 items-center justify-center rounded text-slate-500 outline-none hover:bg-emerald-50 hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-600"><FileText className="size-3.5" /></button></td>
-                <td className="hidden px-3 py-0 md:table-cell"><span className="block truncate">{material.categoryName}</span></td>
+                <td className="hidden px-3 py-0 md:table-cell"><span className="block truncate">{material.categoryName}{material.subcategoryName ? ` / ${material.subcategoryName}` : ""}</span></td>
                 <td className="px-3 py-0"><span className={`font-semibold ${material.status === "Ativo" ? "text-emerald-700" : material.status === "Inativo" ? "text-rose-700" : "text-amber-700"}`}>{material.status}</span></td>
                 <td className="hidden px-3 py-0 xl:table-cell"><span className="block truncate">{material.warehouseLabel}</span></td>
                 <td className="px-3 py-0 text-right tabular-nums">{currency(material.unitCost)}</td>
@@ -147,9 +150,10 @@ export function MaterialCatalogTable({ materials, categories, canUpdate, canDele
           <form onSubmit={saveEdit} className="grid gap-3">
             <label className="grid gap-1 text-sm font-medium">Descrição<textarea rows={4} value={editValues.description} onChange={(event) => setEditValues((current) => ({ ...current, description: event.target.value }))} className="rounded-md border border-input bg-background px-3 py-2 text-sm" /></label>
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="grid gap-1 text-sm font-medium">Categoria<select required value={editValues.categoryId} onChange={(event) => setEditValues((current) => ({ ...current, categoryId: event.target.value }))} className="h-9 rounded-md border border-input bg-background px-3 text-sm"><option value="">Selecione</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+              <label className="grid gap-1 text-sm font-medium">Categoria<select required value={editValues.categoryId} onChange={(event) => setEditValues((current) => ({ ...current, categoryId: event.target.value, subcategoryId: "" }))} className="h-9 rounded-md border border-input bg-background px-3 text-sm"><option value="">Selecione</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
               <label className="grid gap-1 text-sm font-medium">Unidade de Medida (Tipo)<select required value={editValues.unitOfMeasure} onChange={(event) => setEditValues((current) => ({ ...current, unitOfMeasure: event.target.value }))} className="h-9 rounded-md border border-input bg-background px-3 text-sm"><option value="UN">UN - Unidade</option><option value="KIT">KIT - Kit</option><option value="PÇ">PÇ - Peça</option><option value="KG">KG - Quilograma</option><option value="CX">CX - Caixa</option><option value="LT">LT - Litro</option><option value="ROLO">ROLO - Rolo</option><option value="PAQ">PAQ - Pacote</option><option value="FL">FL - Folha</option></select></label>
             </div>
+            <label className="grid gap-1 text-sm font-medium">Subclasse<select value={editValues.subcategoryId} onChange={event => setEditValues({ ...editValues, subcategoryId: event.target.value })} className="h-9 rounded-md border px-3"><option value="">Sem subclasse</option>{subcategories.filter(row => row.categoryId === editValues.categoryId).map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
             {editError && <p role="alert" className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">{editError}</p>}
             <DialogFooter><Button type="button" variant="outline" disabled={isPending} onClick={() => setEditingMaterial(null)}>Cancelar</Button><Button type="submit" disabled={isPending}>{isPending ? "Salvando..." : "Salvar alterações"}</Button></DialogFooter>
           </form>

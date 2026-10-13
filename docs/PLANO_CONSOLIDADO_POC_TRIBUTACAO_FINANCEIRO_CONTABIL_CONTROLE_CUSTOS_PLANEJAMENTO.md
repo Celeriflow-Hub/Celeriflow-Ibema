@@ -493,6 +493,10 @@ Obter documentos/parâmetros locais durante as primeiras fases. **Isso não é i
 
 ### P1 — fundação compartilhada, escopo e classificações
 
+**Reorganização solicitada em 13/10/2026:** a sequência de execução e os critérios de encerramento das frentes integradas estão em [Plano final de implantação](PLANO_FINAL_IMPLANTACAO_MODULOS_INTEGRADOS.md). O escopo e a matriz individual deste plano permanecem a referência; a reorganização não declara fases concluídas.
+
+**Continuação local de 13/10/2026:** [registro de escopo, identidades e classificações](poc-p0/EXECUCAO_P1_2026_10_13.md). Implementações e leituras municipais registradas; sem validação técnica das alterações novas e sem encerramento da fase.
+
 **Continuação mais recente:** [bloco integrado P1–P4](poc-p0/EXECUCAO_P1_P4_BLOCO_INTEGRADO.md). Três versões oficiais TCE-PR de 2026 importadas em revisão (14.494 entradas), com origem/hash/atributos e código externo separado do vínculo canônico. De-para e homologação local permanecem pendentes.
 
 **Execução em andamento:** [P1 — fundação compartilhada](poc-p0/EXECUCAO_P1_ESCOPO_CONTABIL.md). Exercícios/fechamentos por entidade, receita com UG persistida, relatórios e Controle Interno com escopo autorizado; referência de retorno tributário reutiliza a partida canônica. Identidades de ensaio foram conciliadas e classificações sintéticas ganharam origem/vigência/hash. P1 permanece em andamento: revisão integral dos produtores restantes, relações CNAE/CBO/serviços, fonte/MSC e homologação dos catálogos oficiais ainda precisam ser concluídas.

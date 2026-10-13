@@ -14,9 +14,14 @@ export async function buildMunicipalCostReport(db: PrismaClient, actor: CostActo
   let title: string;
   if (input.movementId) {
     const movement = await db.municipalCostMovement.findUnique({ where: { id: input.movementId }, include: { source: true, allocations: { include: { object: true, item: true } } } });
-    if (!movement || movement.source.financialYearId !== input.yearId) throw new MunicipalCostError("Nota de custo não pertence ao exercício.");
-    await db.$transaction(tx => assertCostScope(tx, actor, movement.source.financialYearId, movement.source.budgetUnitId));
-    title = `Nota de ${movement.kind === "REVERSAL" ? "estorno" : movement.kind === "RESTORATION" ? "desfazimento de estorno" : "apropriação"} — ${movement.id}`;
+    const recognitionYearId = movement && (movement.snapshot as Prisma.JsonObject).recognitionFinancialYearId;
+    if (!movement || (movement.source.financialYearId !== input.yearId && recognitionYearId !== input.yearId)) throw new MunicipalCostError("Nota de custo não pertence ao exercício de origem ou reconhecimento.");
+    await db.$transaction(async tx => {
+      const origin = await assertCostScope(tx, actor, movement.source.financialYearId, movement.source.budgetUnitId);
+      const selected = await assertCostScope(tx, actor, input.yearId, movement.source.budgetUnitId);
+      if (origin.governmentEntityId !== selected.governmentEntityId) throw new MunicipalCostError("Nota e exercício divergem no ente.");
+    });
+    title = `Nota de ${movement.kind === "REVERSAL" ? "estorno" : movement.kind === "RESTORATION" ? "desfazimento de estorno" : "apropriação"} — ${movement.id}${recognitionYearId && recognitionYearId !== movement.source.financialYearId ? ` — origem ${movement.source.financialYearId} / reconhecimento ${String(recognitionYearId)}` : ""}`;
     let memory = movement.snapshot as Prisma.JsonObject;
     while (!Array.isArray(memory.definitions) && memory.previousSnapshot && typeof memory.previousSnapshot === "object" && !Array.isArray(memory.previousSnapshot)) memory = memory.previousSnapshot as Prisma.JsonObject;
     for (const row of movement.allocations) {
@@ -35,6 +40,7 @@ export async function buildMunicipalCostReport(db: PrismaClient, actor: CostActo
       for (const reduction of source.reductions) rows.push(["DEVOLUÇÃO DA ORIGEM", reduction.id, reduction.date.slice(0, 10), `-${reduction.amount}`, "", "", `${reduction.reason}; memória ${JSON.stringify(reduction.snapshot)}`]);
     }
     for (const group of data.byType) rows.push([`TOTAL ${group.type}`, "", "", group.expense, group.allocated, group.pending, "Despesa ativa, apropriado no período e saldo atual"]);
+    for (const correction of data.priorYearCorrections) rows.push([`CORREÇÃO DE EXERCÍCIO ANTERIOR ${correction.kind}`, correction.id, `${correction.expenseDate.slice(0, 10)} / ${correction.date.slice(0, 10)}`, correction.kind === "SOURCE_REDUCTION" ? correction.amount : "", correction.kind !== "SOURCE_REDUCTION" ? correction.amount : "", "", `Origem ${correction.originFinancialYearId}; reconhecimento ${correction.recognitionFinancialYearId}; UG ${correction.budgetUnitId}; ${correction.reason}. Movimento histórico identificado separadamente dos totais das origens do exercício.`]);
     const total = data.byType.reduce((sum, group) => ({ expense: sum.expense.plus(group.expense), allocated: sum.allocated.plus(group.allocated), pending: sum.pending.plus(group.pending) }), { expense: new Prisma.Decimal(0), allocated: new Prisma.Decimal(0), pending: new Prisma.Decimal(0) });
     rows.push(["TOTAL GERAL", "", "", total.expense.toFixed(2), total.allocated.toFixed(2), total.pending.toFixed(2), ""]);
   }

@@ -36,6 +36,17 @@ async function costPeriod(tx: Tx, financialYearId: string, date: Date) {
   await assertAccountingPeriodOpen(tx, financialYearId, date);
 }
 
+/** Keep the acquisition/source year intact and recognize a later fact in its own entity-year. */
+export async function resolveCostRecognitionYear(tx: Tx, actor: CostActor, originFinancialYearId: string, budgetUnitId: string | null, date: Date) {
+  if (!Number.isFinite(date.getTime())) throw new MunicipalCostError("Data do fato de custos inválida.");
+  const originYear = await assertCostScope(tx, actor, originFinancialYearId, budgetUnitId);
+  const year = await tx.financialYear.findUnique({ where: { governmentEntityId_year: { governmentEntityId: originYear.governmentEntityId!, year: date.getUTCFullYear() } } });
+  if (!year) throw new MunicipalCostError("Fato de custos exige exercício da mesma entidade na data do movimento.");
+  await assertCostScope(tx, actor, year.id, budgetUnitId);
+  await costPeriod(tx, year.id, date);
+  return year;
+}
+
 async function policyFor(tx: Tx, governmentEntityId: string, date: Date) {
   return tx.municipalCostPolicy.findFirst({ where: { governmentEntityId, effectiveFrom: { lte: date } }, orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }, { id: "desc" }] });
 }
@@ -91,18 +102,21 @@ export async function municipalCostSourceCeiling(tx: Tx, source: { id: string; a
 export async function reduceMunicipalCostSource(tx: Tx, actor: CostActor, input: { sourceId: string; date: Date; amount: Prisma.Decimal; reason: string; idempotencyKey: string; evidence: unknown }) {
   const origin = await tx.municipalCostSource.findUniqueOrThrow({ where: { id: input.sourceId } });
   await assertCostScope(tx, actor, origin.financialYearId, origin.budgetUnitId);
-  await lockCostYear(tx, origin.financialYearId);
-  await tx.$queryRaw`SELECT id FROM "MunicipalCostSource" WHERE id=${origin.id} FOR UPDATE`;
   const requestHash = fingerprint({ ...input, amount: input.amount.toString(), actorId: actor.usuarioId });
   const replay = await tx.municipalCostSourceReduction.findUnique({ where: { idempotencyKey: required(input.idempotencyKey, "Chave da redução") } });
   if (replay) { if ((replay.snapshot as Prisma.JsonObject).requestHash !== requestHash) throw new MunicipalCostError("Chave de redução já utilizada com outro conteúdo."); return replay; }
-  await costPeriod(tx, origin.financialYearId, input.date);
+  const recognitionYear = await resolveCostRecognitionYear(tx, actor, origin.financialYearId, origin.budgetUnitId, input.date);
+  await lockCostYear(tx, origin.financialYearId);
+  if (recognitionYear.id !== origin.financialYearId) await lockCostYear(tx, recognitionYear.id);
+  await tx.$queryRaw`SELECT id FROM "MunicipalCostSource" WHERE id=${origin.id} FOR UPDATE`;
+  const concurrentReplay = await tx.municipalCostSourceReduction.findUnique({ where: { idempotencyKey: input.idempotencyKey.trim() } });
+  if (concurrentReplay) { if ((concurrentReplay.snapshot as Prisma.JsonObject).requestHash !== requestHash) throw new MunicipalCostError("Chave de redução já utilizada com outro conteúdo."); return concurrentReplay; }
   const source = await tx.municipalCostSource.findUniqueOrThrow({ where: { id: origin.id } });
   const reason = required(input.reason, "Justificativa da redução");
   if (source.status !== "ACTIVE" || input.date < source.expenseDate || !input.amount.isFinite() || input.amount.lte(0) || input.amount.decimalPlaces() > 2) throw new MunicipalCostError("Redução exige origem ativa, data posterior e valor positivo em centavos.");
   const ceiling = (await municipalCostSourceCeiling(tx, source)).minus(input.amount);
   if (ceiling.lt(await municipalCostPosition(tx, source.id))) throw new MunicipalCostError("Estorne as apropriações excedentes antes de devolver o material; o custo não pode superar o consumo remanescente.");
-  const reduction = await tx.municipalCostSourceReduction.create({ data: { sourceId: source.id, date: input.date, amount: input.amount, reason, actorId: actor.usuarioId, idempotencyKey: input.idempotencyKey.trim(), snapshot: json({ requestHash, evidence: input.evidence, remainingAmount: ceiling.toFixed(2) }) } });
+  const reduction = await tx.municipalCostSourceReduction.create({ data: { sourceId: source.id, date: input.date, amount: input.amount, reason, actorId: actor.usuarioId, idempotencyKey: input.idempotencyKey.trim(), snapshot: json({ requestHash, evidence: input.evidence, originFinancialYearId: source.financialYearId, recognitionFinancialYearId: recognitionYear.id, remainingAmount: ceiling.toFixed(2) }) } });
   await writeAuditEvent(tx, { actorUsuarioId: actor.usuarioId, eventType: auditEventTypes.administrativeMutation, targetType: "MUNICIPAL_COST_SOURCE_REDUCTION", targetId: reduction.id });
   return reduction;
 }
@@ -156,8 +170,9 @@ export async function correctMunicipalCost(db: PrismaClient, actor: CostActor, i
     const requestHash = fingerprint({ movementId: original.id, date: input.date.toISOString(), reason, kind: input.kind });
     const replay = await tx.municipalCostMovement.findUnique({ where: { idempotencyKey: key } });
     if (replay) { if ((replay.snapshot as Prisma.JsonObject).requestHash !== requestHash || replay.sourceId !== source.id) throw new MunicipalCostError("Chave já usada com outra correção."); return replay; }
-    await costPeriod(tx, source.financialYearId, input.date);
+    const recognitionYear = await resolveCostRecognitionYear(tx, actor, source.financialYearId, source.budgetUnitId, input.date);
     await lockCostYear(tx, original.source.financialYearId);
+    if (recognitionYear.id !== original.source.financialYearId) await lockCostYear(tx, recognitionYear.id);
     await tx.$queryRaw`SELECT id FROM "MunicipalCostSource" WHERE id = ${original.sourceId} FOR UPDATE`;
     source = await tx.municipalCostSource.findUniqueOrThrow({ where: { id: original.sourceId } });
     const concurrentReplay = await tx.municipalCostMovement.findUnique({ where: { idempotencyKey: key } });
@@ -167,7 +182,7 @@ export async function correctMunicipalCost(db: PrismaClient, actor: CostActor, i
     const allocations = original.allocations.map(row => ({ objectId: row.objectId, itemId: row.itemId, amount: row.amount.negated() }));
     const balance = (await municipalCostPosition(tx, source.id)).plus(allocations.reduce((sum, row) => sum.plus(row.amount), new Prisma.Decimal(0)));
     if (balance.lt(0) || balance.gt(await municipalCostSourceCeiling(tx, source))) throw new MunicipalCostError("A correção ultrapassa a posição apropriada ou o teto da origem.");
-    const correction = await tx.municipalCostMovement.create({ data: { sourceId: source.id, kind: input.kind, date: input.date, reason, actorId: actor.usuarioId, idempotencyKey: key, referenceMovementId: original.id, snapshot: json({ requestHash, referenceMovementId: original.id, previousSnapshot: original.snapshot, allocations: allocations.map(row => ({ ...row, amount: row.amount.toFixed(2) })) }), allocations: { create: allocations } } });
+    const correction = await tx.municipalCostMovement.create({ data: { sourceId: source.id, kind: input.kind, date: input.date, reason, actorId: actor.usuarioId, idempotencyKey: key, referenceMovementId: original.id, snapshot: json({ requestHash, referenceMovementId: original.id, originFinancialYearId: source.financialYearId, recognitionFinancialYearId: recognitionYear.id, previousSnapshot: original.snapshot, allocations: allocations.map(row => ({ ...row, amount: row.amount.toFixed(2) })) }), allocations: { create: allocations } } });
     await writeAuditEvent(tx, { actorUsuarioId: actor.usuarioId, eventType: auditEventTypes.administrativeMutation, targetType: "MUNICIPAL_COST_MOVEMENT", targetId: correction.id });
     return correction;
   });

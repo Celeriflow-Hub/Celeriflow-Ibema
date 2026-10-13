@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { FinanceActor } from "@/lib/financeiro";
-import { assertPublishedAccountClassification } from "@/lib/financeiro/account-catalog";
+import { resolveAccountClassificationSnapshots } from "@/lib/financeiro/account-catalog";
 import { taxScopeSnapshot } from "./scope";
 
 export type TaxAccountingProfileInput = {
@@ -39,8 +39,8 @@ export async function configureTaxAccountingProfile(db: PrismaClient, actor: Fin
       const attributes = taxScopeSnapshot(entries[0]?.attributes);
       if (entries.length !== 1 || attributes.operational !== true || attributes.pocOnly !== false || attributes.informationNature !== "P" || attributes.balanceNature !== (index === 1 ? "C" : "D")) throw new Error("Contas exigem vínculo municipal único, natureza patrimonial e D/C compatível.");
     }
-    await assertPublishedAccountClassification(tx, accounts.map(id => ({ id })), input.effectiveFrom);
-    await assertPublishedAccountClassification(tx, accounts.map(id => ({ id })), input.effectiveUntil);
+    await resolveAccountClassificationSnapshots(tx, accounts.map(id => ({ id })), input.effectiveFrom, binding);
+    await resolveAccountClassificationSnapshots(tx, accounts.map(id => ({ id })), input.effectiveUntil, binding);
     const overlapping = await tx.taxRegistryEntry.findMany({ where: { entityType: "TAX", entityId: input.taxId, category: "ACCOUNTING_PROFILE", status: "ATIVO", effectiveFrom: { lte: input.effectiveUntil }, OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: input.effectiveFrom } }], data: { path: ["budgetUnitId"], equals: input.budgetUnitId } } });
     const replaced = new Set(overlapping.map(entry => taxScopeSnapshot(entry.data).supersedesEntryId).filter((id): id is string => typeof id === "string"));
     const current = overlapping.filter(entry => !replaced.has(entry.id));
@@ -80,8 +80,8 @@ export async function configureTaxDebtAccountingProfile(db: PrismaClient, actor:
       const attributes = taxScopeSnapshot(entries[0]?.attributes);
       if (entries.length !== 1 || attributes.operational !== true || attributes.pocOnly !== false || attributes.informationNature !== "P" || attributes.balanceNature !== "D" || accounts.find(account => account.id === id)?.type !== (index === 2 ? "VPD" : "Ativo")) throw new Error("Perfil DA exige direitos analíticos de ativo e VPD de extinção, com natureza patrimonial/devedora.");
     }
-    await assertPublishedAccountClassification(tx, ids.map(id => ({ id })), input.effectiveFrom);
-    await assertPublishedAccountClassification(tx, ids.map(id => ({ id })), input.effectiveUntil);
+    await resolveAccountClassificationSnapshots(tx, ids.map(id => ({ id })), input.effectiveFrom, binding);
+    await resolveAccountClassificationSnapshots(tx, ids.map(id => ({ id })), input.effectiveUntil, binding);
     const overlapping = await tx.taxRegistryEntry.findMany({ where: { entityType: "TAX", entityId: input.taxId, category: "DEBT_ACCOUNTING_PROFILE", status: "ATIVO", effectiveFrom: { lte: input.effectiveUntil }, OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: input.effectiveFrom } }], data: { path: ["budgetUnitId"], equals: input.budgetUnitId } } });
     const replaced = new Set(overlapping.map(entry => taxScopeSnapshot(entry.data).supersedesEntryId));
     const current = overlapping.filter(entry => !replaced.has(entry.id));

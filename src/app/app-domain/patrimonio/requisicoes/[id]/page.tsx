@@ -2,16 +2,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
-import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { canViewModule, getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { MaterialRequestWorkflowClient } from "./MaterialRequestWorkflowClient";
 
 export default async function RequisicaoMaterialDetalhePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { prisma } = await getTenantContextForModule("PATRIMONIO");
+  const { prisma, user } = await getTenantContextForModule("PATRIMONIO");
   const request = await prisma.materialRequest.findUnique({
     where: { id },
     include: {
-      department: { select: { name: true } },
+      department: { select: { name: true, secretariatId: true } },
       requester: { select: { name: true } },
       items: {
         orderBy: { createdAt: "asc" },
@@ -36,6 +36,8 @@ export default async function RequisicaoMaterialDetalhePage({ params }: { params
     },
     orderBy: [{ warehouse: { name: "asc" } }, { batchNumber: "asc" }],
   });
+  const financeEnabled = canViewModule(user, "FINANCEIRO") && Boolean(await prisma.configuracaoModulo.count({ where: { codigo: "FINANCEIRO", ativo: true } }));
+  const settlements = financeEnabled ? await prisma.settlement.findMany({ where: { status: "Liquidado", commitment: { appropriation: { budgetUnit: { secretariatId: request.department.secretariatId }, ...(isSystemAdministrator(user) ? {} : { budgetUnitId: { in: user.allowedBudgetUnitIds } }) }, OR: [{ purchaseReceiptId: { not: null } }, { appropriation: { expenseNature: { code: { startsWith: "3.3.90.30" } } } }] } }, include: { commitment: { select: { number: true } } }, orderBy: [{ date: "desc" }, { id: "asc" }], take: 200 }) : [];
 
   return (
     <PageFrame className="max-w-5xl space-y-2">
@@ -56,6 +58,7 @@ export default async function RequisicaoMaterialDetalhePage({ params }: { params
           })),
         }}
         stocks={stocks}
+        settlements={settlements.map(settlement => ({ id: settlement.id, label: `Empenho ${settlement.commitment.number} · ${settlement.date.toISOString().slice(0, 10)} · R$ ${settlement.valueDecimal?.toFixed(2) ?? "não conciliado"}` }))}
       />
     </PageFrame>
   );

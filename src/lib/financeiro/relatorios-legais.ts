@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { MUNICIPALITY_NAME } from "@/lib/municipality-identity";
 import { financialUnitFilter, resolveFinancialReportScope } from "./report-scope";
+import { readPersonnelFiscalPosition } from "./personnel-fiscal";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -312,45 +313,21 @@ export async function generateRREO(db: Db, filter: ReportFilter) {
 
 // --- Relatório de Gestão Fiscal (RGF - Despesa com Pessoal / LRF) ---
 export async function generateRGF(db: Db, filter: ReportFilter) {
-  filter = { ...filter, ...await resolveFinancialReportScope(db, filter.financialYearId, filter) };
-  const revenues = await db.revenue.findMany({
-    where: {
-      financialYearId: filter.financialYearId,
-      stage: "ARRECADADA",
-      classification: { not: "INTRAORCAMENTARIA" },
-      ...(filter.budgetUnitIds ? { budgetUnitId: { in: filter.budgetUnitIds } } : {}),
-      ...(filter.startDate || filter.endDate ? { date: dateFilter(filter) } : {}),
-    },
-    select: { valueDecimal: true, value: true, classification: true },
-  });
-
-  const rcl = revenues.reduce((sum, r) => sum + Number(r.valueDecimal ?? r.value) * (r.classification === "REDUTORA" ? -1 : 1), 0);
-
-  const commitments = await db.commitment.findMany({
-    where: {
-      appropriation: {
-        financialYearId: filter.financialYearId,
-        expenseNature: { code: { startsWith: "3.1" } },
-        ...(filter.budgetUnitIds ? { budgetUnitId: { in: filter.budgetUnitIds } } : {}),
-      },
-      status: { in: ["Emitido", "Liquidado", "Pago"] },
-      ...(filter.startDate || filter.endDate ? { date: dateFilter(filter) } : {}),
-    },
-    select: { valueDecimal: true, value: true },
-  });
-
-  const personnelExpense = commitments.reduce((sum, c) => sum + Number(c.valueDecimal ?? c.value), 0);
-  const percentageOfRcl = rcl > 0 ? (personnelExpense / rcl) * 100 : 0;
-  const legalLimitPercentage = 54.0;
-  const alertLimitPercentage = 48.6;
-
+  const scope = await resolveFinancialReportScope(db, filter.financialYearId, filter);
+  if (filter.startDate) throw new Error("Pessoal/RCL usa janela de 12 competências; informe somente o corte mensal final.");
+  const now = new Date();
+  const through = filter.endDate ?? (scope.year === now.getUTCFullYear() ? now.getUTCMonth() ? new Date(Date.UTC(scope.year, now.getUTCMonth(), 1) - 1) : new Date(Date.UTC(scope.year, 0, 1)) : new Date(Date.UTC(scope.year + 1, 0, 1) - 1));
+  const position = await readPersonnelFiscalPosition(db, { financialYearId: filter.financialYearId, through, governmentEntityId: scope.governmentEntityId ?? undefined, budgetUnitIds: scope.budgetUnitIds });
+  const numeric = (value: string | null) => value === null ? null : Number(value);
   return {
-    receitaCorrenteLiquida: rcl,
-    despesaTotalPessoal: personnelExpense,
-    percentualAtingido: Number(percentageOfRcl.toFixed(2)),
-    limiteLegal: legalLimitPercentage,
-    limiteAlerta: alertLimitPercentage,
-    situacao: percentageOfRcl > legalLimitPercentage ? "EXCEDIDO" : percentageOfRcl > alertLimitPercentage ? "ALERTA" : "REGULAR",
+    receitaCorrenteLiquida: numeric(position.adjustedRcl),
+    despesaTotalPessoal: numeric(position.personnel),
+    percentualAtingido: numeric(position.percentage),
+    limiteLegal: numeric(position.legalLimit),
+    limitePrudencial: numeric(position.prudentialLimit),
+    limiteAlerta: numeric(position.alertLimit),
+    situacao: position.status,
+    memoriaFiscal: position,
   };
 }
 
@@ -607,7 +584,7 @@ export async function generatePCA(db: Db, filter: ReportFilter) {
     {
       num: 3,
       titulo: "Cumprimento dos Limites Legais Fiscais (LRF)",
-      conteudo: `A Despesa Total com Pessoal encerrou o período em ${rgf.percentualAtingido}% da RCL, em situação ${rgf.situacao} perante o limite legal de ${rgf.limiteLegal}%.`,
+      conteudo: rgf.situacao === "NOT_EVALUATED" ? `Despesa com pessoal/RCL não apurada: ${rgf.memoriaFiscal.issues.join(" ")}` : `A Despesa Total com Pessoal encerrou as 12 competências em ${rgf.percentualAtingido}% da RCL ajustada, em situação ${rgf.situacao} perante o limite legal configurado de ${rgf.limiteLegal}%.`,
     },
   ];
 

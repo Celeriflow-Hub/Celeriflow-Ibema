@@ -19,6 +19,10 @@ test("contabilidade filtra Diario, Razao e Balancete pela entidade e UG sem mist
     });
     assert.equal(posted.governmentEntityId, "ente");
     assert.equal(posted.budgetUnitId, "ug");
+    await db.bankAccount.create({ data: { id: "canonical-restricted-bank", bankName: "Origem fora da UG", agency: "0001", accountNumber: "canonical-restricted", budgetUnitId: "ug-restrita" } });
+    await assert.rejects(postAccountingTransaction(db, { usuarioId: "ana", employeeId: "servidora-ana", allowedBudgetUnitIds: ["ug"] }, {
+      financialYearId: "ano", governmentEntityId: "ente", budgetUnitId: "ug", date: new Date("2026-01-01"), history: "Escopo explícito divergente da origem", sourceModule: "PLANEJAMENTO", sourceType: "BANK_ACCOUNT_OPENING_BALANCE", sourceId: "canonical-restricted-bank", eventType: "PLANNING_BUDGET_OPENING_EXPENSE", lines: [{ accountId: "debito", type: "Débito", value: "5.00" }, { accountId: "credito", type: "Crédito", value: "5.00" }],
+    }), /unidade gestora informada diverge da origem/i);
     await assert.rejects(postAccountingTransaction(db, { usuarioId: "ana", employeeId: "servidora-ana", allowedBudgetUnitIds: ["ug"] }, {
       financialYearId: "ano", governmentEntityId: "ente", budgetUnitId: "ug", date: new Date("2026-01-01T00:00:00.000Z"), history: "Abertura contábil com escopo", sourceModule: "PLANEJAMENTO", sourceType: "PLANNING_BUDGET", eventType: "PLANNING_BUDGET_OPENING_EXPENSE", idempotencyKey: "scope:posted:opening", lines: [{ accountId: "debito", type: "Débito", value: "7.00" }, { accountId: "credito", type: "Crédito", value: "7.00" }],
     }), /chave contábil.*outros dados/i);
@@ -71,6 +75,11 @@ test("contabilidade filtra Diario, Razao e Balancete pela entidade e UG sem mist
     const trial = await generateBalanceteContabil(db, { financialYearId: "ano", budgetUnitId: "ug" });
     assert.equal(trial.find((account) => account.id === "debito")?.debitTotal, 130);
     assert.equal(trial.find((account) => account.id === "credito")?.creditTotal, 130);
+    const monthly = await generateInternalReportDataset(db, "BALANCETE_MENSAL", "ano", 2026, { month: 4 }, { budgetUnitIds: ["ug"] });
+    const debitRow = monthly.sections[1].rows.find(row => row.contaCodigo === "ISOLATED.D");
+    assert.equal(debitRow?.totalDebitos, 125);
+    const noUnits = await generateInternalReportDataset(db, "BALANCETE_MENSAL", "ano", 2026, { month: 4 }, { budgetUnitIds: [] });
+    assert.ok(noUnits.sections[1].rows.every(row => row.totalDebitos === 0 && row.totalCreditos === 0));
 
     await assert.rejects(db.accountingTransaction.create({
       data: {

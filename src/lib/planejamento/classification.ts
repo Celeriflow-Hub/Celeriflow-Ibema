@@ -79,14 +79,30 @@ export async function planningLineClassification(tx: Prisma.TransactionClient, p
   if (!piece.catalogVersionId) { await tx.planningInstrumentSource.upsert({ where: { instrumentId_resourceSourceId: { instrumentId: piece.id, resourceSourceId: line.resourceSourceId } }, create: { instrumentId: piece.id, resourceSourceId: line.resourceSourceId }, update: {} }); return null; }
   const version = await tx.planningCatalogVersion.findUniqueOrThrow({ where: { id: piece.catalogVersionId } });
   if (version.status !== "PUBLISHED" || version.year < piece.startYear || version.year > piece.endYear) throw new Error("Selecione catálogo publicado e vigente na peça.");
-  const entry = async (kind: string, id?: string | null) => { if (!id) return null; const found = await tx.planningCatalogEntry.findUnique({ where: { versionId_kind_canonicalId: { versionId: version.id, kind, canonicalId: id } } }); if (!found) throw new Error(`Classificação ${kind} ausente na versão selecionada.`); return found; };
+  const owner = await tx.planningInstrument.findUniqueOrThrow({ where: { id: piece.id }, select: { governmentEntityId: true } });
+  const entry = async (kind: string, id?: string | null) => {
+    if (!id) return null;
+    const found = await tx.planningCatalogEntry.findUnique({ where: { versionId_kind_canonicalId: { versionId: version.id, kind, canonicalId: id } } });
+    if (!found) throw new Error(`Classificação ${kind} ausente na versão selecionada.`);
+    const attributes = found.attributes as Prisma.JsonObject;
+    if (attributes.governmentEntityId && attributes.governmentEntityId !== owner.governmentEntityId) throw new Error("Classificação municipal pertence a outro ente.");
+    if (attributes.budgetUnitId && (!("budgetUnitId" in line) || attributes.budgetUnitId !== line.budgetUnitId)) throw new Error("Classificação municipal exige a UG da edição adotada.");
+    if (attributes.pocOnly === true && process.env.CELERIFLOW_ACCOUNTING_MODE !== "POC") throw new Error("Classificação de ensaio não pode ser utilizada na peça municipal.");
+    return found;
+  };
   const source = (await entry("SOURCE", line.resourceSourceId))!;
   await tx.planningInstrumentSource.upsert({ where: { instrumentId_resourceSourceId: { instrumentId: piece.id, resourceSourceId: line.resourceSourceId } }, create: { instrumentId: piece.id, resourceSourceId: line.resourceSourceId, catalogEntryId: source.id }, update: {} });
   const revenue = await entry("REVENUE", line.revenueNatureId), expense = await entry("EXPENSE", line.expenseNatureId);
   const tree = [];
   for (const selected of [revenue, expense]) {
     let node = selected;
-    while (node) { tree.push({ kind: node.kind, code: node.code, parentCode: node.parentCode, degree: node.degree, name: node.name }); node = node.parentCode ? await tx.planningCatalogEntry.findUniqueOrThrow({ where: { versionId_kind_code: { versionId: version.id, kind: node.kind, code: node.parentCode } } }) : null; }
+    const visited = new Set<string>();
+    while (node) {
+      if (visited.has(node.id)) throw new Error("Ciclo na hierarquia de classificações; concilie a árvore da edição.");
+      visited.add(node.id);
+      tree.push({ kind: node.kind, code: node.code, parentCode: node.parentCode, degree: node.degree, name: node.name });
+      node = node.parentCode ? await tx.planningCatalogEntry.findUniqueOrThrow({ where: { versionId_kind_code: { versionId: version.id, kind: node.kind, code: node.parentCode } } }) : null;
+    }
   }
   return jsonValue({ versionId: version.id, year: version.year, normativeReference: version.normativeReference, sourceHash: version.sourceHash, source, revenue, expense, tree });
 }

@@ -141,13 +141,14 @@ export async function dispatchHealthStockTransfer(context: AppContext, raw: unkn
 
 export async function receiveHealthStockTransfer(context: AppContext, transferId: string) {
   return context.prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT id FROM "HealthStockTransfer" WHERE id=${transferId} FOR UPDATE`;
     const transfer = await tx.healthStockTransfer.findUnique({ where: { id: transferId }, include: { items: true } });
     if (!transfer) throw new HealthStockError("Transferência não encontrada.");
     await scopedWarehouse(tx, context, transfer.destinationWarehouseId);
     if (transfer.status === "RECEIVED") return { id: transfer.id, status: transfer.status };
     if (transfer.status !== "IN_TRANSIT") throw new HealthStockError("Somente transferências em trânsito podem ser recebidas.");
     for (const item of transfer.items) {
-      const { movement } = await applyStockMovement(tx, { kind: "ENTRY", sourceType: "STOCK_TRANSFER_RECEIPT", warehouseId: transfer.destinationWarehouseId, materialId: item.materialId, batchNumber: item.batchNumber, expirationDate: item.expirationDate, quantity: item.quantity, reason: `ACEITE_TRANSFERENCIA:${transfer.id}`, actor: { usuarioId: context.user.id, employeeId: context.user.employeeId } });
+      const { movement } = await applyStockMovement(tx, { kind: "ENTRY", sourceType: "STOCK_TRANSFER_RECEIPT", transferOriginMovementId: item.departureMovementId, warehouseId: transfer.destinationWarehouseId, materialId: item.materialId, batchNumber: item.batchNumber, expirationDate: item.expirationDate, quantity: item.quantity, reason: `ACEITE_TRANSFERENCIA:${transfer.id}`, actor: { usuarioId: context.user.id, employeeId: context.user.employeeId } });
       await tx.healthStockTransferItem.update({ where: { id: item.id }, data: { arrivalMovementId: movement.id } });
     }
     return tx.healthStockTransfer.update({ where: { id: transfer.id }, data: { status: "RECEIVED", receivedAt: new Date(), receivedByUsuarioId: context.user.id }, select: { id: true, status: true } });

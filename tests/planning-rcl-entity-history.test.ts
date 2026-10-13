@@ -28,3 +28,17 @@ test("RCL não utiliza fechamentos da Câmara nem de exercícios legados para co
     await assert.rejects(readPlanningRclExecution(f.context, "ente", [{ ...references[0], budgetUnitId: "UG-ALHEIA" }], cutoff), /fora da entidade/);
   } finally { await f.close(); }
 });
+
+test("RCL recusa corte parcial mesmo com as 12 competências do ente marcadas como fechadas", async () => {
+  const f = await createPlanningAccountingFixture();
+  try {
+    const prior = await f.db.financialYear.create({ data: { year: 2025, governmentEntityId: "ente", status: "Aberto", startDate: new Date("2025-01-01"), endDate: new Date("2025-12-31") } });
+    for (let at = 0; at < 12; at++) {
+      const competence = new Date(Date.UTC(2025, 1 + at, 1));
+      await f.db.monthlyAccountingClose.create({ data: { financialYearId: competence.getUTCFullYear() === 2025 ? prior.id : "ano", competence, status: "FECHADO" } });
+    }
+    const result = await readPlanningRclExecution(f.context, "ente", [{ budgetUnitId: "ug", resourceSourceId: "livre", revenueNature: { id: "receita" } }], "2026-01-15");
+    assert.equal(result.status, "INCOMPLETE"); assert.equal(result.total, null);
+    assert.ok(result.rows.some(row => "situação" in row && row.situação === "Corte não encerra competência mensal completa"));
+  } finally { await f.close(); }
+});

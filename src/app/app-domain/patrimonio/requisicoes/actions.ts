@@ -7,9 +7,12 @@ import {
   issueMaterialRequestItem,
   ProcurementLifecycleError,
 } from "@/lib/compras/procurement-lifecycle";
-import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { StockValuationError } from "@/lib/patrimonio/stock-valuation";
+import { MunicipalCostError } from "@/lib/financeiro/cost-ledger";
+import { FinanceError } from "@/lib/financeiro";
 
 type ActionResult = { error?: string; message?: string };
 
@@ -28,6 +31,7 @@ const fullIssueInput = z.object({
   stockByItem: z.array(z.object({
     requestItemId: z.string().trim().min(1, "Item de requisição inválido."),
     stockId: z.string().trim().min(1, "Selecione a posição de estoque."),
+    settlementId: z.string().trim().min(1).optional(),
   })),
 });
 
@@ -64,30 +68,33 @@ export async function approveMaterialRequestAction(requestId: string, quantities
   }
 }
 
-export async function issueMaterialRequestItemAction(data: { requestItemId: string; stockId: string; quantity: number }): Promise<ActionResult> {
+export async function issueMaterialRequestItemAction(data: { requestItemId: string; stockId: string; quantity: number; settlementId?: string }): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("PATRIMONIO", "create");
-    await issueMaterialRequestItem(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, data);
+    if (data.settlementId) await getTenantContextForModuleOperation("FINANCEIRO", "update");
+    await issueMaterialRequestItem(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, data);
     revalidatePath("/patrimonio/requisicoes");
     revalidatePath("/patrimonio/materiais");
     return {};
   } catch (error) {
-    return { error: error instanceof ProcurementLifecycleError ? error.message : "Não foi possível atender a requisição." };
+    return { error: error instanceof ProcurementLifecycleError || error instanceof StockValuationError || error instanceof MunicipalCostError || error instanceof FinanceError ? error.message : "Não foi possível atender a requisição." };
   }
 }
 
 export async function issueMaterialRequestInFullAction(data: {
   requestId: string;
-  stockByItem: Array<{ requestItemId: string; stockId: string }>;
+  stockByItem: Array<{ requestItemId: string; stockId: string; settlementId?: string }>;
 }): Promise<ActionResult> {
   const parsed = fullIssueInput.safeParse(data);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados da entrega inválidos." };
 
   try {
     const context = await getTenantContextForModuleOperation("PATRIMONIO", "create");
+    if (parsed.data.stockByItem.some(item => item.settlementId)) await getTenantContextForModuleOperation("FINANCEIRO", "update");
     await issueMaterialRequestInFull(context.prisma, {
       usuarioId: context.user.id,
       employeeId: context.user.employeeId,
+      allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds,
     }, parsed.data);
     revalidatePath("/patrimonio/requisicoes");
     revalidatePath(`/patrimonio/requisicoes/${parsed.data.requestId}`);
@@ -95,6 +102,6 @@ export async function issueMaterialRequestInFullAction(data: {
     revalidatePath("/patrimonio");
     return { message: "Entrega integral registrada." };
   } catch (error) {
-    return { error: error instanceof ProcurementLifecycleError ? error.message : "Não foi possível registrar a entrega integral." };
+    return { error: error instanceof ProcurementLifecycleError || error instanceof StockValuationError || error instanceof MunicipalCostError || error instanceof FinanceError ? error.message : "Não foi possível registrar a entrega integral." };
   }
 }

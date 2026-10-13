@@ -4,8 +4,9 @@ import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
 import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
 import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
-import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { canPerformModuleOperation, getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { RunConsistencyButton } from "./RunConsistencyButton";
+import { IdentityReconciliationForm } from "./IdentityReconciliationForm";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export default async function QualidadePage({ searchParams }: { searchParams: Pr
   const params = await searchParams;
   const page = Math.max(1, Number.parseInt(firstParam(params.page) || "1", 10) || 1);
   const requestedRunId = firstParam(params.run);
-  const { prisma } = await getTenantContextForModule("CADASTROS");
+  const { prisma, user } = await getTenantContextForModule("CADASTROS");
   const [runs, selectedRun] = await Promise.all([
     prisma.masterDataConsistencyRun.findMany({
       where: { area: "CADASTROS" },
@@ -47,6 +48,7 @@ export default async function QualidadePage({ searchParams }: { searchParams: Pr
   return (
     <PageFrame className="flex h-full min-h-0 flex-col">
       <PageHeader title="Qualidade dos Dados" icon={<ShieldCheck className="size-4 text-emerald-700" />} action={<RunConsistencyButton />} />
+      {canPerformModuleOperation(user, "CADASTROS", "update") && <IdentityReconciliationForm />}
       <div className="mb-2 flex gap-2 overflow-x-auto">
         {runs.map((run) => (
           <Link key={run.id} href={`/cadastros/qualidade?run=${run.id}`} className={`min-w-40 rounded border bg-white px-3 py-2 text-xs ${run.id === runId ? "border-emerald-500" : "border-slate-200"}`}>

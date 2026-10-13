@@ -34,12 +34,14 @@ export async function buildControlReport(db: PrismaClient, actor: Actor, input: 
       for (const finding of plan.findings) rows.push(["Apontamento", finding.id, `${finding.title} · ${finding.status}`, `${finding.description}\nPrazo: ${finding.dueAt?.toISOString() ?? "não definido"}; responsável: ${finding.responsibleId ?? "não definido"}; GED: ${finding.evidenceDocumentId ?? "não vinculado"}`]);
     }
     for (const event of plan.events) {
+      if (event.eventType.startsWith("CONTROL_REPORT_") && plan.ownerId !== actor.usuarioId) continue;
       const snapshot = event.snapshot as Prisma.JsonObject;
       if (typeof snapshot.auditId === "string" && !visibleAuditIds.has(snapshot.auditId)) continue;
       if (event.eventType.startsWith("AUDIT_") && !visibleAuditIds.has(event.eventType === "AUDIT_SCHEDULED" ? event.id : String(snapshot.auditId))) continue;
       if (input.auditId && event.id !== input.auditId && snapshot.auditId !== input.auditId) continue;
       if (input.noticeId && event.id !== input.noticeId && snapshot.noticeId !== input.noticeId) continue;
-      rows.push([event.eventType, event.id, `${event.createdAt.toISOString()} · usuário ${event.actorId}`, `${event.reason}\nMemória congelada: ${JSON.stringify(event.snapshot)}`]);
+      const printableSnapshot = event.eventType === "CONTROL_REPORT_FINALIZED" ? Object.fromEntries(Object.entries(snapshot).filter(([key]) => key !== "pdfBase64")) : snapshot;
+      rows.push([event.eventType, event.id, `${event.createdAt.toISOString()} · usuário ${event.actorId}`, `${event.reason}\nMemória congelada: ${JSON.stringify(printableSnapshot)}`]);
     }
     const title = input.auditId ? `Auditoria, questionário, respostas e análise — ${audit!.title}` : input.noticeId ? `Notificação e respostas — ${data!.title}` : `Histórico de Controle Interno — ${plan.title}`;
     const headers = ["Tipo", "Identificador", "Referência", "Conteúdo / evidências"];

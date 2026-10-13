@@ -17,11 +17,12 @@ type RequestItem = {
 type Request = { id: string; number: string; status: string; items: RequestItem[] };
 type Stock = { id: string; materialId: string; quantity: number; batchNumber: string; warehouse: { name: string } };
 
-export function MaterialRequestWorkflowClient({ request, stocks }: { request: Request; stocks: Stock[] }) {
+export function MaterialRequestWorkflowClient({ request, stocks, settlements = [] }: { request: Request; stocks: Stock[]; settlements?: Array<{ id: string; label: string }> }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [approvedQuantities, setApprovedQuantities] = useState(() => Object.fromEntries(request.items.map((item) => [item.id, item.quantityRequested])));
   const [stockByItem, setStockByItem] = useState<Record<string, string>>({});
+  const [settlementByItem, setSettlementByItem] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState<string | null>(null);
   const canApprove = request.status === "Pendente";
   const remainingItems = request.items.filter((item) => item.quantityApproved > item.quantityDelivered);
@@ -44,7 +45,7 @@ export function MaterialRequestWorkflowClient({ request, stocks }: { request: Re
     startTransition(async () => {
       const result = await issueMaterialRequestInFullAction({
         requestId: request.id,
-        stockByItem: remainingItems.map((item) => ({ requestItemId: item.id, stockId: stockByItem[item.id] ?? "" })),
+        stockByItem: remainingItems.map((item) => ({ requestItemId: item.id, stockId: stockByItem[item.id] ?? "", ...(settlementByItem[item.id] ? { settlementId: settlementByItem[item.id] } : {}) })),
       });
       if (result.error) setFeedback(result.error);
       else router.refresh();
@@ -66,7 +67,7 @@ export function MaterialRequestWorkflowClient({ request, stocks }: { request: Re
                   <td className="p-3">{item.quantityRequested}</td>
                   <td className="p-3">{canApprove ? <Input type="number" min="0" max={item.quantityRequested} step="any" value={approvedQuantities[item.id] ?? 0} onChange={(event) => setApprovedQuantities((current) => ({ ...current, [item.id]: Number(event.target.value) }))} /> : item.quantityApproved}</td>
                   <td className="p-3">{item.quantityDelivered}</td>
-                  {canIssueInFull && <td className="p-3">{remaining > 0 ? <select value={stockByItem[item.id] ?? ""} onChange={(event) => setStockByItem((current) => ({ ...current, [item.id]: event.target.value }))} className="h-9 min-w-64 rounded-md border bg-background px-3 text-sm"><option value="">Selecione a posição</option>{availableStocks.map((stock) => <option key={stock.id} value={stock.id}>{stock.warehouse.name} · lote {stock.batchNumber || "sem lote"} · saldo {stock.quantity}</option>)}</select> : "Sem saldo pendente"}</td>}
+                  {canIssueInFull && <td className="space-y-2 p-3">{remaining > 0 ? <><select value={stockByItem[item.id] ?? ""} onChange={(event) => setStockByItem((current) => ({ ...current, [item.id]: event.target.value }))} className="h-9 min-w-64 rounded-md border bg-background px-3 text-sm"><option value="">Selecione a posição</option>{availableStocks.map((stock) => <option key={stock.id} value={stock.id}>{stock.warehouse.name} · lote {stock.batchNumber || "sem lote"} · saldo {stock.quantity}</option>)}</select>{settlements.length > 0 && <select aria-label={`Liquidação do consumo ${item.material.code}`} className="block h-9 min-w-64 rounded-md border px-3 text-sm" value={settlementByItem[item.id] ?? ""} onChange={event => setSettlementByItem(current => ({ ...current, [item.id]: event.target.value }))}><option value="">Sem vínculo financeiro de consumo</option>{settlements.map(settlement => <option key={settlement.id} value={settlement.id}>{settlement.label}</option>)}</select>}</> : "Sem saldo pendente"}</td>}
                 </tr>
               );
             })}

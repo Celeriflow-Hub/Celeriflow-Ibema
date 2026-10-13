@@ -8,6 +8,7 @@ export async function resolveFinancialReportScope(db: Db, financialYearId: strin
   const year = await db.financialYear.findUnique({ where: { id: financialYearId }, select: { year: true, governmentEntityId: true } });
   if (!year) throw new Error("Exercício financeiro não encontrado.");
   if (year.governmentEntityId && scope.governmentEntityId && year.governmentEntityId !== scope.governmentEntityId) throw new Error("A entidade solicitada diverge do exercício financeiro.");
+  if (!year.governmentEntityId && scope.governmentEntityId) throw new Error("Exercício legado sem entidade conciliada; não pode representar o exercício de um ente.");
   const governmentEntityId = year.governmentEntityId ?? scope.governmentEntityId;
   const constrained = Boolean(governmentEntityId || scope.budgetUnitId || scope.budgetUnitIds);
   if (!constrained) return { ...scope, year: year.year, fullEntity: true };

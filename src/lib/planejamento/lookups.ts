@@ -1,17 +1,50 @@
 import "server-only";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { planningEntityWhere, planningInstrumentWhere, planningLineWhere, planningUnitWhere, type PlanningContext } from "./access";
 import { AccessError, canPerformModuleOperation } from "@/lib/platform/tenant-context";
 
-export const planningLookupFields = ["governmentEntityId", "destinationEntityId", "budgetUnitId", "resourceSourceId", "revenueNatureId", "expenseNatureId", "programId", "programPPAId", "programCodes", "sourceCodes", "actionId", "actionPPAId", "objectiveId", "instrumentId", "sourceInstrumentId", "targetInstrumentId", "parentId", "catalogVersionId", "lineId", "lineCodes", "items", "selectedCodes", "creditId", "waiverId", "taxId", "documentId", "hearingId", "signerIds", "linkId", "propositionId", "lawId"] as const;
+export const planningLookupFields = ["governmentEntityId", "destinationEntityId", "budgetUnitId", "resourceSourceId", "revenueNatureId", "expenseNatureId", "programId", "programPPAId", "programCodes", "sourceCodes", "actionId", "actionPPAId", "objectiveId", "instrumentId", "sourceInstrumentId", "targetInstrumentId", "parentId", "catalogVersionId", "lineId", "lineCodes", "items", "selectedCodes", "creditId", "waiverId", "taxId", "documentId", "hearingId", "signerIds", "linkId", "propositionId", "lawId", "canonicalCatalogId", "predecessorEntryId"] as const;
 export async function planningLookup(context: PlanningContext, raw: unknown) {
-  const input = z.object({ field: z.enum(planningLookupFields), instrumentId: z.string().optional(), q: z.string().max(200).default(""), page: z.coerce.number().int().positive().default(1), operation: z.string().optional(), amendmentId: z.string().optional(), parentKind: z.enum(["PPA", "LDO", "LOA"]).optional() }).parse(raw);
+  const input = z.object({ field: z.enum(planningLookupFields), instrumentId: z.string().optional(), q: z.string().max(200).default(""), page: z.coerce.number().int().positive().default(1), operation: z.string().optional(), amendmentId: z.string().optional(), parentKind: z.enum(["PPA", "LDO", "LOA"]).optional(), catalogKind: z.enum(["ACCOUNT", "SOURCE", "REVENUE", "EXPENSE", "CNAE", "CBO", "SERVICE"]).optional(), canonicalId: z.string().optional() }).parse(raw);
   if (input.field === "signerIds" && !canPerformModuleOperation(context.user, "DOCUMENTOS", "update")) throw new AccessError("Consulta de assinantes exige autorização documental.", 403);
   const piece = input.instrumentId ? await context.prisma.planningInstrument.findFirstOrThrow({ where: { id: input.instrumentId, ...planningInstrumentWhere(context) }, include: { parent: { include: { parent: true } } } }) : null;
   const ppaId = piece?.multiYearPlanId ?? piece?.parent?.multiYearPlanId ?? piece?.parent?.parent?.multiYearPlanId ?? "";
   const text = input.q ? { contains: input.q, mode: "insensitive" as const } : undefined;
   let total = 0; let options: { id: string; name: string }[] = [];
   const pageQuery = (count: number) => ({ take: 20, skip: (Math.min(input.page, Math.max(1, Math.ceil(count / 20))) - 1) * 20 });
+  if (input.field === "canonicalCatalogId" || input.field === "predecessorEntryId") {
+    if (!input.catalogKind) throw new Error("Selecione o tipo de classificação.");
+    if (input.field === "predecessorEntryId") {
+      if (!input.canonicalId) return { options, total, page: 1 };
+      const entities = await context.prisma.governmentEntity.findMany({ where: planningEntityWhere(context), select: { id: true } });
+      const units = await context.prisma.budgetUnit.findMany({ where: planningUnitWhere(context), select: { id: true } });
+      const where = { kind: input.catalogKind, canonicalId: input.canonicalId, version: { status: "PUBLISHED" }, AND: [
+        { OR: entities.map(entity => ({ attributes: { path: ["governmentEntityId"], equals: entity.id } })) },
+        { OR: [{ attributes: { path: ["budgetUnitId"], equals: Prisma.JsonNull } }, ...units.map(unit => ({ attributes: { path: ["budgetUnitId"], equals: unit.id } }))] },
+      ], ...(text ? { OR: [{ code: text }, { name: text }, { version: { label: text } }] } : {}) };
+      total = await context.prisma.planningCatalogEntry.count({ where });
+      options = (await context.prisma.planningCatalogEntry.findMany({ where, include: { version: true }, ...pageQuery(total), orderBy: [{ version: { year: "desc" } }, { id: "asc" }] })).map(row => ({ id: row.id, name: `${row.version.year} · ${row.version.label} · ${row.code} · ${row.name}` }));
+    } else if (input.catalogKind === "CBO") {
+      const where = text ? { OR: [{ code: text }, { description: text }] } : {};
+      total = await context.prisma.healthCbo.count({ where });
+      options = (await context.prisma.healthCbo.findMany({ where, ...pageQuery(total), orderBy: [{ code: "asc" }, { id: "asc" }] })).map(row => ({ id: row.id, name: `${row.code} · ${row.description}` }));
+    } else if (input.catalogKind === "CNAE") {
+      const where = { category: "CNAE_CATALOG", status: "ATIVO", ...(text ? { OR: [{ title: text }, { entityId: text }] } : {}) };
+      total = await context.prisma.taxRegistryEntry.count({ where });
+      options = (await context.prisma.taxRegistryEntry.findMany({ where, ...pageQuery(total), orderBy: [{ entityId: "asc" }, { id: "asc" }] })).map(row => ({ id: row.id, name: `${row.entityId} · ${row.title}` }));
+    } else {
+      const where = text ? { OR: [{ code: text }, { name: text }] } : {};
+      const query = { where, ...pageQuery(0), orderBy: [{ code: "asc" as const }, { id: "asc" as const }] };
+      // Model-specific queries keep canonical identities separate even when codes coincide.
+      if (input.catalogKind === "ACCOUNT") { total = await context.prisma.accountingPlan.count({ where }); options = (await context.prisma.accountingPlan.findMany({ ...query, ...pageQuery(total) })).map(row => ({ id: row.id, name: `${row.code} · ${row.name}` })); }
+      else if (input.catalogKind === "SOURCE") { total = await context.prisma.resourceSource.count({ where }); options = (await context.prisma.resourceSource.findMany({ ...query, ...pageQuery(total) })).map(row => ({ id: row.id, name: `${row.code} · ${row.name}` })); }
+      else if (input.catalogKind === "REVENUE") { total = await context.prisma.revenueNature.count({ where }); options = (await context.prisma.revenueNature.findMany({ ...query, ...pageQuery(total) })).map(row => ({ id: row.id, name: `${row.code} · ${row.name}` })); }
+      else if (input.catalogKind === "EXPENSE") { total = await context.prisma.expenseNature.count({ where }); options = (await context.prisma.expenseNature.findMany({ ...query, ...pageQuery(total) })).map(row => ({ id: row.id, name: `${row.code} · ${row.name}` })); }
+      else { total = await context.prisma.taxServiceActivity.count({ where }); options = (await context.prisma.taxServiceActivity.findMany({ ...query, ...pageQuery(total) })).map(row => ({ id: row.id, name: `${row.code} · ${row.name}` })); }
+    }
+    return { options, total, page: Math.min(input.page, Math.max(1, Math.ceil(total / 20))) };
+  }
   if (input.field === "governmentEntityId" || input.field === "destinationEntityId") { const where = { ...(input.field === "governmentEntityId" ? planningEntityWhere(context) : { status: "ATIVA", ...(piece ? { id: { not: piece.governmentEntityId } } : {}) }), ...(text ? { OR: [{ name: text }, { code: text }] } : {}) }; total = await context.prisma.governmentEntity.count({ where }); options = (await context.prisma.governmentEntity.findMany({ where, ...pageQuery(total), orderBy: [{ name: "asc" }, { id: "asc" }] })).map((row) => ({ id: row.id, name: row.name })); }
   else if (["resourceSourceId", "revenueNatureId", "expenseNatureId"].includes(input.field) && piece?.catalogVersionId) {
     const where = { versionId: piece.catalogVersionId, kind: input.field === "resourceSourceId" ? "SOURCE" : input.field === "revenueNatureId" ? "REVENUE" : "EXPENSE", ...(text ? { OR: [{ code: text }, { name: text }] } : {}) };

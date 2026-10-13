@@ -4,11 +4,12 @@ import { useState } from "react";
 import { Ban, ClipboardList, History, Link2, RotateCcw } from "lucide-react";
 import { cancelRap, reregisterRap, trackRapPayment } from "./actions";
 
-type Year = { id: string; year: number; status: string };
+type YearIdentity = { id: string; year: number; governmentEntityId: string | null; governmentEntity: { name: string } | null };
+type Year = YearIdentity & { status: string };
 type Payable = {
   id: string;
   financialYear: Year;
-  originFinancialYear: { id: string; year: number };
+  originFinancialYear: YearIdentity;
   commitment: { id: string; number: string; history: string; supplierName: string };
   previousYear?: number;
   successorYear?: number;
@@ -48,11 +49,15 @@ export default function RestosAPagarClient({ payables, years, payments }: { paya
   }
 
   async function handleReregister(payableCarryForwardId: string) {
-    const availableYears = years.filter((year) => year.status === "Aberto").map((year) => `${year.year}`).join(", ");
+    const payable = payables.find(row => row.id === payableCarryForwardId);
+    if (!payable) return;
+    const eligibleYears = years.filter(year => year.status === "Aberto" && year.governmentEntityId === payable.originFinancialYear.governmentEntityId && year.year > payable.financialYear.year);
+    const availableYears = eligibleYears.map((year) => `${year.year}`).join(", ");
     const targetYear = window.prompt(`Informe o ano aberto de destino para reinscrição (${availableYears || "nenhum disponível"}):`);
     if (!targetYear) return;
-    const target = years.find((year) => year.year === Number(targetYear));
-    if (!target) return setNotice("Informe um exercício de destino existente.");
+    const targets = eligibleYears.filter((year) => year.year === Number(targetYear));
+    if (targets.length !== 1) return setNotice("Informe um exercício aberto e posterior do mesmo ente do RAP.");
+    const target = targets[0];
     const justification = window.prompt("Informe a justificativa obrigatória da reinscrição interna:");
     if (!justification?.trim()) return;
     const result = await reregisterRap({ payableCarryForwardId, targetFinancialYearId: target.id, justification });
@@ -65,7 +70,7 @@ export default function RestosAPagarClient({ payables, years, payments }: { paya
     <div className="grid gap-2 lg:grid-cols-[1fr_1.35fr]">
       <section className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
         <h2 className="font-bold text-slate-800">Consulta</h2>
-        <div className="grid gap-3 sm:grid-cols-2"><select value={originYear} onChange={(event) => setOriginYear(event.target.value)} className="rounded-lg border p-2 text-sm"><option value="ALL">Todos os anos de origem</option>{years.map((year) => <option key={year.id} value={year.id}>{year.year}</option>)}</select><select value={type} onChange={(event) => setType(event.target.value)} className="rounded-lg border p-2 text-sm"><option value="ALL">Todos os tipos</option><option value="PROCESSADO">Processado</option><option value="NAO_PROCESSADO">Não processado</option></select></div>
+        <div className="grid gap-3 sm:grid-cols-2"><select value={originYear} onChange={(event) => setOriginYear(event.target.value)} className="rounded-lg border p-2 text-sm"><option value="ALL">Todos os exercícios autorizados</option>{years.map((year) => <option key={year.id} value={year.id}>{year.governmentEntity?.name ?? "Legado"} · {year.year}</option>)}</select><select value={type} onChange={(event) => setType(event.target.value)} className="rounded-lg border p-2 text-sm"><option value="ALL">Todos os tipos</option><option value="PROCESSADO">Processado</option><option value="NAO_PROCESSADO">Não processado</option></select></div>
         <p className="text-sm text-slate-500">{visiblePayables.length} registro(s) encontrado(s).</p>
       </section>
       <form onSubmit={submitTracking} className="space-y-3 rounded-md border border-slate-200 bg-white p-3">

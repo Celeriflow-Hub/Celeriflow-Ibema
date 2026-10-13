@@ -3,6 +3,7 @@ import { transferPaidItbiInTransaction } from "./itbi-ownership";
 import { FinanceError, recordConfirmedRevenue, type FinanceActor } from "@/lib/financeiro";
 import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxScopeSnapshot, taxAssessmentCompensatedValue } from "./scope";
 import { recognizeTaxAssessmentInTransaction } from "./accrual-accounting";
+import { readMunicipalServiceRelationships } from "@/lib/planejamento/activity-relations";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -405,7 +406,8 @@ export async function recordIssDeclaration(
     const scope = await assessmentYearScope(tx, actor, input.competence.getUTCFullYear(), activity.taxId);
     const taxable = serviceValue.minus(deductions);
     const issValue = taxable.mul(activity.issRate).div(100).toDecimalPlaces(2);
-    const declaration = await tx.taxDeclaration.create({ data: { taxpayerId: input.taxpayerId, economicRegistrationId: input.economicRegistrationId, activityId: input.activityId, competence: input.competence, serviceValueDecimal: serviceValue, deductionValueDecimal: deductions, issValueDecimal: issValue, calculationSnapshot: { tax: activity.tax.name, rate: activity.issRate.toString(), taxableBase: taxable.toFixed(2), issValue: issValue.toFixed(2), scope: "APURACAO_INTERNA", budgetUnitId: scope.budgetUnitId, governmentEntityId: scope.governmentEntityId, financialYearId: scope.financialYear.id } } });
+    const activityRelationships = await readMunicipalServiceRelationships(tx, { governmentEntityId: scope.governmentEntityId, activityId: activity.id, date: input.competence });
+    const declaration = await tx.taxDeclaration.create({ data: { taxpayerId: input.taxpayerId, economicRegistrationId: input.economicRegistrationId, activityId: input.activityId, competence: input.competence, serviceValueDecimal: serviceValue, deductionValueDecimal: deductions, issValueDecimal: issValue, calculationSnapshot: { tax: activity.tax.name, rate: activity.issRate.toString(), taxableBase: taxable.toFixed(2), issValue: issValue.toFixed(2), scope: "APURACAO_INTERNA", budgetUnitId: scope.budgetUnitId, governmentEntityId: scope.governmentEntityId, financialYearId: scope.financialYear.id, activityRelationships } } });
     await audit(tx, actor, "CREATE", "TaxDeclaration", declaration.id, { activityId: activity.id, competence: input.competence.toISOString(), serviceValue: serviceValue.toFixed(2), issValue: issValue.toFixed(2) });
     return declaration;
   });

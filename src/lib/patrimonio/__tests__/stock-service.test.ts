@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { Prisma } from "@prisma/client";
 import { recordStockMovement, returnStockMovement, reverseStockMovement, StockServiceError, normalizeStockMovement } from "../stock-service";
 
 const actor = { usuarioId: "user-1", employeeId: "employee-1" };
@@ -40,10 +41,11 @@ test("allows a settlement only on stock exits", () => {
 test("records the stock row and audit evidence in one transaction", async () => {
   const movements: Array<Record<string, unknown>> = [];
   const transaction = {
+    $executeRaw: async () => 1,
     warehouse: { findFirst: async () => ({ id: "warehouse-1" }) },
     material: { findUnique: async () => ({ id: "material-1" }) },
     inventorySession: { findFirst: async () => null },
-    materialStock: { upsert: async () => ({ id: "stock-1", unitCost: 12 }) },
+    materialStock: { findUnique: async () => null, upsert: async () => ({ id: "stock-1", unitCost: 12 }) },
     materialMovement: { create: async ({ data }: { data: Record<string, unknown> }) => { movements.push(data); return { id: "movement-1" }; } },
   };
   const database = {
@@ -65,6 +67,9 @@ test("records the stock row and audit evidence in one transaction", async () => 
     type: "Entrada",
     quantity: 3,
     unitValue: 12,
+    quantityDecimal: new Prisma.Decimal(3),
+    unitValueDecimal: new Prisma.Decimal(12),
+    totalValueDecimal: new Prisma.Decimal(36),
     reason: "Nota fiscal 123",
     warehouseId: "warehouse-1",
     materialId: "material-1",
@@ -87,6 +92,7 @@ test("records the stock row and audit evidence in one transaction", async () => 
 test("persists an active settlement reference with a stock exit", async () => {
   const movements: Array<Record<string, unknown>> = [];
   const transaction = {
+    $executeRaw: async () => 1,
     warehouse: { findFirst: async () => ({ id: "warehouse-1" }) },
     material: { findUnique: async () => ({ id: "material-1" }) },
     settlement: { findFirst: async () => ({ id: "settlement-1" }) },
@@ -141,7 +147,7 @@ test("records a partial return against the original exit and its original cost",
     warehouse: { findFirst: async () => ({ id: "warehouse-1" }) },
     material: { findUnique: async () => ({ id: "material-1", isActive: true }) },
     inventorySession: { findFirst: async () => null },
-    materialStock: { upsert: async () => ({ id: "stock-1", unitCost: 12 }) },
+    materialStock: { findUnique: async () => null, upsert: async () => ({ id: "stock-1", unitCost: 12 }) },
     materialMovement: {
       findUnique: async ({ where }: { where: { id?: string; idempotencyKey?: string } }) => where.id ? original : null,
       aggregate: async () => ({ _sum: { quantity: 1 } }),
@@ -221,7 +227,7 @@ test("reverses an exit with one compensating entry", async () => {
     warehouse: { findFirst: async () => ({ id: "warehouse-1" }) },
     material: { findUnique: async () => ({ id: "material-1", isActive: true }) },
     inventorySession: { findFirst: async () => null },
-    materialStock: { upsert: async () => ({ id: "stock-1", unitCost: 8.5 }) },
+    materialStock: { findUnique: async () => null, upsert: async () => ({ id: "stock-1", unitCost: 8.5 }) },
     materialMovement: {
       findUnique: async ({ where }: { where: { id?: string; idempotencyKey?: string } }) => where.id ? original : null,
       create: async ({ data }: { data: Record<string, unknown> }) => { movements.push(data); return { id: "movement-reversal-1", ...data }; },

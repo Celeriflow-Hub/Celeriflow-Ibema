@@ -75,18 +75,19 @@ export default async function MateriaisPage({ searchParams }: { searchParams?: P
   const catalogTotal = await prisma.material.count({ where: catalogWhere });
   const page = view === "movimentar" ? 1 : clampPatrimonioListPage(requestedPage, catalogTotal);
 
-  const [materials, warehouses, categories, movementMaterials, settlements] = await Promise.all([
+  const [materials, warehouses, categories, movementMaterials, settlements, subcategories] = await Promise.all([
     view === "catalogo" ? prisma.material.findMany({
       where: catalogWhere,
       skip: (page - 1) * PATRIMONIO_LIST_PAGE_SIZE,
       take: PATRIMONIO_LIST_PAGE_SIZE,
       orderBy: materialOrder(order),
-      include: { category: { select: { id: true, name: true } }, stocks: { select: { quantity: true, unitCost: true, expirationDate: true, warehouse: { select: { id: true, name: true } } } } },
+      include: { category: { select: { id: true, name: true } }, subcategory: { select: { name: true } }, stocks: { select: { quantity: true, unitCost: true, expirationDate: true, warehouse: { select: { id: true, name: true } } } } },
     }) : Promise.resolve([]),
     prisma.warehouse.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.materialCategory.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     view === "movimentar" ? prisma.material.findMany({ where: { isActive: true }, take: 200, orderBy: { name: "asc" }, select: { id: true, code: true, name: true } }) : Promise.resolve([]),
     view === "movimentar" ? prisma.settlement.findMany({ where: { status: "Liquidado" }, take: 100, orderBy: { date: "desc" }, select: { id: true, date: true, value: true, commitment: { select: { number: true } } } }) : Promise.resolve([]),
+    prisma.materialSubcategory.findMany({ where: { isActive: true, category: { isActive: true } }, select: { id: true, categoryId: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   const selectedWarehouse = warehouses.find((warehouse) => warehouse.id === warehouseId);
   const canCreate = canPerformModuleOperation(context.user, "PATRIMONIO", "create");
@@ -110,6 +111,8 @@ export default async function MateriaisPage({ searchParams }: { searchParams?: P
       minStock: material.minStock,
       categoryId: material.categoryId,
       categoryName: material.category.name,
+      subcategoryId: material.subcategoryId,
+      subcategoryName: material.subcategory?.name ?? null,
       status: materialStatus,
       totalStock,
       warehouseLabel,
@@ -121,6 +124,7 @@ export default async function MateriaisPage({ searchParams }: { searchParams?: P
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 sm:p-3">
       <ErpPageTitle title="Estoque" action={canCreate ? <Link href="/patrimonio/materiais/novo" className={buttonVariants({ size: "sm" })}><Plus className="size-3.5" /><span className="hidden sm:inline">Novo material</span><span className="sm:hidden">Novo</span></Link> : undefined} />
+      <Link href="/patrimonio/materiais/subclasses" className="text-xs underline">Classes e subclasses de materiais</Link>
       <nav className="flex shrink-0 items-center gap-1 border-b border-slate-300 px-1" aria-label="Visões de estoque">
         {([ ["catalogo", "Estoque"], ["movimentar", "Movimentar"] ] as Array<[MaterialView, string]>).map(([itemView, label]) => <Link key={itemView} href={panelHref(itemView)} aria-current={view === itemView ? "page" : undefined} className={`border-b-2 px-3 py-1.5 text-xs font-semibold transition-colors ${view === itemView ? "border-emerald-700 text-emerald-800" : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"}`}>{label}</Link>)}
       </nav>
@@ -129,7 +133,7 @@ export default async function MateriaisPage({ searchParams }: { searchParams?: P
         toolbar={<form className="flex flex-wrap items-center gap-2" role="search"><input type="hidden" name="view" value="catalogo" /><Input name="q" defaultValue={q} placeholder="Código, nome ou descrição" className="h-8 min-w-0 flex-1 bg-white text-xs sm:min-w-52" /><select name="type" defaultValue={type} aria-label="Filtrar por tipo" className="h-8 rounded-md border border-input bg-white px-2 text-xs"><option value="">Tipo: todos</option><option value="MATERIAL">Material</option><option value="PATRIMONIO">Patrimônio</option></select><select name="category" defaultValue={categoryId} aria-label="Filtrar por categoria" className="h-8 max-w-44 rounded-md border border-input bg-white px-2 text-xs"><option value="">Categoria: todas</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><select name="status" defaultValue={status} aria-label="Filtrar por status" className="h-8 rounded-md border border-input bg-white px-2 text-xs"><option value="">Status: todos</option><option value="ATIVO">Ativo</option><option value="INATIVO">Inativo</option><option value="SEM_ESTOQUE">Sem estoque</option></select><select name="warehouse" defaultValue={warehouseId} aria-label="Filtrar por almoxarifado" className="h-8 max-w-48 rounded-md border border-input bg-white px-2 text-xs"><option value="">Almoxarifado: todos</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select><select name="order" defaultValue={order} aria-label="Ordenar materiais" className="h-8 max-w-48 rounded-md border border-input bg-white px-2 text-xs"><option value="code-asc">Código: A-Z</option><option value="code-desc">Código: Z-A</option><option value="name-asc">Nome: A-Z</option><option value="name-desc">Nome: Z-A</option><option value="description-asc">Descrição: A-Z</option><option value="description-desc">Descrição: Z-A</option></select><button type="submit" className={buttonVariants({ size: "sm" })}><Search className="size-3.5" />Filtrar</button></form>}
         summary={<p className="text-[11px] text-slate-600"><strong className="text-slate-900">{catalogTotal}</strong> material(is) no catálogo</p>}
         pagination={<ErpPagination page={page} total={catalogTotal} pageSize={PATRIMONIO_LIST_PAGE_SIZE} label="materiais" previousHref={panelHref("catalogo", page - 1)} nextHref={panelHref("catalogo", page + 1)} jumpTo={{ pathname: "/patrimonio/materiais", values: { ...catalogValues, view: "catalogo" } }} />}
-      ><MaterialCatalogTable materials={materialRows} categories={categories} canUpdate={canUpdate} canDelete={canDelete} /></ErpListFrame>}
+      ><MaterialCatalogTable materials={materialRows} categories={categories} subcategories={subcategories} canUpdate={canUpdate} canDelete={canDelete} /></ErpListFrame>}
 
       {view === "movimentar" && <ErpListFrame toolbar={<p className="text-xs font-semibold text-slate-800">Registrar movimentação de estoque</p>}><div className="p-3"><StockOperationsClient materials={movementMaterials.map((material) => ({ id: material.id, label: `${material.code} - ${material.name}` }))} warehouses={warehouses.map((warehouse) => ({ id: warehouse.id, label: warehouse.name }))} settlements={settlements.map((settlement) => ({ id: settlement.id, label: `${settlement.commitment.number} - ${settlement.date.toLocaleDateString("pt-BR", { timeZone: "UTC" })} - ${settlement.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}` }))} /></div></ErpListFrame>}
     </div>

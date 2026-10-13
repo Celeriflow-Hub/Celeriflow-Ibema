@@ -77,6 +77,8 @@ P1 continua **em andamento**: este bloco fecha parte dos consumidores tributári
 
 ## Próxima continuação da P1
 
+**Continuação de 13/10/2026:** [escopo, identidades e classificações](EXECUCAO_P1_2026_10_13.md). Adoção municipal aditiva, relações de atividades/serviços, reconciliação de identidades e memória classificatória por partida foram implementadas localmente. P1 permanece aberta: integração integral, múltiplas fontes/MSC, decisões municipais e validação agrupada estão pendentes.
+
 **Continuação executada:** [bloco integrado P1–P4](EXECUCAO_P1_P4_BLOCO_INTEGRADO.md), com importação das três versões oficiais TCE-PR de 2026 (14.494 entradas), validação contábil por metadados publicados e revisão adicional de consultas tributárias. De-para/homologação local e as demais pendências estruturais continuam abertos.
 
 - Concluir a propagação de exercício/entidade em todos os consumidores de `FinancialYear` e `MonthlyAccountingClose` (chamadas de Financeiro, Tributação, Planejamento e rotas de impressão); o modelo de dados agora permite fechamento independente por entidade/ano.

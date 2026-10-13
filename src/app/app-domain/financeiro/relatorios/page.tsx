@@ -1,9 +1,10 @@
 import { financialReportOptions } from "@/lib/financeiro/report-delivery";
 import { canIssueFinancialReports, getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-const pocReportTypes = new Set(["BALANCETE", "CONCILIACAO_TESOURARIA", "BALANCO_FINANCEIRO"]);
+const availableReportTypes = new Set(["BALANCETE", "CONCILIACAO_TESOURARIA", "BALANCO_FINANCEIRO", "RGF"]);
 
 export default async function FinanceiroRelatoriosPage() {
   const context = await getTenantContextForModule("FINANCEIRO");
@@ -13,14 +14,15 @@ export default async function FinanceiroRelatoriosPage() {
     orderBy: { year: "desc" },
   });
   const canIssue = canIssueFinancialReports(context.user);
-  const reportOptions = financialReportOptions.filter((report) => pocReportTypes.has(report.type));
+  const reportOptions = financialReportOptions.filter((report) => availableReportTypes.has(report.type));
 
   return (
     <div className="max-w-4xl space-y-2 px-1 py-1 sm:px-2">
       <header className="border-b border-slate-300 bg-white px-3 py-2 shadow-sm">
         <h1 className="text-sm font-bold tracking-tight text-slate-900">Relatórios Financeiros</h1>
-        <p className="mt-0.5 text-xs text-slate-500">Prévia e emissão interna em PDF, CSV, XLSX, TXT ou impressão para os relatórios básicos da POC.</p>
+        <p className="mt-0.5 text-xs text-slate-500">Prévia e emissão em PDF, CSV, XLSX, TXT ou impressão dos relatórios disponíveis.</p>
       </header>
+      <nav className="flex flex-wrap gap-3 px-3 text-sm"><Link href="/financeiro/relatorios/pessoal-fiscal" className="underline">Pessoal/RCL ajustada — composição e memória</Link><Link href="/financeiro/relatorios/indices-constitucionais" className="underline">Índices constitucionais</Link></nav>
       <section className="rounded-md border border-slate-200 bg-white p-3">
         <h2 className="font-semibold text-slate-800">Emitir relatório básico</h2>
         {canIssue ? (

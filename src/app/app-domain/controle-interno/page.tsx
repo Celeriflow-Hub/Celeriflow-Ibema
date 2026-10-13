@@ -45,6 +45,7 @@ export default async function ControleInternoPage() {
   const visibleAuditIds = new Set(audits.map(audit => audit.id));
   const diagnosticYears = await prisma.financialYear.findMany({ where: { governmentEntityId: { in: [...new Set(units.flatMap(unit => unit.planningEntityUnit ? [unit.planningEntityUnit.governmentEntityId] : []))] } }, include: { governmentEntity: { select: { name: true, planningUnits: { select: { budgetUnitId: true } } } } }, orderBy: { year: "desc" } });
   const visiblePlans = plans.map(plan => ({ ...plan, events: plan.events.filter(event => {
+    if (event.eventType.startsWith("CONTROL_REPORT_")) return false;
     const auditId = (event.snapshot as Prisma.JsonObject).auditId;
     if (typeof auditId === "string" && !visibleAuditIds.has(auditId)) return false;
     if (event.eventType.startsWith("AUDIT_")) return visibleAuditIds.has(event.eventType === "AUDIT_SCHEDULED" ? event.id : String((event.snapshot as Prisma.JsonObject).auditId));
@@ -60,8 +61,10 @@ export default async function ControleInternoPage() {
   return (
     <PageFrame className="space-y-2 [&>div]:space-y-4 [&>div]:p-0 [&>div>div:first-child]:hidden">
       <PageHeader title="Controle Interno" />
+      <Link href="/controle-interno/relatorios" className="block px-5 text-sm underline">Relatórios circunstanciados, quadros, anexos e publicação</Link>
       <Link href="/controle-interno/consultas/ouvidoria" className="block px-5 text-sm underline">Consultar processos e manifestações da Ouvidoria</Link>
       <Link href="/controle-interno/consultas/rh" className="block px-5 text-sm underline">Estatísticas funcionais por data, cargo, servidor e enquadramento</Link>
+      <Link href="/controle-interno/consultas/judicial" className="block px-5 text-sm underline">Consultar processos judiciais contra a entidade</Link>
       <ControlDiagnosticsClient plans={plans.map(plan => ({ id: plan.id, title: plan.title, ownerId: plan.ownerId, budgetUnitId: plan.budgetUnitId, status: plan.status }))} years={diagnosticYears.map(year => ({ id: year.id, name: `${year.governmentEntity?.name} — ${year.year}`, budgetUnitIds: year.governmentEntity?.planningUnits.map(unit => unit.budgetUnitId) ?? [] }))} runs={plans.flatMap(plan => plan.events.filter(event => event.eventType === "MUNICIPAL_DIAGNOSTICS_EXECUTED").flatMap(event => { const snapshot = event.snapshot as Prisma.JsonObject; return Array.isArray(snapshot.rows) ? [{ id: event.id, planId: plan.id, date: event.createdAt.toISOString(), rows: snapshot.rows as Array<{ family: string; subjectId: string; status: string; description: string }> }] : []; }))} userId={user.id} />
       <ControlClient plans={visiblePlans} employees={employees} documents={documents} budgetUnits={units.map((unit) => ({ id: unit.id, name: `${unit.planningEntityUnit?.governmentEntity.name} — ${unit.name}` }))} />
       <ControlChecklistsClient plans={plans.map(plan => ({ id: plan.id, title: plan.title, status: plan.status }))} editions={plans.flatMap(plan => plan.events.filter(event => event.eventType === "CHECKLIST_PUBLISHED").flatMap(event => { const checklist = readControlChecklist(event.snapshot); return checklist ? [{ id: event.id, planId: plan.id, ...checklist }] : []; }))} />

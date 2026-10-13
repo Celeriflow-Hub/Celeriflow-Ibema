@@ -8,6 +8,7 @@ import { nextMaterialCode } from "@/lib/patrimonio/identifiers";
 const materialEditInput = z.object({
   description: z.string().trim().max(4000).optional(),
   categoryId: z.string().trim().min(1, "Selecione a categoria."),
+  subcategoryId: z.string().trim().optional(),
   type: z.enum(["MATERIAL", "PATRIMONIO"]),
   unitOfMeasure: z.string().trim().min(1, "Informe a unidade de medida.").max(30),
 });
@@ -52,6 +53,7 @@ export async function updateMaterialAction(id: string, input: MaterialEditInput)
     ]);
     if (!material) throw new Error("Material não encontrado.");
     if (!category) throw new Error("Categoria de material não encontrada ou inativa.");
+    if (parsed.subcategoryId && !await context.prisma.materialSubcategory.count({ where: { id: parsed.subcategoryId, categoryId: category.id, isActive: true } })) throw new Error("Selecione uma subclasse ativa da categoria informada.");
     const unitOfMeasure = parsed.unitOfMeasure.toUpperCase();
     const typeChanged = material.type !== parsed.type;
     const unitChanged = material.unitOfMeasure !== unitOfMeasure;
@@ -66,7 +68,7 @@ export async function updateMaterialAction(id: string, input: MaterialEditInput)
     const code = typeChanged ? await nextMaterialCode(context.prisma, parsed.type) : undefined;
     await context.prisma.material.update({
       where: { id: material.id },
-      data: { description: parsed.description || null, categoryId: category.id, type: parsed.type, unitOfMeasure, ...(code ? { code } : {}) },
+      data: { description: parsed.description || null, categoryId: category.id, subcategoryId: parsed.subcategoryId || null, type: parsed.type, unitOfMeasure, ...(code ? { code } : {}) },
     });
     revalidateMaterials();
     return {};

@@ -45,7 +45,7 @@ export default async function PlanejamentoPage() {
       },
       orderBy: { startYear: "desc" },
     }),
-    context.prisma.financialYear.findMany({ select: { id: true, year: true, status: true }, orderBy: { year: "desc" } }),
+    context.prisma.financialYear.findMany({ where: { governmentEntityId: null }, select: { id: true, year: true, status: true }, orderBy: { year: "desc" } }),
     context.prisma.budgetUnit.findMany({ where: budgetUnitFilter, select: { id: true, code: true, name: true }, orderBy: { code: "asc" } }),
     context.prisma.expenseNature.findMany({ select: { id: true, code: true, name: true }, orderBy: { code: "asc" } }),
     context.prisma.resourceSource.findMany({ select: { id: true, code: true, name: true }, orderBy: { code: "asc" } }),

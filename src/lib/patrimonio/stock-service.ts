@@ -1,6 +1,8 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 import { recordStockMunicipalCosts, reduceStockMunicipalCosts } from "@/lib/financeiro/cost-stock-bridge";
+import { lockStockValuation, prepareStockValuation, commitStockValuation } from "./stock-valuation";
+import { postStockConsumptionAccounting } from "./stock-consumption-accounting";
 
 export class StockServiceError extends Error {}
 
@@ -9,6 +11,7 @@ export type StockMovementKind = "ENTRY" | "EXIT" | "ADJUSTMENT";
 export type StockActor = {
   usuarioId: string;
   employeeId?: string | null;
+  allowedBudgetUnitIds?: string[];
 };
 
 export type StockMovementInput = {
@@ -34,6 +37,8 @@ export type StockMovementInput = {
   idempotencyKey?: string | null;
   returnedMovementId?: string | null;
   reversedMovementId?: string | null;
+  /** Explicit departure proof for valued transfers; never inferred from reason text. */
+  transferOriginMovementId?: string | null;
   actor: StockActor;
 };
 
@@ -127,6 +132,8 @@ function updateMetadata(input: ValidStockMovementInput) {
 }
 
 async function ensureStockTarget(tx: Prisma.TransactionClient, input: ValidStockMovementInput) {
+  // Financial origin precedes the position lock in every native consumer.
+  if (input.settlementId?.trim()) await tx.$executeRaw`SELECT id FROM "Settlement" WHERE id=${input.settlementId.trim()} FOR UPDATE`;
   const [warehouse, material, settlement] = await Promise.all([
     tx.warehouse.findFirst({ where: { id: input.warehouseId, isActive: true }, select: { id: true } }),
     tx.material.findUnique({ where: { id: input.materialId }, select: { id: true, isActive: true } }),
@@ -206,6 +213,8 @@ export async function applyStockMovement(tx: Prisma.TransactionClient, rawInput:
   const input = normalizeStockMovement(rawInput);
   await ensureStockTarget(tx, input);
   await ensureWarehouseIsNotCounting(tx, input);
+  await lockStockValuation(tx, input);
+  const valuation = await prepareStockValuation(tx, input);
 
   const stock = input.kind === "ENTRY" || (input.kind === "ADJUSTMENT" && input.quantity > 0)
     ? await increaseStock(tx, input, input.quantity)
@@ -213,11 +222,12 @@ export async function applyStockMovement(tx: Prisma.TransactionClient, rawInput:
 
   const type = input.kind === "ENTRY" ? "Entrada" : input.kind === "EXIT" ? "Saída" : "Ajuste";
   const quantity = new Prisma.Decimal(String(input.quantity));
-  const unitValue = input.unitCost ?? stock.unitCost;
-  const price = unitValue !== null && unitValue !== undefined ? new Prisma.Decimal(String(unitValue)) : null;
+  const unitValue = valuation ? valuation.unitValue.toNumber() : input.unitCost ?? stock.unitCost;
+  const price = valuation?.unitValue ?? (unitValue !== null && unitValue !== undefined ? new Prisma.Decimal(String(unitValue)) : null);
   const decimalQuantity = quantity.decimalPlaces() <= 6 && quantity.abs().lt("1000000000000") ? quantity : null;
   const decimalPrice = price?.isFinite() && price.gte(0) && price.decimalPlaces() <= 6 && price.lt("1000000000000") ? price : null;
-  const total = decimalQuantity && decimalPrice ? decimalQuantity.abs().mul(decimalPrice).toDecimalPlaces(2) : null;
+  const total = valuation?.amount ?? (decimalQuantity && decimalPrice ? decimalQuantity.abs().mul(decimalPrice).toDecimalPlaces(2) : null);
+  if (valuation && (!decimalQuantity || !decimalPrice || !total || total.gte("10000000000000000"))) throw new StockServiceError("Quantidade/preço/total valorizados devem caber na memória Decimal sem truncamento.");
   const movement = await tx.materialMovement.create({
     data: {
       type,
@@ -244,6 +254,8 @@ export async function applyStockMovement(tx: Prisma.TransactionClient, rawInput:
       actorEmployeeId: input.actor.employeeId ?? null,
     },
   });
+  if (valuation) await commitStockValuation(tx, movement, valuation);
+  if (valuation) await postStockConsumptionAccounting(tx, input.actor, movement);
   await recordStockMunicipalCosts(tx, input.actor, movement);
   return { stock, movement };
 }
@@ -356,6 +368,7 @@ export async function reverseStockMovement(db: PrismaClient, rawInput: ReverseSt
     if (!original.stock) throw new StockServiceError("O movimento não possui posição de estoque vinculada.");
     if (original.reversalMovement) throw new StockServiceError("O movimento já foi estornado.");
     if (original.returnMovements.length) throw new StockServiceError("Uma saída com devolução não pode ser estornada integralmente.");
+    if (["TRANSFERENCIA_EM_TRANSITO", "ACEITE_TRANSFERENCIA"].includes(original.reason?.split(":")[0] ?? "")) throw new StockServiceError("Movimento de transferência exige tratamento do documento de transferência; não pode ser estornado isoladamente.");
 
     const result = await applyStockMovement(tx, {
       kind: original.type === "Entrada" ? "EXIT" : "ENTRY",

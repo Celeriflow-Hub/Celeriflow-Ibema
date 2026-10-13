@@ -14,9 +14,10 @@ import { PlanningLookupField } from "./PlanningLookupField";
 const lookupFields = new Set(["governmentEntityId", "destinationEntityId", "budgetUnitId", "resourceSourceId", "revenueNatureId", "expenseNatureId", "programId", "programPPAId", "programCodes", "sourceCodes", "actionId", "actionPPAId", "objectiveId", "instrumentId", "sourceInstrumentId", "targetInstrumentId", "parentId", "catalogVersionId", "lineId", "lineCodes", "selectedCodes", "creditId", "waiverId", "taxId", "documentId", "hearingId", "signerIds", "linkId", "propositionId", "lawId"]);
 
 export type PlanningField = {
-  name: string; label: string; type?: "text" | "number" | "date" | "email" | "textarea" | "select" | "multiSelect" | "money" | "budgetItems" | "mapping";
+  name: string; label: string; type?: "text" | "number" | "date" | "email" | "textarea" | "select" | "multiSelect" | "money" | "budgetItems" | "mapping" | "catalogMapping";
   required?: boolean; value?: string; options?: { id: string; name: string }[]; step?: string;
   mappingRows?: { sourceLineId: string; label: string; newCode: string; defaultTargetId?: string; targets: { id: string; name: string }[] }[];
+  catalogRows?: { sourceEntryId: string; kind: string; label: string }[];
 };
 
 export function PlanningForm({ jurisdiction, operation, fields, hidden = {}, redirectTo }: {
@@ -60,12 +61,13 @@ export function PlanningForm({ jurisdiction, operation, fields, hidden = {}, red
   }
   return <form ref={formRef} onSubmit={submit} className="space-y-3">
     <fieldset key={resetKey} disabled={pending} className="grid gap-3 md:grid-cols-2">
-      {fields.map((field) => <div key={field.name} className={["textarea", "budgetItems", "mapping"].includes(field.type ?? "") ? "space-y-1 md:col-span-2" : "space-y-1"}>
+      {fields.map((field) => <div key={field.name} className={["textarea", "budgetItems", "mapping", "catalogMapping"].includes(field.type ?? "") ? "space-y-1 md:col-span-2" : "space-y-1"}>
         <Label htmlFor={`${operation}-${field.name}`}>{field.label}{field.required !== false && " *"}</Label>
         {(field.type === "select" || field.type === "multiSelect") && lookupFields.has(field.name) ? <PlanningLookupField jurisdiction={jurisdiction} name={field.name} label={field.label} value={field.value} options={field.options} required={field.required !== false} multiple={field.type === "multiSelect"} hidden={{ ...hidden, ...(operation === "import" && field.name === "expenseNatureId" && lookupTarget ? { instrumentId: lookupTarget } : lookupInstrument ? { instrumentId: lookupInstrument } : {}) }} operation={operation} onChange={["instrumentId", "sourceInstrumentId"].includes(field.name) ? setLookupInstrument : field.name === "targetInstrumentId" ? setLookupTarget : undefined} /> : field.type === "select" || field.type === "multiSelect" ? <select id={`${operation}-${field.name}`} name={field.name} multiple={field.type === "multiSelect"} required={field.required !== false} defaultValue={field.type === "multiSelect" ? field.value?.split(",") ?? [] : field.value ?? ""} className={`${field.type === "multiSelect" ? "min-h-24" : "h-9"} w-full rounded-md border bg-background px-2 text-sm`}>{field.type !== "multiSelect" && <option value="">Selecione</option>}{field.options?.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select>
           : field.type === "money" ? <PlanningMoneyField field={field} operation={operation} />
           : field.type === "budgetItems" ? <PlanningItemsField field={field} jurisdiction={jurisdiction} hidden={hidden} operation={operation} />
           : field.type === "mapping" ? <PlanningMappingField field={field} />
+          : field.type === "catalogMapping" ? <PlanningCatalogMappingField field={field} jurisdiction={jurisdiction} />
           : field.type === "textarea" ? <Textarea id={`${operation}-${field.name}`} name={field.name} required={field.required !== false} defaultValue={field.value} />
           : <Input id={`${operation}-${field.name}`} name={field.name} type={field.type ?? "text"} step={field.step} required={field.required !== false} defaultValue={field.value} />}
       </div>)}
@@ -107,5 +109,16 @@ function PlanningMappingField({ field }: { field: PlanningField }) {
   return <div className="space-y-2"><input type="hidden" name={field.name} value={JSON.stringify(definitions.map((row) => ({ sourceLineId: row.sourceLineId, targetLineId: selections[row.sourceLineId] || null, ...(!selections[row.sourceLineId] ? { newCode: newCodes[row.sourceLineId] } : {}) })))} />
     {definitions.map((row) => <div key={row.sourceLineId} className="grid gap-2 rounded border p-2 text-sm md:grid-cols-2"><label>{row.label}<select aria-label={`Destino de ${row.label}`} value={selections[row.sourceLineId]} onChange={(event) => setSelections((values) => ({ ...values, [row.sourceLineId]: event.target.value }))} className="mt-1 w-full rounded border bg-background p-2"><option value="">Criar classificação correspondente no destino</option>{row.targets.map((target) => <option key={target.id} value={target.id}>{target.name}</option>)}</select></label>{!selections[row.sourceLineId] && <label>Código da nova dotação<Input value={newCodes[row.sourceLineId]} required onChange={(event) => setNewCodes((values) => ({ ...values, [row.sourceLineId]: event.target.value }))} /></label>}</div>)}
     <p className="text-xs text-muted-foreground">Dotações do destino sem origem mapeada serão compatibilizadas para valor previsto zero; realizado e histórico serão preservados.</p>
+  </div>;
+}
+
+function PlanningCatalogMappingField({ field, jurisdiction }: { field: PlanningField; jurisdiction: PlanningJurisdiction }) {
+  const [mappings, setMappings] = useState<Record<string, { canonicalId: string; predecessorEntryId?: string; redistributionDebitSource?: string }>>({});
+  return <div className="space-y-3"><input type="hidden" name={field.name} value={JSON.stringify(Object.entries(mappings).filter(([, row]) => row.canonicalId).map(([sourceEntryId, row]) => ({ sourceEntryId, ...row })))} />
+    {(field.catalogRows ?? []).map(row => <div key={row.sourceEntryId} className="space-y-2 rounded border p-3"><p className="text-sm font-medium">{row.kind} · {row.label}</p>
+      <PlanningLookupField jurisdiction={jurisdiction} name="canonicalCatalogId" label={`Destino municipal de ${row.label}`} submitName={false} hidden={{ catalogKind: row.kind }} onChange={canonicalId => setMappings(previous => ({ ...previous, [row.sourceEntryId]: { canonicalId } }))} />
+      {mappings[row.sourceEntryId]?.canonicalId && <PlanningLookupField key={mappings[row.sourceEntryId].canonicalId} jurisdiction={jurisdiction} name="predecessorEntryId" label={`Edição predecessora de ${row.label} (se houver)`} submitName={false} hidden={{ catalogKind: row.kind, canonicalId: mappings[row.sourceEntryId].canonicalId }} onChange={predecessorEntryId => setMappings(previous => ({ ...previous, [row.sourceEntryId]: { ...previous[row.sourceEntryId], ...(predecessorEntryId ? { predecessorEntryId } : { predecessorEntryId: undefined }) } }))} />}
+      {row.kind === "ACCOUNT" && mappings[row.sourceEntryId]?.canonicalId && <label className="block text-sm">Fonte do débito em redistribuições<select aria-label={`Fonte do débito de ${row.label}`} value={mappings[row.sourceEntryId]?.redistributionDebitSource ?? ""} onChange={event => setMappings(previous => ({ ...previous, [row.sourceEntryId]: { ...previous[row.sourceEntryId], redistributionDebitSource: event.target.value || undefined } }))} className="mt-1 w-full rounded border bg-background p-2"><option value="">Sem configuração de redistribuição</option><option value="ORIGIN">Fonte de origem (crédito no destino)</option><option value="DESTINATION">Fonte de destino (crédito na origem)</option></select></label>}
+    </div>)}<p className="text-xs text-muted-foreground">Serão adotadas as entradas desta página com destino selecionado. Cada gravação preserva uma edição e sua decisão; vigência, conflitos e predecessoras são conferidos no servidor.</p>
   </div>;
 }

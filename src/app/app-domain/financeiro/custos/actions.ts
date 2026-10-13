@@ -22,6 +22,9 @@ export async function adoptCostItemsAction(financialYearId: string) { return com
 export async function linkCostItemsAction(input: { objectIds: string[]; itemIds: string[] }) { return command("update", context => linkMunicipalCostItems(context.prisma, actor(context), input)); }
 export async function generateCostObjectsAction(input: { instrumentId: string; financialYearId: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) { return command("create", context => generateMunicipalCostObjectsFromLoa(context.prisma, actor(context), input)); }
 export async function createCostRuleAction(input: { financialYearId: string; budgetUnitId: string; title: string; sourceType: CostSourceType; selector: Record<string, string>; shares: CostShare[]; priority: number; effectiveFrom: string; effectiveUntil?: string }) { return command("create", async context => {
+  if (["STOCK_CONSUMPTION", "IMMEDIATE_MATERIAL"].includes(input.sourceType) && ["materialId", "categoryId", "subcategoryId", "warehouseId", "departmentId"].some(key => input.selector[key])) {
+    if (!canViewModule(context.user, "PATRIMONIO") || !await context.prisma.configuracaoModulo.count({ where: { codigo: "PATRIMONIO", ativo: true } })) throw new MunicipalCostError("Critérios de almoxarifado exigem leitura autorizada do módulo Patrimônio ativo.");
+  }
   if (input.sourceType === "PAYROLL" && ["employeeId", "contractId", "payrollCode", "workLocation"].some(key => input.selector[key])) {
     if (!canViewModule(context.user, "RH") || !await context.prisma.configuracaoModulo.count({ where: { codigo: "RH", ativo: true } })) throw new MunicipalCostError("Critérios individuais de folha exigem leitura autorizada do módulo RH ativo.");
   }

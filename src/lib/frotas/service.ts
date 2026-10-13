@@ -188,7 +188,7 @@ async function apply(tx: Tx, scope: FleetScope, input: FleetMutation): Promise<{
           if (prior.unitId !== unit.id || prior.type !== d.type || prior.workOrderId !== d.workOrderId) throw new FleetError("Esta saída já foi apropriada em outro consumo. Abra o registro de origem.");
           return { targetType: "FLEET_CONSUMPTION", targetId: prior.id };
         }
-        cost = source.unitValue == null ? null : new Prisma.Decimal(String(source.unitValue)).mul(quantity).toDecimalPlaces(2);
+        cost = source.totalValueDecimal ?? (source.unitValue == null ? null : new Prisma.Decimal(String(source.unitValue)).mul(quantity).toDecimalPlaces(2));
       } else if (stockId || stockMovementId) throw new FleetError("Um registro local não pode informar vínculo de estoque.");
       const provider = await supplier(tx, d.supplierId);
       if (d.workOrderId && !await tx.fleetWorkOrder.findFirst({ where: { id: d.workOrderId, unitId: d.unitId } })) throw new FleetError("A OS vinculada deve pertencer à mesma unidade.");

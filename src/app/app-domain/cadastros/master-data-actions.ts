@@ -1,4 +1,5 @@
 "use server";
+import { readCanonicalIdentityIssues } from "@/lib/cadastros/identity-integrity";
 
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -379,7 +380,8 @@ export async function runMasterDataConsistencyCheck(): Promise<MasterDataActionR
         ["MATERIAL_WITHOUT_CATALOG_ITEM", "Material", "MEDIA", "Material sem produto mestre"],
       ] as const;
       const issues = checks.flatMap((records, index) => records.map(record => ({ runId: run.id, area: "CADASTROS", issueType: definitions[index][0], recordType: definitions[index][1], recordId: record.id, severity: definitions[index][2], description: definitions[index][3] })));
-      if (issues.length) await tx.masterDataConsistencyIssue.createMany({ data: issues });
+      const identityIssues = (await readCanonicalIdentityIssues(tx)).map(issue => ({ ...issue, runId: run.id, area: "CADASTROS" }));
+      if (issues.length || identityIssues.length) await tx.masterDataConsistencyIssue.createMany({ data: [...issues, ...identityIssues] });
       await tx.masterDataConsistencyRun.update({ where: { id: run.id }, data: { status: "CONCLUIDA", completedAt: new Date() } });
       await audit(tx, context.user.id, "MASTER_DATA_CONSISTENCY_RUN", run.id);
     }, { timeout: 30000 });

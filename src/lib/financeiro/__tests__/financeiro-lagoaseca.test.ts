@@ -581,8 +581,9 @@ describe("Lagoa Seca/PB - Validação Integrada e Regras Fiscais/Financeiras Est
     assert.ok(Array.isArray(rreo.revenueSummary), "O RREO deve expor o resumo de receitas publicadas");
 
     const rgf = await generateRGF(prisma, filter);
-    assert.ok(rgf.receitaCorrenteLiquida >= 0);
-    assert.ok(["REGULAR", "ALERTA", "EXCEDIDO"].includes(rgf.situacao));
+    assert.ok(rgf.receitaCorrenteLiquida === null || rgf.receitaCorrenteLiquida >= 0);
+    assert.ok(["REGULAR", "ALERTA", "PRUDENCIAL", "EXCEDIDO", "NOT_EVALUATED"].includes(rgf.situacao));
+    if (rgf.situacao === "NOT_EVALUATED") assert.equal(rgf.percentualAtingido, null);
 
     const balancoOrc = await generateBalancoOrcamentario(prisma, filter);
     assert.equal(balancoOrc.totais.totalReceitaPrevista, 0, "LOAs legadas em DRAFT não podem compor o balanço orçamentário");

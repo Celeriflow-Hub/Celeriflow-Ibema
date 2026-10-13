@@ -28,6 +28,8 @@ import { synchronizePlanningWaiver } from "@/lib/planejamento/fiscal-execution";
 import { projectPlanningAnnualMemory } from "@/lib/planejamento/projections";
 import { configurePlanningReportLayout } from "@/lib/planejamento/report-layouts";
 import { publishPlanningReport, withdrawPlanningPublication } from "@/lib/planejamento/publication";
+import { adoptMunicipalCatalog, createCanonicalActivityReference, importSharedReferenceCatalog } from "@/lib/planejamento/catalog-adoption";
+import { configureMunicipalActivityRelation } from "@/lib/planejamento/activity-relations";
 
 export async function searchPlanningOptions(jurisdiction: string, input: Record<string, string>) {
   try { const context = await getPlanningContext(jurisdictionSchema.parse(jurisdiction)); return { ...await planningLookup(context, input), error: undefined }; }
@@ -54,6 +56,10 @@ export async function savePlanningRecord(jurisdiction: string, operation: string
       case "catalog": id = await createPlanningCatalog(context, clean); break;
       case "catalogVersion": id = await importPlanningCatalogVersion(context, clean); break;
       case "catalogPublish": id = await publishPlanningCatalogVersion(context, clean); break;
+      case "catalogAdopt": id = await adoptMunicipalCatalog(context, clean); break;
+      case "catalogReference": id = await createCanonicalActivityReference(context, clean); break;
+      case "catalogRelation": id = await configureMunicipalActivityRelation(context, clean); break;
+      case "catalogReferenceImport": id = await importSharedReferenceCatalog(context, clean); break;
       case "maintenance": id = await maintainPlanningRecord(context, clean); break;
       case "allocation": id = await saveRevenueAllocation(context, clean); break;
       case "hearing": id = await registerPlanningHearing(context, clean); break;

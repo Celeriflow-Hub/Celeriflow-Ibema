@@ -14,6 +14,7 @@ const materialInput = z.object({
   type: z.enum(["MATERIAL", "PATRIMONIO"]),
   unitOfMeasure: z.string().trim().min(1, "Informe a unidade de medida.").max(30, "A unidade deve ter no máximo 30 caracteres."),
   categoryId: z.string().trim().min(1, "Selecione a categoria."),
+  subcategoryId: z.string().trim().optional(),
   catalogItemId: z.string().trim().optional(),
   minStock: z.number().finite().nonnegative("O estoque mínimo deve ser maior ou igual a zero."),
   maxStock: z.number().finite().nonnegative("O estoque máximo deve ser maior ou igual a zero."),
@@ -22,9 +23,10 @@ const materialInput = z.object({
 
 export default async function NovoMaterialPage() {
   const { prisma } = await getTenantContextForModule("PATRIMONIO");
-  const [categories, catalogItems] = await Promise.all([
+  const [categories, catalogItems, subcategories] = await Promise.all([
     prisma.materialCategory.findMany({ where: { isActive: true }, select: { id: true, code: true, name: true }, orderBy: { name: "asc" } }),
     prisma.catalogItem.findMany({ where: { isActive: true }, select: { id: true, code: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.materialSubcategory.findMany({ where: { isActive: true, category: { isActive: true } }, include: { category: { select: { name: true } } }, orderBy: [{ categoryId: "asc" }, { code: "asc" }] }),
   ]);
 
   async function createMaterial(formData: FormData): Promise<void> {
@@ -36,6 +38,7 @@ export default async function NovoMaterialPage() {
       type: formData.get("type"),
       unitOfMeasure: formData.get("unitOfMeasure"),
       categoryId: formData.get("categoryId"),
+      subcategoryId: formData.get("subcategoryId") || "",
       catalogItemId: formData.get("catalogItemId"),
       minStock: Number(formData.get("minStock") || 0),
       maxStock: Number(formData.get("maxStock") || 0),
@@ -55,6 +58,7 @@ export default async function NovoMaterialPage() {
         : null,
     ]);
     if (!category) throw new Error("Selecione uma categoria de material ativa.");
+    if (parsed.data.subcategoryId && !await context.prisma.materialSubcategory.count({ where: { id: parsed.data.subcategoryId, categoryId: category.id, isActive: true } })) throw new Error("Selecione subclasse ativa pertencente à categoria do material.");
     if (catalogItemId && !catalogItem) throw new Error("Selecione um item de catálogo ativo.");
     if (catalogItem && catalogItem.materials.length) throw new Error("O item de catálogo já está vinculado a outro material.");
 
@@ -67,6 +71,7 @@ export default async function NovoMaterialPage() {
         type: parsed.data.type,
         unitOfMeasure: parsed.data.unitOfMeasure,
         categoryId: category.id,
+        subcategoryId: parsed.data.subcategoryId || null,
         catalogItemId,
         minStock: parsed.data.minStock,
         maxStock: parsed.data.maxStock,
@@ -113,6 +118,7 @@ export default async function NovoMaterialPage() {
             {catalogItems.map((item) => <option key={item.id} value={item.id}>{item.code ? `${item.code} - ` : ""}{item.name}</option>)}
           </select>
         </label>
+        <label className="grid gap-1 text-sm font-medium md:col-span-2">Subclasse da categoria<select name="subcategoryId" className="h-9 rounded-md border bg-background px-3 text-sm"><option value="">Sem subclasse</option>{subcategories.map(row => <option key={row.id} value={row.id}>{row.category.name} · {row.code} — {row.name}</option>)}</select></label>
         <label className="grid gap-1 text-sm font-medium">
           Estoque mínimo
           <input name="minStock" type="number" min="0" step="any" defaultValue="0" className="h-9 rounded-md border bg-background px-3 text-sm" />

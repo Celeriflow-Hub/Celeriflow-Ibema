@@ -67,18 +67,36 @@ export async function createParametrizedAssessment(
     realEstateId?: string; economicRegistrationId?: string; originKey: string;
   },
 ) {
+  return db.$transaction(tx => createParametrizedAssessmentInTransaction(tx, actor, input));
+}
+
+/** Shared by individual operations and durable annual jobs: the native
+ * assessment, accounting effects and job progress share one transaction. */
+export async function createParametrizedAssessmentInTransaction(
+  tx: Prisma.TransactionClient,
+  actor: TaxActor,
+  input: { taxId: string; parameterId?: string; taxpayerId: string; taxableBase: string | number; competence: Date; realEstateId?: string; economicRegistrationId?: string; originKey: string },
+) {
   if (!input.originKey.trim()) throw new TaxError("Informe a chave de origem do lançamento.");
-  const { parameter, configuration } = await resolveFiscalRule(db, { taxId: input.taxId, parameterId: input.parameterId, effectiveAt: input.competence });
+  const { parameter, configuration } = await resolveFiscalRule(tx, { taxId: input.taxId, parameterId: input.parameterId, effectiveAt: input.competence });
   const calculation = evaluateFiscalRule({ taxableBase: input.taxableBase, configuration });
-  return db.$transaction(async (tx) => {
+    const originKey = input.originKey.trim();
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`TAX_PARAMETRIZED:${originKey}`}, 0))::text`;
     const existing = await tx.taxIntegrationEvent.findUnique({ where: { idempotencyKey: `ASSESSMENT:${input.originKey.trim()}` } });
     const existingId = jsonObject(existing?.result).assessmentId;
     if (typeof existingId === "string") {
       const assessment = await tx.taxAssessment.findUniqueOrThrow({ where: { id: existingId } });
       await assessmentScope(tx, actor, assessment);
       if (assessment.taxId !== input.taxId || assessment.taxpayerId !== input.taxpayerId || assessment.competence?.getTime() !== input.competence.getTime() || !assessment.taxableBaseDecimal?.equals(input.taxableBase) || assessment.realEstateId !== (input.realEstateId ?? null) || assessment.economicRegistrationId !== (input.economicRegistrationId ?? null) || jsonObject(assessment.calculationSnapshot).parameterId !== parameter.id) throw new TaxError("Lançamento já registrado com outros dados.");
+      const frozen = jsonObject(assessment.calculationSnapshot);
+      const schedule = calculation.schedule.map(item => ({ ...item, amount: item.amount.toFixed(2) }));
+      const frozenSchedule = Array.isArray(frozen.schedule) ? frozen.schedule.map(item => jsonObject(item)) : [];
+      if (Object.entries(calculation.memory).some(([key, value]) => JSON.stringify(frozen[key]) !== JSON.stringify(value)) || frozenSchedule.length !== schedule.length || schedule.some((item, index) => frozenSchedule[index].number !== item.number || frozenSchedule[index].amount !== item.amount || frozenSchedule[index].dueDate !== item.dueDate)) throw new TaxError("A regra fiscal atual diverge da memória do lançamento; preserve a origem e utilize uma revisão fundamentada.");
       return assessment;
     }
+    await tx.$queryRaw`SELECT id FROM "TaxParameter" WHERE id=${parameter.id} FOR SHARE`;
+    const currentRule = await resolveFiscalRule(tx, { taxId: input.taxId, parameterId: input.parameterId, effectiveAt: input.competence });
+    if (currentRule.parameter.id !== parameter.id || JSON.stringify(currentRule.configuration) !== JSON.stringify(configuration)) throw new TaxError("A regra fiscal foi alterada durante a apuração; simule novamente antes de efetivar.");
     const year = input.competence.getUTCFullYear();
     const scope = await assessmentScope(tx, actor, { taxId: input.taxId, calculationSnapshot: null });
     const [financialYear, taxpayer, property, registration] = await Promise.all([
@@ -92,7 +110,8 @@ export async function createParametrizedAssessment(
     if (input.realEstateId && (!property || property.taxpayerId !== taxpayer.id)) throw new TaxError("O imóvel não pertence ao contribuinte selecionado.");
     if (input.economicRegistrationId && (!registration || registration.taxpayerId !== taxpayer.id)) throw new TaxError("A inscrição econômica não pertence ao contribuinte selecionado.");
     const assessmentNumber = await nextNumber(tx, year, "ASSESSMENT");
-    const rate = configuration.formula === "PERCENTUAL_BASE" ? new Prisma.Decimal(String(configuration.rate ?? 0)) : calculation.principal.div(new Prisma.Decimal(String(input.taxableBase || 1))).mul(100);
+    const base = new Prisma.Decimal(String(input.taxableBase));
+    const rate = configuration.formula === "PERCENTUAL_BASE" ? new Prisma.Decimal(String(configuration.rate ?? 0)) : base.isZero() ? new Prisma.Decimal(0) : calculation.principal.div(base).mul(100);
     const assessment = await tx.taxAssessment.create({ data: {
       year, assessmentNumber, competence: input.competence, originalValue: Number(calculation.principal), originalValueDecimal: calculation.principal,
       taxableBaseDecimal: new Prisma.Decimal(String(input.taxableBase)), rate, discountValueDecimal: 0, interestValueDecimal: 0,
@@ -109,7 +128,6 @@ export async function createParametrizedAssessment(
     await recognizeTaxAssessmentInTransaction(tx, actor, assessment.id);
     await audit(tx, actor, "CREATE_PARAMETRIZED", "TaxAssessment", assessment.id, { parameterId: parameter.id, originKey: input.originKey.trim(), principal: calculation.principal.toFixed(2) });
     return assessment;
-  });
 }
 
 export async function reviseTaxAssessment(db: PrismaClient, actor: TaxActor, input: {

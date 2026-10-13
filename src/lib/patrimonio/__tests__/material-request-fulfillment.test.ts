@@ -64,6 +64,7 @@ test("full delivery issues every remaining request line in the same transaction"
   const itemUpdates: Array<Record<string, unknown>> = [];
   let requestStatus: Record<string, unknown> | undefined;
   const transaction = {
+    $executeRaw: async () => 1,
     procurementLifecycleEvent: {
       findUnique: async () => null,
       create: async () => ({ id: "event-1" }),

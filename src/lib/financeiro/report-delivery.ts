@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { financialUnitFilter, resolveFinancialReportScope } from "./report-scope";
 import {
   generateBalancoOrcamentario,
@@ -192,7 +192,7 @@ export async function generateInternalReportDataset(
       const startDate = new Date(Date.UTC(year, reportMonth - 1, 1));
       const endDate = new Date(Date.UTC(year, reportMonth, 0, 23, 59, 59, 999));
       const [report, closes] = await Promise.all([
-        generateBalanceteContabil(db, { financialYearId, startDate, endDate }),
+        generateBalanceteContabil(db, { ...filter, startDate, endDate }),
         db.monthlyAccountingClose.findMany({
           where: { financialYearId, competence: { gte: startDate, lte: endDate } },
           select: { competence: true, status: true, closedAt: true, pendingSummary: true },
@@ -215,7 +215,7 @@ export async function generateInternalReportDataset(
     }
     case "RGF": {
       const report = await generateRGF(db, filter);
-      return accountingDataset("RGF", reportType, year, [{ title: "Despesa com pessoal", rows: [{ receitaCorrenteLiquida: report.receitaCorrenteLiquida, despesaTotalPessoal: report.despesaTotalPessoal, percentualAtingido: report.percentualAtingido, limiteLegal: report.limiteLegal, limiteAlerta: report.limiteAlerta, situacao: report.situacao }] }]);
+      return accountingDataset("RGF", reportType, year, [{ title: "Despesa com pessoal — 12 competências", rows: [{ receitaCorrenteLiquida: report.receitaCorrenteLiquida ?? "Não apurada", despesaTotalPessoal: report.despesaTotalPessoal ?? "Não apurada", percentualAtingido: report.percentualAtingido ?? "Não apurado", limiteLegal: report.limiteLegal ?? "Não configurado", limitePrudencial: report.limitePrudencial ?? "Não configurado", limiteAlerta: report.limiteAlerta ?? "Não configurado", situacao: report.situacao, inicio: report.memoriaFiscal.from, corte: report.memoriaFiscal.through, composicaoId: report.memoriaFiscal.definitionId ?? "", fundamento: report.memoriaFiscal.legalReference ?? "", pendencias: report.memoriaFiscal.issues.join(" "), hash: report.memoriaFiscal.sourceHash ?? "" }] }, { title: "Composição e origens contábeis", rows: report.memoriaFiscal.rows.map(row => ({ secao: row.section, componente: row.label, valor: row.amount, partidas: row.entryIds.join(", ") })) }]);
     }
     case "BALANCO_ORCAMENTARIO": {
       const report = await generateBalancoOrcamentario(db, filter);
@@ -363,20 +363,20 @@ export async function generateInternalReportDataset(
         include: { bankAccount: { select: { bankName: true, agency: true, accountNumber: true, budgetUnit: { select: { code: true, name: true } }, resourceSource: { select: { code: true, name: true } } } } },
         orderBy: [{ date: "asc" }, { createdAt: "asc" }],
       });
-      const byType = new Map<string, { type: string; entries: number; exits: number }>();
-      const byAccount = new Map<string, { bank: string; agency: string; account: string; unit: string; source: string; balance: number }>();
+      const byType = new Map<string, { type: string; entries: Prisma.Decimal; exits: Prisma.Decimal }>();
+      const byAccount = new Map<string, { bank: string; agency: string; account: string; unit: string; source: string; balance: Prisma.Decimal }>();
       for (const movement of movements) {
-        const value = Number(movement.valueDecimal);
-        const type = byType.get(movement.type) ?? { type: movement.type, entries: 0, exits: 0 };
-        if (movement.direction === "Entrada") type.entries += value;
-        if (movement.direction === "Saída") type.exits += value;
+        const value = movement.valueDecimal;
+        const type = byType.get(movement.type) ?? { type: movement.type, entries: new Prisma.Decimal(0), exits: new Prisma.Decimal(0) };
+        if (movement.direction === "Entrada") type.entries = type.entries.plus(value);
+        if (movement.direction === "Saída") type.exits = type.exits.plus(value);
         byType.set(movement.type, type);
-        const account = byAccount.get(movement.bankAccountId) ?? { bank: movement.bankAccount.bankName, agency: movement.bankAccount.agency, account: movement.bankAccount.accountNumber, unit: movement.bankAccount.budgetUnit ? `${movement.bankAccount.budgetUnit.code} - ${movement.bankAccount.budgetUnit.name}` : "", source: movement.bankAccount.resourceSource ? `${movement.bankAccount.resourceSource.code} - ${movement.bankAccount.resourceSource.name}` : "", balance: 0 };
-        account.balance += movement.direction === "Entrada" ? value : -value;
+        const account = byAccount.get(movement.bankAccountId) ?? { bank: movement.bankAccount.bankName, agency: movement.bankAccount.agency, account: movement.bankAccount.accountNumber, unit: movement.bankAccount.budgetUnit ? `${movement.bankAccount.budgetUnit.code} - ${movement.bankAccount.budgetUnit.name}` : "", source: movement.bankAccount.resourceSource ? `${movement.bankAccount.resourceSource.code} - ${movement.bankAccount.resourceSource.name}` : "", balance: new Prisma.Decimal(0) };
+        account.balance = movement.direction === "Entrada" ? account.balance.plus(value) : account.balance.minus(value);
         byAccount.set(movement.bankAccountId, account);
       }
-      const totalEntries = [...byType.values()].reduce((sum, item) => sum + item.entries, 0);
-      const totalExits = [...byType.values()].reduce((sum, item) => sum + item.exits, 0);
+      const totalEntries = [...byType.values()].reduce((sum, item) => sum.plus(item.entries), new Prisma.Decimal(0));
+      const totalExits = [...byType.values()].reduce((sum, item) => sum.plus(item.exits), new Prisma.Decimal(0));
       const isBalance = reportType === "BALANCO_FINANCEIRO";
       return {
         title: isBalance ? "Balanço Financeiro - Síntese de Tesouraria" : "Fluxo de Caixa Anual - Síntese de Tesouraria",
@@ -384,9 +384,9 @@ export async function generateInternalReportDataset(
         warnings: [internalReportWarning, partialReportWarning, isBalance ? "Síntese baseada exclusivamente em movimentos de tesouraria confirmados; não constitui Balanço Financeiro oficial." : "Síntese baseada exclusivamente em movimentos de tesouraria confirmados; não constitui Demonstração dos Fluxos de Caixa oficial."],
         metadata: reportMetadata(reportType, year, { status: "INTERNAL_PARTIAL", scope: "Movimentos de tesouraria confirmados do exercício" }),
         sections: [
-          { title: isBalance ? "Entradas e saídas por tipo de movimento" : "Fluxos por tipo de movimento", rows: [...byType.values()].map((item) => ({ tipo: item.type, entradas: item.entries, saidas: item.exits, fluxoLiquido: item.entries - item.exits })) },
-          { title: "Saldos calculados por conta", rows: [...byAccount.values()].map((account) => ({ banco: account.bank, agencia: account.agency, conta: account.account, unidade: account.unit, fonte: account.source, saldoCalculado: account.balance })) },
-          { title: "Totais", rows: [{ entradas: totalEntries, saidas: totalExits, fluxoLiquido: totalEntries - totalExits, movimentosConfirmados: movements.length }] },
+          { title: isBalance ? "Entradas e saídas por tipo de movimento" : "Fluxos por tipo de movimento", rows: [...byType.values()].map((item) => ({ tipo: item.type, entradas: Number(item.entries.toFixed(2)), saidas: Number(item.exits.toFixed(2)), fluxoLiquido: Number(item.entries.minus(item.exits).toFixed(2)) })) },
+          { title: "Saldos calculados por conta", rows: [...byAccount.values()].map((account) => ({ banco: account.bank, agencia: account.agency, conta: account.account, unidade: account.unit, fonte: account.source, saldoCalculado: Number(account.balance.toFixed(2)) })) },
+          { title: "Totais", rows: [{ entradas: Number(totalEntries.toFixed(2)), saidas: Number(totalExits.toFixed(2)), fluxoLiquido: Number(totalEntries.minus(totalExits).toFixed(2)), movimentosConfirmados: movements.length }] },
         ],
       };
     }

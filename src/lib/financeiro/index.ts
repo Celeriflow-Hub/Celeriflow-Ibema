@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient, type BudgetReservation, type Commitment, type Settlement, type Payment, type Expense } from "@prisma/client";
 import { createHash } from "node:crypto";
-import { assertPublishedAccountClassification } from "./account-catalog";
+import { resolveAccountClassificationSnapshots } from "./account-catalog";
+import { resolveAccountingSourceDimensions, resolveAccountingLineSourceDimensions, resolveAccountingReversalLineDimensions } from "./accounting-source-dimensions";
 import { calculateRetentionDueDate, calculateRetentions, getActiveRetentionRules } from "./retencoes";
 import { assertPlanningPeriodAvailability, assertPlanningReservationYear, getPlanningBudgetRestrictions, lockPlanningBudgetForAppropriation, recordPlanningFinanceExecution } from "@/lib/planejamento/execution-bridge";
 import { lockPlanningRevenueBudget, recordPlanningRevenueCollection, recordPlanningRevenueReversal, recordPlanningRevenueRedistribution } from "@/lib/planejamento/revenue-execution-bridge";
@@ -919,7 +920,7 @@ async function postCommitmentBalanceChange(tx: Prisma.TransactionClient, actor: 
   const originals = await tx.accountingTransaction.findMany({ where: { financialYearId, sourceType: "COMMITMENT", sourceId: commitment.id, eventType: "EMPENHO_EMITIDO", status: "POSTADO" }, include: { entries: true }, take: 2 });
   const original = originals.length === 1 ? originals[0] : undefined;
   if (!original || original.entries.length !== 2 || original.entries.some((entry) => !entry.valueDecimal?.equals(requiredDecimal(commitment.valueDecimal, "Commitment.valueDecimal")) || !["Débito", "Crédito"].includes(entry.type)) || new Set(original.entries.map((entry) => entry.type)).size !== 2) throw new FinanceError("Reconcilie a postagem original do empenho antes de reforçar ou anular seu saldo.");
-  return postAccountingTransactionInTransaction(tx, actor, { financialYearId, date: input.date, history: `${input.eventType} · empenho ${commitment.number}`, sourceModule: "FINANCEIRO", sourceType: input.sourceType, sourceId: input.sourceId, eventType: input.eventType, idempotencyKey: input.key, reversalOfId: input.sourceType === "COMMITMENT_REVERSAL" ? original.id : undefined, lines: original.entries.map((entry) => ({ accountId: entry.accountId, type: input.reverse ? entry.type === "Débito" ? "Crédito" : "Débito" : entry.type as "Débito" | "Crédito", value: input.value })) });
+  return postAccountingTransactionInTransaction(tx, actor, { financialYearId, date: input.date, history: `${input.eventType} · empenho ${commitment.number}`, sourceModule: "FINANCEIRO", sourceType: input.sourceType, sourceId: input.sourceId, eventType: input.eventType, idempotencyKey: input.key, reversalOfId: input.sourceType === "COMMITMENT_REVERSAL" ? original.id : undefined, lines: original.entries.map((entry) => ({ ...(input.sourceType === "COMMITMENT_REVERSAL" ? { originalEntryId: entry.id } : {}), accountId: entry.accountId, type: input.reverse ? entry.type === "Débito" ? "Crédito" : "Débito" : entry.type as "Débito" | "Crédito", value: input.value })) });
 }
 
 async function commitmentForPosting(tx: Prisma.TransactionClient, commitmentId: string, date: Date) {
@@ -2196,23 +2197,31 @@ export async function redistributeRevenueResourceSource(
 ) {
   const value = money(input.value);
   if (!input.history.trim()) throw new FinanceError("Informe o historico da redistribuicao de fonte.");
+  if (!Number.isFinite(input.date.getTime())) throw new FinanceError("Data de redistribuição inválida.");
   return db.$transaction(async (tx) => {
-    if (input.idempotencyKey?.trim()) {
-      const existing = await tx.revenueResourceRedistribution.findUnique({ where: { idempotencyKey: input.idempotencyKey.trim() } });
-      if (existing) return existing;
-    }
     await lockRevenue(tx, input.revenueId);
     const revenue = await tx.revenue.findUnique({ where: { id: input.revenueId }, select: { id: true, budgetUnitId: true, stage: true, valueDecimal: true, resourceSourceId: true, financialYearId: true, bankAccountId: true, collectionDate: true, revenueNatureId: true } });
-    if (!revenue || revenue.stage !== "ARRECADADA") throw new FinanceError("Somente receitas arrecadadas podem ter fonte redistribuida.");
+    if (!revenue) throw new FinanceError("Receita da redistribuição não encontrada.");
     if (revenue.budgetUnitId) assertActorBudgetUnit(actor, revenue.budgetUnitId);
     else if (actor.allowedBudgetUnitIds) throw new FinanceError("Receita legada sem unidade gestora conciliada.");
+    if (input.idempotencyKey?.trim()) {
+      const existing = await tx.revenueResourceRedistribution.findUnique({ where: { idempotencyKey: input.idempotencyKey.trim() } });
+      if (existing) {
+        if (existing.revenueId !== revenue.id || existing.date.getTime() !== input.date.getTime() || !existing.valueDecimal.equals(value) || existing.destinationResourceSourceId !== input.destinationResourceSourceId || existing.history !== input.history.trim()) throw new FinanceError("Chave da redistribuição já utilizada com outro conteúdo.");
+        return existing;
+      }
+    }
+    if (revenue.stage !== "ARRECADADA") throw new FinanceError("Somente receitas arrecadadas podem ter fonte redistribuida.");
+    if (revenue.collectionDate && input.date < revenue.collectionDate) throw new FinanceError("Redistribuição não pode anteceder a arrecadação.");
     if (revenue.resourceSourceId === input.destinationResourceSourceId) throw new FinanceError("A fonte de destino deve ser diferente da fonte de origem.");
     const [destination, redistributed, bankAccount] = await Promise.all([
       tx.resourceSource.findUnique({ where: { id: input.destinationResourceSourceId }, select: { id: true } }),
       tx.revenueResourceRedistribution.aggregate({ where: { revenueId: revenue.id }, _sum: { valueDecimal: true } }),
       revenue.bankAccountId ? tx.bankAccount.findUnique({ where: { id: revenue.bankAccountId }, select: { budgetUnitId: true } }) : null,
     ]);
-    const year = await financialYearForPosting(tx, input.date, bankAccount?.budgetUnitId);
+    if (bankAccount?.budgetUnitId && revenue.budgetUnitId && bankAccount.budgetUnitId !== revenue.budgetUnitId) throw new FinanceError("Banco e receita divergem na unidade gestora.");
+    const budgetUnitId = revenue.budgetUnitId ?? bankAccount?.budgetUnitId ?? undefined;
+    const year = await financialYearForPosting(tx, input.date, budgetUnitId);
     if (year.id !== revenue.financialYearId) throw new FinanceError("A redistribuicao deve ocorrer no mesmo exercicio financeiro da receita.");
     if (!destination) throw new FinanceError("Fonte de destino nao encontrada.");
     const available = requiredDecimal(revenue.valueDecimal, "Revenue.valueDecimal").minus(redistributed._sum.valueDecimal ?? new Prisma.Decimal(0));
@@ -2222,7 +2231,7 @@ export async function redistributeRevenueResourceSource(
     });
     await postAccountingEventInTransaction(tx, actor, {
       financialYearId: year.id,
-      budgetUnitId: bankAccount?.budgetUnitId ?? undefined,
+      budgetUnitId,
       date: input.date,
       eventCode: "RECEITA_REDISTRIBUIDA_FONTE",
       value,
@@ -2468,6 +2477,7 @@ export type AccountingLine = {
   accountId: string;
   type: "Débito" | "Crédito";
   value: Prisma.Decimal | string | number;
+  originalEntryId?: string;
 };
 
 type AccountingPostingInput = {
@@ -2522,8 +2532,12 @@ async function resolveAccountingScope(
   let budgetUnitId = input.budgetUnitId?.trim() || null;
   if (input.governmentEntityId && !budgetUnitId) throw new FinanceError("Informe a unidade gestora junto à entidade do lançamento contábil.");
 
-  if (!budgetUnitId && input.sourceId) {
+  if (input.sourceId) {
+    const suppliedBudgetUnitId = budgetUnitId;
     const sourceType = input.sourceType ?? "";
+    const canonicalRevenue = await tx.revenue.findFirst({ where: { id: input.sourceId, sourceModule: input.sourceModule ?? "MANUAL", sourceType }, select: { budgetUnitId: true } });
+    const canonicalSource = !!canonicalRevenue || ["BUDGET_APPROPRIATION_OPENING", "COMMITMENT", "COMMITMENT_REVERSAL", "COMMITMENT_MOVEMENT", "SETTLEMENT", "PAYMENT", "WITHHOLDING_PAYABLE", "BANK_ACCOUNT", "BANK_ACCOUNT_OPENING_BALANCE", "BANK_STATEMENT_INVESTMENT_TRANSFER", "BANK_STATEMENT_CLASSIFICATION", "PLANNING_BUDGET", "REVENUE_REVERSAL", "REVENUE_RESOURCE_REDISTRIBUTION"].includes(sourceType);
+    if (canonicalSource) budgetUnitId = null;
     if (sourceType === "BUDGET_APPROPRIATION_OPENING") {
       budgetUnitId = (await tx.budgetAppropriation.findUnique({ where: { id: input.sourceId }, select: { budgetUnitId: true } }))?.budgetUnitId ?? null;
     } else if (["COMMITMENT", "COMMITMENT_REVERSAL"].includes(sourceType)) {
@@ -2545,7 +2559,15 @@ async function resolveAccountingScope(
       const movement = await tx.planningLineMovement.findUnique({ where: { id: input.sourceId }, select: { line: { select: { budgetUnitId: true } } } });
       if (movement) budgetUnitId = movement.line.budgetUnitId;
       else budgetUnitId = (await tx.planningBudgetLine.findUnique({ where: { id: input.sourceId }, select: { budgetUnitId: true } }))?.budgetUnitId ?? null;
+    } else if (sourceType === "REVENUE_REVERSAL") {
+      budgetUnitId = (await tx.revenueReversal.findUnique({ where: { id: input.sourceId }, select: { revenue: { select: { budgetUnitId: true } } } }))?.revenue.budgetUnitId ?? null;
+    } else if (sourceType === "REVENUE_RESOURCE_REDISTRIBUTION") {
+      budgetUnitId = (await tx.revenueResourceRedistribution.findUnique({ where: { id: input.sourceId }, select: { revenue: { select: { budgetUnitId: true } } } }))?.revenue.budgetUnitId ?? null;
+    } else if (canonicalRevenue) {
+      budgetUnitId = canonicalRevenue.budgetUnitId;
     }
+    if (canonicalSource && suppliedBudgetUnitId && suppliedBudgetUnitId !== budgetUnitId) throw new FinanceError("A unidade gestora informada diverge da origem canônica do lançamento.");
+    if (canonicalSource && !budgetUnitId && suppliedBudgetUnitId) throw new FinanceError("Origem canônica sem unidade gestora conciliada.");
   }
 
   if (!budgetUnitId) return null;
@@ -2570,10 +2592,14 @@ export async function postAccountingTransactionInTransaction(
   input: AccountingPostingInput,
 ) {
   const totals = accountingTotals(input.lines);
+  if (input.lines.some(line => line.originalEntryId) && !input.reversalOfId) throw new FinanceError("Vínculo de linha original exige transação de estorno.");
   if (!input.history.trim()) throw new FinanceError("Informe o historico da transacao contabil.");
   if (!actor.employeeId) throw new FinanceError("A postagem contabil exige usuario vinculado a servidor responsavel.");
   if ((input.sourceModule ?? "MANUAL") === "MANUAL" && (!input.governmentEntityId || !input.budgetUnitId)) throw new FinanceError("Selecione a entidade e a unidade gestora do lançamento manual.");
   const accountingScope = await resolveAccountingScope(tx, actor, input);
+  for (const line of input.lines.filter(line => line.originalEntryId)) {
+    if (!await tx.accountingEntry.count({ where: { id: line.originalEntryId, transactionId: input.reversalOfId, accountId: line.accountId, type: line.type === "Débito" ? "Crédito" : "Débito" } })) throw new FinanceError("Linha original não pertence à contraparte da transação estornada.");
+  }
   const yearScope = await tx.financialYear.findUnique({ where: { id: input.financialYearId }, select: { governmentEntityId: true } });
   if (accountingScope && yearScope?.governmentEntityId !== accountingScope.governmentEntityId) throw new FinanceError("A entidade do lançamento contábil deve corresponder à entidade do exercício financeiro.");
   if (!accountingScope && yearScope?.governmentEntityId) throw new FinanceError("O exercício da entidade exige lançamento com entidade e unidade gestora identificadas.");
@@ -2581,9 +2607,14 @@ export async function postAccountingTransactionInTransaction(
   if (input.idempotencyKey) {
     const existing = await tx.accountingTransaction.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
     if (existing) {
-      const entries = await tx.accountingEntry.findMany({ where: { transactionId: existing.id }, select: { accountId: true, type: true, valueDecimal: true } });
-      const expected = input.lines.map((line) => `${line.accountId}:${line.type}:${money(line.value).toFixed(2)}`).sort();
-      const persisted = entries.map((entry) => `${entry.accountId}:${entry.type}:${entry.valueDecimal?.toFixed(2) ?? "NULL"}`).sort();
+      const entries = await tx.accountingEntry.findMany({ where: { transactionId: existing.id }, select: { accountId: true, type: true, valueDecimal: true, classificationSnapshot: true } });
+      const explicitLineMapping = input.lines.some(line => line.originalEntryId);
+      const expected = input.lines.map((line) => `${line.accountId}:${line.type}:${money(line.value).toFixed(2)}${explicitLineMapping ? `:${line.originalEntryId ?? ""}` : ""}`).sort();
+      const persisted = entries.map((entry) => {
+        const snapshot = entry.classificationSnapshot as Prisma.JsonObject | null;
+        const originalId = typeof snapshot?.originalEntryId === "string" ? snapshot.originalEntryId : "";
+        return `${entry.accountId}:${entry.type}:${entry.valueDecimal?.toFixed(2) ?? "NULL"}${explicitLineMapping ? `:${originalId}` : ""}`;
+      }).sort();
       if (existing.financialYearId !== input.financialYearId || existing.governmentEntityId !== (accountingScope?.governmentEntityId ?? null) || existing.budgetUnitId !== (accountingScope?.budgetUnitId ?? null) || existing.date.getTime() !== input.date.getTime() || existing.history !== input.history.trim() || existing.sourceModule !== (input.sourceModule?.trim() || "MANUAL") || existing.sourceType !== (input.sourceType?.trim() || "ACCOUNTING_TRANSACTION") || existing.sourceId !== (input.sourceId?.trim() || null) || existing.eventType !== (input.eventType?.trim() || "MANUAL_POSTING") || existing.reversalOfId !== (input.reversalOfId ?? null) || JSON.stringify(expected) !== JSON.stringify(persisted)) throw new FinanceError("Chave contábil já registrada com outros dados ou escopo.");
       return existing;
     }
@@ -2595,8 +2626,16 @@ export async function postAccountingTransactionInTransaction(
   await assertAccountingPeriodOpen(tx, input.financialYearId, input.date);
   const accounts = await tx.accountingPlan.findMany({ where: { id: { in: input.lines.map((line) => line.accountId) } }, select: { id: true, code: true } });
   if (accounts.length !== new Set(input.lines.map((line) => line.accountId)).size) throw new FinanceError("Uma ou mais contas contabeis nao foram encontradas.");
-  try { await assertPublishedAccountClassification(tx, accounts, input.date); }
+  let classifications: Map<string, Prisma.InputJsonObject>;
+  try { classifications = await resolveAccountClassificationSnapshots(tx, accounts, input.date, accountingScope ?? undefined); }
   catch (error) { throw new FinanceError(error instanceof Error ? error.message : "Classificação contábil inválida."); }
+  const dimensions = accountingScope && classifications.size ? await resolveAccountingSourceDimensions(tx, { ...input, ...accountingScope }) : null;
+  const lineDimensions: Array<Prisma.InputJsonObject | null> = [];
+  for (const line of input.lines) {
+    const classification = classifications.get(line.accountId);
+    lineDimensions.push(accountingScope && input.reversalOfId ? await resolveAccountingReversalLineDimensions(tx, { ...input, ...accountingScope }, input.reversalOfId, line.accountId, line.type, line.originalEntryId) : accountingScope && classification && input.sourceType === "REVENUE_RESOURCE_REDISTRIBUTION" ? await resolveAccountingLineSourceDimensions(tx, { ...input, ...accountingScope }, line.type, classification) : dimensions);
+  }
+  if (accountingScope && classifications.size && input.sourceType === "REVENUE_RESOURCE_REDISTRIBUTION" && new Set(lineDimensions.map(dimension => dimension?.resourceSourceId)).size !== 2) throw new FinanceError("Redistribuição deve identificar fonte de origem e destino em linhas distintas.");
   const childAccount = await tx.accountingPlan.findFirst({ where: { OR: accounts.map((account) => ({ code: { startsWith: `${account.code}.` } })) }, select: { id: true } });
   if (childAccount) throw new FinanceError("A postagem exige conta analítica de último nível; conta sintética com desdobramentos não aceita partidas.");
   const transaction = await tx.accountingTransaction.create({
@@ -2616,9 +2655,11 @@ export async function postAccountingTransactionInTransaction(
       authorEmployeeId: actor.employeeId,
       postedAt: new Date(),
       entries: {
-        create: input.lines.map((line) => {
+        create: input.lines.map((line, index) => {
           const value = money(line.value);
-          return { date: input.date, value: legacyMoney(value), valueDecimal: value, type: line.type, history: input.history.trim(), accountId: line.accountId, authorId: actor.employeeId! };
+          const classification = classifications.get(line.accountId);
+          const classificationSnapshot = classification ? { ...classification, ...(line.originalEntryId ? { originalEntryId: line.originalEntryId } : {}), dimensions: lineDimensions[index] } : line.originalEntryId ? { originalEntryId: line.originalEntryId, classificationResolution: "NOT_RECONCILED" } : undefined;
+          return { date: input.date, value: legacyMoney(value), valueDecimal: value, classificationSnapshot, type: line.type, history: input.history.trim(), accountId: line.accountId, authorId: actor.employeeId! };
         }),
       },
     },
@@ -2647,6 +2688,7 @@ async function reverseAccountingForSource(
     governmentEntityId: original.governmentEntityId ?? undefined,
     budgetUnitId: original.budgetUnitId ?? undefined,
     lines: original.entries.map((entry) => ({
+      originalEntryId: entry.id,
       accountId: entry.accountId,
       type: entry.type === "Débito" ? "Crédito" : "Débito",
       value: requiredDecimal(entry.valueDecimal, "AccountingEntry.valueDecimal"),

@@ -55,7 +55,7 @@ export async function reverseTaxCreditMovement(db: PrismaClient, actor: TaxActor
       const transaction = await postAccountingTransactionInTransaction(tx, actor, {
         financialYearId: year.id, ...scope, date: input.date, history: `Estorno de restituição paga ${movement.id}: ${input.reason.trim()}`,
         sourceModule: "TRIBUTACAO", sourceType: "TAX_REFUND_REVERSAL", sourceId: movement.id, eventType: "TAX_REFUND_REVERSED", idempotencyKey: `${key}:ACCOUNTING`, reversalOfId: original.id,
-        lines: original.entries.map((entry) => { if (!entry.valueDecimal) throw new TaxError("Partida original sem Decimal conciliado."); return { accountId: entry.accountId, type: entry.type === "Débito" ? "Crédito" as const : "Débito" as const, value: entry.valueDecimal }; }),
+        lines: original.entries.map((entry) => { if (!entry.valueDecimal) throw new TaxError("Partida original sem Decimal conciliado."); return { originalEntryId: entry.id, accountId: entry.accountId, type: entry.type === "Débito" ? "Crédito" as const : "Débito" as const, value: entry.valueDecimal }; }),
       });
       transactionId = transaction.id;
       const incoming = await tx.treasuryMovement.create({ data: { date: input.date, type: "ExtraBudgetRefundReversal", direction: "Entrada", valueDecimal: amount, bankAccountId: account.id, financialYearId: year.id, history: transaction.history, sourceModule: "TRIBUTACAO", sourceType: "TAX_REFUND_REVERSAL", sourceId: movement.id, eventType: "TAX_REFUND_REVERSED", idempotencyKey: `${key}:TREASURY` } });
@@ -72,7 +72,7 @@ export async function reverseTaxCreditMovement(db: PrismaClient, actor: TaxActor
       const transaction = await postAccountingTransactionInTransaction(tx, actor, {
         financialYearId: year.id, ...scope, date: input.date, history: `Reversão da compensação ${movement.id}: ${input.reason.trim()}`,
         sourceModule: "TRIBUTACAO", sourceType: "TAX_CREDIT_COMPENSATION_REVERSAL", sourceId: movement.id, eventType: "TAX_CREDIT_COMPENSATION_REVERSED", idempotencyKey: `${key}:ACCOUNTING`, reversalOfId: original.id,
-        lines: original.entries.map((entry) => { if (!entry.valueDecimal) throw new TaxError("Partida original sem Decimal conciliado."); return { accountId: entry.accountId, type: entry.type === "Débito" ? "Crédito" as const : "Débito" as const, value: entry.valueDecimal }; }),
+        lines: original.entries.map((entry) => { if (!entry.valueDecimal) throw new TaxError("Partida original sem Decimal conciliado."); return { originalEntryId: entry.id, accountId: entry.accountId, type: entry.type === "Débito" ? "Crédito" as const : "Débito" as const, value: entry.valueDecimal }; }),
       });
       transactionId = transaction.id;
       await reclassifyRestoredTaxReceivable(tx, actor, { assessmentId: assessment.id, originalTransactionId: original.id, amount, date: input.date, idempotencyKey: `${key}:DA_RESTORATION`, reason: `Recomposição do direito em dívida ativa após estorno da compensação ${movement.id}` });

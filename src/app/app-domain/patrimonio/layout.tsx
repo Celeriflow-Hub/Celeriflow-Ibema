@@ -14,6 +14,7 @@ const navigation: ModuleNavGroup[] = [
     items: [
       { title: "Almoxarifados", href: "/patrimonio/almoxarifados", icon: "warehouse" },
       { title: "Estoque", href: "/patrimonio/materiais", icon: "boxes" },
+      { title: "Valorização do estoque", href: "/patrimonio/valorizacao", icon: "landmark" },
       { title: "Requisições internas", href: "/patrimonio/requisicoes", icon: "clipboardList" },
       { title: "Inventários", href: "/patrimonio/inventarios", icon: "clipboardList" },
       { title: "Fornecedores", href: "/cadastros/fornecedores", icon: "truck" },

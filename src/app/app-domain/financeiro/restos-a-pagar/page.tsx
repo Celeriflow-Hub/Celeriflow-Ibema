@@ -12,8 +12,8 @@ export default async function RestosAPagarPage() {
     context.prisma.payableCarryForward.findMany({
       where: { commitment: { appropriation: appropriationFilter } },
       include: {
-        financialYear: { select: { id: true, year: true, status: true } },
-        originFinancialYear: { select: { id: true, year: true } },
+        financialYear: { select: { id: true, year: true, status: true, governmentEntityId: true, governmentEntity: { select: { name: true } } } },
+        originFinancialYear: { select: { id: true, year: true, governmentEntityId: true, governmentEntity: { select: { name: true } } } },
         commitment: { select: { id: true, number: true, history: true, supplier: { select: { company: { select: { corporateName: true } }, person: { select: { fullName: true } } } } } },
         previousPayableCarryForward: { select: { id: true, financialYear: { select: { year: true } } } },
         successorPayableCarryForward: { select: { id: true, financialYear: { select: { year: true } } } },
@@ -22,7 +22,7 @@ export default async function RestosAPagarPage() {
       orderBy: [{ originFinancialYear: { year: "desc" } }, { createdAt: "desc" }],
       take: 300,
     }),
-    context.prisma.financialYear.findMany({ orderBy: { year: "desc" }, select: { id: true, year: true, status: true } }),
+    context.prisma.financialYear.findMany({ where: isSystemAdministrator(context.user) ? {} : { governmentEntity: { is: { planningUnits: { some: { budgetUnitId: { in: context.user.allowedBudgetUnitIds } } } } } }, orderBy: [{ year: "desc" }, { id: "asc" }], select: { id: true, year: true, status: true, governmentEntityId: true, governmentEntity: { select: { name: true } } } }),
     context.prisma.payment.findMany({
       where: { status: "Paga", commitment: { appropriation: appropriationFilter } },
       select: { id: true, orderNumber: true, commitmentId: true, valueDecimal: true, value: true, date: true },

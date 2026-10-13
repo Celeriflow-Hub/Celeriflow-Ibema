@@ -33,7 +33,7 @@ export async function reverseAssetValuation(db: PrismaClient, context: AssetValu
       financialYearId: scope.financialYearId, governmentEntityId: scope.governmentEntityId, budgetUnitId: context.budgetUnitId,
       date: input.date, history: input.reason.trim(), sourceModule: "PATRIMONIO", sourceType: "ASSET_VALUATION_REVERSAL", sourceId: record.assetId,
       eventType: "ASSET_VALUATION_REVERSED", idempotencyKey: key, reversalOfId: original.id,
-      lines: original.entries.map(entry => ({ accountId: entry.accountId, type: entry.type === "Débito" ? "Crédito" : "Débito", value: entry.valueDecimal! })),
+      lines: original.entries.map(entry => ({ originalEntryId: entry.id, accountId: entry.accountId, type: entry.type === "Débito" ? "Crédito" : "Débito", value: entry.valueDecimal! })),
     });
     let acquisition: Prisma.Decimal | undefined;
     if ("type" in record && record.type === "SUBSEQUENT_COST") {

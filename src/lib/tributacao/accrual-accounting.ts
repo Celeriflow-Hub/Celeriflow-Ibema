@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { postAccountingEventInTransaction, postAccountingTransactionInTransaction, type FinanceActor } from "@/lib/financeiro";
-import { assertPublishedAccountClassification } from "@/lib/financeiro/account-catalog";
+import { resolveAccountClassificationSnapshots } from "@/lib/financeiro/account-catalog";
 import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxAssessmentCompensatedValue, taxScopeSnapshot } from "./scope";
 
 type Profile = { receivableAccountId: string; revenueAccountId: string; deductionAccountId: string; lossAccountId: string; budgetUnitId: string; governmentEntityId: string; catalogVersionId: string };
@@ -93,7 +93,7 @@ export async function reclassifyActiveDebtInTransaction(tx: Prisma.TransactionCl
     if (catalog.status !== "PUBLISHED" || catalog.year !== date.getUTCFullYear() || new Set(ids).size !== 3 || ids.some(id => !catalog.entries.some(entry => entry.kind === "ACCOUNT" && entry.canonicalId === id && taxScopeSnapshot(entry.attributes).operational === true && taxScopeSnapshot(entry.attributes).pocOnly === false))) throw new Error("Perfil DA sem três contas municipais distintas, publicadas e vigentes.");
   }
   if (lossAccount.type !== "VPD" || debtAccount.type !== "Ativo") throw new Error("Reclassificação da dívida exige conta analítica de ativo e VPD de extinção.");
-  await assertPublishedAccountClassification(tx, [{ id: lossAccount.id }, { id: debtAccount.id }], date);
+  await resolveAccountClassificationSnapshots(tx, [{ id: lossAccount.id }, { id: debtAccount.id }], date, selected);
   const payments = await tx.taxPayment.findMany({ where: { guide: { assessmentId: assessment.id }, status: "Confirmado" }, select: { amountPaidDecimal: true } });
   if (payments.some(payment => !payment.amountPaidDecimal) || !assessment.finalValueDecimal) throw new Error("Reclassificação exige saldo Decimal conciliado.");
   const paid = payments.reduce((sum, payment) => sum.plus(payment.amountPaidDecimal!), new Prisma.Decimal(0)).plus(await taxAssessmentCompensatedValue(tx, assessment.id));

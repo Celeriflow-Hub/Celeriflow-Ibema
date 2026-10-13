@@ -12,6 +12,7 @@ export class ProcurementLifecycleError extends Error {}
 export type ProcurementActor = {
   usuarioId: string;
   employeeId: string | null;
+  allowedBudgetUnitIds?: string[];
 };
 
 export type CreateMaterialRequestInput = {
@@ -23,7 +24,7 @@ export type CreateMaterialRequestInput = {
 
 export type IssueMaterialRequestInFullInput = {
   requestId: string;
-  stockByItem: Array<{ requestItemId: string; stockId: string }>;
+  stockByItem: Array<{ requestItemId: string; stockId: string; settlementId?: string }>;
 };
 
 function required(value: string | null | undefined, label: string) {
@@ -496,7 +497,24 @@ export async function approveMaterialRequest(db: Db, actor: ProcurementActor, in
   });
 }
 
-export async function issueMaterialRequestItem(db: Db, actor: ProcurementActor, input: { requestItemId: string; stockId: string; quantity: number }) {
+async function assertMaterialRequestFinancialOrigin(tx: Tx, actor: ProcurementActor, input: { settlementId?: string; stockId: string; departmentId: string }) {
+  if (!input.settlementId) return;
+  await tx.$queryRaw`SELECT id FROM "Settlement" WHERE id=${input.settlementId} FOR UPDATE`;
+  const settlement = await tx.settlement.findUnique({ where: { id: input.settlementId }, include: { commitment: { include: { appropriation: { include: { financialYear: true, budgetUnit: true, expenseNature: true } } } } } });
+  const [stock, department] = await Promise.all([
+    tx.materialStock.findUniqueOrThrow({ where: { id: input.stockId }, include: { warehouse: { include: { costCenter: true } }, material: true } }),
+    tx.department.findUniqueOrThrow({ where: { id: input.departmentId } }),
+  ]);
+  const appropriation = settlement?.commitment.appropriation;
+  if (appropriation && actor.allowedBudgetUnitIds && !actor.allowedBudgetUnitIds.includes(appropriation.budgetUnitId)) throw new ProcurementLifecycleError("Liquidação fora das UGs autorizadas.");
+  if (!appropriation || settlement?.status !== "Liquidado" || !appropriation.financialYear.governmentEntityId || stock.warehouse.costCenter?.governmentEntityId !== appropriation.financialYear.governmentEntityId || stock.warehouse.costCenter.secretariatId !== appropriation.budgetUnit.secretariatId || department.secretariatId !== appropriation.budgetUnit.secretariatId || stock.material.type === "PATRIMONIO") throw new ProcurementLifecycleError("Origem financeira, material, almoxarifado e destino devem pertencer ao mesmo ente/secretaria da UG de consumo.");
+  if (!await tx.usuario.count({ where: { id: actor.usuarioId, ativo: true, unidadesGestoras: { some: { budgetUnitId: appropriation.budgetUnitId } } } })) throw new ProcurementLifecycleError("Responsável sem vínculo ativo com a UG da liquidação.");
+  if (settlement.commitment.purchaseReceiptId) {
+    if (!await tx.purchaseReceiptItem.count({ where: { purchaseReceiptId: settlement.commitment.purchaseReceiptId, materialId: stock.materialId, warehouseId: stock.warehouseId, stockMovement: { stockId: stock.id } } })) throw new ProcurementLifecycleError("Material/lote não pertence ao recebimento da liquidação.");
+  } else if (!appropriation.expenseNature.code.replace(/\D/g, "").startsWith("339030")) throw new ProcurementLifecycleError("Origem sem recebimento deve identificar material de consumo.");
+}
+
+export async function issueMaterialRequestItem(db: Db, actor: ProcurementActor, input: { requestItemId: string; stockId: string; quantity: number; settlementId?: string }) {
   const requestItemId = required(input.requestItemId, "Item da requisição");
   const stockId = required(input.stockId, "Posição de estoque");
   const issuedQuantity = quantity(input.quantity, "Quantidade atendida");
@@ -512,6 +530,7 @@ export async function issueMaterialRequestItem(db: Db, actor: ProcurementActor, 
     }
     if (requestItem.materialId !== stock.materialId) throw new ProcurementLifecycleError("O material da posição de estoque não corresponde ao item requisitado.");
     if (requestItem.quantityDelivered + issuedQuantity > requestItem.quantityApproved) throw new ProcurementLifecycleError("A saída excede a quantidade aprovada.");
+    await assertMaterialRequestFinancialOrigin(tx, actor, { settlementId: input.settlementId, stockId: stock.id, departmentId: requestItem.request.departmentId });
 
     await applyStockMovement(tx, {
       kind: "EXIT",
@@ -523,7 +542,8 @@ export async function issueMaterialRequestItem(db: Db, actor: ProcurementActor, 
       quantity: issuedQuantity,
       unitCost: stock.unitCost,
       departmentId: requestItem.request.departmentId,
-      reason: `Requisição de material ${requestItem.request.number}`,
+      settlementId: input.settlementId,
+      reason: `${input.settlementId ? "CONSUMO_ORCAMENTARIO:" : ""}Requisição de material ${requestItem.request.number}`,
       actor,
     });
     await tx.materialRequestItem.update({ where: { id: requestItem.id }, data: { quantityDelivered: { increment: issuedQuantity } } });
@@ -557,7 +577,12 @@ export async function issueMaterialRequestInFull(db: Db, actor: ProcurementActor
       tx.materialRequest.findUnique({ where: { id: requestId }, include: { items: true } }),
     ]);
     if (!request) throw new ProcurementLifecycleError("Requisição de material não encontrada.");
-    if (existingEvent) return request;
+    if (existingEvent) {
+      for (const assignment of input.stockByItem.filter(item => item.settlementId)) {
+        if (!await tx.materialMovement.count({ where: { materialRequestItemId: assignment.requestItemId, stockId: assignment.stockId, settlementId: assignment.settlementId } })) throw new ProcurementLifecycleError("Entrega já registrada com outra origem financeira; preserve os movimentos confirmados.");
+      }
+      return request;
+    }
     if (!["Aprovada", "Atendida Parcialmente"].includes(request.status)) {
       throw new ProcurementLifecycleError("A entrega integral exige uma requisição de material aprovada.");
     }
@@ -567,6 +592,7 @@ export async function issueMaterialRequestInFull(db: Db, actor: ProcurementActor
       throw new ProcurementLifecycleError("Informe uma única posição de estoque para cada item pendente.");
     }
     const assignmentByItem = new Map(input.stockByItem.map((item) => [item.requestItemId, item.stockId.trim()]));
+    const financialOriginByItem = new Map(input.stockByItem.map(item => [item.requestItemId, item.settlementId?.trim() || undefined]));
     if (remainingItems.some((item) => !assignmentByItem.get(item.id)) || assignmentByItem.size !== remainingItems.length) {
       throw new ProcurementLifecycleError("Informe a posição de estoque para todos os itens pendentes da requisição.");
     }
@@ -599,6 +625,7 @@ export async function issueMaterialRequestInFull(db: Db, actor: ProcurementActor
     for (const item of remainingItems) {
       const stock = stockById.get(assignmentByItem.get(item.id)!)!;
       const quantityToIssue = item.quantityApproved - item.quantityDelivered;
+      await assertMaterialRequestFinancialOrigin(tx, actor, { settlementId: financialOriginByItem.get(item.id), stockId: stock.id, departmentId: request.departmentId });
       await applyStockMovement(tx, {
         kind: "EXIT",
         sourceType: "MATERIAL_REQUEST_ISSUE",
@@ -609,7 +636,8 @@ export async function issueMaterialRequestInFull(db: Db, actor: ProcurementActor
         quantity: quantityToIssue,
         unitCost: stock.unitCost,
         departmentId: request.departmentId,
-        reason: `Entrega integral da requisição ${request.number}`,
+        settlementId: financialOriginByItem.get(item.id),
+        reason: `${financialOriginByItem.get(item.id) ? "CONSUMO_ORCAMENTARIO:" : ""}Entrega integral da requisição ${request.number}`,
         actor,
       });
       await tx.materialRequestItem.update({ where: { id: item.id }, data: { quantityDelivered: { increment: quantityToIssue } } });

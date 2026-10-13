@@ -88,6 +88,7 @@ export default async function ProcessoDetalhesPage({
 
   return (
     <PageFrame className="max-w-6xl space-y-3">
+      <Link href={`/protocolos/processos/${id}/judicial`} className="text-sm underline">Registro documentado de ação contra a entidade</Link>
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <Link href={returnTo} className="text-emerald-600 hover:text-emerald-700 text-sm font-semibold flex items-center gap-2 mb-4 w-fit transition-colors">

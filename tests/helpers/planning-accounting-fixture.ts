@@ -23,9 +23,13 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
     const models = ["GovernmentEntity", "BudgetUnit", "Secretariat", "MultiYearPlan", "BudgetGuideline", "AnnualBudgetLaw", "AnnualBudgetRevenueForecast", "AnnualBudgetExpenseFixation", "BudgetGuidelinePriority", "BudgetGuidelineRisk", "BudgetAppropriation", "CreditRequest", "CreditRequestItem", "BudgetReservation", "BudgetMovement", "ProgramPPA", "ObjectivePPA", "IndicatorPPA", "ActionPPA", "GoalPPA", "FinancialYear", "ResourceSource", "RevenueNature", "ExpenseNature", "FinancialAuditLog", "Document", "DocumentVersion", "DocumentClass", "ConfiguracaoParametroInstancia", "AuditEvent", "HealthClinicalDocument", "HealthLabReport", "SstCertificateDocument", "Employee", "Usuario", "CamVereador", "Person", "CamGabinete", "AccountingPlan", "AccountingEntry", "AccountingTransaction", "AccountingEventCatalog", "AccountingPostingRule", "MonthlyAccountingClose", "Tax", "CamProposicao", "CamLei"];
     models.push("Revenue", "Payment", "Commitment", "CommitmentMovement", "Settlement", "BankStatementImport", "BankStatementItem", "BankAccount", "BankReconciliation", "TreasuryMovement", "MonthlyAccountingCloseEvent", "AnnualAccountingClose", "PayableCarryForward", "PayableCarryForwardEvent");
     omitted.Revenue = ["budgetUnitId"];
+    omitted.AccountingEntry = ["classificationSnapshot"];
     models.push("InternalControlPlan", "InternalControlFinding", "InternalControlEvent", "HrIntegrationEvent");
+    models.push("TransparencyPublication");
     models.push("UsuarioUnidadeGestora", "CostCenter", "HrEmploymentContract");
     models.push("MaterialMovement");
+    models.push("RevenueResourceRedistribution");
+    models.push("Company", "Taxpayer", "Supplier", "Creditor");
     omitted.MaterialMovement = ["quantityDecimal", "unitValueDecimal", "totalValueDecimal"];
     omitted.InternalControlPlan = ["budgetUnitId"];
     const enums = new Set<string>();
@@ -57,6 +61,9 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
     await pg.exec(readFileSync("prisma/migrations-ibema/20261013210000_fiscal_index_definitions/migration.sql", "utf8"));
     await pg.exec(readFileSync("prisma/migrations-ibema/20261013220000_control_audit_event_integrity/migration.sql", "utf8"));
     await pg.exec(readFileSync("prisma/migrations-ibema/20261013230000_material_consumption_costs/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261014100000_control_final_reports/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261014150000_personnel_fiscal_definitions/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261014170000_account_classification_snapshot/migration.sql", "utf8"));
     await pg.exec(`
       CREATE UNIQUE INDEX ON "AccountingEventCatalog" (code);
       CREATE UNIQUE INDEX ON "AccountingPlan" (code);

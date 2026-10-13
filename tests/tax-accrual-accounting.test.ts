@@ -89,8 +89,13 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) {
       assert.equal((await getAssessmentAccount(f.db, assessment.id)).position.balance.toFixed(2), "7.00");
       await f.db.taxParameter.create({ data: { id: "accrual-calculation", taxId: "tax-accrual", code: "IPTU", name: "Cálculo municipal", calculationType: "PERCENTUAL_BASE", configuration: { formula: "PERCENTUAL_BASE", rate: 4 }, effectiveFrom: new Date("2026-01-01") } });
       const input = { taxId: "tax-accrual", taxpayerId: "payer-accrual", taxableBase: "100", competence: base.competence, originKey: "parameter-accrual" };
-      const parametrized = await createParametrizedAssessment(f.db, f.actor, input);
+      const simultaneous = await Promise.all([createParametrizedAssessment(f.db, f.actor, input), createParametrizedAssessment(f.db, f.actor, input)]);
+      const parametrized = simultaneous[0];
+      assert.equal(simultaneous[1].id, parametrized.id, "Efetivações concorrentes devem compartilhar a mesma origem e lançamento.");
       assert.equal((await createParametrizedAssessment(f.db, f.actor, input)).id, parametrized.id);
+      await f.db.taxParameter.update({ where: { id: "accrual-calculation" }, data: { configuration: { formula: "PERCENTUAL_BASE", rate: 5 } } });
+      await assert.rejects(createParametrizedAssessment(f.db, f.actor, input), /memória do lançamento/);
+      await f.db.taxParameter.update({ where: { id: "accrual-calculation" }, data: { configuration: { formula: "PERCENTUAL_BASE", rate: 4 } } });
       assert.equal(await sum("right"), "11.00");
       assert.equal(await sum("vpa"), "-16.00");
       await assert.rejects(createTaxAssessment(f.db, { ...f.actor, allowedBudgetUnitIds: [] }, base), /autorizadas/);

@@ -35,9 +35,18 @@ export async function runMunicipalControlDiagnostics(db: PrismaClient, actor: Ac
     if (!actor.sourcePermissions.financial || !actor.sourcePermissions.tax) rows.push({ family: "SUPPLIER_DEBT", subjectId: binding.governmentEntityId, status: "NOT_EVALUATED", description: "Leitura financeira e tributária não autorizada/ativada.", evidence: {} });
     else if (!commits.length) rows.push({ family: "SUPPLIER_DEBT", subjectId: binding.governmentEntityId, status: "NOT_EVALUATED", description: "Sem empenhos no exercício para avaliar fornecedores.", evidence: {} });
     else for (const supplier of new Map(commits.filter(commitment => effectiveValue(commitment)?.gt(0)).map(commitment => [commitment.supplierId, commitment.supplier])).values()) {
-      const identities = [...(supplier.personId ? [{ personId: supplier.personId }] : []), ...(supplier.companyId ? [{ companyId: supplier.companyId }] : [])];
-      const taxpayer = identities.length ? await tx.taxpayer.findFirst({ where: { OR: identities }, select: { id: true } }) : null;
       const linked = commits.filter(commitment => commitment.supplierId === supplier.id).map(commitment => commitment.id);
+      if ((!supplier.personId && !supplier.companyId) || (supplier.personId && supplier.companyId)) {
+        rows.push({ family: "SUPPLIER_DEBT", subjectId: supplier.id, status: "NOT_EVALUATED", description: "Fornecedor sem identidade canônica PF/PJ única; exige conciliação documental antes de pesquisar débitos.", evidence: { commitmentIds: linked } });
+        continue;
+      }
+      const identities = [...(supplier.personId ? [{ personId: supplier.personId }] : []), ...(supplier.companyId ? [{ companyId: supplier.companyId }] : [])];
+      const taxpayers = await tx.taxpayer.findMany({ where: { OR: identities }, select: { id: true, taxpayerType: true, personId: true, companyId: true }, take: 2 });
+      const taxpayer = taxpayers.length === 1 ? taxpayers[0] : null;
+      if (taxpayers.length > 1 || taxpayer && (taxpayer.personId !== supplier.personId || taxpayer.companyId !== supplier.companyId || taxpayer.taxpayerType !== (supplier.personId ? "PF" : "PJ"))) {
+        rows.push({ family: "SUPPLIER_DEBT", subjectId: supplier.id, status: "NOT_EVALUATED", description: "Contribuinte duplicado ou incompatível com a identidade do fornecedor; históricos preservados para conciliação.", evidence: { commitmentIds: linked, taxpayerIds: taxpayers.map(row => row.id) } });
+        continue;
+      }
       if (!taxpayer) { rows.push({ family: "SUPPLIER_DEBT", subjectId: supplier.id, status: "NOT_EVALUATED", description: "Fornecedor sem identidade vinculada a contribuinte municipal.", evidence: { commitmentIds: linked } }); continue; }
       const assessments = await tx.taxAssessment.findMany({ where: { taxpayerId: taxpayer.id, status: { notIn: ["Cancelado", "CANCELADO"] } }, include: { activeDebt: true }, orderBy: { id: "asc" } });
       const evidence: Array<{ assessmentId: string; debtId: string | null; balance: string }> = []; const issues: string[] = [];
@@ -95,7 +104,10 @@ export async function runMunicipalControlDiagnostics(db: PrismaClient, actor: Ac
         }
         grouped.set(account.resourceSourceId, group);
       }
-      for (const [sourceId, group] of grouped) rows.push({ family: "NEGATIVE_SOURCE", subjectId: sourceId, status: group.value.lt(0) ? "IRREGULAR" : group.issues.length ? "NOT_EVALUATED" : "REGULAR", description: `Saldo de tesouraria das contas vinculadas à fonte: ${group.value.toFixed(2)} BRL. ${group.issues.join(" ")}`, evidence: { accountIds: group.ids, treasuryMovementIds: group.movementIds, balance: group.value.toFixed(2), issues: group.issues, scope: "CURRENT_BANK_SOURCE_CASH_BALANCE_NOT_DDR_AVAILABILITY" } });
+      for (const [sourceId, group] of grouped) {
+        const issues = [...group.issues, "Disponibilidade de DDR/passivos por fonte ainda não conciliada; saldo bancário positivo não comprova regularidade da fonte."];
+        rows.push({ family: "NEGATIVE_SOURCE", subjectId: sourceId, status: group.value.lt(0) ? "IRREGULAR" : "NOT_EVALUATED", description: `Saldo de tesouraria das contas vinculadas à fonte: ${group.value.toFixed(2)} BRL. ${issues.join(" ")}`, evidence: { accountIds: group.ids, treasuryMovementIds: group.movementIds, balance: group.value.toFixed(2), issues, scope: "CURRENT_BANK_SOURCE_CASH_BALANCE_NOT_DDR_AVAILABILITY" } });
+      }
     }
     for (const code of ["HEALTH_MINIMUM", "EDUCATION_MINIMUM"] as const) {
       if (!actor.sourcePermissions.financial) rows.push({ family: "CONSTITUTIONAL_MINIMUM", subjectId: code, status: "NOT_EVALUATED", description: "Leitura financeira não autorizada/ativada.", evidence: {} });

@@ -628,7 +628,7 @@ export function PortalShell({ children, institution }: { children: React.ReactNo
       style={{ "--portal-font-scale": fontScale } as CSSProperties}
     >
       {highContrast && (
-        <style>{`.portal-high-contrast, .portal-high-contrast main, .portal-high-contrast header, .portal-high-contrast nav, .portal-high-contrast footer, .portal-high-contrast section, .portal-high-contrast aside, .portal-high-contrast div { background-color: #000 !important; background-image: none !important; color: #fff !important; border-color: #fff !important; } .portal-high-contrast a, .portal-high-contrast button { color: #ffe600 !important; } .portal-high-contrast img { filter: contrast(1.15); }`}</style>
+        <style>{`.portal-high-contrast, .portal-high-contrast main, .portal-high-contrast header, .portal-high-contrast nav, .portal-high-contrast footer, .portal-high-contrast section, .portal-high-contrast aside, .portal-high-contrast div, .portal-high-contrast input, .portal-high-contrast select, .portal-high-contrast textarea, .portal-high-contrast table, .portal-high-contrast th, .portal-high-contrast td, .portal-high-contrast details, .portal-high-contrast summary, .portal-high-contrast fieldset, .portal-high-contrast legend { background-color: #000 !important; background-image: none !important; color: #fff !important; border-color: #fff !important; } .portal-high-contrast a, .portal-high-contrast button { color: #ffe600 !important; } .portal-high-contrast img { filter: contrast(1.15); }`}</style>
       )}
       <a
         href="#conteudo-principal"

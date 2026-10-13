@@ -2,7 +2,10 @@
 
 Data: 12/10/2026. **Backlog com implementação parcial de acessos, consultas e biblioteca documental.**
 
-O fluxo implementado e as dependências de ativação estão em [Acessos e publicações](PORTAL_TRANSPARENCIA_ACESSOS_E_PUBLICACOES.md). Esta entrega não encerra as fases completas abaixo nem executa a carga do acervo em produção.
+Fechamento da execução e dependências de conteúdo/adoção: [PORTAL_TRANSPARENCIA_FECHAMENTO_T00_T09.md](PORTAL_TRANSPARENCIA_FECHAMENTO_T00_T09.md). Os checkboxes históricos abaixo preservam o aceite integral original; a tabela de fechamento distingue implementação entregue de homologação e fontes institucionais.
+
+O fluxo implementado e as dependências de ativação estão em [Acessos e publicações](PORTAL_TRANSPARENCIA_ACESSOS_E_PUBLICACOES.md). As fases abaixo conservam os critérios de aceite integral; a entrega funcional não equivale à homologação de todas as integrações ou requisitos legais.
+Atualização operacional: a carga das 136 fontes no Vercel Blob/banco configurados foi concluída nesta rodada. [Entrega funcional, roteiro e limites de integração](PORTAL_TRANSPARENCIA_TESTES_E_ENTREGA.md) é a referência atual para testes.
 
 Referências: [mapa de atualização](MAPA_ATUALIZACAO_PORTAL_TRANSPARENCIA.md) e [matriz dos 58 itens de cada Poder](MATRIZ_PORTAL_TRANSPARENCIA_CHECKLIST.md).
 
@@ -194,4 +197,4 @@ Não usar o primeiro bloco como declaração de atendimento de todos os 58 itens
 - Definir no cadastro de publicação os campos nominais básicos por categoria, CPF protegido e estados/fontes dos exemplos.
 - Confirmar arquivo autônomo da PAS ou sua publicação de origem, documentos integrais/aditivos/obras e demais fontes faltantes. Exemplos sintéticos não substituem documentos oficiais.
 
-As decisões Prefeitura+Câmara, uso da API/exemplos/fictícios e foco básico funcional foram confirmadas com o usuário. O plano segue com esses limites; nenhuma implementação/carga foi executada nesta etapa.
+As decisões Prefeitura+Câmara, uso da API/exemplos/fictícios e foco básico funcional foram confirmadas com o usuário. A implementação funcional para teste e a carga documental estão registradas no roteiro de entrega; os checkboxes acima conservam o aceite integral de cada requisito, incluindo integração nativa e homologação quando aplicáveis.

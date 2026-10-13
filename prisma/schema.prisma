@@ -1303,6 +1303,7 @@ model PlanningLegislativeLink {
 
 model GovernmentEntity {
   activeDebts ActiveDebt[]
+  transparencyBindings TransparencyNativeBinding[]
   incomingPlanningTransfers PlanningBudgetLine[] @relation("PlanningTransferDestination")
   id        String             @id @default(cuid())
   code      String             @unique
@@ -2258,6 +2259,7 @@ model ServiceSubject {
 }
 
 model Ticket {
+  transparencyRequest TransparencyCitizenRequest?
   id           String    @id @default(cuid())
   ticketNumber String    @unique // e.g., TKT-2026-0001
   subject      String
@@ -2310,6 +2312,7 @@ model Ticket {
 }
 
 model Ombudsman {
+  transparencyRequest TransparencyCitizenRequest?
   id             String  @id @default(cuid())
   protocolNumber String  @unique
   type           String // DenÃºncia, ReclamaÃ§Ã£o, Elogio, SugestÃ£o
@@ -14044,6 +14047,115 @@ model ConfiguracaoInstancia {
   updatedAt DateTime @updatedAt
 }
 
+model TransparencyNativeBinding {
+  id String @id @default(cuid())
+  publicKey String @unique @default(uuid())
+  collectionSlug String
+  sourceType String
+  sourceId String
+  governmentEntityId String
+  governmentEntity GovernmentEntity @relation(fields: [governmentEntityId], references: [id], onDelete: Restrict)
+  enabled Boolean @default(true)
+  sourceReference String
+  details Json
+  createdById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([collectionSlug, sourceType, sourceId])
+  @@index([governmentEntityId, collectionSlug, enabled])
+}
+
+model TransparencyCriterion {
+  id String @id
+  cycle Int
+  matrix String
+  dimension String
+  code String
+  title String
+  importance String
+  facets Json
+  applicableEntities Json
+  sourceUrl String
+  sourceHash String
+  evidence TransparencyCriterionEvidence[]
+  @@index([cycle, dimension, code])
+}
+model TransparencyCriterionEvidence {
+  id String @id @default(cuid())
+  criterionId String
+  criterion TransparencyCriterion @relation(fields: [criterionId], references: [id], onDelete: Restrict)
+  entity String
+  year Int
+  status String @default("UNVERIFIED")
+  urls Json
+  notes String
+  reviewedById String
+  reviewedAt DateTime @default(now())
+  @@unique([criterionId, entity, year])
+}
+
+model TransparencyCitizenRequest {
+  id String @id @default(cuid())
+  protocol String @unique
+  accessHash String @unique
+  type String
+  entity String @default("prefeitura")
+  name String?
+  email String?
+  subject String
+  message String
+  status String @default("RECEBIDO")
+  response String?
+  respondedAt DateTime?
+  dueAt DateTime @default(now())
+  outcome String?
+  extendedAt DateTime?
+  extensionReason String?
+  appeals TransparencyCitizenAppeal[]
+  nativeTicketId String? @unique
+  nativeTicket Ticket? @relation(fields: [nativeTicketId], references: [id], onDelete: Restrict)
+  nativeOmbudsmanId String? @unique
+  nativeOmbudsman Ombudsman? @relation(fields: [nativeOmbudsmanId], references: [id], onDelete: Restrict)
+  satisfaction TransparencySatisfaction?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([status, createdAt])
+}
+model TransparencySatisfaction {
+  id String @id @default(cuid())
+  requestId String @unique
+  request TransparencyCitizenRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  rating Int
+  comment String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TransparencyCitizenAppeal {
+  id String @id @default(cuid())
+  requestId String
+  request TransparencyCitizenRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  level Int
+  message String
+  status String @default("RECEBIDO")
+  response String?
+  dueAt DateTime
+  respondedAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([requestId, level])
+}
+
+model TransparencyAccess {
+  id String @id @default(cuid())
+  collectionSlug String
+  entity String
+  source String
+  year Int
+  ip String
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+}
+
 model TransparencyPublication {
   id              String   @id @default(cuid())
   publicKey       String   @unique @default(uuid())
@@ -14053,6 +14165,8 @@ model TransparencyPublication {
   title           String
   group           String
   referencePeriod String
+  documentKind String @default("OUTRO")
+  legalStage String @default("REFERENCIA")
   source          String   @default("DOCUMENTOS")
   status          String   @default("DRAFT")
   values          Json

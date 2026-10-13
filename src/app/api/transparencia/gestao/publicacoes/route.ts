@@ -3,11 +3,12 @@ import { AccessError, getTenantContextForModuleOperation } from "@/lib/platform/
 import { uploadFile, deleteUploadedDocument, validateUpload } from "@/lib/platform/blob";
 import { publicationMetadataSchema } from "@/lib/transparencia/publication-policy";
 import { getTransparencySettings } from "@/lib/transparencia/presentation-settings";
+import {isSameOriginRequest} from "@/lib/transparencia/request-origin";
 
 export async function POST(request: Request) {
   try {
     const context = await getTenantContextForModuleOperation("TRANSPARENCIA", "create");
-    if (request.headers.get("origin") !== new URL(request.url).origin) return Response.json({ error: "Origem inválida." }, { status: 403 });
+    if (!isSameOriginRequest(request)) return Response.json({ error: "Origem inválida." }, { status: 403 });
     const form = await request.formData();
     const metadata = publicationMetadataSchema.parse(Object.fromEntries(["title", "collectionSlug", "entity", "year", "group", "referencePeriod"].map(key => [key, form.get(key)])));
     const settings = await getTransparencySettings(context.prisma);

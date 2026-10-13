@@ -1,5 +1,7 @@
 # Portal da Transparência — acessos e publicação de documentos
 
+**Atualização:** o acervo de 136 fontes já foi carregado no Vercel Blob e publicado no banco configurado. Recursos e roteiro atuais: [Entrega e testes](PORTAL_TRANSPARENCIA_TESTES_E_ENTREGA.md).
+
 ## Endereços e navegação
 
 - **Cidadão:** `https://www.ibema.celeriflow.com.br/portal/portaldatransparencia`.
@@ -11,7 +13,7 @@
 ## Fluxo do acervo
 
 1. Em Configurações, definir exercícios disponíveis, entidades e consultas habilitadas.
-2. Selecionar PDFs de `Novos Docs` ou novos documentos. Todos os arquivos desse acervo foram informados pelo responsável como provenientes do Portal da Transparência anterior.
+2. Selecionar PDF, CSV, TXT, PNG, JPEG ou ZIP. O upload usa envio direto ao Vercel Blob privado, até 100 MB por novo arquivo. Todos os documentos de Novos Docs foram informados pelo responsável como provenientes do Portal da Transparência anterior; a carga operacional desse acervo foi concluída.
 3. Informar entidade, exercício, assunto, competência/período e consulta de destino. Separar lotes com metadados diferentes.
 4. Em upload múltiplo, cada nome de arquivo é usado como título. Em upload único, é possível definir um título próprio.
 5. O arquivo é enviado ao armazenamento privado da instância e registrado como **Rascunho**. O SHA-256 corresponde aos bytes do arquivo.
@@ -39,17 +41,17 @@ CSV exporta o conjunto filtrado completo, com origem e proteção contra fórmul
 - Aplicar a migration aditiva `20261013010000_transparency_publications` pelo fluxo de deploy de `prisma/migrations-ibema`.
 - Configurar `BLOB_READ_WRITE_TOKEN` para o armazenamento privado da instância.
 - Garantir configuração de instância e permissões `TRANSPARENCIA` dos responsáveis.
-- Carregar e publicar os PDFs por lotes de assunto/exercício. **Este desenvolvimento não executou a carga dos arquivos locais no armazenamento de produção.** A presença em `docs/Novos docs` não equivale a publicação externa; essa pasta não é asset de runtime/deploy.
+- **Carga concluída:** 136 fontes, 826.700.805 bytes, com SHA-256 conferido após upload. Os arquivos são servidos do Vercel Blob; `docs/Novos docs` continua fora dos assets de runtime/deploy.
 - Conferir consulta e download sem sessão após o deploy.
 
 ## Limites registrados
 
-Esta entrega organiza os acessos e o fluxo de documentos, e disponibiliza o contrato de consultas. A carga integral do acervo, validação de todos os campos/endpoints reais da API, integração nativa de todas as famílias, projeção oficial de restos a pagar, formatos adicionais e auditoria PNTP integral continuam no backlog T00–T09. Os documentos de referência não são inseridos na biblioteca pública antes da efetiva publicação do arquivo.
+Esta entrega disponibiliza consultas e gestão documental para teste, com acervo carregado, painel, formatos adicionais, configurações, consultas/grupos documentais novos e canal privado do cidadão. Validação integral da API, integração nativa de todas as famílias e auditoria/homologação PNTP permanecem no backlog T00–T09. A projeção de RP nativos expõe o acompanhamento interno existente, sem apresentá-lo como demonstrativo legal homologado.
 
 ## Verificação local
 
 - `npm run build`: aprovado (Prisma generate, Next typegen, TypeScript e build de produção).
 - ESLint direcionado aos serviços, páginas, rotas, navegação e testes alterados: sem erros ou avisos.
-- 39 testes aprovados: consultas novas, proxy/navegação, financeiro público, publicações de planejamento e política de avisos públicos.
+- 48 testes aprovados: consultas, novas consultas/grupos documentais, proteção do banco, canal do cidadão, proxy/navegação, financeiro público, planejamento e avisos públicos.
 - Casos novos cobrem 180 registros com página intermediária/exportação integral, filtros combinados, origem fictícia, total ausente, falha externa sem fallback, Câmara sem código confirmado e hash de bytes divergentes.
-- Migration e upload/download real no armazenamento da instância ainda dependem da ativação operacional descrita acima; nenhum deploy foi executado nesta rodada.
+- Migrations aplicadas e downloads reais conferidos no Vercel Blob, inclusive ZIP de 144 MB. O teste HTTP de produção local foi executado. O código desta rodada ainda não foi enviado a deploy.

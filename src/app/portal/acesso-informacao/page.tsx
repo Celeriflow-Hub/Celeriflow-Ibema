@@ -3,13 +3,16 @@ import Link from "next/link";
 import { FileText } from "lucide-react";
 import { PortalBreadcrumb } from "@/components/portal-institucional/PortalShell";
 import { MUNICIPALITY_INSTITUTION_NAME } from "@/lib/municipality-identity";
+import { CitizenRequestForm } from "@/components/transparencia/CitizenRequestForm";
+import {CitizenServiceInformation} from "@/components/transparencia/CitizenServiceInformation";
 
 export const metadata: Metadata = {
   title: `Acesso à Informação | ${MUNICIPALITY_INSTITUTION_NAME}`,
   description: `Serviço de Informação ao Cidadão (e-SIC) de ${MUNICIPALITY_INSTITUTION_NAME}.`,
 };
 
-export default function AcessoInformacaoPage() {
+export const dynamic="force-dynamic";
+export default async function AcessoInformacaoPage() {
   return (
     <main className="mx-auto max-w-4xl px-4 py-9 sm:px-6">
       <PortalBreadcrumb current="Acesso à Informação" />
@@ -23,8 +26,8 @@ export default function AcessoInformacaoPage() {
         <article className="rounded-lg border border-slate-200 bg-white p-5">
           <h2 className="font-bold text-slate-900">Como pedir informação</h2>
           <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-slate-700">
-            <li>Registre seu pedido pelo <Link href="/portal/contato" className="font-bold text-[#0e4c7e] hover:underline">Fale Conosco</Link>, identificando a informação desejada.</li>
-            <li>Acompanhe a resposta pelo e-mail informado e pelos canais oficiais.</li>
+             <li>Registre seu pedido no formulário abaixo, identificando a informação desejada.</li>
+             <li>Guarde o protocolo e a chave privada para consultar a resposta nesta página. O formulário não envia e-mail automático.</li>
             <li>Consulte antes o <Link href="/portal-transparencia" className="font-bold text-[#0e4c7e] hover:underline">Portal da Transparência</Link> e os <Link href="/portal/dados-abertos" className="font-bold text-[#0e4c7e] hover:underline">Dados Abertos</Link> — a informação pode já estar publicada.</li>
           </ol>
         </article>
@@ -33,7 +36,9 @@ export default function AcessoInformacaoPage() {
           <p className="mt-2 text-sm leading-6 text-slate-700">Receitas, despesas, contratos, licitações e relatórios legais estão disponíveis para consulta pública e exportação em CSV, sem necessidade de cadastro.</p>
           <Link href="/portal-transparencia" className="mt-3 inline-block rounded-md bg-[#00843d] px-4 py-2 text-sm font-bold text-white hover:bg-[#006e33]">Abrir Portal da Transparência</Link>
         </article>
-      </div>
+       </div>
+       <div className="mt-6"><CitizenRequestForm /></div>
+       <div className="mt-6"><CitizenServiceInformation/></div>
     </main>
   );
 }

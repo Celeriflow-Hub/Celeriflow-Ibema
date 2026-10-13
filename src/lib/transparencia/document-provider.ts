@@ -1,6 +1,12 @@
 import "server-only";
 import type { PrismaClient } from "@prisma/client";
 import type { PublicCollection, PublicDataset, PublicRecord, TransparencyQuery } from "./query-contract";
+import { transparencyCatalog } from "./consultation-catalog";
+export function publicPublicationValues(value: unknown): PublicRecord["values"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const allowed = new Set([...transparencyCatalog.flatMap(collection => [...collection.columns.map(column => column.key), ...collection.filters.map(filter => filter.key)]), "origin", "sourceDocumentId", "sourceMunicipality", "sourceReference", "sizeBytes", "sha256", "version", "competence", "originalYear"]);
+  return Object.fromEntries(Object.entries(value).filter(([key, cell]) => allowed.has(key) && (cell === null || ["string", "number", "boolean"].includes(typeof cell))));
+}
 export const receivedTransparencyReferences = [
   { code: "ND-127", title: "Relatório Anual de Monitoramento da Transparência 2025", group: "Controle e transparência", year: 2025, reference: "2025", filename: "Relatório Anual de Monitoramento do Portal Transparência 2025.pdf" },
   { code: "ND-040", title: "Demonstrativo simplificado do Relatório de Gestão Fiscal", group: "Contas públicas / RGF", year: 2026, reference: "2º quadrimestre/2026", filename: "DEMONSTRATIVO SIMPLIFICADO DO RELATORIO DE GESTÃO FISCAL.pdf" },
@@ -16,7 +22,7 @@ export const receivedTransparencyReferences = [
 
 export async function documentTransparencyDataset(db: PrismaClient, collection: PublicCollection, query: TransparencyQuery): Promise<PublicDataset> {
   const records: PublicRecord[] = [];
-  const native = await db.transparencyPublication.findMany({ where: { collectionSlug: collection.slug, year: query.year, status: "PUBLISHED", ...(query.entity !== "consolidado" ? { entity: query.entity } : {}) }, orderBy: [{ publishedAt: "desc" }, { order: "asc" }, { publicKey: "asc" }] });
-  for (const entry of native) records.push({ key: entry.publicKey, entity: entry.entity as "prefeitura" | "camara", year: entry.year, values: { ...(entry.values as PublicRecord["values"]), name: entry.title, group: entry.group, date: entry.publishedAt?.toISOString().slice(0, 10) || null, format: entry.contentType || "Link", reference: entry.referencePeriod, status: "Publicado", version: entry.version }, links: entry.fileUrl ? [{ title: "Documento publicado", url: `/api/transparencia/publicacoes/${entry.publicKey}` }] : entry.linkUrl ? [{ title: "Publicação de origem", url: entry.linkUrl }] : [] });
+   const native = await db.transparencyPublication.findMany({ where: { ...(collection.slug !== "publicacoes" ? { collectionSlug: collection.slug } : {}), year: query.year, status: "PUBLISHED", ...(query.entity !== "consolidado" ? { entity: query.entity } : {}) }, orderBy: [{ publishedAt: "desc" }, { order: "asc" }, { publicKey: "asc" }] });
+   for (const entry of native) records.push({ key: entry.publicKey, entity: entry.entity as "prefeitura" | "camara", year: entry.year, values: { ...publicPublicationValues(entry.values), name: entry.title, group: entry.group, date: entry.publishedAt?.toISOString().slice(0, 10) || null, format: ({"application/pdf":"PDF","application/zip":"ZIP","text/csv":"CSV","text/plain":"TXT","image/png":"PNG","image/jpeg":"JPEG"} as Record<string,string>)[entry.contentType||""]||entry.contentType||"Link", reference: entry.referencePeriod, status: "Publicado",documentKind:entry.documentKind,legalStage:entry.legalStage, version: entry.version, sha256: entry.sha256,collectionSlug:entry.collectionSlug }, links: entry.fileUrl ? [{ title: "Baixar documento", url: `/api/transparencia/publicacoes/${entry.publicKey}` }] : entry.linkUrl ? [{ title: "Publicação de origem", url: entry.linkUrl }] : [] });
    return { records, source: "DOCUMENTOS", status: "AVAILABLE", updatedAt: native[0]?.updatedAt.toISOString() || null, provenance: "Documentos municipais enviados e publicados pela gestão do Portal da Transparência. O acervo do portal anterior fica disponível após upload e publicação de cada arquivo.", complete: true };
 }

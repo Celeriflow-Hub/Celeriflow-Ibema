@@ -9,6 +9,6 @@ export function exportTransparencyCsv(collection: PublicCollection, dataset: Pub
     const safe = /^[\t\r\n ]*[=+\-@]/.test(text) ? `'${text}` : text;
     return `"${safe.replace(/"/g, '""')}"`;
   };
-  const columns = ["Fonte", "Origem", "Entidade", "Exercício", ...collection.columns.map(column => column.label)];
-  return "\uFEFF" + [columns, ...result.rows.map(record => [dataset.source, dataset.provenance, record.entity, record.year, ...collection.columns.map(column => record.values[column.key])])].map(row => row.map(cell).join(";")).join("\r\n") + "\r\n";
+  const columns = ["Fonte", "Origem", "Entidade", "Exercício","Campos excluídos dos totais","Escopo de período", ...collection.columns.map(column => column.label)];
+  return "\uFEFF" + [columns, ...result.rows.map(record => [dataset.source, dataset.provenance, record.entity, record.year,record.excludedFromTotals?.join(",")||"",record.periodIndependent?"Referência anual, independente da data do movimento":"Data do registro", ...collection.columns.map(column => record.values[column.key])])].map(row => row.map(cell).join(";")).join("\r\n") + "\r\n";
 }

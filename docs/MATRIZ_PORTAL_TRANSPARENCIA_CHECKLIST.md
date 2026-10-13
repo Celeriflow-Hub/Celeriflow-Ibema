@@ -2,6 +2,10 @@
 
 Data: 12/10/2026. Referência de código: `c778b7b`.
 
+Esta tabela preserva o levantamento de lacunas nessa referência. A implementação posterior — consultas, biblioteca com 136 fontes no Vercel Blob, gestão, formatos, grupos/consultas documentais e canal do cidadão — está em [Entrega e testes](PORTAL_TRANSPARENCIA_TESTES_E_ENTREGA.md). Os estados abaixo não devem ser lidos como inventário atualizado de telas nem como aceite de conformidade integral.
+
+Fechamento atualizado por fase: [T00–T09](PORTAL_TRANSPARENCIA_FECHAMENTO_T00_T09.md). Matriz PNTP 2026 importada no sistema e cartilha preservada no Blob: 181 critérios, aplicabilidade Executivo 96 e Legislativo 83; 60 evidências PARCIAIS registradas. Modelos de Aurora estão em REFERENCIA, sem decisões/atos presumidos.
+
 Mapa principal: [MAPA_ATUALIZACAO_PORTAL_TRANSPARENCIA.md](MAPA_ATUALIZACAO_PORTAL_TRANSPARENCIA.md). Execução: [PORTAL_TRANSPARENCIA_BACKLOG_EXECUCAO.md](PORTAL_TRANSPARENCIA_BACKLOG_EXECUCAO.md).
 
 ## Método e legenda

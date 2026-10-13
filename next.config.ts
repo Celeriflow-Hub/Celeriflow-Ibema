@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const isProductionBuild = process.env.NODE_ENV === "production";
 
 const nextConfig: NextConfig = {
+  // PDFKit resolves its bundled font metrics through Node filesystem paths.
+  serverExternalPackages: ["pdfkit"],
   typescript: {
     // The production build only needs application sources. Test fixtures and
     // operational scripts are checked by their own commands and can otherwise
@@ -43,6 +45,8 @@ const nextConfig: NextConfig = {
     ],
   },
   outputFileTracingIncludes: {
+    "/api/transparencia/consultas/*": ["./node_modules/pdfkit/js/data/**/*"],
+    "/api/transparencia/exemplos/*/*": ["./node_modules/pdfkit/js/data/**/*"],
     "/api/financeiro/relatorios": ["./node_modules/pdfkit/js/data/**/*"],
     "/api/frotas/relatorios": ["./node_modules/pdfkit/js/data/**/*"],
     "/api/saude/relatorios": ["./node_modules/pdfkit/js/data/**/*"],

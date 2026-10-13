@@ -1057,7 +1057,7 @@ export async function tributarioBi(db: PrismaClient, filters: { year?: number; t
     db.debtInstallment.findMany({ select: { status: true, totalValueDecimal: true, totalValue: true }, take: 1000 }),
     db.taxExecutionCase.findMany({ select: { status: true, internalProtocol: true, activeDebtId: true }, take: 500 }),
     db.taxProtestItem.findMany({ select: { status: true, batchId: true, activeDebtId: true }, take: 1000 }),
-    db.taxDeclaration.findMany({ where: year ? { competence: { gte: new Date(Date.UTC(year, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) } } : {}, select: { competence: true, issValueDecimal: true, activityId: true }, take: 2000 }),
+    db.taxDeclaration.findMany({ where: { status: { notIn: ["CANCELADA", "SUBSTITUIDA"] }, ...(year ? { competence: { gte: new Date(Date.UTC(year, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) } } : {}) }, select: { competence: true, issValueDecimal: true, activityId: true }, take: 2000 }),
     db.taxServiceActivity.findMany({ select: { id: true, code: true } }),
   ]);
   const activityNames = new Map(activities.map((row) => [row.id, row.code ?? row.id]));

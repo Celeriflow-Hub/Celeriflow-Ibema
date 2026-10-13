@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createPlanningExecutionFixture } from "./helpers/planning-execution-fixture";
-import { requestTravelAllowance, decideTravelAllowance, accountForTravelAllowance, buildTravelAllowanceDocument } from "../src/lib/rh/travel-allowance";
+import { requestTravelAllowance, decideTravelAllowance, accountForTravelAllowance, buildTravelAllowanceDocument, reopenTravelAllowanceReport } from "../src/lib/rh/travel-allowance";
 import { dispatchTravelAllowanceExpense } from "../src/lib/rh/travel-finance";
 import { approveExpenseRequest, createBudgetReservation, createCommitment, createSettlement, createRevenue, createPayment, updatePaymentStatus, reversePayment, cancelSettlement, cancelCommitment } from "../src/lib/financeiro";
 import type { AppContext } from "../src/lib/platform/tenant-context";
@@ -42,7 +42,7 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) test(`P4 ${jur
     assert.deepEqual(await dispatchTravelAllowanceExpense(context, dispatch), expense);
     await assert.rejects(dispatchTravelAllowanceExpense(context, { ...dispatch, date: "2026-09-02" }), /outra classificação/);
     const report = { requestId: request.id, activities: "Capacitação concluída e conhecimentos compartilhados", returnedAmount: "0.00", reportDate: "2026-09-02", documentId: "documento-fiscal" };
-    await assert.rejects(accountForTravelAllowance(f.db, "ana", report, context), /pagamento integral/);
+    await assert.rejects(accountForTravelAllowance(f.db, "ana", { ...report, reportDate: "2026-09-04" }, context), /pagamento integral/);
     const date = new Date(dispatch.date);
     await approveExpenseRequest(f.db, f.financeReviewer, expense.expenseId);
     const reservation = await createBudgetReservation(f.db, f.financeReviewer, { number: "TRAVEL-RES", date, value: "1.50", appropriationId: f.appropriationId, expenseId: expense.expenseId });
@@ -57,8 +57,10 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) test(`P4 ${jur
     assert.equal((await accountForTravelAllowance(f.db, "ana", report, context)).id, submitted.id);
     await assert.rejects(buildTravelAllowanceDocument(f.db, request.id, "PRESTACAO", denied));
     assert.equal((await buildTravelAllowanceDocument(f.db, request.id, "PRESTACAO", context)).title, "Diárias — PRESTACAO");
+    await assert.rejects(reversePayment(f.db, f.financeReviewer, payment.id, "Estorno fundamentado da viagem municipal"), /prestação ativa/);
+    await reopenTravelAllowanceReport({ ...context, user: { ...context.user, id: "beatriz", employeeId: null } }, { requestId: request.id, requestKey: "travel-payment-correction", date: "2026-09-03", documentId: "documento-fiscal", reason: "Regularização independente antes do estorno da viagem" });
     await reversePayment(f.db, f.financeReviewer, payment.id, "Estorno fundamentado da viagem municipal");
-    await assert.rejects(accountForTravelAllowance(f.db, "ana", report, context), /pagamento integral/);
+    await assert.rejects(accountForTravelAllowance(f.db, "ana", { ...report, reportDate: "2026-09-04" }, context), /pagamento integral/);
 
     for (const id of ["travel-rh", "travel-finance"]) await f.db.department.create({ data: { id, name: id, secretariatId: "secretaria", isActive: true } });
     await f.db.processType.create({ data: { id: "travel-process-type", name: "Viagens municipais", genericWorkflowEnabled: true } });

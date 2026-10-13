@@ -1,5 +1,4 @@
-import { getTenantContextForModule } from "@/lib/platform/tenant-context";
-import { ensureTributarioS3Defaults } from "@/lib/tributacao/s3-service";
+import { getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import ItbiClient from "./ItbiClient";
 
 export const dynamic = "force-dynamic";
@@ -9,14 +8,15 @@ function taxpayerName(item: { person: { fullName: string; cpf: string } | null; 
 }
 
 export default async function ItbiPage() {
-  const { prisma } = await getTenantContextForModule("TRIBUTACAO");
-  await ensureTributarioS3Defaults(prisma);
+  const { prisma, user } = await getTenantContextForModule("TRIBUTACAO");
+  const unrestricted = isSystemAdministrator(user);
+  const declarationScope = unrestricted ? {} : user.allowedBudgetUnitIds.length ? { OR: user.allowedBudgetUnitIds.map(budgetUnitId => ({ calculationSnapshot: { path: ["budgetUnitId"], equals: budgetUnitId } })) } : { id: { in: [] } };
   const [types, properties, taxpayers, processes, declarations] = await Promise.all([
     prisma.itbiTransactionType.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     prisma.realEstate.findMany({ orderBy: { municipalInsc: "asc" }, take: 500 }),
     prisma.taxpayer.findMany({ where: { status: "Ativo" }, include: { person: true, company: true }, orderBy: { createdAt: "desc" }, take: 500 }),
     prisma.process.findMany({ orderBy: { createdAt: "desc" }, select: { id: true, protocolNumber: true, status: true }, take: 200 }),
-    prisma.itbiDeclaration.findMany({ include: { transactionType: true, parties: true, events: { orderBy: { createdAt: "desc" }, take: 20 } }, orderBy: { createdAt: "desc" }, take: 300 }),
+    prisma.itbiDeclaration.findMany({ where: declarationScope, include: { transactionType: true, parties: true, events: { orderBy: { createdAt: "desc" }, take: 20 } }, orderBy: { createdAt: "desc" }, take: 300 }),
   ]);
   const names = new Map(taxpayers.map((item) => [item.id, taxpayerName(item)]));
   return <ItbiClient

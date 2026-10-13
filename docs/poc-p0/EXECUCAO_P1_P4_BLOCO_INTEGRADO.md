@@ -2,6 +2,8 @@
 
 ## Situação das fases
 
+**Continuação mais recente, ainda não validada:** implementadas transações NFS-e/escrita/débito e avulsa, titularidade fiscal ITBI após pagamento integral e recomposição no estorno, gestão versionada de perfis DA e restituições corrente/anterior de diárias com regularização e histórico. Detalhes, subcritérios e limites na seção final de [revisão dos três domínios](REVISAO_TRIBUTACAO_FINANCEIRO_CONTROLE_2026_10_13.md). Testes novos preparados; lint/Prisma/testes/build não foram executados, conforme a solicitação de reservar as verificações para o fechamento integral. Resultados históricos abaixo não validam estas alterações. P1–P10 e os checklists completos continuam abertos.
+
 **Revisão de 13/10/2026:** [Tributação, Financeiro e Controle Interno](REVISAO_TRIBUTACAO_FINANCEIRO_CONTROLE_2026_10_13.md). Checklists numerados/categorizados, pareceres/providências, histórico de decisões e diagnóstico de fonte bancária implementados; guarda do saldo pago em guia cancelada corrigida. Rodadas PostgreSQL do bloco aprovadas e novo build completo aprovado. P1–P4 e os checklists integrais continuam abertos; o documento distingue desenvolvimento pendente de configuração municipal.
 
 **Continuação de adiantamentos:** regularização de prestação aprovada implementada com revisão independente, inversão de controles, preservação da aprovação e abertura de novo ciclo antes do estorno de restituição. Testes positivos 2025→2026 dos dois entes e regressões de diárias aprovados (4/4); regressão compartilhada após correção do tipo enum da fixture aprovada (27/27), com novo build completo aprovado. Detalhes e limites no documento de revisão; restituição do exercício corrente permanece pendente.

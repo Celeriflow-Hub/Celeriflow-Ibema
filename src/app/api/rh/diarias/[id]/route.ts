@@ -6,7 +6,7 @@ import { renderHrReport } from "@/lib/rh/report-service";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const context = await getTenantContextForModuleOperation("RH", "issueReports");
-  const input = z.object({ type: z.enum(["SOLICITACAO", "AUTORIZACAO", "PRESTACAO"]).default("SOLICITACAO"), format: z.enum(["PDF", "CSV", "XLSX"]).default("PDF") }).parse(Object.fromEntries(request.nextUrl.searchParams));
+  const input = z.object({ type: z.enum(["SOLICITACAO", "AUTORIZACAO", "PRESTACAO", "HISTORICO"]).default("SOLICITACAO"), format: z.enum(["PDF", "CSV", "XLSX"]).default("PDF") }).parse(Object.fromEntries(request.nextUrl.searchParams));
   const { id } = await params;
   try {
     const document = await buildTravelAllowanceDocument(context.prisma, id, input.type, context);

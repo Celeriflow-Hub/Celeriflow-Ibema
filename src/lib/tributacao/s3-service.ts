@@ -1,9 +1,19 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { createHash, randomBytes } from "node:crypto";
 import { calculateItbi, canDeleteDteMessage, dteDeadline, nextPowerOfAttorneyStatus, TributarioS3Error } from "./s3-engine";
-import { generateTaxGuide, type TaxActor } from "./index";
+import { generateTaxGuideInTransaction, type TaxActor } from "./index";
+import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxScopeSnapshot } from "./scope";
+import { recognizeTaxAssessmentInTransaction } from "./accrual-accounting";
+import { assertAccountingPeriodOpen } from "@/lib/financeiro";
 
 type Db = PrismaClient | Prisma.TransactionClient;
+
+async function itbiScope(db: Db, actor: TaxActor, snapshot?: Prisma.JsonValue) {
+  const stored = taxScopeSnapshot(snapshot);
+  const tax = typeof stored.taxId === "string" ? await db.tax.findUnique({ where: { id: stored.taxId } }) : await db.tax.findFirst({ where: { name: { equals: "ITBI", mode: "insensitive" }, isActive: true }, orderBy: { createdAt: "asc" } });
+  if (!tax?.isActive) throw new TributarioS3Error("Configure o tributo ITBI ativo antes de operar declarações.");
+  return { tax, scope: await resolveTaxAssessmentScope(db, actor, tax.id, snapshot) };
+}
 
 function required(value: string, label: string) {
   const text = value.trim();
@@ -67,7 +77,7 @@ export async function createItbiDeclaration(db: PrismaClient, actor: TaxActor, i
   transactionTypeId: string; realEstateId: string; processId: string; registryOffice: string; transmittedFractionPercent: number;
   declaredPropertyValue: number; sellerTaxpayerId: string; buyers: { taxpayerId: string; sharePercent: number }[];
   responsibleTaxpayerId?: string; responsibilityType?: "SOLIDARIO" | "SUBSIDIARIO"; isLeasehold?: boolean; leaseholdDetails?: string;
-  cadastralUpdateMode: "MANUAL" | "AUTO_ON_APPROVAL";
+  cadastralUpdateMode: "MANUAL" | "AUTO_ON_APPROVAL" | "AUTO_ON_PAYMENT";
 }) {
   return db.$transaction(async (tx) => {
     const [transactionType, property, process] = await Promise.all([
@@ -78,6 +88,9 @@ export async function createItbiDeclaration(db: PrismaClient, actor: TaxActor, i
     if (!transactionType) throw new TributarioS3Error("Selecione um tipo de transmissão ativo.");
     if (!property) throw new TributarioS3Error("Imóvel não encontrado.");
     if (!process) throw new TributarioS3Error("Selecione um processo/protocolo existente.");
+    const { tax, scope } = await itbiScope(tx, actor);
+    if (!["MANUAL", "AUTO_ON_APPROVAL", "AUTO_ON_PAYMENT"].includes(input.cadastralUpdateMode)) throw new TributarioS3Error("Selecione o gatilho de atualização cadastral.");
+    if (new Set(input.buyers.map(buyer => buyer.taxpayerId)).size !== input.buyers.length) throw new TributarioS3Error("Adquirentes duplicados na mesma transmissão.");
     const partyIds = [input.sellerTaxpayerId, ...input.buyers.map((buyer) => buyer.taxpayerId), input.responsibleTaxpayerId].filter(Boolean) as string[];
     const taxpayers = await tx.taxpayer.count({ where: { id: { in: [...new Set(partyIds)] }, status: "Ativo" } });
     if (taxpayers !== new Set(partyIds).size) throw new TributarioS3Error("Uma das partes não é contribuinte ativo.");
@@ -90,8 +103,8 @@ export async function createItbiDeclaration(db: PrismaClient, actor: TaxActor, i
       registryOffice: required(input.registryOffice, "Cartório"), transmissionScope: calculation.fraction.equals(100) ? "INTEGRAL" : "PARCIAL",
       transmittedFraction: calculation.fraction, declaredPropertyValue: calculation.propertyValue, taxableBase: calculation.taxableBase,
       appliedRate: calculation.rate, taxAmount: calculation.taxAmount, blockingTaxDebt: debts.blockingTaxDebt, nonTaxDebtAmount: debts.nonTaxDebtAmount,
-      calculationSnapshot: json({ formula: "valorImovel × fracaoTransmitida × aliquota", propertyValue: calculation.propertyValue.toFixed(2), fractionPercent: calculation.fraction.toString(), taxableBase: calculation.taxableBase.toFixed(2), ratePercent: calculation.rate.toString(), taxAmount: calculation.taxAmount.toFixed(2), allocations: calculation.allocations.map((allocation, index) => ({ taxpayerId: input.buyers[index].taxpayerId, sharePercent: allocation.sharePercent.toString(), transmittedValue: allocation.transmittedValue.toFixed(2), taxAmount: allocation.taxAmount.toFixed(2) })) }),
-      isLeasehold: Boolean(input.isLeasehold), leaseholdDetails: input.leaseholdDetails?.trim() || null, cadastralUpdateMode: input.cadastralUpdateMode,
+      calculationSnapshot: json({ ...scope, taxId: tax.id, formula: "valorImovel × fracaoTransmitida × aliquota", propertyValue: calculation.propertyValue.toFixed(2), fractionPercent: calculation.fraction.toString(), taxableBase: calculation.taxableBase.toFixed(2), ratePercent: calculation.rate.toString(), taxAmount: calculation.taxAmount.toFixed(2), allocations: calculation.allocations.map((allocation, index) => ({ taxpayerId: input.buyers[index].taxpayerId, sharePercent: allocation.sharePercent.toString(), transmittedValue: allocation.transmittedValue.toFixed(2), taxAmount: allocation.taxAmount.toFixed(2) })) }),
+      isLeasehold: Boolean(input.isLeasehold), leaseholdDetails: input.leaseholdDetails?.trim() || null, cadastralUpdateMode: input.cadastralUpdateMode === "AUTO_ON_APPROVAL" ? "AUTO_ON_PAYMENT" : input.cadastralUpdateMode,
       createdByUsuarioId: actor.usuarioId,
       parties: { create: [
         { taxpayerId: input.sellerTaxpayerId, role: "TRANSMITENTE", participationPercent: 100, sortOrder: 0 },
@@ -106,8 +119,10 @@ export async function createItbiDeclaration(db: PrismaClient, actor: TaxActor, i
 
 export async function transmitItbiDeclaration(db: PrismaClient, actor: TaxActor, declarationId: string) {
   return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "ItbiDeclaration" WHERE id=${declarationId} FOR UPDATE`;
     const declaration = await tx.itbiDeclaration.findUnique({ where: { id: declarationId }, include: { transactionType: true, parties: true } });
     if (!declaration || declaration.status !== "RASCUNHO") throw new TributarioS3Error("Somente declaração em rascunho pode ser transmitida.");
+    await itbiScope(tx, actor, declaration.calculationSnapshot);
     if (!declaration.processId) throw new TributarioS3Error("A transmissão exige processo/protocolo vinculado.");
     if (declaration.transactionType.requiresDebtClearance && declaration.blockingTaxDebt.greaterThan(0)) throw new TributarioS3Error(`O imóvel possui ${declaration.blockingTaxDebt.toFixed(2)} em débitos tributários pendentes.`);
     const buyer = declaration.parties.find((party) => party.role === "ADQUIRENTE");
@@ -120,45 +135,57 @@ export async function transmitItbiDeclaration(db: PrismaClient, actor: TaxActor,
 
 export async function analyzeItbiDeclaration(db: PrismaClient, actor: TaxActor, input: { declarationId: string; approved: boolean; notes: string }) {
   return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "ItbiDeclaration" WHERE id=${input.declarationId} FOR UPDATE`;
     const declaration = await tx.itbiDeclaration.findUnique({ where: { id: input.declarationId }, include: { parties: true, transactionType: true } });
     if (!declaration || !["PROTOCOLADA", "EM_ANALISE"].includes(declaration.status)) throw new TributarioS3Error("A declaração não está disponível para análise.");
+    const { tax, scope } = await itbiScope(tx, actor, declaration.calculationSnapshot);
     const now = new Date();
     if (!input.approved) return tx.itbiDeclaration.update({ where: { id: declaration.id }, data: { status: "INDEFERIDA", analysisNotes: required(input.notes, "Motivo"), analyzedAt: now, events: { create: { eventType: "ANALISE_INDEFERIDA", description: input.notes.trim(), actorUsuarioId: actor.usuarioId } } } });
     const buyer = declaration.parties.find((party) => party.role === "ADQUIRENTE");
     if (!buyer) throw new TributarioS3Error("A declaração não possui adquirente.");
-    const existingTax = await tx.tax.findFirst({ where: { name: { equals: "ITBI", mode: "insensitive" } }, orderBy: { createdAt: "asc" } });
-    const tax = existingTax ? await tx.tax.update({ where: { id: existingTax.id }, data: { isActive: true } }) : await tx.tax.create({ data: { name: "ITBI", taxType: "Imposto", isActive: true } });
     const year = now.getUTCFullYear();
+    const financialYear = await resolveTaxFinancialYear(tx, year, scope);
+    await assertAccountingPeriodOpen(tx, financialYear.id, now);
     const assessmentNumber = await nextDocumentNumber(tx, "ASSESSMENT", "LAN");
     const assessment = await tx.taxAssessment.create({ data: {
       year, assessmentNumber, competence: now, originalValue: Number(declaration.taxAmount), originalValueDecimal: declaration.taxAmount,
       taxableBaseDecimal: declaration.taxableBase, rate: declaration.appliedRate, discountValueDecimal: 0, interestValueDecimal: 0, penaltyValueDecimal: 0,
-      correctionValueDecimal: 0, finalValueDecimal: declaration.taxAmount, status: "Lançado", calculationSnapshot: json(declaration.calculationSnapshot),
+      correctionValueDecimal: 0, finalValueDecimal: declaration.taxAmount, status: "Lançado", calculationSnapshot: json({ ...taxScopeSnapshot(declaration.calculationSnapshot), ...scope, financialYearId: financialYear.id, itbiDeclarationId: declaration.id }),
       taxId: tax.id, taxpayerId: buyer.taxpayerId, realEstateId: declaration.realEstateId,
     } });
-    if (declaration.cadastralUpdateMode === "AUTO_ON_APPROVAL") await tx.realEstate.update({ where: { id: declaration.realEstateId }, data: { taxpayerId: buyer.taxpayerId } });
+    await recognizeTaxAssessmentInTransaction(tx, actor, assessment.id);
     return tx.itbiDeclaration.update({ where: { id: declaration.id }, data: {
       status: "APROVADA", assessmentId: assessment.id, analysisNotes: input.notes.trim() || "Análise aprovada.", analyzedAt: now,
-      cadastralUpdatedAt: declaration.cadastralUpdateMode === "AUTO_ON_APPROVAL" ? now : null,
-      events: { create: { eventType: "ANALISE_APROVADA", description: "Análise aprovada e crédito tributário constituído.", actorUsuarioId: actor.usuarioId, payload: json({ assessmentId: assessment.id, cadastralUpdateMode: declaration.cadastralUpdateMode }) } },
+      cadastralUpdateMode: declaration.cadastralUpdateMode === "AUTO_ON_APPROVAL" ? "AUTO_ON_PAYMENT" : declaration.cadastralUpdateMode,
+      cadastralUpdatedAt: null,
+      events: { create: { eventType: "ANALISE_APROVADA", description: "Análise aprovada e crédito tributário constituído; atualização automática condicionada ao pagamento.", actorUsuarioId: actor.usuarioId, payload: json({ assessmentId: assessment.id, previousCadastralUpdateMode: declaration.cadastralUpdateMode, cadastralUpdateMode: declaration.cadastralUpdateMode === "AUTO_ON_APPROVAL" ? "AUTO_ON_PAYMENT" : declaration.cadastralUpdateMode }) } },
     } });
   });
 }
 
 export async function issueItbiDam(db: PrismaClient, actor: TaxActor, declarationId: string) {
-  const declaration = await db.itbiDeclaration.findUnique({ where: { id: declarationId } });
-  if (!declaration?.assessmentId || declaration.guideId) throw new TributarioS3Error("A declaração deve estar aprovada e sem DAM ativo.");
-  const year = new Date().getUTCFullYear();
-  const dueDate = new Date(Date.UTC(year, 11, 31, 12));
-  const guide = await generateTaxGuide(db, actor, { assessmentId: declaration.assessmentId, dueDate });
-  await db.itbiDeclaration.update({ where: { id: declaration.id }, data: { guideId: guide.id, status: "DAM_EMITIDO", events: { create: { eventType: "DAM_EMITIDO", description: `DAM ${guide.guideNumber ?? guide.id} emitido.`, actorUsuarioId: actor.usuarioId, payload: json({ guideId: guide.id }) } } } });
-  return guide;
+  return db.$transaction(async tx => {
+    const origin = await tx.itbiDeclaration.findUniqueOrThrow({ where: { id: declarationId } });
+    if (!origin.assessmentId) throw new TributarioS3Error("A declaração deve estar aprovada.");
+    await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id=${origin.assessmentId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "ItbiDeclaration" WHERE id=${declarationId} FOR UPDATE`;
+    const declaration = await tx.itbiDeclaration.findUniqueOrThrow({ where: { id: declarationId } });
+    const assessment = await tx.taxAssessment.findUniqueOrThrow({ where: { id: origin.assessmentId } });
+    await resolveTaxAssessmentScope(tx, actor, assessment.taxId, assessment.calculationSnapshot);
+    if (declaration.guideId) return tx.taxGuide.findUniqueOrThrow({ where: { id: declaration.guideId } });
+    if (declaration.status !== "APROVADA") throw new TributarioS3Error("A declaração deve estar aprovada e sem DAM ativo.");
+    const guide = await generateTaxGuideInTransaction(tx, actor, { assessmentId: assessment.id, dueDate: new Date(Date.UTC(assessment.year, 11, 31, 12)) });
+    await tx.itbiDeclaration.update({ where: { id: declaration.id }, data: { guideId: guide.id, status: "DAM_EMITIDO", events: { create: { eventType: "DAM_EMITIDO", description: `DAM ${guide.guideNumber ?? guide.id} emitido.`, actorUsuarioId: actor.usuarioId, payload: json({ guideId: guide.id }) } } } });
+    return guide;
+  }, { timeout: 60000 });
 }
 
 export async function generateItbiDocument(db: PrismaClient, actor: TaxActor, declarationId: string) {
   return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "ItbiDeclaration" WHERE id=${declarationId} FOR UPDATE`;
     const declaration = await tx.itbiDeclaration.findUnique({ where: { id: declarationId } });
     if (!declaration || !["APROVADA", "DAM_EMITIDO", "DOCUMENTO_EMITIDO"].includes(declaration.status)) throw new TributarioS3Error("O documento exige declaração aprovada.");
+    await itbiScope(tx, actor, declaration.calculationSnapshot);
     if (declaration.documentId) return tx.document.findUniqueOrThrow({ where: { id: declaration.documentId } });
     const document = await tx.document.create({ data: { title: `Documento de transmissão ${declaration.declarationNumber}`, documentType: "ITBI", fileUrl: `/tributacao/itbi/${declaration.id}/documento`, status: "Válido", publicLabel: "Documento interno de ITBI", notes: "Documento municipal. Não substitui o registro civil da propriedade." } });
     await tx.itbiDeclaration.update({ where: { id: declaration.id }, data: { documentId: document.id, status: "DOCUMENTO_EMITIDO", events: { create: { eventType: "DOCUMENTO_EMITIDO", description: "Documento de transmissão registrado no GED.", actorUsuarioId: actor.usuarioId, payload: json({ documentId: document.id }) } } } });

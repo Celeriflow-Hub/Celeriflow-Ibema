@@ -22,6 +22,8 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
     models.push("ProcessType", "Subject", "Process", "ProcessMovement", "ProcessWorkflowStage", "ProcessSequence", "ProcessEvent", "GenericProcessWorkflowDefinition", "GenericProcessWorkflowStage", "GenericProcessWorkflowInstance", "GenericProcessWorkflowEvent", "ProcessDocument", "ConfiguracaoPerfil", "ConfiguracaoModulo", "UsuarioModulo", "ProtocolNotification");
     models.push("TreasuryTransfer", "Asset", "AssetCategory", "AssetMaintenance", "AssetWriteOff", "AssetIntegrationPendingConfiguration", "Department");
     models.push("AssetValueHistory", "AssetValueAdjustment");
+    models.push("RealEstate", "ItbiDeclaration", "ItbiParty", "ItbiEvent", "ItbiTransactionType");
+     models.push("EconomicRegistration", "TaxServiceActivity", "TaxDeclaration", "Invoice", "NfseInvoiceData", "NfseEvent", "NfseDmsDeclaration", "NfseCredentialRequest", "NfseCredentialEvent", "NfseDeductionCredit", "NfseDeductionConsumption", "NfseOccasionalRequest", "NfseRpsBatch", "NfseRpsItem", "NfseCorrectionLetter", "TaxServiceRequest");
     const enums = new Set<string>();
     for (const name of models) {
       const model = Prisma.dmmf.datamodel.models.find((item) => item.name === name);
@@ -40,7 +42,8 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
         if (typeof item.default === "string") fallback = ` DEFAULT '${item.default.replaceAll("'", "''")}'`;
         else if (typeof item.default === "boolean" || typeof item.default === "number") fallback = ` DEFAULT ${item.default}`;
         if (item.type === "DateTime" && item.isRequired) fallback = " DEFAULT CURRENT_TIMESTAMP";
-        const sqlType = item.kind === "enum" ? `"${item.type}"` : types[item.type] ?? "TEXT";
+        const autoIncrement = typeof item.default === "object" && item.default !== null && "name" in item.default && item.default.name === "autoincrement";
+        const sqlType = autoIncrement ? "SERIAL" : item.kind === "enum" ? `"${item.type}"` : types[item.type] ?? "TEXT";
         const primaryKey = item.name === "id" || (name === "ProcessSequence" && item.name === "year");
         return `"${item.name}" ${sqlType}${item.isList ? "[]" : ""}${primaryKey ? " PRIMARY KEY" : ""}${fallback}`;
       });

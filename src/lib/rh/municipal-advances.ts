@@ -2,7 +2,7 @@ import { Prisma, type HrPortalRequest } from "@prisma/client";
 import { z } from "zod";
 import { canPerformModuleOperation, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
 import { postAccountingEventInTransaction, postAccountingTransactionInTransaction, recordConfirmedRevenue, type FinanceActor } from "@/lib/financeiro";
-import { assertTravelAllowanceAccess } from "./travel-allowance";
+import { assertTravelAllowanceAccess, assertTravelReportOperationDate } from "./travel-allowance";
 import { resolveContractRevision } from "./contract-timeline";
 import { enqueueHrIntegration } from "./workforce-service";
 
@@ -64,6 +64,14 @@ async function assertAdvanceRestitution(tx: Prisma.TransactionClient, request: H
 }
 
 export async function receivePriorYearAdvanceRefund(context: AppContext, raw: unknown) {
+  return receivePriorYearAllowanceRefund(context, raw, "ADIANTAMENTO");
+}
+
+export async function receivePriorYearTravelRefund(context: AppContext, raw: unknown) {
+  return receivePriorYearAllowanceRefund(context, raw, "DIARIA");
+}
+
+async function receivePriorYearAllowanceRefund(context: AppContext, raw: unknown, kind: "ADIANTAMENTO" | "DIARIA") {
   const schema = z.object({ requestId: z.string().min(1), requestKey: z.string().trim().min(1).max(120), date: z.iso.date(), amount: money, bankAccountId: z.string().min(1), revenueNatureId: z.string().min(1), resourceSourceId: z.string().min(1), documentId: z.string().min(1), reason: z.string().trim().min(10).max(3000) }).strict();
   const input = schema.parse(raw);
   input.amount = new Prisma.Decimal(input.amount).toFixed(2);
@@ -72,8 +80,8 @@ export async function receivePriorYearAdvanceRefund(context: AppContext, raw: un
     await tx.$queryRaw`SELECT id FROM "HrPortalRequest" WHERE id=${input.requestId} FOR UPDATE`;
     const request = await tx.hrPortalRequest.findUniqueOrThrow({ where: { id: input.requestId } });
     assertTravelAllowanceAccess(request.payload, context);
-    const memory = memorySchema.parse(request.payload);
-    const key = `ADIANTAMENTO:RESTITUICAO:${input.requestKey}`;
+    const memory = z.object({ scope: z.literal("PRODUCAO"), input: z.object({ budgetUnitId: z.string() }), assessment: z.object({ amountBRL: money }) }).parse(request.payload);
+    const key = `${kind}:RESTITUICAO:${input.requestKey}`;
     const previous = await tx.hrIntegrationEvent.findUnique({ where: { sourceKey: key } });
     if (previous) {
       const payload = z.object({ input: schema, revenueId: z.string() }).parse(previous.payload);
@@ -82,7 +90,9 @@ export async function receivePriorYearAdvanceRefund(context: AppContext, raw: un
       if (revenue.reversedAt || revenue.stage !== "ARRECADADA") throw new Error("Restituição anterior estornada; registre nova operação fundamentada.");
       return revenue;
     }
-    if (request.kind !== "ADIANTAMENTO" || request.status !== "DEFERIDA") throw new Error("Restituição exige adiantamento concedido antes da apresentação da prestação.");
+    if (request.kind !== kind || request.status !== "DEFERIDA") throw new Error("Restituição exige concessão autorizada antes da apresentação da prestação.");
+    if (kind === "DIARIA") await assertTravelReportOperationDate(tx, request.id, input.date);
+    if (kind === "DIARIA" && await tx.hrIntegrationEvent.findFirst({ where: { sourceKey: `DIARIA:PRESTACAO:${request.id}`, status: { not: "ESTORNADA" } } })) throw new Error("Regularize a prestação ativa da diária antes de receber nova restituição.");
     const date = new Date(`${input.date}T12:00:00Z`);
     const amount = new Prisma.Decimal(input.amount);
     if (amount.lte(0)) throw new Error("Restituição deve ter valor positivo.");
@@ -91,7 +101,9 @@ export async function receivePriorYearAdvanceRefund(context: AppContext, raw: un
     if (!bank.isActive || bank.budgetUnitId !== memory.input.budgetUnitId) throw new Error("Conta da restituição deve pertencer à UG original do adiantamento.");
     const document = await tx.document.findUniqueOrThrow({ where: { id: input.documentId } });
     if (document.status !== "Válido") throw new Error("Restituição exige comprovante GED válido.");
-    const payments = await tx.payment.findMany({ where: { id: { notIn: await correctiveAdvancePaymentIds(tx, request.id) }, status: "Paga", commitment: { reservation: { expense: { sourceModule: "RH", sourceType: "ADVANCE_ALLOWANCE", sourceId: request.id } } } }, include: { commitment: { include: { appropriation: { include: { financialYear: true } } } } }, orderBy: { id: "asc" } });
+    const corrections = await tx.hrIntegrationEvent.findMany({ where: { eventType: { in: [`${kind}_RESTITUICAO_DESPESA`, `${kind}_RESTITUICAO_DESPESA_ESTORNADA`] }, OR: [{ payload: { path: ["input", "requestId"], equals: request.id } }, { payload: { path: ["requestId"], equals: request.id } }] }, select: { payload: true } });
+    const correctionIds = corrections.map(event => z.object({ correctionPaymentId: z.string() }).parse(event.payload).correctionPaymentId);
+    const payments = await tx.payment.findMany({ where: { id: { notIn: correctionIds }, status: "Paga", commitment: { reservation: { expense: { sourceModule: "RH", sourceType: kind === "DIARIA" ? "TRAVEL_ALLOWANCE" : "ADVANCE_ALLOWANCE", sourceId: request.id } } } }, include: { commitment: { include: { appropriation: { include: { financialYear: true } } } } }, orderBy: { id: "asc" } });
     let paid = new Prisma.Decimal(0);
     for (const payment of payments) {
       await tx.$queryRaw`SELECT id FROM "Payment" WHERE id=${payment.id} FOR UPDATE`;
@@ -102,19 +114,19 @@ export async function receivePriorYearAdvanceRefund(context: AppContext, raw: un
       paid = paid.plus(current.valueDecimal);
     }
     if (!payments.length || !paid.eq(memory.assessment.amountBRL)) throw new Error("Restituição exige pagamento integral conciliado do adiantamento original.");
-    const duplicateProof = await tx.hrIntegrationEvent.findFirst({ where: { eventType: "ADIANTAMENTO_RESTITUICAO_RECEBIDA", AND: [{ payload: { path: ["requestId"], equals: request.id } }, { payload: { path: ["documentId"], equals: input.documentId } }] }, select: { payload: true } });
+    const duplicateProof = await tx.hrIntegrationEvent.findFirst({ where: { eventType: `${kind}_RESTITUICAO_RECEBIDA`, AND: [{ payload: { path: ["requestId"], equals: request.id } }, { payload: { path: ["documentId"], equals: input.documentId } }] }, select: { payload: true } });
     if (duplicateProof) {
       const previousRevenueId = (duplicateProof.payload as Prisma.JsonObject).revenueId;
       if (typeof previousRevenueId !== "string") throw new Error("Comprovante anterior sem restituição financeira conciliada.");
       const priorRevenue = await tx.revenue.findUniqueOrThrow({ where: { id: previousRevenueId } });
       if (!priorRevenue.reversedAt) throw new Error("Comprovante já utilizado nesta restituição; repita a chave original para recuperar o mesmo recebimento.");
     }
-    const refunds = await tx.revenue.findMany({ where: { sourceModule: "RH", sourceType: "ADVANCE_ALLOWANCE_REFUND", sourceId: request.id, stage: "ARRECADADA", reversedAt: null }, select: { valueDecimal: true } });
-    const expenseRefunds = await tx.hrIntegrationEvent.findMany({ where: { eventType: "ADIANTAMENTO_RESTITUICAO_DESPESA", status: "CONCLUIDA", payload: { path: ["input", "requestId"], equals: request.id } }, select: { payload: true } });
+    const refunds = await tx.revenue.findMany({ where: { sourceModule: "RH", sourceType: kind === "DIARIA" ? "TRAVEL_ALLOWANCE_REFUND" : "ADVANCE_ALLOWANCE_REFUND", sourceId: request.id, stage: "ARRECADADA", reversedAt: null }, select: { valueDecimal: true } });
+    const expenseRefunds = await tx.hrIntegrationEvent.findMany({ where: { eventType: `${kind}_RESTITUICAO_DESPESA`, status: "CONCLUIDA", payload: { path: ["input", "requestId"], equals: request.id } }, select: { payload: true } });
     const refunded = refunds.reduce((sum, revenue) => { if (!revenue.valueDecimal) throw new Error("Restituição histórica sem Decimal conciliado."); return sum.plus(revenue.valueDecimal); }, new Prisma.Decimal(0)).plus(expenseRefunds.reduce((sum, event) => sum.plus(z.object({ input: z.object({ amount: money }) }).parse(event.payload).input.amount), new Prisma.Decimal(0)));
     if (refunded.plus(amount).gt(paid)) throw new Error("Restituições parciais acumuladas excedem o valor pago do adiantamento.");
-    const revenue = await recordConfirmedRevenue(tx, actorFor(context), { date, value: amount, bankAccountId: bank.id, revenueNatureId: input.revenueNatureId, resourceSourceId: input.resourceSourceId, history: input.reason, sourceModule: "RH", sourceType: "ADVANCE_ALLOWANCE_REFUND", sourceId: request.id, eventType: "ADVANCE_PRIOR_YEAR_REFUNDED", idempotencyKey: `${key}:REVENUE` });
-    const event = await enqueueHrIntegration(tx, { sourceKey: key, domain: "FINANCEIRO", environment: "PRODUCAO", eventType: "ADIANTAMENTO_RESTITUICAO_RECEBIDA", payload: { input, requestId: request.id, actorId: context.user.id, revenueId: revenue.id, documentId: input.documentId, paymentIds: payments.map(payment => payment.id), governmentEntityId: binding.governmentEntityId, budgetUnitId: bank.budgetUnitId, returnedTotal: refunded.plus(amount).toFixed(2) } });
+    const revenue = await recordConfirmedRevenue(tx, actorFor(context), { date, value: amount, bankAccountId: bank.id, revenueNatureId: input.revenueNatureId, resourceSourceId: input.resourceSourceId, history: input.reason, sourceModule: "RH", sourceType: kind === "DIARIA" ? "TRAVEL_ALLOWANCE_REFUND" : "ADVANCE_ALLOWANCE_REFUND", sourceId: request.id, eventType: kind === "DIARIA" ? "TRAVEL_PRIOR_YEAR_REFUNDED" : "ADVANCE_PRIOR_YEAR_REFUNDED", idempotencyKey: `${key}:REVENUE` });
+    const event = await enqueueHrIntegration(tx, { sourceKey: key, domain: "FINANCEIRO", environment: "PRODUCAO", eventType: `${kind}_RESTITUICAO_RECEBIDA`, payload: { input, requestId: request.id, actorId: context.user.id, revenueId: revenue.id, documentId: input.documentId, paymentIds: payments.map(payment => payment.id), governmentEntityId: binding.governmentEntityId, budgetUnitId: bank.budgetUnitId, returnedTotal: refunded.plus(amount).toFixed(2) } });
     await tx.hrIntegrationEvent.update({ where: { id: event.id }, data: { status: "CONCLUIDA" } });
     return revenue;
   }, { timeout: 60000 });
@@ -123,10 +135,17 @@ export async function receivePriorYearAdvanceRefund(context: AppContext, raw: un
 /** Locks the originating request before Revenue, matching submission/review lock order. */
 export async function assertAdvanceRefundReversalAllowed(tx: Prisma.TransactionClient, actor: FinanceActor, revenueId: string) {
   const revenue = await tx.revenue.findUniqueOrThrow({ where: { id: revenueId }, select: { sourceModule: true, sourceType: true, sourceId: true, budgetUnitId: true } });
-  if (revenue.sourceModule !== "RH" || revenue.sourceType !== "ADVANCE_ALLOWANCE_REFUND") return;
+  if (revenue.sourceModule !== "RH" || !["ADVANCE_ALLOWANCE_REFUND", "TRAVEL_ALLOWANCE_REFUND"].includes(revenue.sourceType ?? "")) return;
   if (!revenue.sourceId) throw new Error("Restituição do adiantamento sem solicitação original conciliada.");
   await tx.$queryRaw`SELECT id FROM "HrPortalRequest" WHERE id=${revenue.sourceId} FOR UPDATE`;
   const request = await tx.hrPortalRequest.findUniqueOrThrow({ where: { id: revenue.sourceId } });
+  if (revenue.sourceType === "TRAVEL_ALLOWANCE_REFUND") {
+    const unit = z.object({ input: z.object({ budgetUnitId: z.string() }) }).parse(request.payload).input.budgetUnitId;
+    if (request.kind !== "DIARIA" || unit !== revenue.budgetUnitId || actor.allowedBudgetUnitIds && !actor.allowedBudgetUnitIds.includes(unit)) throw new Error("Estorno da restituição fora da origem/UG da diária.");
+    const report = await tx.hrIntegrationEvent.findUnique({ where: { sourceKey: `DIARIA:PRESTACAO:${request.id}` } });
+    if (report && report.status !== "ESTORNADA") throw new Error("Regularize a prestação ativa da diária antes de estornar o recebimento.");
+    return;
+  }
   const memory = memorySchema.parse(request.payload);
   if (request.kind !== "ADIANTAMENTO" || memory.input.budgetUnitId !== revenue.budgetUnitId || (actor.allowedBudgetUnitIds && !actor.allowedBudgetUnitIds.includes(memory.input.budgetUnitId))) throw new Error("Estorno da restituição fora da origem/UG autorizada do adiantamento.");
   const cycle = await advanceCycle(tx, request.id);
@@ -139,12 +158,14 @@ export async function assertAdvanceRefundReversalAllowed(tx: Prisma.TransactionC
 
 export async function recordAdvanceRefundReversal(tx: Prisma.TransactionClient, actor: FinanceActor, input: { revenueId: string; reversalId: string; date: Date; reason: string }) {
   const revenue = await tx.revenue.findUniqueOrThrow({ where: { id: input.revenueId }, select: { sourceModule: true, sourceType: true, sourceId: true, stage: true } });
-  if (revenue.sourceModule !== "RH" || revenue.sourceType !== "ADVANCE_ALLOWANCE_REFUND") return;
+  if (revenue.sourceModule !== "RH" || !["ADVANCE_ALLOWANCE_REFUND", "TRAVEL_ALLOWANCE_REFUND"].includes(revenue.sourceType ?? "")) return;
+  const kind = revenue.sourceType === "TRAVEL_ALLOWANCE_REFUND" ? "DIARIA" : "ADIANTAMENTO";
   if (!revenue.sourceId || revenue.stage !== "ESTORNADA") throw new Error("Restituição sem origem ou estorno financeiro efetivo.");
-  const events = await tx.hrIntegrationEvent.findMany({ where: { eventType: "ADIANTAMENTO_RESTITUICAO_RECEBIDA", payload: { path: ["revenueId"], equals: input.revenueId } }, select: { id: true } });
+  if (kind === "DIARIA") await assertTravelReportOperationDate(tx, revenue.sourceId, input.date.toISOString().slice(0, 10));
+  const events = await tx.hrIntegrationEvent.findMany({ where: { eventType: `${kind}_RESTITUICAO_RECEBIDA`, payload: { path: ["revenueId"], equals: input.revenueId } }, select: { id: true } });
   if (events.length > 1) throw new Error("Recebimento da restituição com eventos de origem ambíguos.");
   for (const event of events) await tx.hrIntegrationEvent.update({ where: { id: event.id }, data: { status: "ESTORNADA" } });
-  const reversalEvent = await enqueueHrIntegration(tx, { sourceKey: `ADIANTAMENTO:RESTITUICAO_ESTORNADA:${input.revenueId}`, domain: "FINANCEIRO", environment: "PRODUCAO", eventType: "ADIANTAMENTO_RESTITUICAO_ESTORNADA", payload: { requestId: revenue.sourceId, revenueId: input.revenueId, reversalId: input.reversalId, date: input.date.toISOString(), reason: input.reason.trim(), actorId: actor.usuarioId, originalEventId: events[0]?.id ?? null } });
+  const reversalEvent = await enqueueHrIntegration(tx, { sourceKey: `${kind}:RESTITUICAO_ESTORNADA:${input.revenueId}`, domain: "FINANCEIRO", environment: "PRODUCAO", eventType: `${kind}_RESTITUICAO_ESTORNADA`, payload: { requestId: revenue.sourceId, revenueId: input.revenueId, reversalId: input.reversalId, date: input.date.toISOString(), reason: input.reason.trim(), actorId: actor.usuarioId, originalEventId: events[0]?.id ?? null } });
   await tx.hrIntegrationEvent.update({ where: { id: reversalEvent.id }, data: { status: "CONCLUIDA" } });
 }
 
@@ -310,6 +331,19 @@ export async function reverseAdvancePaymentControl(tx: Prisma.TransactionClient,
 export async function reverseAdvanceCommitmentControl(tx: Prisma.TransactionClient, actor: FinanceActor, commitmentId: string, date: Date, reason: string) {
   const commitment = await tx.commitment.findUniqueOrThrow({ where: { id: commitmentId }, include: { reservation: { include: { expense: true } } } });
   const expense = commitment.reservation?.expense;
+  if (expense?.sourceModule === "RH" && expense.sourceType === "TRAVEL_ALLOWANCE" && expense.sourceId) {
+    if (commitment.status !== "Anulado") throw new Error("Cancelamento da diária exige empenho anulado.");
+    await tx.$queryRaw`SELECT id FROM "HrPortalRequest" WHERE id=${expense.sourceId} FOR UPDATE`;
+    const request = await tx.hrPortalRequest.findUniqueOrThrow({ where: { id: expense.sourceId } });
+    const unit = z.object({ scope: z.literal("PRODUCAO"), input: z.object({ budgetUnitId: z.string() }) }).parse(request.payload).input.budgetUnitId;
+    if (request.kind !== "DIARIA" || actor.allowedBudgetUnitIds && !actor.allowedBudgetUnitIds.includes(unit)) throw new Error("Cancelamento fora da origem/UG da diária.");
+    const report = await tx.hrIntegrationEvent.findUnique({ where: { sourceKey: `DIARIA:PRESTACAO:${request.id}` } });
+    if (report && report.status !== "ESTORNADA") throw new Error("Regularize a prestação ativa antes de cancelar a diária.");
+    await tx.hrPortalRequest.update({ where: { id: request.id }, data: { status: "CANCELADA" } });
+    const cancellation = await enqueueHrIntegration(tx, { sourceKey: `DIARIA:ANULACAO:${commitmentId}`, domain: "FINANCEIRO", environment: "PRODUCAO", eventType: "DIARIA_CONCESSAO_ANULADA", payload: { requestId: request.id, commitmentId, actorId: actor.usuarioId, date: date.toISOString(), reason } });
+    await tx.hrIntegrationEvent.update({ where: { id: cancellation.id }, data: { status: "CONCLUIDA" } });
+    return;
+  }
   if (expense?.sourceModule !== "RH" || expense.sourceType !== "ADVANCE_ALLOWANCE" || !expense.sourceId) return;
   if (commitment.status !== "Anulado") throw new Error("Estorno da concessão exige empenho anulado.");
   await tx.$queryRaw`SELECT id FROM "HrPortalRequest" WHERE id=${expense.sourceId} FOR UPDATE`;

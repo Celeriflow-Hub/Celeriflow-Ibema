@@ -4,6 +4,7 @@ import { TaxError, type TaxActor } from "./index";
 import { resolveTaxAssessmentScope, taxAssessmentCompensatedValue, taxScopeSnapshot } from "./scope";
 import { assertTaxCreditScope } from "./credit-finance";
 import { reclassifyRestoredTaxReceivable } from "./accrual-accounting";
+import { reversePaidItbiInTransaction } from "./itbi-ownership";
 
 /** Reverses a collection and its unused excess without erasing any origin record. */
 export async function reverseTaxPayment(db: PrismaClient, actor: TaxActor, input: {
@@ -63,6 +64,7 @@ export async function reverseTaxPayment(db: PrismaClient, actor: TaxActor, input
       await tx.taxRegistryEntry.update({ where: { id: credit.id }, data: { status: "ESTORNADO", data: { ...data, available: "0.00", reversalTransactionId: transaction.id, reversalMovementId: movement.id, reversedAt: input.date.toISOString() } } });
     }
     await tx.taxPayment.update({ where: { id: payment.id }, data: { status: "Estornado" } });
+    await reversePaidItbiInTransaction(tx, actor, payment.id, input.date);
     const paid = await tx.taxPayment.findMany({ where: { guide: { assessmentId: payment.guide.assessmentId }, status: "Confirmado" }, select: { guideId: true, amountPaidDecimal: true } });
     const sum = (rows: typeof paid) => rows.reduce((total, row) => { if (!row.amountPaidDecimal) throw new TaxError("Pagamento histórico sem Decimal conciliado."); return total.plus(row.amountPaidDecimal); }, new Prisma.Decimal(0));
     const guidePaid = sum(paid.filter((row) => row.guideId === payment.guideId));

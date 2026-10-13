@@ -1,11 +1,11 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { approveOccasionalRequest, cancelNfse, createCorrectionLetter, createDeductionCredit, createDmsDeclaration, createOccasionalRequest, decideNfseCredential, emitNfse, receiveRpsBatch, releaseOccasionalRequest, requestNfseCredential, substituteNfse, updateRpsItem } from "@/lib/tributacao/s4-service";
 const path = "/tributacao/nfse";
 const done = (error?: unknown) => ({ error: error instanceof Error ? error.message : error ? "Não foi possível concluir a operação." : undefined });
 async function context(operation: "create" | "update" | "delete") { return getTenantContextForModuleOperation("TRIBUTACAO", operation); }
-const actor = (ctx: Awaited<ReturnType<typeof context>>) => ({ usuarioId: ctx.user.id, employeeId: ctx.user.employeeId });
+const actor = (ctx: Awaited<ReturnType<typeof context>>) => ({ usuarioId: ctx.user.id, employeeId: ctx.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(ctx.user) ? undefined : ctx.user.allowedBudgetUnitIds });
 export async function requestCredentialAction(input: Parameters<typeof requestNfseCredential>[2]) { try { const ctx = await context("create"); await requestNfseCredential(ctx.prisma, actor(ctx), input); revalidatePath(path); return done(); } catch (error) { return done(error); } }
 export async function decideCredentialAction(input: Parameters<typeof decideNfseCredential>[2]) { try { const ctx = await context("update"); await decideNfseCredential(ctx.prisma, actor(ctx), input); revalidatePath(path); return done(); } catch (error) { return done(error); } }
 export async function emitNfseAction(input: Parameters<typeof emitNfse>[2]) { try { const ctx = await context("create"); const invoice = await emitNfse(ctx.prisma, actor(ctx), input); revalidatePath(path); return { ...done(), invoiceId: invoice.id }; } catch (error) { return { ...done(error), invoiceId: null }; } }
@@ -13,7 +13,7 @@ export async function substituteNfseAction(input: Parameters<typeof substituteNf
 export async function cancelNfseAction(input: Parameters<typeof cancelNfse>[2]) { try { const ctx = await context("update"); await cancelNfse(ctx.prisma, actor(ctx), input); revalidatePath(path); return done(); } catch (error) { return done(error); } }
 export async function correctionLetterAction(input: Parameters<typeof createCorrectionLetter>[2]) { try { const ctx = await context("create"); await createCorrectionLetter(ctx.prisma, actor(ctx), input); revalidatePath(path); return done(); } catch (error) { return done(error); } }
 export async function receiveRpsAction(input: Parameters<typeof receiveRpsBatch>[2]) { try { const ctx = await context("create"); await receiveRpsBatch(ctx.prisma, actor(ctx), input); revalidatePath(path); return done(); } catch (error) { return done(error); } }
-export async function updateRpsAction(input: Parameters<typeof updateRpsItem>[1]) { try { const ctx = await context("update"); await updateRpsItem(ctx.prisma, input); revalidatePath(path); return done(); } catch (error) { return done(error); } }
+export async function updateRpsAction(input: Parameters<typeof updateRpsItem>[1]) { try { const ctx = await context("update"); await updateRpsItem(ctx.prisma, input, actor(ctx)); revalidatePath(path); return done(); } catch (error) { return done(error); } }
 export async function createDmsAction(input: Parameters<typeof createDmsDeclaration>[2]) { try { const ctx = await context("create"); await createDmsDeclaration(ctx.prisma, actor(ctx), input); revalidatePath(path); return done(); } catch (error) { return done(error); } }
 export async function createCreditAction(input: Parameters<typeof createDeductionCredit>[2]) { try { const ctx = await context("create"); await createDeductionCredit(ctx.prisma, actor(ctx), input); revalidatePath(path); return done(); } catch (error) { return done(error); } }
 export async function createOccasionalAction(input: Parameters<typeof createOccasionalRequest>[2]) { try { const ctx = await context("create"); await createOccasionalRequest(ctx.prisma, actor(ctx), input); revalidatePath(path); return done(); } catch (error) { return done(error); } }

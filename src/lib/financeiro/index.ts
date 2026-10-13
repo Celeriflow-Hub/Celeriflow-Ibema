@@ -352,6 +352,12 @@ async function refreshCommittedMirror(tx: Prisma.TransactionClient, appropriatio
   });
 }
 
+/** Reconciles the durable budget mirror after origin-controlled additive corrections. */
+export async function synchronizeCommittedBudgetMirror(tx: Prisma.TransactionClient, appropriationId: string) {
+  await lockAppropriation(tx, appropriationId);
+  await refreshCommittedMirror(tx, appropriationId);
+}
+
 async function creditorForSupplier(tx: Prisma.TransactionClient, supplierId: string) {
   const supplier = await tx.supplier.findUnique({
     where: { id: supplierId },
@@ -849,6 +855,9 @@ export async function cancelCommitment(db: PrismaClient, actor: FinanceActor, co
 }
 
 export async function cancelCommitmentInTransaction(tx: Prisma.TransactionClient, actor: FinanceActor, commitmentId: string, date = new Date(), reason = "Anulação integral do empenho"): Promise<Commitment> {
+    const source = await tx.commitment.findUnique({ where: { id: commitmentId }, include: { reservation: { include: { expense: true } } } });
+    const allowance = source?.reservation?.expense;
+    if (allowance?.sourceModule === "RH" && ["ADVANCE_ALLOWANCE", "TRAVEL_ALLOWANCE"].includes(allowance.sourceType ?? "") && allowance.sourceId) await tx.$queryRaw`SELECT id FROM "HrPortalRequest" WHERE id=${allowance.sourceId} FOR UPDATE`;
     await lockCommitment(tx, commitmentId);
     const commitment = await tx.commitment.findUnique({ include: { appropriation: true, movements: true, settlements: { where: { status: ACTIVE_SETTLEMENT_STATUS } }, payments: { where: { status: { in: ACTIVE_PAYMENT_STATUSES } } } }, where: { id: commitmentId } });
     if (!commitment) throw new FinanceError("Empenho não encontrado.");
@@ -1301,8 +1310,8 @@ export async function reversePayment(
 ) {
   if (!justification.trim()) throw new FinanceError("A justificativa de estorno do pagamento é obrigatória.");
   return db.$transaction(async (tx) => {
-    await lockPayment(tx, paymentId);
     await assertCurrentRefundPaymentMutationAllowed(tx, paymentId, "PAYMENT");
+    await lockPayment(tx, paymentId);
     await lockPaymentWithholdings(tx, paymentId);
     const payment = await tx.payment.findUnique({
       include: {

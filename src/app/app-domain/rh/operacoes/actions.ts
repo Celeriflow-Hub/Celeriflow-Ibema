@@ -27,17 +27,38 @@ import { transferTimeBank, reverseTimeBankTransfer } from "@/lib/rh/time-bank-tr
 import { convertTimeBankToPayroll, reverseTimeBankPayment } from "@/lib/rh/time-bank-payment";
 import { decideEmployeeCreditRequest } from "@/lib/rh/credit-requests";
 import { installDocumentaryPocParameters, prepareDocumentaryPocDataset } from "@/lib/rh/poc-bootstrap";
-import { requestTravelAllowance, decideTravelAllowance, accountForTravelAllowance } from "@/lib/rh/travel-allowance";
+import { requestTravelAllowance, decideTravelAllowance, accountForTravelAllowance, reopenTravelAllowanceReport } from "@/lib/rh/travel-allowance";
 import { registerPocPayment } from "@/lib/rh/poc-payment";
 import { configurePayrollPensions } from "@/lib/rh/pension-configuration";
 import { accountPayrollProvision } from "@/lib/rh/provision-accounting";
 import { applyPocEmploymentLifecycle } from "@/lib/rh/employment-lifecycle";
 import { dispatchTravelAllowanceExpense } from "@/lib/rh/travel-finance";
 import { openTravelAllowanceProcess } from "@/lib/rh/travel-process";
-import { requestMunicipalAdvance, submitAdvanceReport, reviewAdvanceReport, reopenAdvanceReport, receivePriorYearAdvanceRefund } from "@/lib/rh/municipal-advances";
-import { receiveCurrentYearAdvanceRefund, reverseCurrentYearAdvanceRefund } from "@/lib/financeiro/allowance-expense-refunds";
+import { requestMunicipalAdvance, submitAdvanceReport, reviewAdvanceReport, reopenAdvanceReport, receivePriorYearAdvanceRefund, receivePriorYearTravelRefund } from "@/lib/rh/municipal-advances";
+import { receiveCurrentYearAdvanceRefund, reverseCurrentYearAdvanceRefund, receiveCurrentYearTravelRefund, reverseCurrentYearTravelRefund } from "@/lib/financeiro/allowance-expense-refunds";
+import { reverseRevenue } from "@/lib/financeiro";
 
 export async function executeWorkforceOperation(command: string, values: Record<string, string>) {
+  if (command === "diaria-estornar-restituicao-anterior") {
+    try {
+      const context = await getTenantContextForModuleOperation("RH", "update");
+      if (!canPerformModuleOperation(context.user, "FINANCEIRO", "create") || !canPerformModuleOperation(context.user, "FINANCEIRO", "update")) throw new Error("Estorno exige criação e alteração no Financeiro.");
+      const input = z.object({ revenueId: z.string().min(1), date: z.iso.date(), justification: z.string().trim().min(10).max(3000) }).strict().parse(values);
+      const revenue = await context.prisma.revenue.findUniqueOrThrow({ where: { id: input.revenueId } });
+      if (revenue.sourceModule !== "RH" || revenue.sourceType !== "TRAVEL_ALLOWANCE_REFUND") throw new Error("Selecione restituição de exercício anterior de diária.");
+      const result = await reverseRevenue(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, { ...input, date: new Date(`${input.date}T12:00:00Z`) });
+      revalidatePath("/rh/diarias"); revalidatePath("/financeiro/receitas"); revalidatePath("/financeiro/contabilidade");
+      return { id: result.id, message: "Restituição anterior estornada com origem e histórico preservados.", error: "" };
+    } catch (error) { return { error: error instanceof Error ? error.message : "Falha no estorno da restituição anterior." }; }
+  }
+  if (["diaria-restituir-corrente", "diaria-restituir-anterior", "diaria-estornar-restituicao-corrente", "diaria-reabrir"].includes(command)) {
+    try {
+      const context = await getTenantContextForModuleOperation("RH", "update");
+      const result = command === "diaria-restituir-corrente" ? await receiveCurrentYearTravelRefund(context, values) : command === "diaria-restituir-anterior" ? await receivePriorYearTravelRefund(context, values) : command === "diaria-reabrir" ? await reopenTravelAllowanceReport(context, values) : await reverseCurrentYearTravelRefund(context, values);
+      revalidatePath("/rh/diarias"); revalidatePath("/financeiro/contabilidade"); revalidatePath("/financeiro/pagamentos");
+      return { id: command === "diaria-restituir-corrente" ? `DESPESA:${result.id}` : result.id, message: "Operação financeira da diária registrada. Referência:", error: "" };
+    } catch (error) { return { error: error instanceof Error ? error.message : "Falha na restituição/regularização da diária." }; }
+  }
   if (["adiantamento-solicitar", "adiantamento-prestar", "adiantamento-revisar", "adiantamento-reabrir", "adiantamento-restituir-anterior", "adiantamento-restituir-corrente", "adiantamento-estornar-restituicao-corrente"].includes(command)) {
     try {
       const context = await getTenantContextForModuleOperation("RH", "update");

@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
+import { transferPaidItbiInTransaction } from "./itbi-ownership";
 import { FinanceError, recordConfirmedRevenue, type FinanceActor } from "@/lib/financeiro";
 import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxScopeSnapshot, taxAssessmentCompensatedValue } from "./scope";
 import { recognizeTaxAssessmentInTransaction } from "./accrual-accounting";
@@ -303,6 +304,7 @@ export async function confirmTaxPaymentInTransaction(
       await tx.activeDebt.update({ where: { id: debt.id }, data: { updatedValue: Number(remaining), updatedValueDecimal: remaining, ...(collecting ? { status: remaining.isZero() ? "PAGA" : ["EM_PROTESTO", "AJUIZADA"].includes(debt.status) ? debt.status : "EM_COBRANCA" } : {}) } });
     }
     if (!revenue.treasuryMovement) throw new TaxError("A integração financeira não gerou movimento de tesouraria.");
+    await transferPaidItbiInTransaction(tx, actor, guide.assessmentId, payment.id, input.paymentDate);
     await audit(tx, actor, "CONFIRM_PAYMENT", "TaxPayment", payment.id, { guideId: guide.id, amountPaid: paidAmount.toFixed(2), revenueId: revenue.id, treasuryMovementId: revenue.treasuryMovement.id, proofDocumentId: input.proofDocumentId ?? null, activeDebtId: debt?.id ?? null, debtStatusBefore: debt?.status ?? null });
     return tx.taxGuide.findUniqueOrThrow({ where: { id: guide.id } });
 }

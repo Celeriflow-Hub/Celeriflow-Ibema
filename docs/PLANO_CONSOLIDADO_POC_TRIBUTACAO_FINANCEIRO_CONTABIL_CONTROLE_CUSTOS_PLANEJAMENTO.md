@@ -2,6 +2,8 @@
 
 **Referência:** 12/10/2026. **Natureza:** análise documental/técnica e plano de desenvolvimento, ajustes, integração e homologação. **Meta:** atendimento integral de cada requisito e de seus subcritérios, por módulo e por ente.
 
+**Atualização de execução — 13/10/2026:** a [revisão dos três domínios](poc-p0/REVISAO_TRIBUTACAO_FINANCEIRO_CONTROLE_2026_10_13.md) registra a implementação local de NFS-e/escrita/débito, transferência fiscal ITBI após quitação, perfis contábeis DA e devoluções corrente/anterior de diárias. Essas alterações mais recentes ainda não passaram pela rodada final de validação. A matriz diagnóstica abaixo conserva seu corte original e não constitui evidência de aceite das novas entregas. P1–P4 não substituem as exigências P5–P10: o planejamento integral permanece aberto.
+
 ## 1. Conclusão executiva e decisões confirmadas
 
 O produto possui bases operacionais relevantes em Tributação, Financeiro/Contabilidade e Planejamento. Entretanto, **a existência de serviços, telas, modelos e testes não comprova 100% dos checklists**. As principais frentes são:

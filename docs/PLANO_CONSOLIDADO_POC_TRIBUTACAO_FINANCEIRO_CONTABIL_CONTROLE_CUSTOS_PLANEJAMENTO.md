@@ -541,6 +541,8 @@ Obter documentos/parâmetros locais durante as primeiras fases. **Isso não é i
 
 **Bloco iniciado:** [P1–P4 integrado](poc-p0/EXECUCAO_P1_P4_BLOCO_INTEGRADO.md). Alienação patrimonial usa classificação explícita e serviço financeiro canônico, com receita/tesouraria/partida/realizado na mesma transação da baixa. Os demais produtores e reversões permanecem em revisão.
 
+**Continuação municipal:** folha com ciclo nativo e provisões por componente do empenho; diárias com roteiro publicado e empenho automático; adiantamentos com concessão, apresentação, revisão independente e estorno em contas de controle oficiais. Testes PostgreSQL segregados Prefeitura/Câmara aprovados. Restituição parcial/por exercício, reapresentação de impugnação, demais produtores patrimoniais/estoque/instrumentos e reconciliação integral dos critérios continuam em implementação; resultados não representam conclusão de P4.
+
 **Dependência:** P1–P3. Executar somente os comportamentos desses produtores necessários aos checklists analisados.
 
 - Folha: liberação RH→críticas→empenho automático por tipo/classificação→liquidação/extras→pagamento de todos→conclusão digital; desmovimentação bloqueada após liquidação/pagamento; provisões/encargos/baixas contábeis.

@@ -16,6 +16,7 @@ import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence"
 import { assertMovementCanBeCancelled, assertMovementCanBeRejected, PENDING_MOVEMENT_STATUS } from "@/lib/protocols/movement-policy";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { completeTravelAllowanceProcess, rejectTravelAllowanceProcess } from "@/lib/rh/travel-process";
 
 const AWAITING_RECEIPT = "Aguardando Recebimento";
 const AWAITING_ACCOUNTING = "Aguardando Contabilidade";
@@ -570,11 +571,17 @@ export async function returnGenericProcessWorkflow(processId: string, reason: st
 
 export async function rejectGenericProcessWorkflow(processId: string, reason: string): Promise<{ error: string | null }> {
   try {
-    const { prisma, employee, departmentId, user } = await getOperationalContext("update");
+    const context = await getOperationalContext("update");
+    const { prisma, employee, departmentId, user } = context;
     const note = reason.trim();
     if (!note) throw new Error("Informe o motivo da rejeicao.");
-    await prisma.$transaction((tx) => rejectGenericWorkflowProcess(tx, processId, { usuarioId: user.id, employeeId: employee.id, departmentId }, note));
+    await prisma.$transaction(async tx => {
+      await rejectGenericWorkflowProcess(tx, processId, { usuarioId: user.id, employeeId: employee.id, departmentId }, note);
+      await rejectTravelAllowanceProcess(tx, context, processId, note);
+    }, { timeout: 60000 });
     revalidateProtocolPages();
+    revalidatePath("/rh/diarias");
+    revalidatePath("/rh/adiantamentos");
     return { error: null };
   } catch (error) {
     console.error(error);
@@ -584,11 +591,17 @@ export async function rejectGenericProcessWorkflow(processId: string, reason: st
 
 export async function concludeGenericProcessWorkflow(processId: string, reason: string): Promise<{ error: string | null }> {
   try {
-    const { prisma, employee, departmentId, user } = await getOperationalContext("update");
+    const context = await getOperationalContext("update");
+    const { prisma, employee, departmentId, user } = context;
     const note = reason.trim();
     if (!note) throw new Error("Informe a justificativa da conclusao.");
-    await prisma.$transaction((tx) => concludeGenericWorkflowProcess(tx, processId, { usuarioId: user.id, employeeId: employee.id, departmentId }, note));
+    await prisma.$transaction(async tx => {
+      await concludeGenericWorkflowProcess(tx, processId, { usuarioId: user.id, employeeId: employee.id, departmentId }, note);
+      await completeTravelAllowanceProcess(tx, context, processId, note);
+    }, { timeout: 120000 });
     revalidateProtocolPages();
+    revalidatePath("/rh/diarias"); revalidatePath("/financeiro/empenhos"); revalidatePath("/financeiro/orcamento");
+    revalidatePath("/rh/adiantamentos");
     return { error: null };
   } catch (error) {
     console.error(error);

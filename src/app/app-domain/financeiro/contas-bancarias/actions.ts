@@ -18,6 +18,7 @@ const transferSchema = z.object({
 async function getTenantPrisma(operation: ModuleOperation) {
   return getTenantContextForModuleOperation("FINANCEIRO", operation);
 }
+const bankActor = (context: Awaited<ReturnType<typeof getTenantPrisma>>) => ({ usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds });
 
 async function assertAccountAccess(context: Awaited<ReturnType<typeof getTenantPrisma>>, accountId: string, nextBudgetUnitId?: string) {
   const account = await context.prisma.bankAccount.findUnique({ where: { id: accountId }, select: { budgetUnitId: true } });
@@ -55,7 +56,7 @@ export async function createBankAccount(data: {
 }) {
   const context = await getTenantPrisma("create");
   assertBudgetUnitAccess(context.user, data.budgetUnitId);
-  const account = await createBankAccountWithOpeningBalance(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, {
+  const account = await createBankAccountWithOpeningBalance(context.prisma, bankActor(context), {
     ...data,
     openingBalance: data.currentBalance,
   });
@@ -80,7 +81,7 @@ export async function updateBankAccount(id: string, data: {
 }) {
   const context = await getTenantPrisma("update");
   await assertAccountAccess(context, id, data.budgetUnitId);
-  const account = await updateBankAccountDetails(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, id, data);
+  const account = await updateBankAccountDetails(context.prisma, bankActor(context), id, data);
 
   revalidatePath("/app-domain/financeiro/contas-bancarias");
   revalidatePath("/app-domain/cadastros/bancos-agencias");
@@ -90,7 +91,7 @@ export async function updateBankAccount(id: string, data: {
 export async function toggleBankAccountStatus(id: string, isActive: boolean) {
   const context = await getTenantPrisma("update");
   await assertAccountAccess(context, id);
-  const account = await updateBankAccountDetails(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, id, { isActive });
+  const account = await updateBankAccountDetails(context.prisma, bankActor(context), id, { isActive });
 
   revalidatePath("/app-domain/financeiro/contas-bancarias");
   return account;

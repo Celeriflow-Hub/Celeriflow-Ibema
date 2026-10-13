@@ -7,7 +7,7 @@ import {
   createCommitmentFromExpenseAuthorization,
   procurementFinanceEventTypes,
 } from "@/lib/compras/procurement-finance-bridge";
-import { assertBudgetUnitAccess, getTenantContextForModuleOperation, type AppContext } from "@/lib/platform/tenant-context";
+import { assertBudgetUnitAccess, getTenantContextForModuleOperation, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
 type ActionResult = { error?: string };
@@ -113,7 +113,7 @@ export async function createCommitment(data: {
       throw new ProcurementFinanceBridgeError("O fornecedor informado não corresponde à AE selecionada.");
     }
 
-    const actor = { usuarioId: context.user.id, employeeId: context.user.employeeId };
+    const actor = { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds };
     const commitment = expense
       ? (await createCommitmentFromExpenseAuthorization(context.prisma, actor, {
         expenseId: expense.id,
@@ -171,7 +171,7 @@ export async function cancelCommitment(id: string): Promise<ActionResult> {
       },
       select: { id: true },
     });
-    const actor = { usuarioId: context.user.id, employeeId: context.user.employeeId };
+    const actor = { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds };
     if (fromProcurement) {
       await cancelCommitmentForCancelledContract(context.prisma, actor, id);
     } else {

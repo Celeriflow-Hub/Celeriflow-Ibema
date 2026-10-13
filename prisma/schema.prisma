@@ -4898,6 +4898,8 @@ model BankAccount {
   taxFinancialMappings              TaxFinancialMapping[]
   constitutionalRevenueRules        ClassificationRule[]        @relation("ClassificationRuleBankAccount")
   statementItems                    BankStatementItem[]
+  reconciliationSessions            BankReconciliationSession[]
+  reconciliationAllocationGroups    BankReconciliationAllocationGroup[]
   covenants                         Covenant[]
   investmentAllocationsAsOrigin     InvestmentAllocation[]      @relation("InvestmentAllocationOrigin")
   investmentAllocationsAsInvestment InvestmentAllocation[]      @relation("InvestmentAllocationInvestment")
@@ -4931,6 +4933,7 @@ model TreasuryMovement {
   transferOrigin      TreasuryTransfer?   @relation("TreasuryTransferOriginMovement")
   transferDestination TreasuryTransfer?   @relation("TreasuryTransferDestinationMovement")
   statementItems      BankStatementItem[]
+  reconciliationAllocations BankReconciliationAllocation[]
 
   @@index([bankAccountId, date])
   @@index([financialYearId, date])
@@ -5018,6 +5021,7 @@ model BankStatementItem {
   status             String               @default("Pendente")
   treasuryMovementId String?              @unique
   treasuryMovement   TreasuryMovement?    @relation(fields: [treasuryMovementId], references: [id])
+  reconciliationAllocations BankReconciliationAllocation[]
 
   // Campos adicionais para Automação POC, Rendimentos e Regras
   downloadId                  String?
@@ -14475,6 +14479,9 @@ model ExceptionQueueItem {
 
 model BankReconciliationSession {
   id                   String    @id @default(cuid())
+  bankAccountId        String?
+  bankAccount          BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  allocationGroups     BankReconciliationAllocationGroup[]
   banco                String
   agencia              String
   contaNumero          String
@@ -14498,7 +14505,45 @@ model BankReconciliationSession {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  @@unique([banco, agencia, contaNumero, periodo])
+  @@unique([bankAccountId, periodo])
+  @@index([banco, agencia, contaNumero, periodo])
+}
+
+model BankReconciliationAllocationGroup {
+  id                   String @id @default(cuid())
+  sessionId            String
+  session              BankReconciliationSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  bankAccountId        String
+  bankAccount          BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  idempotencyKey       String @unique
+  request              Json
+  reason               String
+  status               String @default("EFETIVADO")
+  authorUsuarioId       String
+  reversedByUsuarioId  String?
+  reversalReason       String?
+  reversedAt           DateTime?
+  createdAt            DateTime @default(now())
+  allocations          BankReconciliationAllocation[]
+
+  @@index([sessionId, status])
+  @@index([bankAccountId, status])
+}
+
+model BankReconciliationAllocation {
+  id                  String @id @default(cuid())
+  groupId             String
+  group               BankReconciliationAllocationGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  statementItemId     String
+  statementItem       BankStatementItem @relation(fields: [statementItemId], references: [id], onDelete: Restrict)
+  treasuryMovementId  String
+  treasuryMovement    TreasuryMovement @relation(fields: [treasuryMovementId], references: [id], onDelete: Restrict)
+  amountDecimal       Decimal @db.Decimal(18, 2)
+  createdAt           DateTime @default(now())
+
+  @@unique([groupId, statementItemId, treasuryMovementId], map: "BankReconciliationAllocation_group_statement_movement_key")
+  @@index([statementItemId])
+  @@index([treasuryMovementId])
 }
 
 model BankReconciliationMatch {

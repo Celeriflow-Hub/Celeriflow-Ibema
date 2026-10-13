@@ -9,7 +9,7 @@ import {
   createSettlementFromPurchaseReceiptAuthorization,
   procurementFinanceEventTypes,
 } from "@/lib/compras/procurement-finance-bridge";
-import { assertBudgetUnitAccess, getTenantContextForModuleOperation, type AppContext } from "@/lib/platform/tenant-context";
+import { assertBudgetUnitAccess, getTenantContextForModuleOperation, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
 type ActionResult = { error?: string };
@@ -95,7 +95,7 @@ export async function createSettlement(data: {
   try {
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const commitment = await assertCommitmentAccess(context, data.commitmentId);
-    const actor = { usuarioId: context.user.id, employeeId: context.user.employeeId };
+    const actor = { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds };
     const fromProcurement = await hasProcurementEvent(
       context,
       procurementFinanceEventTypes.commitmentCreated,
@@ -163,7 +163,7 @@ export async function cancelSettlement(id: string): Promise<ActionResult> {
       "SETTLEMENT",
       settlement.id,
     );
-    const actor = { usuarioId: context.user.id, employeeId: context.user.employeeId };
+    const actor = { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds };
     if (fromProcurement) {
       if (!settlement.documentId) throw new ProcurementFinanceBridgeError("A liquidação vinculada à AL não possui o documento GED de origem.");
       const source = await procurementSourceForSettlement(context, commitment, settlement.documentId, true);

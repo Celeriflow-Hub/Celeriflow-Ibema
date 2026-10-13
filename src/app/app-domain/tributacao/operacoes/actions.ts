@@ -3,6 +3,7 @@
 import { TaxError, configureTaxFinancialMapping, configureTaxParameter, configureTaxServiceActivity, createTaxAssessment, createTaxServiceRequest, enrollAssessmentInActiveDebt, evaluateTaxCertificateSituation, generateTaxGuide, recordIssDeclaration } from "@/lib/tributacao";
 import { executeTaxRefund } from "@/lib/tributacao/credit-finance";
 import { reverseTaxCreditMovement } from "@/lib/tributacao/credit-reversal";
+import { grantBenefit } from "@/lib/tributacao/s8-service";
 import { FinanceError } from "@/lib/financeiro";
 import {
   approveRefundRequest,
@@ -27,6 +28,18 @@ import { revalidatePath } from "next/cache";
 type ActionResult = { error?: string };
 const taxActor = (context: AppContext) => ({ usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds });
 const message = (error: unknown) => error instanceof TaxError || error instanceof FinanceError ? error.message : "Nao foi possivel concluir a operacao tributaria interna.";
+
+export async function grantAssessmentBenefitAction(data: { assessmentId: string; ruleId: string; originalAmount: number; reason: string; documentId?: string }): Promise<ActionResult> {
+  try {
+    const context = await getTenantContextForModuleOperation("TRIBUTACAO", "update");
+    const assessment = await context.prisma.taxAssessment.findUniqueOrThrow({ where: { id: data.assessmentId }, select: { taxpayerId: true } });
+    await grantBenefit(context.prisma, taxActor(context), { ...data, sourceType: "TAX_ASSESSMENT", sourceId: data.assessmentId, taxpayerId: assessment.taxpayerId });
+    revalidatePath("/tributacao/motor-fiscal");
+    revalidatePath("/tributacao/cobranca");
+    revalidatePath("/planejamento");
+    return {};
+  } catch (error) { return { error: error instanceof Error ? error.message : "Não foi possível conceder o benefício." }; }
+}
 
 export async function reverseCreditMovementAction(data: { movementId: string; date: string; reason: string; idempotencyKey: string; proofDocumentId?: string }): Promise<ActionResult> {
   try {

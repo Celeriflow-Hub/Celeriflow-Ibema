@@ -160,7 +160,7 @@ export async function generateTaxGuide(
   return db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${input.assessmentId} FOR UPDATE`;
     const assessment = await tx.taxAssessment.findUnique({ where: { id: input.assessmentId }, include: { guides: { where: { status: { not: "Cancelada" } } } } });
-    if (!assessment || assessment.status === "Cancelado") throw new TaxError("O lançamento tributário não está disponível para geração de guia.");
+    if (!assessment || ["Cancelado", "Pago", "Extinto", "Suspenso"].includes(assessment.status)) throw new TaxError("O lançamento tributário não está disponível para geração de guia.");
     await assessmentYearScope(tx, actor, assessment.year, assessment.taxId, assessment.calculationSnapshot);
     if (input.dueDate.getFullYear() !== assessment.year) throw new TaxError("O vencimento da guia deve pertencer ao exercício do lançamento.");
     if (assessment.guides.length) throw new TaxError("O lançamento já possui guia ativa. Cancele-a formalmente antes de emitir outra.");

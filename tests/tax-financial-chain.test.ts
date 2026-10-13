@@ -4,11 +4,13 @@ import { Prisma } from "@prisma/client";
 import { createPlanningExecutionFixture } from "./helpers/planning-execution-fixture";
 import { confirmTaxPayment, configureTaxFinancialMapping, createTaxAssessment, generateTaxGuide, enrollAssessmentInActiveDebt, createDebtInstallmentPlan } from "../src/lib/tributacao";
 import { getBankAccountBalance } from "../src/lib/financeiro";
-import { applyTaxCredit, approveRefundRequest, createParametrizedAssessment, generatePartialTaxGuide, getAssessmentAccount, processCollectionReturn, registerCreditEvent } from "../src/lib/tributacao/s2-service";
+import { applyTaxCredit, approveRefundRequest, createParametrizedAssessment, generateGroupedTaxGuides, generatePartialTaxGuide, getAssessmentAccount, processCollectionReturn, registerCreditEvent, reviseTaxAssessment } from "../src/lib/tributacao/s2-service";
 import { executeTaxRefund } from "../src/lib/tributacao/credit-finance";
 import { reverseTaxPayment } from "../src/lib/tributacao/payment-reversal";
 import { reverseTaxCreditMovement } from "../src/lib/tributacao/credit-reversal";
 import { taxAssessmentAccessFilter } from "../src/lib/tributacao/scope";
+import { createBenefitRule, grantBenefit } from "../src/lib/tributacao/s8-service";
+import { readPlanningWaiverRealization } from "../src/lib/planejamento/fiscal-execution";
 
 type Fixture = Awaited<ReturnType<typeof createPlanningExecutionFixture>>;
 async function scenario(body: (fixture: Fixture) => Promise<void>, jurisdiction: "EXECUTIVE" | "LEGISLATIVE" = "EXECUTIVE") {
@@ -71,6 +73,97 @@ test("P2: débito de exercício encerrado é arrecadado no corrente sem reabrir 
   await assert.rejects(confirmTaxPayment(f.db, { ...f.actor, allowedBudgetUnitIds: [] }, input), /autorizadas/i);
   assert.equal(await f.db.revenue.count(), 1);
 }));
+
+for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) {
+  test(`P2: extinção reduz saldo e dívida uma única vez; revisão preserva decisão e escopo (${jurisdiction})`, async () => scenario(async (f) => {
+    const assessment = await createTaxAssessment(f.db, f.actor, { year: 2026, taxId: "tax-chain", taxpayerId: "taxpayer-chain", taxableBase: "100.00", rate: "10" });
+    const input = { assessmentId: assessment.id, eventType: "EXTINCAO_NAO_FINANCEIRA" as const, amount: "3.00", reason: "Decisão administrativa fundamentada", idempotencyKey: "extinction-chain" };
+    const entry = await registerCreditEvent(f.db, f.actor, input);
+    assert.equal((await registerCreditEvent(f.db, f.actor, input)).id, entry.id);
+    assert.equal((await getAssessmentAccount(f.db, assessment.id)).position.balance.toFixed(2), "7.00");
+    await assert.rejects(registerCreditEvent(f.db, { ...f.actor, allowedBudgetUnitIds: [] }, input), /autorizadas/i);
+    await assert.rejects(registerCreditEvent(f.db, f.actor, { ...input, amount: "4.00" }), /outros dados/i);
+    await assert.rejects(registerCreditEvent(f.db, f.actor, { ...input, amount: "8.00", idempotencyKey: "over-extinction" }), /saldo/i);
+    await assert.rejects(registerCreditEvent(f.db, f.actor, { ...input, eventType: "COMPENSACAO", idempotencyKey: "unfunded-compensation" }), /crédito disponível/i);
+    const revision = { assessmentId: assessment.id, imposedValue: "6.00", reason: "Revisão da decisão", idempotencyKey: "revision-chain" };
+    const revised = await reviseTaxAssessment(f.db, f.actor, revision);
+    assert.equal((await reviseTaxAssessment(f.db, f.actor, revision)).id, revised.id);
+    await assert.rejects(reviseTaxAssessment(f.db, f.actor, { ...revision, imposedValue: "5.00" }), /outros dados/i);
+    await assert.rejects(reviseTaxAssessment(f.db, { ...f.actor, allowedBudgetUnitIds: [] }, revision), /autorizadas/i);
+    const guide = await generatePartialTaxGuide(f.db, f.actor, { assessmentId: assessment.id, amount: "2.00", dueDate: new Date("2026-03-31") });
+    await assert.rejects(registerCreditEvent(f.db, f.actor, { ...input, idempotencyKey: "extinction-with-guide" }), /guias abertas/i);
+    await assert.rejects(reviseTaxAssessment(f.db, f.actor, { ...revision, idempotencyKey: "revision-with-guide" }), /guias abertas/i);
+    await confirmTaxPayment(f.db, f.actor, { guideId: guide.id, amountPaid: "2.00", paymentDate: new Date("2026-03-01"), paymentMethod: "Manual", idempotencyKey: "extinction-paid" });
+    await assert.rejects(reviseTaxAssessment(f.db, f.actor, { ...revision, imposedValue: "1.00", idempotencyKey: "below-paid" }), /pagamentos/i);
+    assert.equal((await getAssessmentAccount(f.db, assessment.id)).position.balance.toFixed(2), "4.00");
+    const debt = await enrollAssessmentInActiveDebt(f.db, f.actor, assessment.id);
+    assert.equal(debt.originalValueDecimal!.toFixed(2), "4.00");
+  }, jurisdiction));
+}
+
+test("P2: extinção integral é atômica, não cria caixa e respeita fechamento corrente", async () => scenario(async (f) => {
+  const assessment = await createTaxAssessment(f.db, f.actor, { year: 2026, taxId: "tax-chain", taxpayerId: "taxpayer-chain", taxableBase: "100.00", rate: "10" });
+  const input = { assessmentId: assessment.id, eventType: "EXTINCAO_NAO_FINANCEIRA" as const, reason: "Extinção integral documentada no processo", idempotencyKey: "full-extinction" };
+  await f.pg.exec(`CREATE FUNCTION fail_extinction() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.category='CREDIT_EVENT' THEN RAISE EXCEPTION 'injected extinction failure'; END IF; RETURN NEW; END $$;
+    CREATE TRIGGER fail_extinction BEFORE INSERT ON "TaxRegistryEntry" FOR EACH ROW EXECUTE FUNCTION fail_extinction();`);
+  await assert.rejects(registerCreditEvent(f.db, f.actor, input), /extinction failure/i);
+  assert.equal((await getAssessmentAccount(f.db, assessment.id)).position.balance.toFixed(2), "10.00");
+  assert.equal(await f.db.taxIntegrationEvent.count({ where: { idempotencyKey: "CREDIT_EVENT:full-extinction" } }), 0);
+  await f.pg.exec('DROP TRIGGER fail_extinction ON "TaxRegistryEntry"; DROP FUNCTION fail_extinction();');
+  await f.db.financialYear.update({ where: { id: "ano" }, data: { status: "Encerrado" } });
+  await assert.rejects(registerCreditEvent(f.db, f.actor, input), /exercício|aberto|vigente/i);
+  await f.db.financialYear.update({ where: { id: "ano" }, data: { status: "Aberto" } });
+  const before = { revenue: await f.db.revenue.count(), movement: await f.db.treasuryMovement.count(), posting: await f.db.accountingTransaction.count() };
+  const entry = await registerCreditEvent(f.db, f.actor, input);
+  assert.equal((entry.data as Prisma.JsonObject).amount, "10.00");
+  assert.equal((await registerCreditEvent(f.db, f.actor, input)).id, entry.id);
+  assert.equal((await getAssessmentAccount(f.db, assessment.id)).position.balance.toFixed(2), "0.00");
+  await assert.rejects(generatePartialTaxGuide(f.db, f.actor, { assessmentId: assessment.id, amount: "0.01", dueDate: new Date("2026-03-31") }), /disponível/i);
+  await assert.rejects(generateTaxGuide(f.db, f.actor, { assessmentId: assessment.id, dueDate: new Date("2026-03-31") }), /disponível/i);
+  assert.deepEqual({ revenue: await f.db.revenue.count(), movement: await f.db.treasuryMovement.count(), posting: await f.db.accountingTransaction.count() }, before);
+}));
+
+test("P2: suspensão recusa DAM integral, parcial e agrupado sem alterar outros débitos", async () => scenario(async (f) => {
+  const a = await createTaxAssessment(f.db, f.actor, { year: 2026, taxId: "tax-chain", taxpayerId: "taxpayer-chain", taxableBase: "100.00", rate: "10" });
+  const b = await createTaxAssessment(f.db, f.actor, { year: 2026, taxId: "tax-chain", taxpayerId: "taxpayer-chain", taxableBase: "200.00", rate: "10" });
+  await registerCreditEvent(f.db, f.actor, { assessmentId: a.id, eventType: "SUSPENSAO", reason: "Suspensão de exigibilidade em processo administrativo", idempotencyKey: "suspended-assessment" });
+  await assert.rejects(generateTaxGuide(f.db, f.actor, { assessmentId: a.id, dueDate: new Date("2026-03-31") }), /disponível/i);
+  await assert.rejects(generatePartialTaxGuide(f.db, f.actor, { assessmentId: a.id, amount: "1.00", dueDate: new Date("2026-03-31") }), /disponível/i);
+  await assert.rejects(generateGroupedTaxGuides(f.db, f.actor, { assessmentIds: [a.id, b.id], dueDate: new Date("2026-03-31") }), /disponível/i);
+  assert.equal(await f.db.taxGuide.count(), 0);
+  assert.equal((await f.db.taxAssessment.findUniqueOrThrow({ where: { id: a.id } })).status, "Suspenso");
+  assert.equal((await getAssessmentAccount(f.db, b.id)).position.balance.toFixed(2), "20.00");
+}));
+
+for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) {
+  test(`P2: benefício baixa débito atomicamente e alimenta renúncia realizada (${jurisdiction})`, async () => scenario(async (f) => {
+    const assessment = await createTaxAssessment(f.db, f.actor, { year: 2026, taxId: "tax-chain", taxpayerId: "taxpayer-chain", taxableBase: "100.00", rate: "10" });
+    const rule = await createBenefitRule(f.db, f.actor, { code: "BENEFIT-CHAIN", name: "Benefício individual", benefitType: "RENUNCIA", legalReference: "Fundamento parametrizado para implantação", value: 30, valueMode: "PERCENT", effectiveFrom: new Date("2026-01-01") });
+    const input = { ruleId: rule.id, taxpayerId: assessment.taxpayerId, sourceType: "TAX_ASSESSMENT", sourceId: assessment.id, originalAmount: 10, reason: "Concessão individual fundamentada" };
+    await assert.rejects(grantBenefit(f.db, { ...f.actor, allowedBudgetUnitIds: [] }, input), /autorizadas/i);
+    await assert.rejects(grantBenefit(f.db, f.actor, { ...input, taxpayerId: "another-taxpayer" }), /titular/i);
+    await assert.rejects(grantBenefit(f.db, f.actor, { ...input, originalAmount: 9 }), /saldo/i);
+    await f.pg.exec(`CREATE FUNCTION fail_benefit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.source='BENEFICIO' THEN RAISE EXCEPTION 'injected benefit failure'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER fail_benefit BEFORE INSERT ON "TaxRegistryEntry" FOR EACH ROW EXECUTE FUNCTION fail_benefit();`);
+    await assert.rejects(grantBenefit(f.db, f.actor, input), /benefit failure/i);
+    assert.equal(await f.db.taxBenefitGrant.count(), 0);
+    assert.equal((await getAssessmentAccount(f.db, assessment.id)).position.balance.toFixed(2), "10.00");
+    await f.pg.exec('DROP TRIGGER fail_benefit ON "TaxRegistryEntry"; DROP FUNCTION fail_benefit();');
+    const grant = await grantBenefit(f.db, f.actor, input);
+    assert.equal(grant.renunciationDecimal.toFixed(2), "3.00");
+    assert.equal((await getAssessmentAccount(f.db, assessment.id)).position.balance.toFixed(2), "7.00");
+    assert.equal((await grantBenefit(f.db, f.actor, input)).id, grant.id);
+    await assert.rejects(grantBenefit(f.db, f.actor, { ...input, reason: "Outra decisão" }), /outros dados/i);
+    await assert.rejects(grantBenefit(f.db, { ...f.actor, allowedBudgetUnitIds: [] }, input), /autorizadas/i);
+    const realized = await readPlanningWaiverRealization(f.context, "ente", "tax-chain", 2026, new Date().toISOString().slice(0, 10));
+    assert.equal(realized.status, "CONNECTED");
+    assert.equal(realized.value, "3.00");
+    assert.deepEqual(realized.originIds, [grant.id]);
+    assert.equal(await f.db.revenue.count(), 0);
+    const guide = await generateTaxGuide(f.db, f.actor, { assessmentId: assessment.id, dueDate: new Date("2026-03-31") });
+    assert.equal(guide.totalValueDecimal!.toFixed(2), "7.00");
+  }, jurisdiction));
+}
 
 test("P2: inscrição considera apenas saldo e parcelamento/replay preservam autorização", async () => scenario(async (f) => {
   const assessment = await createTaxAssessment(f.db, f.actor, { year: 2026, taxId: "tax-chain", taxpayerId: "taxpayer-chain", taxableBase: "100.00", rate: "10" });

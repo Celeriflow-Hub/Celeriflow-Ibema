@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
+import { assertAccountingPeriodOpen } from "@/lib/financeiro";
+import type { TaxActor } from "./index";
+import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxAssessmentCompensatedValue, taxScopeSnapshot } from "./scope";
 import {
   allocateInstallmentPayment,
   calculateBenefit,
@@ -629,12 +632,15 @@ export async function createBenefitRule(
 ) {
   if (!input.legalReference.trim())
     throw new TributarioS8Error("A referência legal é obrigatória.");
+  if (!input.code.trim() || !input.name.trim() || !["CREDITO", "REDUCAO", "RENUNCIA"].includes(input.benefitType) || !["PERCENT", "FIXED"].includes(input.valueMode)) throw new TributarioS8Error("Identificação ou tipo do benefício inválido.");
+  if (!Number.isFinite(input.value) || input.value <= 0 || (input.valueMode === "PERCENT" && input.value > 100)) throw new TributarioS8Error("Valor do benefício inválido.");
+  if (!Number.isFinite(input.effectiveFrom.getTime()) || (input.effectiveUntil && (!Number.isFinite(input.effectiveUntil.getTime()) || input.effectiveUntil < input.effectiveFrom))) throw new TributarioS8Error("Vigência do benefício inválida.");
   return db.taxBenefitRule.create({
     data: {
-      code: input.code,
-      name: input.name,
+      code: input.code.trim(),
+      name: input.name.trim(),
       benefitType: input.benefitType,
-      legalReference: input.legalReference,
+      legalReference: input.legalReference.trim(),
       eligibility: { mode: "ANALISE_INDIVIDUAL" },
       calculation: { value: input.value, valueMode: input.valueMode },
       effectiveFrom: input.effectiveFrom,
@@ -646,52 +652,76 @@ export async function createBenefitRule(
 
 export async function grantBenefit(
   db: PrismaClient,
-  actor: Actor,
+  actor: TaxActor,
   input: {
     ruleId: string;
     taxpayerId: string;
     sourceType: string;
     sourceId: string;
     originalAmount: number;
+    reason: string;
+    documentId?: string;
   },
 ) {
-  const rule = await db.taxBenefitRule.findUnique({
-    where: { id: input.ruleId },
-  });
-  const now = new Date();
-  if (
-    !rule?.active ||
-    rule.effectiveFrom > now ||
-    (rule.effectiveUntil && rule.effectiveUntil < now)
-  )
-    throw new TributarioS8Error("Regra de benefício fora da vigência.");
-  const config = rule.calculation as {
-    value?: number;
-    valueMode?: "PERCENT" | "FIXED";
-  };
-  const result = calculateBenefit({
-    amount: input.originalAmount,
-    type: rule.benefitType as "CREDITO" | "REDUCAO" | "RENUNCIA",
-    value: config.value ?? 0,
-    valueMode: config.valueMode ?? "FIXED",
-  });
-  return db.taxBenefitGrant.create({
-    data: {
-      ruleId: rule.id,
-      taxpayerId: input.taxpayerId,
-      sourceType: input.sourceType,
-      sourceId: input.sourceId,
-      originalAmountDecimal: result.amount,
-      creditDecimal: result.credit,
-      reductionDecimal: result.reduction,
-      renunciationDecimal: result.renunciation,
-      finalAmountDecimal: result.finalAmount,
-      calculationSnapshot: json({
-        rule: { code: rule.code, legalReference: rule.legalReference },
-        result,
-      }),
-      grantedByUsuarioId: actor.usuarioId,
-    },
+  if (input.sourceType !== "TAX_ASSESSMENT" || !input.reason.trim()) throw new TributarioS8Error("Informe o lançamento e o fundamento da concessão.");
+  const original = money(input.originalAmount);
+  if (!original.isFinite() || original.lte(0)) throw new TributarioS8Error("Valor original do benefício inválido.");
+  const request = { originalAmount: original.toFixed(2), reason: input.reason.trim(), documentId: input.documentId?.trim() || null };
+  return db.$transaction(async (tx) => {
+    const assessment = await tx.taxAssessment.findUniqueOrThrow({ where: { id: input.sourceId } });
+    const scope = await resolveTaxAssessmentScope(tx, actor, assessment.taxId, assessment.calculationSnapshot);
+    if (assessment.taxpayerId !== input.taxpayerId) throw new TributarioS8Error("Contribuinte diferente do titular do lançamento.");
+    const key = { ruleId: input.ruleId, taxpayerId: input.taxpayerId, sourceType: input.sourceType, sourceId: input.sourceId };
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`BENEFIT:${JSON.stringify(key)}`}, 0))::text`;
+    const existing = await tx.taxBenefitGrant.findUnique({ where: { ruleId_taxpayerId_sourceType_sourceId: key } });
+    if (existing) {
+      const stored = taxScopeSnapshot(taxScopeSnapshot(existing.calculationSnapshot).request);
+      if (existing.status !== "CONCEDIDO" || Object.entries(request).some(([field, value]) => stored[field] !== value)) throw new TributarioS8Error("Benefício já registrado com outros dados.");
+      return existing;
+    }
+    const now = new Date();
+    const year = await resolveTaxFinancialYear(tx, now.getUTCFullYear(), scope);
+    await assertAccountingPeriodOpen(tx, year.id, now);
+    await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${input.sourceId} FOR UPDATE`;
+    const current = await tx.taxAssessment.findUniqueOrThrow({ where: { id: input.sourceId }, include: { guides: { include: { payments: { where: { status: "Confirmado" } } } } } });
+    if (["Cancelado", "Pago", "Extinto", "Suspenso", "Dívida Ativa"].includes(current.status)) throw new TributarioS8Error("Lançamento indisponível para concessão de benefício.");
+    const total = current.finalValueDecimal ?? current.originalValueDecimal;
+    if (!total) throw new TributarioS8Error("Lançamento sem valor decimal conciliado.");
+    let paid = await taxAssessmentCompensatedValue(tx, current.id);
+    for (const guide of current.guides) {
+      const collected = guide.payments.reduce((sum, payment) => {
+        if (!payment.amountPaidDecimal) throw new TributarioS8Error("Pagamento sem valor decimal conciliado.");
+        return sum.plus(payment.amountPaidDecimal);
+      }, new Prisma.Decimal(0));
+      paid = paid.plus(collected);
+      if (guide.status !== "Cancelada" && (guide.totalValueDecimal ?? money(guide.totalValue)).gt(collected)) throw new TributarioS8Error("Cancele as guias abertas antes de conceder o benefício.");
+    }
+    const balance = total.minus(paid);
+    if (!balance.eq(original)) throw new TributarioS8Error("O saldo do lançamento mudou; atualize o valor da concessão.");
+    const rule = await tx.taxBenefitRule.findUnique({ where: { id: input.ruleId } });
+    if (!rule?.active || rule.effectiveFrom > now || (rule.effectiveUntil && rule.effectiveUntil < now)) throw new TributarioS8Error("Regra de benefício fora da vigência.");
+    if (!["CREDITO", "REDUCAO", "RENUNCIA"].includes(rule.benefitType)) throw new TributarioS8Error("Tipo de benefício inválido.");
+    if (request.documentId) {
+      const document = await tx.document.findUnique({ where: { id: request.documentId } });
+      if (document?.status !== "Válido") throw new TributarioS8Error("Documento GED da concessão não está válido.");
+    }
+    const config = taxScopeSnapshot(rule.calculation);
+    if ((config.valueMode !== "PERCENT" && config.valueMode !== "FIXED") || (typeof config.value !== "number" && typeof config.value !== "string")) throw new TributarioS8Error("Cálculo do benefício não está configurado.");
+    const configuredValue = new Prisma.Decimal(String(config.value));
+    if (!configuredValue.isFinite() || configuredValue.lte(0) || (config.valueMode === "PERCENT" && configuredValue.gt(100))) throw new TributarioS8Error("Valor configurado do benefício inválido.");
+    const result = calculateBenefit({ amount: balance, type: rule.benefitType as "CREDITO" | "REDUCAO" | "RENUNCIA", value: config.value, valueMode: config.valueMode });
+    const applied = balance.minus(result.finalAmount);
+    if (applied.lte(0)) throw new TributarioS8Error("O benefício deve reduzir o saldo do lançamento.");
+    const finalValue = total.minus(applied);
+    const grant = await tx.taxBenefitGrant.create({ data: {
+      ...key, originalAmountDecimal: balance, creditDecimal: result.credit, reductionDecimal: result.reduction, renunciationDecimal: result.renunciation, finalAmountDecimal: result.finalAmount,
+      calculationSnapshot: json({ ...scope, operationFinancialYearId: year.id, request, rule: { id: rule.id, code: rule.code, legalReference: rule.legalReference, calculation: rule.calculation }, result, oldValue: total.toFixed(2), newValue: finalValue.toFixed(2), effect: "REDUCAO_DEBITO_SEM_CAIXA" }), grantedByUsuarioId: actor.usuarioId, grantedAt: now,
+    } });
+    const entry = await tx.taxRegistryEntry.create({ data: { entityType: "TAX_ASSESSMENT", entityId: current.id, category: "CREDIT_EVENT", title: `Benefício: ${rule.name}`, status: "ATIVO", source: "BENEFICIO", actorUsuarioId: actor.usuarioId, documentId: request.documentId, data: { ...scope, eventType: "BENEFICIO", grantId: grant.id, ruleId: rule.id, legalReference: rule.legalReference, amount: applied.toFixed(2), oldValue: total.toFixed(2), newValue: finalValue.toFixed(2), reducesAssessmentValue: true, reason: request.reason } } });
+    await tx.taxAssessment.update({ where: { id: current.id }, data: { finalValueDecimal: finalValue, status: finalValue.eq(paid) ? "Extinto" : "Revisado", calculationSnapshot: { ...taxScopeSnapshot(current.calculationSnapshot), currentValue: finalValue.toFixed(2), lastBenefitGrantId: grant.id } } });
+    await tx.taxIntegrationEvent.create({ data: { integrationCode: "FISCAL_ENGINE", eventType: "BENEFIT_GRANTED", idempotencyKey: `BENEFIT:${grant.id}`, status: "PROCESSADO", evidenceLevel: "L1", taxpayerId: current.taxpayerId, payload: { ...scope, assessmentId: current.id, grantId: grant.id }, result: { registryEntryId: entry.id, amount: applied.toFixed(2), renunciation: result.renunciation.toFixed(2) }, processedAt: now } });
+    await tx.taxAuditLog.create({ data: { action: "GRANT_BENEFIT", entityType: "TaxBenefitGrant", entityId: grant.id, authorUsuarioId: actor.usuarioId, authorEmployeeId: actor.employeeId, payload: { ...scope, assessmentId: current.id, registryEntryId: entry.id, amount: applied.toFixed(2), reason: request.reason } } });
+    return grant;
   });
 }
 

@@ -289,8 +289,8 @@ export async function saveHrPayrollRule(
         if (input.valueType !== "JSON") throw new Error("Folhas especiais POC exigem política JSON.");
         pocSpecialPolicySchema.parse(value);
       }
-      if (input.code === "DIARIAS_POC") {
-        if (input.valueType !== "JSON") throw new Error("Diárias POC exigem política JSON.");
+      if (["DIARIAS_POC", "DIARIAS_MUNICIPAIS"].includes(input.code)) {
+        if (input.valueType !== "JSON") throw new Error("Diárias exigem política JSON.");
         travelAllowancePolicySchema.parse(value);
       }
       if (input.code === "FALTAS_FERIAS_POC") {

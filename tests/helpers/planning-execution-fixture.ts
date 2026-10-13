@@ -13,7 +13,11 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
     models.push("TaxIntegrationEvent", "TaxRegistryEntry", "Taxpayer", "TaxDocumentSequence", "TaxParameter");
     models.push("ActiveDebt", "DebtInstallment", "DebtInstallmentSchedule");
     models.push("PurchaseReceipt", "PurchaseReceiptItem", "InstrumentMeasurement");
+    models.push("BankStatementImport", "BankStatementItem", "BankReconciliationSession", "BankReconciliationMatch", "BankReconciliationAllocationGroup", "BankReconciliationAllocation", "BankReconciliation");
     models.push("Payroll", "HrPayrollRun", "HrIntegrationEvent", "SstBenefitPayrollScope");
+    models.push("HrEmploymentContract", "HrRightEntry", "HrPayrollStatement");
+    models.push("HrPayrollRuleSet", "HrPayrollRule", "HrEmploymentRegime", "HrEmploymentRevision", "HrPortalRequest", "CostCenter");
+    models.push("ProcessType", "Subject", "Process", "ProcessMovement", "ProcessWorkflowStage", "ProcessSequence", "ProcessEvent", "GenericProcessWorkflowDefinition", "GenericProcessWorkflowStage", "GenericProcessWorkflowInstance", "GenericProcessWorkflowEvent", "ProcessDocument", "ConfiguracaoPerfil", "ConfiguracaoModulo", "UsuarioModulo", "ProtocolNotification");
     models.push("TreasuryTransfer", "Asset", "AssetCategory", "AssetMaintenance", "AssetWriteOff", "AssetIntegrationPendingConfiguration", "Department");
     const enums = new Set<string>();
     for (const name of models) {
@@ -34,7 +38,8 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
         else if (typeof item.default === "boolean" || typeof item.default === "number") fallback = ` DEFAULT ${item.default}`;
         if (item.type === "DateTime" && item.isRequired) fallback = " DEFAULT CURRENT_TIMESTAMP";
         const sqlType = item.kind === "enum" ? `"${item.type}"` : types[item.type] ?? "TEXT";
-        return `"${item.name}" ${sqlType}${item.isList ? "[]" : ""}${item.name === "id" ? " PRIMARY KEY" : ""}${fallback}`;
+        const primaryKey = item.name === "id" || (name === "ProcessSequence" && item.name === "year");
+        return `"${item.name}" ${sqlType}${item.isList ? "[]" : ""}${primaryKey ? " PRIMARY KEY" : ""}${fallback}`;
       });
       await f.pg.exec(`CREATE TABLE IF NOT EXISTS "${name}" (${columns.join(",")})`);
       for (const item of model.fields.filter((field) => field.isUnique && field.name !== "id")) await f.pg.exec(`CREATE UNIQUE INDEX ON "${name}" ("${item.name}")`);

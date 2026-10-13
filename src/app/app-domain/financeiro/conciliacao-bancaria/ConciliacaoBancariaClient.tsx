@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { GitCompare, CheckCircle2, FileSpreadsheet, ArrowRightLeft, Sparkles, Scale } from "lucide-react";
-import { confirmReconciliationSessionAction, openReconciliationSessionAction, runAutoReconciliationAction } from "./actions";
+import { allocateReconciliationAction, confirmReconciliationSessionAction, openReconciliationSessionAction, runAutoReconciliationAction } from "./actions";
 import { MoneyInput } from "@/components/ui/MoneyInput";
-import { pocVirtualBank } from "@/lib/poc/poc-config";
+import { ReconciliationAllocationForm } from "./ReconciliationAllocationForm";
 import type { ReconciliationMatchResult } from "@/lib/financeiro/reconciliation-engine";
 
 interface Session {
@@ -33,12 +33,14 @@ interface ConfirmReceipt {
   hash: string;
 }
 
-export default function ConciliacaoBancariaClient({ initialSessions = [] }: { initialSessions?: Session[] }) {
-  const [banco] = useState(pocVirtualBank.name);
-  const [agencia, setAgencia] = useState<string>(pocVirtualBank.agency);
-  const [contaNumero, setContaNumero] = useState("20001-1");
-  const [periodo, setPeriodo] = useState("2025-08");
-  const [saldoInicial, setSaldoInicial] = useState<number>(150000.0);
+export default function ConciliacaoBancariaClient({ initialSessions = [], accounts }: { initialSessions?: Session[]; accounts: Array<{ id: string; bankName: string; agency: string; accountNumber: string }> }) {
+  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+  const account = accounts.find((item) => item.id === accountId);
+  const banco = account?.bankName ?? "";
+  const agencia = account?.agency ?? "";
+  const contaNumero = account?.accountNumber ?? "";
+  const [periodo, setPeriodo] = useState(new Date().toISOString().slice(0, 7));
+  const [saldoInicial, setSaldoInicial] = useState<number>(0);
 
   const [activeSession, setActiveSession] = useState<Session | null>(initialSessions[0] || null);
   const [matchResults, setMatchResults] = useState<ReconciliationMatchResult[]>([]);
@@ -58,6 +60,7 @@ export default function ConciliacaoBancariaClient({ initialSessions = [] }: { in
       contaNumero,
       periodo,
       saldoInicial,
+      bankAccountId: accountId,
     });
 
     setLoading(false);
@@ -66,6 +69,7 @@ export default function ConciliacaoBancariaClient({ initialSessions = [] }: { in
       setErrorMsg(res.error);
     } else if (res.data) {
       setActiveSession(res.data);
+      setMatchResults([]);
     }
   }
 
@@ -73,6 +77,7 @@ export default function ConciliacaoBancariaClient({ initialSessions = [] }: { in
     if (!activeSession) return;
     setLoading(true);
     setErrorMsg(null);
+    setConfirmReceipt(null);
 
     const res = await runAutoReconciliationAction(activeSession.id);
 
@@ -102,6 +107,16 @@ export default function ConciliacaoBancariaClient({ initialSessions = [] }: { in
     }
   }
 
+  async function handleApplySuggestions() {
+    if (!activeSession) return;
+    const allocations = matchResults.filter((item) => item.statementItemId && item.treasuryMovementId && item.diferenca === 0 && ["VALOR_DATA_EXATA", "VALOR_D1", "DOCUMENTO", "HISTORICO"].includes(item.type)).map((item) => ({ statementItemId: item.statementItemId!, treasuryMovementId: item.treasuryMovementId!, amount: item.valorBanco!.toFixed(2) }));
+    if (!allocations.length) { setErrorMsg("Não há correspondências exatas disponíveis; use as alocações manuais."); return; }
+    setLoading(true);
+    const result = await allocateReconciliationAction({ sessionId: activeSession.id, idempotencyKey: `AUTO:${activeSession.id}:${crypto.randomUUID()}`, reason: "Correspondências exatas conferidas pelo operador", allocations });
+    setLoading(false);
+    if (result.error) setErrorMsg(result.error); else await handleRunAutoMatch();
+  }
+
   return (
     <div className="h-full min-h-0 overflow-y-auto px-1 py-1 sm:px-2 [&>*+*]:mt-2">
       {/* Header */}
@@ -118,6 +133,7 @@ export default function ConciliacaoBancariaClient({ initialSessions = [] }: { in
       </div>
 
       {/* Grid: Abertura & Painel de Saldos */}
+      {initialSessions.length > 0 && <select aria-label="Sessões de conciliação" className="w-full rounded border p-2 text-xs" value={activeSession?.id ?? ""} onChange={(event) => { setActiveSession(initialSessions.find((session) => session.id === event.target.value) ?? null); setMatchResults([]); setConfirmReceipt(null); setErrorMsg(null); }}><option value="">Selecionar sessão anterior</option>{initialSessions.map((session) => <option key={session.id} value={session.id}>{session.banco} · {session.contaNumero} · {session.periodo} · {session.status}</option>)}</select>}
       <div className="grid grid-cols-1 gap-2 lg:grid-cols-12">
         {/* Form Abertura */}
         <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3 shadow-none lg:col-span-4">
@@ -128,13 +144,7 @@ export default function ConciliacaoBancariaClient({ initialSessions = [] }: { in
           <form onSubmit={handleOpenSession} className="space-y-3 text-xs">
             <div>
               <label className="block font-semibold uppercase mb-1">Banco</label>
-              <input
-                type="text"
-                value={banco}
-                readOnly
-                className="w-full bg-slate-50 dark:bg-slate-800 border p-2.5 rounded-lg text-sm"
-                required
-              />
+              <select aria-label="Conta bancária municipal" value={accountId} onChange={(event) => setAccountId(event.target.value)} className="w-full bg-slate-50 border p-2.5 rounded-lg text-sm" required><option value="">Selecione a conta</option>{accounts.map((item) => <option key={item.id} value={item.id}>{item.bankName} · {item.agency} · {item.accountNumber}</option>)}</select>
             </div>
 
             <div className="grid gap-2 sm:grid-cols-2">
@@ -143,7 +153,7 @@ export default function ConciliacaoBancariaClient({ initialSessions = [] }: { in
                 <input
                   type="text"
                   value={agencia}
-                  onChange={(e) => setAgencia(e.target.value)}
+                  readOnly
                   className="w-full bg-slate-50 dark:bg-slate-800 border p-2.5 rounded-lg text-sm"
                   required
                 />
@@ -153,7 +163,7 @@ export default function ConciliacaoBancariaClient({ initialSessions = [] }: { in
                 <input
                   type="text"
                   value={contaNumero}
-                  onChange={(e) => setContaNumero(e.target.value)}
+                  readOnly
                   className="w-full bg-slate-50 dark:bg-slate-800 border p-2.5 rounded-lg text-sm"
                   required
                 />
@@ -196,6 +206,7 @@ export default function ConciliacaoBancariaClient({ initialSessions = [] }: { in
 
         {/* Dashboard de Saldos & Motor de Match */}
           <div className="space-y-3 lg:col-span-8">
+          {activeSession && <ReconciliationAllocationForm key={`${activeSession.id}:${activeSession.itensConciliados}:${activeSession.itensDivergentes}`} sessionId={activeSession.id} closed={activeSession.status === "CONCILIADA"} onChanged={handleRunAutoMatch} />}
           {!activeSession ? (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-8 text-center text-slate-500 italic">
               Preencha os dados e clique em &quot;Abrir Conciliação &amp; Carregar Razão Bancário&quot; para iniciar.
@@ -262,9 +273,10 @@ export default function ConciliacaoBancariaClient({ initialSessions = [] }: { in
 
               {/* Botões do Motor de Match */}
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <button onClick={handleApplySuggestions} disabled={loading || !matchResults.length || activeSession.status === "CONCILIADA"} className="rounded border px-3 py-2 text-xs font-bold disabled:opacity-50">Aplicar correspondências exatas</button>
                 <button
                   onClick={handleRunAutoMatch}
-                  disabled={loading}
+                  disabled={loading || activeSession.status === "CONCILIADA"}
                   className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md transition-all"
                 >
                   <Sparkles className="w-5 h-5 text-amber-300 animate-pulse" />

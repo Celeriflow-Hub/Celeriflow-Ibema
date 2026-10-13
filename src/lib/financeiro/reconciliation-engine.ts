@@ -1,6 +1,7 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import type { BankReconciliationSession } from "@prisma/client";
-import { getBankAccountLedgerBalance } from "@/lib/financeiro";
+import { type FinanceActor } from "@/lib/financeiro";
+import { readReconciliationPosition } from "./reconciliation-allocations";
 
 export type ReconciliationMatchType =
   | "VALOR_DATA_EXATA"
@@ -58,51 +59,20 @@ function sameValue(first: Prisma.Decimal, second: Prisma.Decimal) {
  */
 export async function runAutoReconciliation(
   prisma: PrismaClient,
-  sessionId: string
+  sessionId: string,
+  actor: FinanceActor,
 ): Promise<{
   session: BankReconciliationSession;
   matches: ReconciliationMatchResult[];
   balances: SessionBalancesSummary;
 }> {
-  const session = await prisma.bankReconciliationSession.findUnique({
-    where: { id: sessionId },
-  });
-
-  if (!session) {
-    throw new Error("Sessão de conciliação bancária não encontrada.");
-  }
-
-  // Obter extratos pendentes da conta
-  const bankItems = await prisma.bankStatementItem.findMany({
-    where: {
-      banco: session.banco,
-      agencia: session.agencia,
-      contaNumero: session.contaNumero,
-      date: { gte: session.dataInicio, lte: session.dataFim },
-      status: { not: "Conciliado" },
-    },
-  });
-
-  const bankAccount = await prisma.bankAccount.findFirst({
-    where: {
-      bankName: session.banco,
-      agency: session.agencia,
-      accountNumber: session.contaNumero,
-    },
-    select: { id: true },
-  });
-
-  if (!bankAccount) {
-    throw new Error("A conta bancária da sessão não está cadastrada na tesouraria.");
-  }
-
-  // The treasury ledger references the internal account id, not its displayed number.
-  const treasuryMovements = await prisma.treasuryMovement.findMany({
-    where: {
-      bankAccountId: bankAccount.id,
-      date: { gte: session.dataInicio, lte: session.dataFim },
-    },
-  });
+  return prisma.$transaction(async (tx) => {
+  await tx.$queryRaw`SELECT id FROM "BankReconciliationSession" WHERE id = ${sessionId} FOR UPDATE`;
+  const position = await readReconciliationPosition(tx, actor, sessionId);
+  const session = position.session;
+  if (["CONCILIADA", "CANCELADA"].includes(session.status)) throw new Error("Sessão encerrada; reabra antes de recalcular correspondências.");
+  const bankItems = position.bank.filter((row) => row.remaining.gt(0)).map((row) => ({ ...row, valueDecimal: row.remaining }));
+  const treasuryMovements = position.treasury.filter((row) => row.remaining.gt(0)).map((row) => ({ ...row, valueDecimal: row.remaining }));
 
   const matches: ReconciliationMatchResult[] = [];
   const matchedBankIds = new Set<string>();
@@ -178,7 +148,7 @@ export async function runAutoReconciliation(
       const match = treasuryMovements.find((t) => {
         if (matchedTreasuryIds.has(t.id)) return false;
         return statementDirection(bItem) === treasuryDirection(t.direction)
-          && ((t.sourceId || "").includes(bDoc) || bDoc.includes(t.sourceId || ""));
+          && !!t.sourceId && (t.sourceId.includes(bDoc) || bDoc.includes(t.sourceId));
     });
 
     if (match) {
@@ -248,7 +218,7 @@ export async function runAutoReconciliation(
     }
   }
 
-  // Agrupamentos e correspondências um-para-muitos permanecem pendentes até que todos os itens possam ser vinculados e confirmados.
+  // Grouped/partial allocations are durable records; heuristic suggestions never consume their balances.
 
   // Regra: Lançamentos Sem Correspondente
   for (const bItem of bankItems) {
@@ -264,12 +234,12 @@ export async function runAutoReconciliation(
   }
 
   // Gravar matches no banco de dados
-  await prisma.bankReconciliationMatch.deleteMany({
-    where: { sessionId: session.id },
+  await tx.bankReconciliationMatch.deleteMany({
+    where: { sessionId: session.id, status: "AUTOMATICO" },
   });
 
   for (const m of matches) {
-    await prisma.bankReconciliationMatch.create({
+    await tx.bankReconciliationMatch.create({
       data: {
         sessionId: session.id,
         statementItemId: m.statementItemId,
@@ -283,26 +253,26 @@ export async function runAutoReconciliation(
   }
 
   // Recalcular Saldos
-  const totalDebitos = bankItems.filter((item) => statementDirection(item) === "Saída").reduce((total, item) => total + Math.abs(Number(item.valueDecimal)), 0);
-  const totalCreditos = bankItems.filter((item) => statementDirection(item) === "Entrada").reduce((total, item) => total + Math.abs(Number(item.valueDecimal)), 0);
+  const totalDebitos = Number(position.debits);
+  const totalCreditos = Number(position.credits);
   const saldoInicial = Number(session.saldoInicialDecimal);
-  const saldoFinal = saldoInicial + totalCreditos - totalDebitos;
-  const saldoRazao = Number(await getBankAccountLedgerBalance(prisma, bankAccount.id, session.dataFim));
-  const diferenca = saldoRazao - saldoFinal;
+  const saldoFinal = Number(position.finalBalance);
+  const saldoRazao = Number(position.ledgerBalance);
+  const diferenca = Number(position.difference);
 
-  const itensConciliados = matches.filter((match) => ["VALOR_DATA_EXATA", "VALOR_D1", "DOCUMENTO", "HISTORICO"].includes(match.type) && match.diferenca === 0).length;
-  const itensDivergentes = matches.length - itensConciliados;
+  const itensConciliados = position.matched;
+  const itensDivergentes = position.pending;
 
-  const updatedSession = await prisma.bankReconciliationSession.update({
+  const updatedSession = await tx.bankReconciliationSession.update({
     where: { id: sessionId },
     data: {
-        totalDebitosDecimal: new Prisma.Decimal(totalDebitos),
-        totalCreditosDecimal: new Prisma.Decimal(totalCreditos),
-        saldoFinalDecimal: new Prisma.Decimal(saldoFinal),
-        saldoRazaoDecimal: new Prisma.Decimal(saldoRazao),
-        diferencaDecimal: new Prisma.Decimal(diferenca),
-      totalItensBanco: bankItems.length,
-      totalItensContabeis: treasuryMovements.length,
+        totalDebitosDecimal: position.debits,
+        totalCreditosDecimal: position.credits,
+        saldoFinalDecimal: position.finalBalance,
+        saldoRazaoDecimal: position.ledgerBalance,
+        diferencaDecimal: position.difference,
+      totalItensBanco: position.bank.length,
+      totalItensContabeis: position.treasury.filter((row) => row.date >= session.dataInicio).length,
       itensConciliados,
       itensDivergentes,
         status: "EM_ANDAMENTO",
@@ -319,10 +289,11 @@ export async function runAutoReconciliation(
       saldoFinal,
       saldoRazao,
       diferenca,
-      totalItensBanco: bankItems.length,
-      totalItensContabeis: treasuryMovements.length,
+       totalItensBanco: position.bank.length,
+       totalItensContabeis: position.treasury.filter((row) => row.date >= session.dataInicio).length,
       itensConciliados,
       itensDivergentes,
     },
   };
+  });
 }

@@ -2,6 +2,8 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { payrollPeriod } from "./calculation-engine";
 import { enqueueHrIntegration } from "./workforce-service";
+import { assertAccountingPeriodOpen, type FinanceActor } from "@/lib/financeiro";
+import { reverseProvisionAccrualAccounting } from "./provision-accounting";
 
 const percentage = z.string().regex(/^\d+(?:\.\d{1,8})?$/).refine(value => new Prisma.Decimal(value).lte(100));
 export const payrollProvisionPolicySchema = z.object({ origin: z.literal("PROVISOES_FOLHA"), legalReference: z.string().trim().min(3), components: z.array(z.object({ kind: z.enum(["PROVISAO_FERIAS", "PROVISAO_13", "PROVISAO_LICENCA"]), rubricCodes: z.array(z.string().min(1)).min(1), rate: percentage, employerRate: percentage }).strict()).min(1).max(3) }).strict().superRefine((policy, ctx) => {
@@ -62,11 +64,19 @@ export async function postPayrollProvisions(db: PrismaClient, actorId: string, r
   }, { timeout: 60000 });
 }
 
-export async function reversePayrollProvision(db: PrismaClient, actorId: string, raw: unknown) {
+export async function reversePayrollProvision(db: PrismaClient, actorId: string, raw: unknown, financeActor?: FinanceActor) {
   const input = z.object({ entryId: z.string().min(1), reason: z.string().trim().min(10).max(2000) }).strict().parse(raw);
   return db.$transaction(async tx => {
     const original = await tx.hrRightEntry.findUniqueOrThrow({ where: { id: input.entryId } });
     const memory = z.object({ operation: z.literal("APROPRIACAO"), scope: z.string() }).parse(original.details);
+    const posting = await tx.hrIntegrationEvent.findUnique({ where: { sourceKey: `CONTABIL:PROVISAO:${original.id}` } });
+    const date = new Date();
+    if (posting) {
+      if (!financeActor || financeActor.usuarioId !== actorId) throw new Error("Estorno de provisão contabilizada exige autorização financeira e escopo de UG.");
+      const reference = z.object({ input: z.object({ budgetUnitId: z.string() }), financialYearId: z.string() }).parse(posting.payload);
+      if (financeActor.allowedBudgetUnitIds && !financeActor.allowedBudgetUnitIds.includes(reference.input.budgetUnitId)) throw new Error("Provisão fora das UGs autorizadas.");
+      await assertAccountingPeriodOpen(tx, reference.financialYearId, date);
+    }
     if (!original.kind.startsWith("PROVISAO_") || original.amount.lt(0)) throw new Error("Selecione uma apropriação original de provisão.");
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:contract:${original.contractId}`}))`;
     const sourceKey = `ESTORNO:PROVISAO:${original.id}`;
@@ -76,6 +86,7 @@ export async function reversePayrollProvision(db: PrismaClient, actorId: string,
     const linked = await tx.hrRightEntry.aggregate({ where: { details: { path: ["appropriationEntryId"], equals: original.id } }, _sum: { amount: true } });
     if (linked._sum.amount?.lt(0)) throw new Error("Apropriação possui baixa vinculada; estorne a baixa antes de devolver a provisão.");
     if (ledger.reduce((sum, row) => sum.add(row.amount), new Prisma.Decimal(0)).sub(original.amount).lt(0) || ledger.reduce((sum, row) => sum.add(row.quantity), new Prisma.Decimal(0)).sub(original.quantity).lt(0)) throw new Error("Provisão consumida exige conciliação antes do estorno.");
+    if (posting) await reverseProvisionAccrualAccounting(tx, financeActor!, original.id, date, input.reason);
     const entry = await tx.hrRightEntry.create({ data: { contractId: original.contractId, sourceKey, kind: original.kind, periodStart: original.periodStart, periodEnd: original.periodEnd, quantity: original.quantity.negated(), amount: original.amount.negated(), actorId, details: { operation: "ESTORNO", scope: memory.scope, cancelsId: original.id, reason: input.reason } } });
     await enqueueHrIntegration(tx, { sourceKey, domain: "AUDITORIA", environment: memory.scope, eventType: "PROVISAO_ESTORNADA", payload: { entryId: entry.id, originalEntryId: original.id, actorId, reason: input.reason } });
     return entry;

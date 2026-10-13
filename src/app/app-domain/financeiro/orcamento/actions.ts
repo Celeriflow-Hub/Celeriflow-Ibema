@@ -9,10 +9,11 @@ import {
   createBudgetReservation,
   setFinancialYearStatus,
 } from "@/lib/financeiro";
-import { assertBudgetUnitAccess, getTenantContextForModuleOperation, type AppContext } from "@/lib/platform/tenant-context";
+import { assertBudgetUnitAccess, getTenantContextForModuleOperation, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
 type ActionResult = { error?: string };
+const budgetActor = (context: AppContext) => ({ usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds });
 type MasterDataType = "budgetUnit" | "resourceSource" | "revenueNature" | "expenseNature";
 type ProcurementOriginPolicy = "NONE" | "PROCUREMENT_SOURCE" | "CONTRACT";
 type MasterDataInput = { code: string; name: string; secretariatId?: string; procurementOriginPolicy?: ProcurementOriginPolicy };
@@ -88,7 +89,7 @@ export async function createBudgetReservationAction(data: { number: string; date
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     await assertAppropriationAccess(context, data.appropriationId);
     if (!data.expenseId) throw new FinanceError("Selecione uma solicitação de despesa aprovada.");
-    await createBudgetReservation(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, { ...data, expenseId: data.expenseId });
+    await createBudgetReservation(context.prisma, budgetActor(context), { ...data, expenseId: data.expenseId });
     revalidatePath("/financeiro/orcamento");
     revalidatePath("/financeiro/empenhos");
     return {};
@@ -101,7 +102,7 @@ export async function createExpenseRequestAction(data: { date: Date; description
   try {
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     await assertAppropriationAccess(context, data.appropriationId);
-    await createExpenseRequest(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, { ...data, sourceModule: "FINANCEIRO", sourceType: "MANUAL_EXPENSE_REQUEST", eventType: "MANUAL_EXPENSE_REQUEST" });
+    await createExpenseRequest(context.prisma, budgetActor(context), { ...data, sourceModule: "FINANCEIRO", sourceType: "MANUAL_EXPENSE_REQUEST", eventType: "MANUAL_EXPENSE_REQUEST" });
     revalidatePath("/financeiro/orcamento");
     return {};
   } catch (error) {
@@ -113,7 +114,7 @@ export async function createExpenseRequestFromPurchaseReceiptAction(data: { purc
   try {
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     await assertAppropriationAccess(context, data.appropriationId);
-    await createExpenseRequestFromApprovedPurchaseReceipt(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, data);
+    await createExpenseRequestFromApprovedPurchaseReceipt(context.prisma, budgetActor(context), data);
     revalidatePath("/financeiro/orcamento");
     return {};
   } catch (error) {
@@ -127,7 +128,7 @@ export async function approveExpenseRequestAction(expenseId: string): Promise<Ac
     const expense = await context.prisma.expense.findUnique({ where: { id: expenseId }, select: { appropriationId: true } });
     if (!expense) throw new FinanceError("Solicitação de despesa não encontrada.");
     await assertAppropriationAccess(context, expense.appropriationId);
-    await approveExpenseRequest(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, expenseId);
+    await approveExpenseRequest(context.prisma, budgetActor(context), expenseId);
     revalidatePath("/financeiro/orcamento");
     return {};
   } catch (error) {
@@ -144,7 +145,7 @@ export async function cancelBudgetReservationAction(id: string): Promise<ActionR
     });
     if (!reservation) throw new FinanceError("Reserva orçamentária não encontrada.");
     await assertAppropriationAccess(context, reservation.appropriationId);
-    await cancelBudgetReservation(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, id);
+    await cancelBudgetReservation(context.prisma, budgetActor(context), id);
     revalidatePath("/financeiro/orcamento");
     revalidatePath("/financeiro/empenhos");
     return {};
@@ -156,7 +157,7 @@ export async function cancelBudgetReservationAction(id: string): Promise<ActionR
 export async function setFinancialYearStatusAction(id: string, status: string): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
-    await setFinancialYearStatus(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, id, status);
+    await setFinancialYearStatus(context.prisma, budgetActor(context), id, status);
     revalidatePath("/financeiro/orcamento");
     return {};
   } catch (error) {

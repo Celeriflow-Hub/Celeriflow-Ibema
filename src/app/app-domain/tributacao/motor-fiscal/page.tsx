@@ -4,6 +4,7 @@ import { taxAssessmentAccessFilter, taxAssessmentCompensatedValue } from "@/lib/
 import MotorFiscalClient from "./MotorFiscalClient";
 import { CreditMovementReversalForm } from "./CreditMovementReversalForm";
 import { AuthorizedCompensationForm } from "./AuthorizedCompensationForm";
+import { AssessmentBenefitForm } from "./AssessmentBenefitForm";
 
 export const dynamic = "force-dynamic";
 
@@ -49,11 +50,14 @@ export default async function MotorFiscalPage() {
   const assessmentRows = assessments.map((assessment) => {
     const total = Number(assessment.finalValueDecimal ?? assessment.originalValueDecimal ?? assessment.originalValue);
     const paid = assessment.guides.flatMap((guide) => guide.payments).reduce((sum, payment) => sum + Number(payment.amountPaidDecimal ?? payment.amountPaid), 0);
-    const extinct = creditEvents.filter((entry) => entry.entityId === assessment.id).reduce((sum, entry) => { const data = object(entry.data); return ["EXTINCAO_NAO_FINANCEIRA", "COMPENSACAO"].includes(String(data.eventType)) ? sum + Number(data.amount ?? 0) : sum; }, compensated.get(assessment.id) ?? 0);
+    const extinct = creditEvents.filter((entry) => entry.entityId === assessment.id).reduce((sum, entry) => { const data = object(entry.data); return data.reducesAssessmentValue !== true && ["EXTINCAO_NAO_FINANCEIRA", "COMPENSACAO"].includes(String(data.eventType)) ? sum + Number(data.amount ?? 0) : sum; }, compensated.get(assessment.id) ?? 0);
     return { id: assessment.id, number: assessment.assessmentNumber ?? assessment.id, taxId: assessment.taxId, tax: assessment.tax.name, taxpayerId: assessment.taxpayerId, taxpayer: taxpayerName(assessment.taxpayer), year: assessment.year, competence: assessment.competence?.toISOString() ?? null, base: Number(assessment.taxableBaseDecimal ?? 0), principal: Number(assessment.originalValueDecimal ?? assessment.originalValue), correction: Number(assessment.correctionValueDecimal ?? 0), interest: Number(assessment.interestValueDecimal ?? 0), penalty: Number(assessment.penaltyValueDecimal ?? 0), total, paid, balance: Math.max(total - paid - extinct, 0), status: assessment.status, realEstateId: assessment.realEstateId, economicRegistrationId: assessment.economicRegistrationId };
   });
   const reversibleMovements = await prisma.taxRegistryEntry.findMany({ where: { AND: [registryAccess, { OR: [{ category: "CREDIT_MOVEMENT", status: "EFETIVADO" }, { category: "REFUND_REQUEST", status: { in: ["PENDENTE_APROVACAO", "APROVADA_AGUARDANDO_TESOURARIA", "RESTITUIDA"] } }] }] }, orderBy: { createdAt: "desc" }, take: 200 });
+  const now = new Date();
+  const benefitRules = await prisma.taxBenefitRule.findMany({ where: { active: true, effectiveFrom: { lte: now }, OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: now } }] }, orderBy: { code: "asc" } });
   return <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+    <AssessmentBenefitForm rules={benefitRules.map((rule) => ({ id: rule.id, label: `${rule.code} · ${rule.name} · ${rule.legalReference}` }))} assessments={assessmentRows.filter((entry) => entry.balance > 0 && !["Cancelado", "Pago", "Extinto", "Suspenso", "Dívida Ativa"].includes(entry.status)).map((entry) => ({ id: entry.id, label: `${entry.number} · ${entry.taxpayer}`, balance: entry.balance }))} documents={documents.map((entry) => ({ id: entry.id, label: entry.title }))} />
     <CreditMovementReversalForm movements={reversibleMovements.map((movement) => ({ id: movement.id, label: `${movement.title} · ${object(movement.data).amount ?? ""} · ${movement.entityId}` }))} />
     <AuthorizedCompensationForm credits={credits.filter((entry) => entry.status === "DISPONIVEL").map((entry) => ({ id: entry.id, label: `${entry.title} · ${object(entry.data).available ?? ""} · ${entry.entityId}` }))} assessments={assessmentRows.filter((entry) => entry.balance > 0 && !["Cancelado", "Pago", "Suspenso", "Dívida Ativa"].includes(entry.status)).map((entry) => ({ id: entry.id, label: `${entry.number} · ${entry.taxpayer}` }))} documents={documents.map((entry) => ({ id: entry.id, label: entry.title }))} />
     <MotorFiscalClient

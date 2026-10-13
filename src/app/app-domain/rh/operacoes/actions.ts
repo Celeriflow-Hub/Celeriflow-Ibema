@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getTenantContextForModuleOperation, assertBudgetUnitAccess, canViewModule } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, assertBudgetUnitAccess, canViewModule, canPerformModuleOperation, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { calculatePayrollRun, cancelPayrollRun, closePayrollRun, publishPayrollStatements, recordHrRightEntry, saveEmploymentContract, savePayrollMovement } from "@/lib/rh/workforce-service";
 import { acquireVacationRights, cancelVacationReservation, reserveVacationRight } from "@/lib/rh/vacation-rights";
 import { reserveMultipleVacationPeriods, cancelMultipleVacationPeriods } from "@/lib/rh/vacation-multiple-periods";
@@ -30,9 +30,46 @@ import { installDocumentaryPocParameters, prepareDocumentaryPocDataset } from "@
 import { requestTravelAllowance, decideTravelAllowance, accountForTravelAllowance } from "@/lib/rh/travel-allowance";
 import { registerPocPayment } from "@/lib/rh/poc-payment";
 import { configurePayrollPensions } from "@/lib/rh/pension-configuration";
+import { accountPayrollProvision } from "@/lib/rh/provision-accounting";
 import { applyPocEmploymentLifecycle } from "@/lib/rh/employment-lifecycle";
+import { dispatchTravelAllowanceExpense } from "@/lib/rh/travel-finance";
+import { openTravelAllowanceProcess } from "@/lib/rh/travel-process";
+import { requestMunicipalAdvance, submitAdvanceReport, reviewAdvanceReport, reopenAdvanceReport } from "@/lib/rh/municipal-advances";
 
 export async function executeWorkforceOperation(command: string, values: Record<string, string>) {
+  if (["adiantamento-solicitar", "adiantamento-prestar", "adiantamento-revisar", "adiantamento-reabrir"].includes(command)) {
+    try {
+      const context = await getTenantContextForModuleOperation("RH", "update");
+      const result = command === "adiantamento-solicitar" ? await requestMunicipalAdvance(context, values) : command === "adiantamento-prestar" ? await submitAdvanceReport(context, values) : command === "adiantamento-reabrir" ? await reopenAdvanceReport(context, values) : await reviewAdvanceReport(context, values);
+      revalidatePath("/rh/adiantamentos"); revalidatePath("/financeiro/contabilidade");
+      return { id: result.id, message: "Operação de adiantamento registrada.", error: "" };
+    } catch (error) { return { error: error instanceof Error ? error.message : "Falha na operação de adiantamento." }; }
+  }
+  if (command === "diaria-processo") {
+    try {
+      const context = await getTenantContextForModuleOperation("RH", "update");
+      const result = await openTravelAllowanceProcess(context, values);
+      revalidatePath("/rh/diarias"); revalidatePath("/protocolos/processos");
+      revalidatePath("/rh/adiantamentos");
+      return { id: result.processId, message: "Solicitação protocolada no roteiro publicado; conclusão autorizada emite empenho automaticamente.", error: "" };
+    } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao protocolar diária." }; }
+  }
+  if (command === "diaria-financeiro") {
+    try {
+      const context = await getTenantContextForModuleOperation("RH", "update");
+      const result = await dispatchTravelAllowanceExpense(context, values);
+      revalidatePath("/rh/diarias"); revalidatePath("/financeiro/orcamento");
+      return { id: result.expenseId, message: "Despesa da diária encaminhada para aprovação e execução financeira.", error: "" };
+    } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao encaminhar diária." }; }
+  }
+  if (command === "contabilizar-provisao") {
+    try {
+      const context = await getTenantContextForModuleOperation("RH", "update");
+      const result = await accountPayrollProvision(context, values);
+      revalidatePath("/rh/operacoes"); revalidatePath("/financeiro/contabilidade");
+      return { id: result.transactionId, message: "Provisão apropriada no razão com VPD, obrigação e origem RH preservadas.", error: "" };
+    } catch (error) { return { error: error instanceof Error ? error.message : "Falha na apropriação contábil da provisão." }; }
+  }
   if (command === "poc-vinculo") {
     try {
       const context = await getTenantContextForModuleOperation("RH", "update");
@@ -91,9 +128,9 @@ export async function executeWorkforceOperation(command: string, values: Record<
       id = (await registerPocPayment(context.prisma, context.user.id, values)).id;
       message = "Pagamento demonstrativo registrado por data, disponível no informe anual POC.";
     }
-    if (command === "diaria-solicitar") id = (await requestTravelAllowance(context.prisma, context.user.id, values)).id;
-    if (command === "diaria-decidir") id = (await decideTravelAllowance(context.prisma, context.user.id, values)).id;
-    if (command === "diaria-prestar") id = (await accountForTravelAllowance(context.prisma, context.user.id, values)).id;
+    if (command === "diaria-solicitar") id = (await requestTravelAllowance(context.prisma, context.user.id, values, context)).id;
+    if (command === "diaria-decidir") id = (await decideTravelAllowance(context.prisma, context.user.id, values, context)).id;
+    if (command === "diaria-prestar") id = (await accountForTravelAllowance(context.prisma, context.user.id, values, context)).id;
     if (command === "poc-parametros") {
       const result = await installDocumentaryPocParameters(context.prisma, context.user.id);
       id = result.ruleSetId; message = "Parâmetros documentais POC instalados. Valores e origens disponíveis em Parametrizações.";
@@ -127,7 +164,7 @@ export async function executeWorkforceOperation(command: string, values: Record<
       const runId = command === "provisionar" ? values.runId : z.object({ runId: z.string() }).parse((await context.prisma.hrRightEntry.findUniqueOrThrow({ where: { id: values.entryId } })).details).runId;
       const run = await context.prisma.hrPayrollRun.findUniqueOrThrow({ where: { id: runId } });
       await assertPayrollBudgetScope(context, run.payrollId);
-      id = command === "provisionar" ? (await postPayrollProvisions(context.prisma, context.user.id, values)).entryIds.join(", ") : (await reversePayrollProvision(context.prisma, context.user.id, values)).id;
+      id = command === "provisionar" ? (await postPayrollProvisions(context.prisma, context.user.id, values)).entryIds.join(", ") : (await reversePayrollProvision(context.prisma, context.user.id, values, canPerformModuleOperation(context.user, "FINANCEIRO", "update") ? { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds } : undefined)).id;
       message = "Ledger de provisões atualizado com memória por rubrica. Consulte os saldos no relatório de direitos.";
     }
     if (command === "averbar-tempo") id = (await registerServiceTimeCredit(context.prisma, context.user.id, values)).id;

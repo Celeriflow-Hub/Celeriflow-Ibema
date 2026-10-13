@@ -2,6 +2,14 @@
 
 Este registro complementa o controle P0 sem alterar o texto original, os subcritérios ou o aceite dos 1.052 requisitos. Resultado de teste técnico não constitui aceite integral do requisito. O aceite autenticado pela interface foi adiado pelo usuário.
 
+## Diretriz vigente e bloco de benefícios/extinções
+
+- Autenticação, interface e testes de uso real ficam com o usuário. Itens sem lacuna de implementação, com validação interna concluída, podem ter conclusão técnica registrada e validação operacional pendente. Lacunas funcionais das fases continuam sob responsabilidade de implementação.
+- Revisão/extinção passaram a afetar o saldo efetivo, com replay protegido, autorização por UG, competência corrente e recusa de valor superior ao saldo/abaixo da baixa já realizada. Extinção não financeira não cria caixa; o extrato evita segunda dedução do valor já baixado.
+- Benefício vigente → concessão → baixa → evento/auditoria é transacional. Formulário/action no motor fiscal usa lançamento autorizado, regra, fundamento e GED; renúncia fica vinculada à origem para o Planejamento.
+- **18/18 cenários tributários aprovados** em PostgreSQL isolado, incluindo Prefeitura/Câmara, rollback tardio das novas concessões/extinções e guarda de suspensão nas três emissões. **5/5 cenários de Planejamento S3–S7 aprovados**, incluindo renúncia vinculada. ESLint direcionado aprovado; build completo ainda em execução.
+- A implementação desse bloco não conclui matriz contábil de constituição/benefícios/extinções, compensação fiscal LRF, demais produtores de renúncia nem o conjunto P1–P4.
+
 | Requisito | Ente | Evidência obtida | Fechamento ainda necessário |
 |---|---|---|---|
 | EXE-02.17 | Prefeitura | Lote nativo reserva → empenho com partidas/documentos/cotas, a partir do plano da folha oficial; rollback tardio e replay em `tests/payroll-financial-cycle.test.ts`. | Matriz real por tipo de folha, classificação homologada e ensaio autenticado integral. |
@@ -16,6 +24,34 @@ Este registro complementa o controle P0 sem alterar o texto original, os subcrit
 | EXE-25.32 | Prefeitura | Fluxo interno de solicitação/aprovação de restituição e compensação possui base de saldo rastreável. | Solicitação/deferimento pelo portal do contribuinte e aplicação em competências futuras, com evidência de interface. |
 
 ## Execução e preservação
+
+### Reconciliação do escopo por requisito
+
+Consulta read-only da matriz original dos 1.052 requisitos: **739 requisitos distintos** possuem ao menos uma atribuição a P1–P4. Há **109 atribuições P1**, **340 P2**, **398 P3** e **349 P4**; as fases se sobrepõem e os números não podem ser somados como requisitos únicos nem interpretados como pendências restantes. O aceite original foi preservado.
+
+| Requisitos nos dois entes | Evidência técnica deste bloco | Limite da evidência |
+| --- | --- | --- |
+| EXE-02.158 / LEG-02.158 | Extrato e tesouraria na mesma jornada, conta canônica, comparação e alocações | Validação autenticada da interface pelo usuário |
+| EXE-02.161 / LEG-02.161 | Movimentos confirmados anteriores pendentes são disponibilizados na sessão corrente, com saldo alocado consultável | Transporte de itens bancários anteriores e tratamento de pendências com registro próprio ainda em revisão |
+| EXE-02.162 / LEG-02.162 | Lote N:N reserva atomicamente o saldo dos dois lados, rollback e concorrência reais aprovados | Conferência de soma/seleção visual e variantes do texto integral ainda em revisão |
+| EXE-02.163 / LEG-02.163 | Alocação parcial Decimal e consulta de saldo remanescente; itens completamente alocados deixam a seleção | Quatro testes de conciliação aprovados, sem aceite integral promovido |
+| EXE-02.164 / LEG-02.164 | Seleção de sessões anteriores; reabertura e revisões com recibos/auditoria | Impressão histórica ainda precisa de evidência própria |
+| EXE-02.167 / LEG-02.167 | Consulta dos grupos efetivados/revertidos e respectivos valores/fundamentos | Pendências 1:1 legadas e apresentação completa dos itens conciliados ainda em revisão |
+| EXE-02.19 / LEG-02.19 | Apropriação patrimonial, componentes de remuneração/encargo, baixa na liquidação e rastreio no pagamento parcial/estorno com partida/caixa canônicos; vínculo explícito do componente do empenho ao plano da folha | Build `sh_1328e7ff5001DkiTjTJkR6EvnJ` aprovado; vínculo explícito ampliado em rodada provisões/RH 3/3 aprovada, incluindo encargos liquidados primeiro. Contas da cadeia municipal efetiva e variantes integrais seguem em revisão |
+| EXE-02.61 / LEG-02.61 | Política municipal, solicitação por UG/ente, autorização numerada, roteiro genérico publicado, processo/tramitação/rejeição e empenho automático na conclusão, com rollback conjunto; adiantamento integrado ao mesmo roteiro e concessão controlada | Ampliação adiantamentos 2/2, regressão 12/12 e build `sh_132af511a0018yqcBffbUMNfly` aprovados. Reapresentação ampliada e testada depois; restituição e variantes integrais ainda pendentes |
+| EXE-02.62 / LEG-02.62 | Prestação com GED, conferência de pagamento integral, vínculo de restituição e revalidação do replay após estorno; adiantamento com contas de controle, revisão independente, reapresentação após impugnação, histórico documental e estorno/anulação próprios | Build inicial aprovado; reapresentação/emissão documental com testes 4/4 e concorrência 2/2 aprovados, build seguinte em execução. Restituição parcial e tratamento contábil/orçamentário por exercício e variantes integrais ainda pendentes |
+
+Filtros/ordenação/relatórios (EXE/LEG-02.165–166/168), parsers OFC/OFX de P9 e critérios adicionais dos demais requisitos não são certificados por ensaios de N:N. A consulta não altera o texto de origem nem o resultado de nenhum subcritério.
+
+- Continuação da conciliação municipal: **32/32 aprovados**, saída 0, incluindo N:N/parcial, Tributação e Planejamento/execução. Ampliação posterior dirigida: **8/8 aprovados**, saída 0, incluindo conciliação parcial e disputa real de encerramento anual/reabertura nos dois entes. Escopo contábil/produtores: **9/9 aprovados**, saída 0. Rodadas se sobrepõem e não representam quantidade de requisitos concluídos.
+- Migration aditiva `20261012210000_bank_reconciliation_allocations` aplicada; alocações têm valor Decimal, saldo dos dois lados, chave/fundamento/autor e reversão histórica. Sessões guardam conta canônica; vínculo automático de legados somente sem ambiguidade. Banco atual não recebeu fatos bancários dos testes.
+- Build `sh_1326a9b13001x1vY7hNNTS4ZSq` aprovado, saída 0, para conciliação/guardas anuais/primeira integração patrimonial RH. Pagamento e componentes de encargos foram acrescentados depois e estão no build `sh_1327cc4d6001aVERinOxiGexyV`; rodada conjunta pagamento/provisões/folha **4/4 aprovada**, saída 0; ampliação de cancelamento por componente **2/2 aprovada**, saída 0. Aprovação dos testes não promove aceite integral.
+- Builds `sh_1327cc4d6001aVERinOxiGexyV` e `sh_1328e7ff5001DkiTjTJkR6EvnJ` aprovados, saída 0; o segundo inclui componentes vinculados explicitamente por empenho e diárias municipais. Política municipal de diárias aplicada/reaplicada, sem fatos financeiros de teste no banco atual.
+- Regressão conjunta diárias/provisões/ciclo financeiro da folha **6/6 aprovada**, zero falhas/pulados, saída 0, nos dois entes; confirma compatibilidade da fixture ampliada e dos produtores RH. Não amplia o aceite integral dos requisitos.
+- Roteiro publicado e empenho automático de diárias acrescentados após esse build/rodada; ampliação dirigida **2/2 aprovada** com falha tardia revertendo também a conclusão do processo. Regressão ampliada `sh_1329d9702001y2L9x163gd0VGe` **12/12 aprovada**, zero falhas/pulados, saída 0: diárias/provisões/folha/Compras, nos dois entes. Build `sh_1329e9406001U6u70xwxwZT6ID` **aprovado**, saída 0. Dois roteiros municipais iniciais aplicados/reaplicados sem alterar processos antigos ou gerar despesa no banco atual.
+- Bloco adiantamentos acrescentado depois: cinco contas/quatro eventos oficiais adotados em edição municipal própria e idempotente; solicitação→roteiro→concessão/empenho→pagamento→prestação→revisão→estorno/anulação em rodada dirigida 2/2 aprovada. Regressão `sh_132adf5ad001tCAXJlaoOEuOz0` 12/12 aprovada, com última ampliação de anulação validada depois. Build `sh_132af511a0018yqcBffbUMNfly` aprovado, saída 0. As rodadas se sobrepõem e não medem percentual de conclusão dos requisitos.
+- Ampliação final de adiantamentos 2/2 aprovada: revisão com rollback tardio da partida/status, impugnação na conta oficial própria e titular bloqueado após impugnação. Conferência do banco atual confirmou cinco vínculos publicados, quatro eventos com uma regra operacional ativa cada e exatamente uma auditoria de adoção após replay.
+- Reapresentação de prestação impugnada e emissão de histórico por UG implementadas; rodada conjunta com provisões 4/4 e reabertura concorrente 2/2 aprovadas. Partidas/documentos/decisões anteriores preservados e falha tardia não altera ciclo/estado. Build `sh_132c3778a002cQ3IUp3INAc7x6` em execução; não promove aceite integral de P1–P4.
 
 - `tests/planning-execution.test.ts`: 11/11 aprovados em PostgreSQL descartável real, incluindo os três cenários concorrentes antes não executados.
 - `tests/payroll-financial-cycle.test.ts`: cadeia ampliada aprovada em PGlite e **2/2 cenários aprovados no PostgreSQL real, Prefeitura e Câmara separadamente**, incluindo rollback integral por falha tardia de empenho e por saldo insuficiente na segunda ordem.

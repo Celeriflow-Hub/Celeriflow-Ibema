@@ -2,11 +2,19 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { enqueueHrIntegration } from "./workforce-service";
 import { resolveContractRevision } from "./contract-timeline";
+import { assertBudgetUnitAccess, canPerformModuleOperation, type AppContext } from "@/lib/platform/tenant-context";
 
 const decimal = z.string().regex(/^\d{1,12}(?:\.\d{1,6})?$/);
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
-export const travelAllowancePolicySchema = z.object({ origin: z.literal("DIARIAS_POC"), rates: z.object({ DF: decimal, CAPITAL: decimal, INTERIOR: decimal, INTERNACIONAL: decimal }).strict(), minimumDistanceKm: z.number().nonnegative(), rounding: z.enum(["DOWN", "HALF_UP"]), legalReference: z.string().min(3), estimated: z.literal(true) }).strict();
-const inputSchema = z.object({ requestKey: z.string().min(1).max(120), contractId: z.string().min(1), ruleId: z.string().min(1), destination: z.string().trim().min(3).max(300), destinationType: z.enum(["DF", "CAPITAL", "INTERIOR", "INTERNACIONAL"]), departureAt: z.iso.datetime({ offset: true }), returnAt: z.iso.datetime({ offset: true }), distanceKm: decimal, overnight: z.enum(["SIM", "NAO"]), exchangeRate: decimal.default("1"), purpose: z.string().trim().min(10).max(3000), vehiclePlate: z.string().trim().max(20).default("") }).strict();
+export const travelAllowancePolicySchema = z.object({ origin: z.enum(["DIARIAS_POC", "DIARIAS_MUNICIPAIS"]), rates: z.object({ DF: decimal, CAPITAL: decimal, INTERIOR: decimal, INTERNACIONAL: decimal }).strict(), minimumDistanceKm: z.number().nonnegative(), rounding: z.enum(["DOWN", "HALF_UP"]), legalReference: z.string().min(3), estimated: z.boolean() }).strict();
+const inputSchema = z.object({ requestKey: z.string().min(1).max(120), contractId: z.string().min(1), ruleId: z.string().min(1), budgetUnitId: z.string().min(1).optional(), destination: z.string().trim().min(3).max(300), destinationType: z.enum(["DF", "CAPITAL", "INTERIOR", "INTERNACIONAL"]), departureAt: z.iso.datetime({ offset: true }), returnAt: z.iso.datetime({ offset: true }), distanceKm: decimal, overnight: z.enum(["SIM", "NAO"]), exchangeRate: decimal.default("1"), purpose: z.string().trim().min(10).max(3000), vehiclePlate: z.string().trim().max(20).default("") }).strict();
+
+export function assertTravelAllowanceAccess(payload: Prisma.JsonValue, context?: AppContext, operation: "update" | "issueReports" = "update") {
+  const memory = payload as { scope?: string; input?: { budgetUnitId?: string } };
+  if (memory.scope !== "PRODUCAO") return;
+  if (!context || !canPerformModuleOperation(context.user, "RH", operation) || !memory.input?.budgetUnitId) throw new Error("Diária municipal exige autorização RH e UG definida.");
+  assertBudgetUnitAccess(context.user, memory.input.budgetUnitId);
+}
 
 export function calculateTravelAllowance(rawPolicy: unknown, raw: unknown) {
   const policy = travelAllowancePolicySchema.parse(rawPolicy), input = inputSchema.parse(raw);
@@ -20,15 +28,16 @@ export function calculateTravelAllowance(rawPolicy: unknown, raw: unknown) {
   const exchange = input.destinationType === "INTERNACIONAL" ? new Prisma.Decimal(input.exchangeRate) : new Prisma.Decimal(1);
   if (exchange.lte(0)) throw new Error("Câmbio deve ser positivo.");
   const mode = policy.rounding === "DOWN" ? Prisma.Decimal.ROUND_DOWN : Prisma.Decimal.ROUND_HALF_UP;
-  return { hours: hours.toFixed(4), fullDays: full.toString(), remainderHours: remainder.toFixed(4), distanceEligible, quantity: quantity.toString(), unitValue: unitValue.toFixed(2), currency: input.destinationType === "INTERNACIONAL" ? "USD" : "BRL", exchangeRate: exchange.toString(), originalAmount: unitValue.mul(quantity).toDecimalPlaces(2, mode).toFixed(2), amountBRL: unitValue.mul(quantity).mul(exchange).toDecimalPlaces(2, mode).toFixed(2), rounding: policy.rounding, estimated: true };
+  return { hours: hours.toFixed(4), fullDays: full.toString(), remainderHours: remainder.toFixed(4), distanceEligible, quantity: quantity.toString(), unitValue: unitValue.toFixed(2), currency: input.destinationType === "INTERNACIONAL" ? "USD" : "BRL", exchangeRate: exchange.toString(), originalAmount: unitValue.mul(quantity).toDecimalPlaces(2, mode).toFixed(2), amountBRL: unitValue.mul(quantity).mul(exchange).toDecimalPlaces(2, mode).toFixed(2), rounding: policy.rounding, estimated: policy.estimated };
 }
 
-export async function requestTravelAllowance(db: PrismaClient, actorId: string, raw: unknown) {
+export async function requestTravelAllowance(db: PrismaClient, actorId: string, raw: unknown, context?: AppContext) {
   const input = inputSchema.parse(raw);
   return db.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:DIARIA:${input.requestKey}`}))`;
-    const previous = await tx.hrPortalRequest.findUnique({ where: { requestKey: `DIARIA_POC:${input.requestKey}` } });
+    const previous = await tx.hrPortalRequest.findFirst({ where: { requestKey: { in: [`DIARIA_POC:${input.requestKey}`, `DIARIA:${input.requestKey}`] } } });
     if (previous) {
+      assertTravelAllowanceAccess(previous.payload, context);
       const stored = (previous.payload as { input: typeof input }).input;
       if (Object.entries(input).some(([key, value]) => stored[key as keyof typeof input] !== value)) throw new Error("Solicitação repetida com dados diferentes.");
       return previous;
@@ -39,20 +48,36 @@ export async function requestTravelAllowance(db: PrismaClient, actorId: string, 
     const stored = await tx.hrEmploymentContract.findUniqueOrThrow({ where: { id: input.contractId }, include: { revisions: true, employee: { include: { person: true } } } });
     const contract = resolveContractRevision(stored, stored.revisions, { start, end: start }).contract;
     const regime = await tx.hrEmploymentRegime.findUniqueOrThrow({ where: { id: contract.regimeId } });
-    if (!rule.isActive || !rule.ruleSet.isDemo || rule.ruleSet.scope !== "DEMONSTRACAO" || rule.ruleSet.status !== "ATIVA" || !regime.isActive || regime.ruleSetId !== rule.ruleSetId || rule.ruleSet.effectiveFrom > start || (rule.ruleSet.effectiveUntil && rule.ruleSet.effectiveUntil < end) || !stored.employee.isActive || !stored.employee.personId || contract.status !== "ATIVO" || start < contract.admittedAt || (contract.endsAt && end > contract.endsAt)) throw new Error("Diária POC exige contrato e política demonstrativa vigentes em toda a viagem.");
+    const municipal = policy.origin === "DIARIAS_MUNICIPAIS";
+    const scope = municipal ? "PRODUCAO" : "DEMONSTRACAO";
+    if (!rule.isActive || rule.ruleSet.isDemo === municipal || rule.ruleSet.scope !== scope || rule.ruleSet.status !== "ATIVA" || !regime.isActive || regime.ruleSetId !== rule.ruleSetId || rule.ruleSet.effectiveFrom > start || (rule.ruleSet.effectiveUntil && rule.ruleSet.effectiveUntil < end) || !stored.employee.isActive || !stored.employee.personId || contract.status !== "ATIVO" || start < contract.admittedAt || (contract.endsAt && end > contract.endsAt)) throw new Error("Diária exige contrato e política vigentes em toda a viagem, no mesmo escopo.");
+    if (municipal) {
+      assertTravelAllowanceAccess(json({ scope, input }) as Prisma.JsonValue, context);
+      const unit = await tx.planningEntityUnit.findUniqueOrThrow({ where: { budgetUnitId: input.budgetUnitId! } });
+      const center = contract.costCenterId ? await tx.costCenter.findUniqueOrThrow({ where: { id: contract.costCenterId } }) : null;
+      if (!unit.governmentEntityId || !center?.isActive || center.governmentEntityId !== unit.governmentEntityId) throw new Error("Centro de custo do vínculo deve pertencer ao ente da UG da diária.");
+    }
     const assessment = calculateTravelAllowance(policy, input);
-    const request = await tx.hrPortalRequest.create({ data: { requestKey: `DIARIA_POC:${input.requestKey}`, employeeId: stored.employeeId, actorId, kind: "DIARIA_POC", payload: json({ input, policy, assessment, contract, scope: "DEMONSTRACAO" }) } });
-    await enqueueHrIntegration(tx, { sourceKey: `DIARIA:SOLICITACAO:${request.id}`, domain: "AUDITORIA", environment: "DEMONSTRACAO", eventType: "DIARIA_SOLICITADA", payload: { requestId: request.id, actorId, assessment } });
+    const request = await tx.hrPortalRequest.create({ data: { requestKey: `${municipal ? "DIARIA" : "DIARIA_POC"}:${input.requestKey}`, employeeId: stored.employeeId, actorId, kind: municipal ? "DIARIA" : "DIARIA_POC", payload: json({ input, policy, assessment, contract, scope }) } });
+    await enqueueHrIntegration(tx, { sourceKey: `DIARIA:SOLICITACAO:${request.id}`, domain: "AUDITORIA", environment: scope, eventType: "DIARIA_SOLICITADA", payload: { requestId: request.id, actorId, assessment } });
     return request;
   }, { timeout: 60000 });
 }
 
-export async function decideTravelAllowance(db: PrismaClient, actorId: string, raw: unknown) {
+export async function decideTravelAllowance(db: PrismaClient, actorId: string, raw: unknown, context?: AppContext) {
   const input = z.object({ requestId: z.string().min(1), status: z.enum(["DEFERIDA", "INDEFERIDA"]), decision: z.string().trim().min(10).max(3000), authorizationNumber: z.string().trim().min(1).max(100) }).strict().parse(raw);
   return db.$transaction(async tx => {
     await tx.$queryRaw`SELECT id FROM "HrPortalRequest" WHERE id=${input.requestId} FOR UPDATE`;
     const request = await tx.hrPortalRequest.findUniqueOrThrow({ where: { id: input.requestId } });
-    if (request.kind !== "DIARIA_POC") throw new Error("Selecione uma diária demonstrativa.");
+    if (!["DIARIA", "DIARIA_POC"].includes(request.kind)) throw new Error("Selecione uma diária.");
+    assertTravelAllowanceAccess(request.payload, context);
+    if (await tx.hrIntegrationEvent.findUnique({ where: { sourceKey: `DIARIA:PROCESSO:${request.id}` } })) throw new Error("A decisão desta diária deve ocorrer no roteiro do processo vinculado.");
+    if (request.kind === "DIARIA") {
+      const unit = (request.payload as { input: { budgetUnitId: string } }).input.budgetUnitId;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`DIARIA:AUTORIZACAO:${unit}:${input.authorizationNumber}`}))`;
+      const duplicate = await tx.hrIntegrationEvent.findFirst({ where: { eventType: "DIARIA_DECIDIDA", environment: "PRODUCAO", AND: [{ payload: { path: ["input", "authorizationNumber"], equals: input.authorizationNumber } }, { payload: { path: ["requestPayload", "input", "budgetUnitId"], equals: unit } }] } });
+      if (duplicate && duplicate.sourceKey !== `DIARIA:DECISAO:${request.id}`) throw new Error("Número de autorização já utilizado nesta UG.");
+    }
     const key = `DIARIA:DECISAO:${request.id}`;
     const previous = await tx.hrIntegrationEvent.findUnique({ where: { sourceKey: key } });
     if (previous) {
@@ -62,17 +87,18 @@ export async function decideTravelAllowance(db: PrismaClient, actorId: string, r
     }
     if (request.status !== "EM_ANALISE") throw new Error("Diária já decidida.");
     const updated = await tx.hrPortalRequest.update({ where: { id: request.id }, data: { status: input.status, decision: input.decision, decidedBy: actorId, decidedAt: new Date() } });
-    await enqueueHrIntegration(tx, { sourceKey: key, domain: "AUDITORIA", environment: "DEMONSTRACAO", eventType: "DIARIA_DECIDIDA", payload: { input, actorId, requestPayload: request.payload } });
+    await enqueueHrIntegration(tx, { sourceKey: key, domain: "AUDITORIA", environment: request.kind === "DIARIA" ? "PRODUCAO" : "DEMONSTRACAO", eventType: "DIARIA_DECIDIDA", payload: { input, actorId, requestPayload: request.payload } });
     return updated;
   });
 }
 
-export async function accountForTravelAllowance(db: PrismaClient, actorId: string, raw: unknown) {
-  const input = z.object({ requestId: z.string().min(1), activities: z.string().trim().min(10).max(4000), returnedAmount: decimal, reportDate: z.iso.date() }).strict().parse(raw);
+export async function accountForTravelAllowance(db: PrismaClient, actorId: string, raw: unknown, context?: AppContext) {
+  const input = z.object({ requestId: z.string().min(1), activities: z.string().trim().min(10).max(4000), returnedAmount: decimal, reportDate: z.iso.date(), documentId: z.string().optional(), restitutionRevenueId: z.string().optional() }).strict().parse(raw);
   return db.$transaction(async tx => {
     await tx.$queryRaw`SELECT id FROM "HrPortalRequest" WHERE id=${input.requestId} FOR UPDATE`;
     const request = await tx.hrPortalRequest.findUniqueOrThrow({ where: { id: input.requestId } });
-    if (request.kind !== "DIARIA_POC" || request.status !== "DEFERIDA") throw new Error("Prestação exige diária POC autorizada.");
+    if (!["DIARIA", "DIARIA_POC"].includes(request.kind) || request.status !== "DEFERIDA") throw new Error("Prestação exige diária autorizada.");
+    assertTravelAllowanceAccess(request.payload, context);
     const memory = request.payload as { input: z.infer<typeof inputSchema>; assessment: ReturnType<typeof calculateTravelAllowance> };
     if (input.reportDate < new Date(memory.input.returnAt).toISOString().slice(0, 10) || new Prisma.Decimal(input.returnedAmount).gt(memory.assessment.amountBRL)) throw new Error("Data/valor de restituição incompatíveis com a viagem.");
     const sourceKey = `DIARIA:PRESTACAO:${request.id}`;
@@ -80,17 +106,38 @@ export async function accountForTravelAllowance(db: PrismaClient, actorId: strin
     if (previous) {
       const stored = (previous.payload as { input: typeof input }).input;
       if (Object.entries(input).some(([key, value]) => stored[key as keyof typeof input] !== value)) throw new Error("Prestação já registrada com outros valores/atividades.");
-      return previous;
     }
-    return enqueueHrIntegration(tx, { sourceKey, domain: "AUDITORIA", environment: "DEMONSTRACAO", eventType: "DIARIA_PRESTACAO_REGISTRADA", payload: { input, actorId, spentAmount: new Prisma.Decimal(memory.assessment.amountBRL).sub(input.returnedAmount).toFixed(2), financialSettlement: false } });
+    const paymentIds: string[] = [];
+    if (request.kind === "DIARIA") {
+      const document = await tx.document.findUniqueOrThrow({ where: { id: input.documentId || "" } });
+      if (document.status !== "Válido") throw new Error("Relatório da viagem exige documento GED válido.");
+      const payments = await tx.payment.findMany({ where: { status: "Paga", commitment: { reservation: { expense: { sourceModule: "RH", sourceType: "TRAVEL_ALLOWANCE", sourceId: request.id } } } }, include: { commitment: { include: { appropriation: true } } }, orderBy: { id: "asc" } });
+      const unit = memory.input.budgetUnitId!;
+      for (const payment of payments) {
+        await tx.$queryRaw`SELECT id FROM "Payment" WHERE id=${payment.id} FOR UPDATE`;
+        const current = await tx.payment.findUniqueOrThrow({ where: { id: payment.id } });
+        if (current.status !== "Paga" || payment.commitment.appropriation.budgetUnitId !== unit || payment.date.toISOString().slice(0, 10) > input.reportDate) throw new Error("Pagamento da diária incompatível com a UG ou data da prestação.");
+        paymentIds.push(payment.id);
+      }
+      const paid = payments.reduce((sum, row) => sum.plus(row.valueDecimal ?? 0), new Prisma.Decimal(0));
+      if (!paid.eq(memory.assessment.amountBRL) || !payments.length) throw new Error("Prestação exige pagamento integral da diária pela execução financeira nativa.");
+      if (new Prisma.Decimal(input.returnedAmount).gt(0)) {
+        await tx.$queryRaw`SELECT id FROM "Revenue" WHERE id=${input.restitutionRevenueId || ""} FOR UPDATE`;
+        const revenue = await tx.revenue.findUniqueOrThrow({ where: { id: input.restitutionRevenueId || "" }, include: { treasuryMovement: true } });
+        if (revenue.sourceModule !== "RH" || revenue.sourceType !== "TRAVEL_ALLOWANCE_REFUND" || revenue.sourceId !== request.id || revenue.budgetUnitId !== unit || revenue.stage !== "ARRECADADA" || revenue.reversedAt || !revenue.valueDecimal?.eq(input.returnedAmount) || !revenue.treasuryMovement || revenue.date.toISOString().slice(0, 10) > input.reportDate) throw new Error("Restituição exige arrecadação nativa confirmada, com origem da diária e mesma UG/valor.");
+      } else if (input.restitutionRevenueId) throw new Error("Restituição zerada não deve referenciar receita.");
+    }
+    if (previous) return previous;
+    return enqueueHrIntegration(tx, { sourceKey, domain: "AUDITORIA", environment: request.kind === "DIARIA" ? "PRODUCAO" : "DEMONSTRACAO", eventType: "DIARIA_PRESTACAO_REGISTRADA", payload: { input, actorId, spentAmount: new Prisma.Decimal(memory.assessment.amountBRL).sub(input.returnedAmount).toFixed(2), financialSettlement: request.kind === "DIARIA", paymentIds } });
   });
 }
 
-export async function buildTravelAllowanceDocument(db: PrismaClient, requestId: string, type: "SOLICITACAO" | "AUTORIZACAO" | "PRESTACAO") {
+export async function buildTravelAllowanceDocument(db: PrismaClient, requestId: string, type: "SOLICITACAO" | "AUTORIZACAO" | "PRESTACAO", context?: AppContext) {
   const request = await db.hrPortalRequest.findUniqueOrThrow({ where: { id: requestId } });
-  if (request.kind !== "DIARIA_POC") throw new Error("Documento disponível para diárias POC.");
+  if (!["DIARIA", "DIARIA_POC"].includes(request.kind)) throw new Error("Documento disponível para diárias.");
+  assertTravelAllowanceAccess(request.payload, context, "issueReports");
   const payload = request.payload as { input: z.infer<typeof inputSchema>; policy: z.infer<typeof travelAllowancePolicySchema>; assessment: ReturnType<typeof calculateTravelAllowance>; contract: { registration: string; employee: { name: string; person: { cpf: string } }; workLocation: string } };
-  const rows = [["Servidor", payload.contract.employee.name], ["Matrícula", payload.contract.registration], ["CPF", payload.contract.employee.person.cpf], ["Local", payload.contract.workLocation], ["Destino", payload.input.destination], ["Saída", payload.input.departureAt], ["Retorno", payload.input.returnAt], ["Finalidade", payload.input.purpose], ["Placa", payload.input.vehiclePlate], ["Quantidade", payload.assessment.quantity], ["Unitário / moeda", `${payload.assessment.unitValue} ${payload.assessment.currency}`], ["Total BRL", payload.assessment.amountBRL], ["Situação", request.status], ["Fundamento POC", payload.policy.legalReference]];
+  const rows = [["Servidor", payload.contract.employee.name], ["Matrícula", payload.contract.registration], ["CPF", payload.contract.employee.person.cpf], ["Local", payload.contract.workLocation], ["Destino", payload.input.destination], ["Saída", payload.input.departureAt], ["Retorno", payload.input.returnAt], ["Finalidade", payload.input.purpose], ["Placa", payload.input.vehiclePlate], ["Quantidade", payload.assessment.quantity], ["Unitário / moeda", `${payload.assessment.unitValue} ${payload.assessment.currency}`], ["Total BRL", payload.assessment.amountBRL], ["Situação", request.status], ["Fundamento", payload.policy.legalReference]];
   if (type === "AUTORIZACAO") {
     if (request.status !== "DEFERIDA") throw new Error("Autorização exige deferimento da diária.");
     const event = await db.hrIntegrationEvent.findUniqueOrThrow({ where: { sourceKey: `DIARIA:DECISAO:${request.id}` } });
@@ -102,5 +149,5 @@ export async function buildTravelAllowanceDocument(db: PrismaClient, requestId: 
     const report = event.payload as { input: { activities: string; reportDate: string; returnedAmount: string }; spentAmount: string };
     rows.push(["Atividades", report.input.activities], ["Data da prestação", report.input.reportDate], ["Restituição BRL", report.input.returnedAmount], ["Valor utilizado BRL", report.spentAmount]);
   }
-  return { title: `Diárias — ${type} — modelo POC Cartilha Ibema anexos I/II`, headers: ["Campo", "Valor"], rows };
+  return { title: `Diárias — ${type}`, headers: ["Campo", "Valor"], rows };
 }

@@ -1,10 +1,11 @@
 "use server";
 
 import { FinanceError, createPayment as createOfficialPayment, updatePaymentStatus as updateOfficialPaymentStatus } from "@/lib/financeiro";
-import { assertBudgetUnitAccess, getTenantContextForModuleOperation, type AppContext, type ModuleOperation } from "@/lib/platform/tenant-context";
+import { assertBudgetUnitAccess, getTenantContextForModuleOperation, isSystemAdministrator, type AppContext, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
 type ActionResult = { error?: string };
+const paymentActor = (context: AppContext) => ({ usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds });
 const message = (error: unknown) => error instanceof Error ? error.message : "Não foi possível concluir o pagamento.";
 
 async function assertCommitmentAccess(context: AppContext, commitmentId: string) {
@@ -49,7 +50,7 @@ export async function createPayment(data: {
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const commitment = await assertCommitmentAccess(context, data.commitmentId);
     await assertBankAccountAccess(context, data.bankAccountId);
-    const payment = await createOfficialPayment(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, data);
+    const payment = await createOfficialPayment(context.prisma, paymentActor(context), data);
     const bankOrder = await context.prisma.payment.findUnique({
       where: { id: payment.id },
       select: {
@@ -107,7 +108,7 @@ export async function updatePaymentStatus(id: string, status: string): Promise<A
     const payment = await context.prisma.payment.findUnique({ where: { id }, select: { commitmentId: true } });
     if (!payment) throw new FinanceError("Pagamento não encontrado.");
     const commitment = await assertCommitmentAccess(context, payment.commitmentId);
-    await updateOfficialPaymentStatus(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, id, status);
+    await updateOfficialPaymentStatus(context.prisma, paymentActor(context), id, status);
     revalidatePath("/financeiro/pagamentos");
     revalidatePath("/financeiro/liquidacoes");
     revalidatePath("/financeiro/empenhos");
@@ -125,7 +126,7 @@ export async function reversePaymentAction(paymentId: string, justification: str
     if (!payment) throw new FinanceError("Pagamento não encontrado.");
     const commitment = await assertCommitmentAccess(context, payment.commitmentId);
     const { reversePayment: reverseOfficialPayment } = await import("@/lib/financeiro");
-    await reverseOfficialPayment(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, paymentId, justification);
+    await reverseOfficialPayment(context.prisma, paymentActor(context), paymentId, justification);
     revalidatePath("/financeiro/pagamentos");
     revalidatePath("/financeiro/liquidacoes");
     revalidatePath("/financeiro/empenhos");
@@ -149,7 +150,7 @@ export async function settleWithholdingPayableAction(withholdingPayableId: strin
     await assertBankAccountAccess(context, bankAccountId);
 
     const { settleWithholdingPayable: settleOfficialWithholding } = await import("@/lib/financeiro");
-    await settleOfficialWithholding(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, { withholdingPayableId, bankAccountId, receiptDocumentId, paymentDate: new Date() });
+    await settleOfficialWithholding(context.prisma, paymentActor(context), { withholdingPayableId, bankAccountId, receiptDocumentId, paymentDate: new Date() });
     revalidatePath("/financeiro/pagamentos");
     revalidateContractExecution(commitment.contractId);
     return {};

@@ -1,9 +1,11 @@
-import { Prisma, type PrismaClient, type BudgetReservation, type Commitment, type Settlement, type Payment } from "@prisma/client";
+import { Prisma, type PrismaClient, type BudgetReservation, type Commitment, type Settlement, type Payment, type Expense } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { assertPublishedAccountClassification } from "./account-catalog";
 import { calculateRetentionDueDate, calculateRetentions, getActiveRetentionRules } from "./retencoes";
 import { assertPlanningPeriodAvailability, assertPlanningReservationYear, getPlanningBudgetRestrictions, lockPlanningBudgetForAppropriation, recordPlanningFinanceExecution } from "@/lib/planejamento/execution-bridge";
 import { lockPlanningRevenueBudget, recordPlanningRevenueCollection, recordPlanningRevenueReversal, recordPlanningRevenueRedistribution } from "@/lib/planejamento/revenue-execution-bridge";
+import { releasePayrollProvisionsAtSettlement, reversePayrollProvisionSettlement, recordPayrollProvisionPayment, reversePayrollProvisionPayment } from "@/lib/rh/provision-accounting";
+import { reverseAdvancePaymentControl, reverseAdvanceCommitmentControl } from "@/lib/rh/municipal-advances";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -390,8 +392,11 @@ export async function createExpenseRequest(
     purchaseReceiptId?: string;
   },
 ) {
+  return db.$transaction(tx => createExpenseRequestInTransaction(tx, actor, input));
+}
+
+export async function createExpenseRequestInTransaction(tx: Prisma.TransactionClient, actor: FinanceActor, input: Parameters<typeof createExpenseRequest>[2]): Promise<Expense> {
   const value = money(input.value);
-  return db.$transaction(async (tx) => {
     await lockAppropriation(tx, input.appropriationId);
     if (input.idempotencyKey) {
       const existing = await tx.expense.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
@@ -443,7 +448,6 @@ export async function createExpenseRequest(
     });
     await audit(tx, actor, "CREATE", "Expense", expense.id, { value: jsonMoney(value), supplierId: supplier.id, sourceModule: expense.sourceModule, sourceType: expense.sourceType, sourceId: expense.sourceId, eventType: expense.eventType, purchaseReceiptId: expense.purchaseReceiptId }, year.id, appropriation.budgetUnitId);
     return expense;
-  });
 }
 
 export async function createExpenseRequestFromApprovedPurchaseReceipt(
@@ -480,7 +484,10 @@ export async function createExpenseRequestFromApprovedPurchaseReceipt(
 }
 
 export async function approveExpenseRequest(db: PrismaClient, actor: FinanceActor, expenseId: string) {
-  return db.$transaction(async (tx) => {
+  return db.$transaction(tx => approveExpenseRequestInTransaction(tx, actor, expenseId));
+}
+
+export async function approveExpenseRequestInTransaction(tx: Prisma.TransactionClient, actor: FinanceActor, expenseId: string): Promise<Expense> {
     await lockExpense(tx, expenseId);
     const expense = await tx.expense.findUnique({ include: { appropriation: true }, where: { id: expenseId } });
     if (!expense) throw new FinanceError("Solicitação de despesa não encontrada.");
@@ -492,7 +499,6 @@ export async function approveExpenseRequest(db: PrismaClient, actor: FinanceActo
     const approved = await tx.expense.update({ where: { id: expense.id }, data: { status: "Aprovada", approvedById: actor.usuarioId, approvedAt: new Date() } });
     await audit(tx, actor, "APPROVE", "Expense", expense.id, { requestedById: expense.requestedById, approvedById: actor.usuarioId }, year.id, expense.appropriation.budgetUnitId);
     return approved;
-  });
 }
 
 const movementDirections: Record<string, 1 | -1> = {
@@ -857,6 +863,7 @@ export async function cancelCommitmentInTransaction(tx: Prisma.TransactionClient
       await postCommitmentBalanceChange(tx, actor, commitment, year.id, { date: canceledAt, value: effectiveValue, reverse: true, sourceType: "COMMITMENT_REVERSAL", sourceId: commitment.id, eventType: "EMPENHO_ANULADO", key: `FINANCEIRO:COMMITMENT:${commitment.id}:EMPENHO_ANULADO` });
     }
     const canceled = await tx.commitment.update({ where: { id: commitmentId }, data: { status: "Anulado" } });
+    await reverseAdvanceCommitmentControl(tx, actor, commitmentId, date, reason);
     await refreshCommittedMirror(tx, commitment.appropriationId);
     if (effectiveValue.greaterThan(0)) await recordPlanningFinanceExecution(tx, actor, { appropriationId: commitment.appropriationId, operation: "REVERSE", date: canceledAt, value: effectiveValue, key: `finance:cancel:${commitment.id}`, originPrefix: `finance:commit:${commitment.id}:` });
     await audit(tx, actor, "CANCEL", "Commitment", commitmentId, { previousStatus: commitment.status, value: jsonMoney(effectiveValue) }, year.id);
@@ -1068,6 +1075,7 @@ export async function createSettlementInTransaction(tx: Prisma.TransactionClient
       sourceId: settlement.id,
       idempotencyKey: `FINANCEIRO:SETTLEMENT:${settlement.id}:LIQUIDACAO_REGISTRADA`,
     });
+    await releasePayrollProvisionsAtSettlement(tx, actor, settlement.id);
     await audit(tx, actor, "CREATE", "Settlement", settlement.id, { value: jsonMoney(value), retentionValue: jsonMoney(retentionTotal), commitmentId: commitment.id, documentId: document.id, authorId: input.authorId }, year.id);
     return settlement;
 }
@@ -1098,6 +1106,7 @@ export async function cancelSettlementInTransaction(tx: Prisma.TransactionClient
       history: `Cancelamento da liquidação ${settlement.id}`,
       idempotencyKey: `FINANCEIRO:SETTLEMENT:${settlement.id}:LIQUIDACAO_CANCELADA`,
     });
+    await reversePayrollProvisionSettlement(tx, actor, settlement.id, date);
     const canceled = await tx.settlement.update({ where: { id: settlementId }, data: { status: "Cancelado" } });
     await refreshCommitmentExecutionStatus(tx, settlement.commitmentId);
     await audit(tx, actor, "CANCEL", "Settlement", settlementId, { previousStatus: settlement.status }, year.id);
@@ -1350,6 +1359,8 @@ export async function reversePayment(
       sourceId: payment.id,
       idempotencyKey: `FINANCEIRO:PAYMENT:${payment.id}:PAGAMENTO_ESTORNADO`,
     });
+    await reversePayrollProvisionPayment(tx, actor, paymentId, justification.trim());
+    await reverseAdvancePaymentControl(tx, actor, paymentId, justification.trim());
     await audit(tx, actor, "REVERSE", "Payment", paymentId, { previousStatus: payment.status, status: "Estornada", justification: justification.trim() }, year.id);
     return updated;
   });
@@ -1598,6 +1609,7 @@ export async function updatePaymentStatusInTransaction(tx: Prisma.TransactionCli
         sourceId: payment.id,
         idempotencyKey: `FINANCEIRO:PAYMENT:${payment.id}:PAGAMENTO_EFETIVADO`,
       });
+      await recordPayrollProvisionPayment(tx, actor, payment.id);
     }
     await audit(tx, actor, "STATUS_CHANGE", "Payment", paymentId, { previousStatus: payment.status, status }, year.id);
     return updated;
@@ -1608,13 +1620,12 @@ export async function setFinancialYearStatus(db: PrismaClient, actor: FinanceAct
   if (!statuses.includes(status)) throw new FinanceError("Status de exercício inválido.");
   if (status === "Encerrado") throw new FinanceError("O exercício só pode ser encerrado pela operação de fechamento anual final.");
   return db.$transaction(async (tx) => {
-    const current = await tx.financialYear.findUnique({ where: { id: financialYearId } });
-    if (!current) throw new FinanceError("Exercício financeiro não encontrado.");
+    const current = await lockAccountingYearPeriods(tx, actor, financialYearId);
     if (current.status === "Encerrado") throw new FinanceError("Um exercício encerrado não pode ter seu status alterado.");
     const updated = await tx.financialYear.update({ where: { id: financialYearId }, data: { status } });
     await audit(tx, actor, "STATUS_CHANGE", "FinancialYear", financialYearId, { previousStatus: current.status, status }, financialYearId);
     return updated;
-  });
+  }, { timeout: 60000 });
 }
 
 async function financialYearForPosting(tx: Db, date: Date, budgetUnitId?: string | null) {
@@ -1659,15 +1670,19 @@ export async function getBankAccountBalances(tx: Db, bankAccountIds?: string[]) 
 }
 
 export async function getBankAccountLedgerBalance(tx: Db, bankAccountId: string, throughDate?: Date) {
-  const account = await tx.bankAccount.findUnique({ where: { id: bankAccountId }, select: { accountingPlanId: true } });
+  const account = await tx.bankAccount.findUnique({ where: { id: bankAccountId }, select: { accountingPlanId: true, budgetUnitId: true } });
   if (!account?.accountingPlanId) {
     throw new FinanceError("A conta bancária deve possuir uma conta analítica vinculada para calcular o razão bancário.");
   }
+  if (!account.budgetUnitId) throw new FinanceError("Conta bancária sem unidade gestora para isolamento do razão.");
+  if (await tx.bankAccount.count({ where: { id: { not: bankAccountId }, accountingPlanId: account.accountingPlanId, budgetUnitId: account.budgetUnitId } })) throw new FinanceError("Mais de uma conta bancária utiliza o mesmo razão na UG; configure subcontas analíticas individuais.");
+  if (await tx.accountingEntry.count({ where: { accountId: account.accountingPlanId, transaction: { status: "POSTADO", budgetUnitId: null, ...(throughDate ? { date: { lte: throughDate } } : {}) } } })) throw new FinanceError("O razão possui partidas legadas sem UG; concilie a origem antes de calcular saldo por conta.");
   const entries = await tx.accountingEntry.findMany({
     where: {
       accountId: account.accountingPlanId,
       transaction: {
         status: "POSTADO",
+        budgetUnitId: account.budgetUnitId,
         ...(throughDate ? { date: { lte: throughDate } } : {}),
       },
     },
@@ -2334,6 +2349,7 @@ export async function matchBankStatementItemToTreasuryMovement(
           id: true,
           status: true,
           treasuryMovementId: true,
+          bankAccountId: true,
           direction: true,
           sinal: true,
           valueDecimal: true,
@@ -2357,7 +2373,7 @@ export async function matchBankStatementItemToTreasuryMovement(
     if (statementItem.status !== "Pendente" || statementItem.treasuryMovementId) {
       throw new FinanceError("O item de extrato já foi conciliado.");
     }
-    const bankAccountId = statementItem.statementImport?.bankAccountId;
+    const bankAccountId = statementItem.bankAccountId ?? statementItem.statementImport?.bankAccountId;
     if (bankAccountId && bankAccountId !== treasuryMovement.bankAccountId) {
       throw new FinanceError("O movimento de tesouraria deve pertencer à mesma conta bancária do extrato.");
     }
@@ -2382,6 +2398,7 @@ export async function matchBankStatementItemToTreasuryMovement(
     if (treasuryMovement.statementItems.length) {
       throw new FinanceError("O movimento de tesouraria já está vinculado a outro item de extrato.");
     }
+    if (await tx.bankReconciliationAllocation.count({ where: { group: { status: "EFETIVADO" }, OR: [{ statementItemId: statementItem.id }, { treasuryMovementId: treasuryMovement.id }] } })) throw new FinanceError("Lançamento já possui alocações de conciliação; utilize o saldo parcial no fluxo N:N.");
 
     const matched = await tx.bankStatementItem.update({
       where: { id: statementItem.id },
@@ -2690,7 +2707,11 @@ export async function accountingPendingChecks(tx: Db, financialYearId: string, c
   const [draftTransactions, emittedPayments, openReconciliations] = await Promise.all([
     tx.accountingTransaction.count({ where: { financialYearId, status: "RASCUNHO", date: { lt: nextMonth } } }),
     tx.payment.count({ where: { status: "Emitida", date: { lt: nextMonth }, commitment: { appropriation: { financialYearId } } } }),
-    tx.bankStatementItem.count({ where: { status: "Pendente", date: { gte: year.startDate, lt: nextMonth }, ...(year.governmentEntityId ? { bankAccount: { is: { budgetUnit: { is: { planningEntityUnit: { is: { governmentEntityId: year.governmentEntityId } } } } } } } : {}) } }),
+    tx.bankStatementItem.count({ where: { status: { in: ["Pendente", "Parcial"] }, date: { gte: year.startDate, lt: nextMonth }, ...(year.governmentEntityId ? { OR: [
+      { bankAccount: { is: { budgetUnit: { is: { planningEntityUnit: { is: { governmentEntityId: year.governmentEntityId } } } } } } },
+      { bankAccountId: null, statementImport: { bankAccount: { budgetUnit: { planningEntityUnit: { governmentEntityId: year.governmentEntityId } } } } },
+      { bankAccountId: null, statementImportId: null },
+    ] } : {}) } }),
   ]);
   return { draftTransactions, emittedPayments, openReconciliations, total: draftTransactions + emittedPayments + openReconciliations };
 }
@@ -2804,11 +2825,18 @@ export async function authorizeAccountingMonthReopen(db: PrismaClient, actor: Fi
   });
 }
 
+async function lockAccountingYearPeriods(tx: Prisma.TransactionClient, actor: FinanceActor, financialYearId: string) {
+  await assertAccountingYearScope(tx, actor, financialYearId);
+  const origin = await tx.financialYear.findUniqueOrThrow({ where: { id: financialYearId } });
+  // Shared with every posting and monthly close/reopen, in stable calendar order.
+  for (let month = 0; month < 12; month++) await lockAccountingPeriod(tx, financialYearId, new Date(Date.UTC(origin.year, month, 1)));
+  await tx.$queryRaw`SELECT id FROM "FinancialYear" WHERE id = ${financialYearId} FOR UPDATE`;
+  return tx.financialYear.findUniqueOrThrow({ where: { id: financialYearId } });
+}
+
 export async function prepareAnnualAccountingClose(db: PrismaClient, actor: FinanceActor, financialYearId: string) {
   return db.$transaction(async (tx) => {
-    await assertAccountingYearScope(tx, actor, financialYearId);
-    const year = await tx.financialYear.findUnique({ where: { id: financialYearId } });
-    if (!year) throw new FinanceError("Exercicio financeiro nao encontrado.");
+    const year = await lockAccountingYearPeriods(tx, actor, financialYearId);
     const closes = await tx.monthlyAccountingClose.count({ where: { financialYearId, status: "FECHADO" } });
     if (closes < 12) throw new FinanceError("O encerramento anual exige os doze fechamentos mensais.");
     const pending = await accountingPendingChecks(tx, financialYearId, year.endDate);
@@ -2862,7 +2890,7 @@ export async function prepareAnnualAccountingClose(db: PrismaClient, actor: Fina
     if (year.status === "Aberto") await tx.financialYear.update({ where: { id: financialYearId }, data: { status: "Em Encerramento" } });
     await audit(tx, actor, "PREPARE_CLOSE", "AnnualAccountingClose", annual.id, { ...pending, payableCandidates: commitments.length }, financialYearId);
     return annual;
-  });
+  }, { timeout: 60000 });
 }
 
 export async function trackPayableCarryForwardPayment(
@@ -2981,8 +3009,7 @@ export async function reregisterPayableCarryForward(
 
 export async function finalizeAnnualAccountingClose(db: PrismaClient, actor: FinanceActor, financialYearId: string) {
   return db.$transaction(async (tx) => {
-    await assertAccountingYearScope(tx, actor, financialYearId);
-    const year = await tx.financialYear.findUnique({ where: { id: financialYearId } });
+    const year = await lockAccountingYearPeriods(tx, actor, financialYearId);
     if (!year || year.status !== "Em Encerramento") throw new FinanceError("O exercicio deve estar em encerramento para o fechamento anual final.");
     const closedMonths = await tx.monthlyAccountingClose.count({ where: { financialYearId, status: "FECHADO" } });
     if (closedMonths !== 12) throw new FinanceError("O encerramento anual final exige doze competencias atualmente fechadas.");
@@ -2997,7 +3024,7 @@ export async function finalizeAnnualAccountingClose(db: PrismaClient, actor: Fin
     await audit(tx, actor, "FINAL_CLOSE", "AnnualAccountingClose", updated.id, { ...pending, closedMonths, closedAt: closedAt.toISOString() }, financialYearId);
     await audit(tx, actor, "STATUS_CHANGE", "FinancialYear", financialYearId, { previousStatus: year.status, status: "Encerrado", annualAccountingCloseId: updated.id }, financialYearId);
     return updated;
-  });
+  }, { timeout: 60000 });
 }
 
 // -----------------------------------------------------------------------------

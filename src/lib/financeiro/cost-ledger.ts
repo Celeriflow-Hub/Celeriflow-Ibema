@@ -10,7 +10,8 @@ const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.Inp
 const required = (value: string, label: string) => { if (!value?.trim()) throw new MunicipalCostError(`${label} é obrigatório.`); return value.trim(); };
 const fingerprint = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 function sourceMemoryFingerprint(value: unknown): string {
-  const normalize = (entry: Prisma.JsonValue): Prisma.JsonValue => Array.isArray(entry) ? entry.map(normalize) : entry && typeof entry === "object" ? Object.fromEntries(Object.keys(entry).sort().map(key => [key, normalize(entry[key])])) : entry;
+  // The caller parses serialized JSON, so every enumerated key has a JSON value.
+  const normalize = (entry: Prisma.JsonValue): Prisma.JsonValue => Array.isArray(entry) ? entry.map(normalize) : entry && typeof entry === "object" ? Object.fromEntries(Object.keys(entry).sort().map(key => [key, normalize(entry[key]!)])) : entry;
   return fingerprint(normalize(JSON.parse(JSON.stringify(value)) as Prisma.JsonValue));
 }
 

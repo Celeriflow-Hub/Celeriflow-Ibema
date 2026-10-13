@@ -52,6 +52,7 @@ async function registerMovement(kind: StockMovementKind, data: {
     });
     revalidatePath("/patrimonio/materiais");
     revalidatePath("/patrimonio");
+    revalidatePath("/financeiro/custos");
     return { message: kind === "ENTRY" ? "Entrada registrada." : kind === "EXIT" ? "Saída registrada." : "Ajuste registrado." };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Não foi possível registrar a movimentação." };

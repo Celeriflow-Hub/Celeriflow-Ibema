@@ -20,6 +20,7 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
     models.push("Payroll", "HrPayrollRun", "HrIntegrationEvent", "SstBenefitPayrollScope");
     models.push("HrEmploymentContract", "HrRightEntry", "HrPayrollStatement");
     models.push("HrPayrollRuleSet", "HrPayrollRule", "HrEmploymentRegime", "HrEmploymentRevision", "HrPortalRequest", "CostCenter");
+    models.push("Role");
     models.push("ProcessType", "Subject", "Process", "ProcessMovement", "ProcessWorkflowStage", "ProcessSequence", "ProcessEvent", "GenericProcessWorkflowDefinition", "GenericProcessWorkflowStage", "GenericProcessWorkflowInstance", "GenericProcessWorkflowEvent", "ProcessDocument", "ConfiguracaoPerfil", "ConfiguracaoModulo", "UsuarioModulo", "ProtocolNotification");
     models.push("TreasuryTransfer", "Asset", "AssetCategory", "AssetMaintenance", "AssetWriteOff", "AssetIntegrationPendingConfiguration", "Department");
     models.push("AssetValueHistory", "AssetValueAdjustment");

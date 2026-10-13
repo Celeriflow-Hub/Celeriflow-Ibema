@@ -11,13 +11,16 @@ export async function readMunicipalCosts(db: PrismaClient, actor: CostActor, fin
       tx.municipalCostObject.findMany({ where: { financialYearId, OR: [{ budgetUnitId: null }, { budgetUnitId: { in: unitIds } }] }, include: { links: true }, orderBy: { code: "asc" } }),
       tx.municipalCostItem.findMany({ where: { financialYearId }, orderBy: { identifier: "asc" } }),
       tx.municipalCostRule.findMany({ where: { financialYearId, budgetUnitId: { in: unitIds } }, orderBy: [{ priority: "desc" }, { createdAt: "desc" }] }),
-      tx.municipalCostSource.findMany({ where: { financialYearId, budgetUnitId: { in: unitIds }, ...(filters.sourceType ? { sourceType: filters.sourceType } : {}), ...(filters.expenseFrom || filters.expenseUntil ? { expenseDate: { gte: filters.expenseFrom, lte: filters.expenseUntil } } : {}) }, include: { movements: { include: { allocations: true, correction: { select: { id: true } } }, orderBy: [{ date: "asc" }, { id: "asc" }] } }, orderBy: [{ expenseDate: "desc" }, { id: "asc" }] }),
+      tx.municipalCostSource.findMany({ where: { financialYearId, budgetUnitId: { in: unitIds }, ...(filters.sourceType ? { sourceType: filters.sourceType } : {}), ...(filters.expenseFrom || filters.expenseUntil ? { expenseDate: { gte: filters.expenseFrom, lte: filters.expenseUntil } } : {}) }, include: { reductions: { orderBy: [{ date: "asc" }, { id: "asc" }] }, movements: { include: { allocations: true, correction: { select: { id: true } } }, orderBy: [{ date: "asc" }, { id: "asc" }] } }, orderBy: [{ expenseDate: "desc" }, { id: "asc" }] }),
       tx.municipalCostPolicy.findMany({ where: { governmentEntityId: year.governmentEntityId! }, orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }, { id: "desc" }] }),
     ]);
     const byObject = new Map<string, Prisma.Decimal>();
     const byItem = new Map<string, Prisma.Decimal>();
     const byType = new Map<string, { expense: Prisma.Decimal; allocated: Prisma.Decimal; pending: Prisma.Decimal }>();
     const rows = sources.map(source => {
+      const snapshot = source.snapshot as Prisma.JsonObject;
+      const evidence = snapshot.evidence && typeof snapshot.evidence === "object" && !Array.isArray(snapshot.evidence) ? snapshot.evidence : {};
+      const settlementId = typeof evidence.settlementId === "string" ? evidence.settlementId : null;
       const allocated = source.movements.flatMap(movement => movement.allocations).reduce((sum, allocation) => sum.plus(allocation.amount), new Prisma.Decimal(0));
       let inPeriod = new Prisma.Decimal(0);
       for (const movement of source.movements) {
@@ -29,11 +32,13 @@ export async function readMunicipalCosts(db: PrismaClient, actor: CostActor, fin
           byItem.set(allocation.itemId, (byItem.get(allocation.itemId) ?? new Prisma.Decimal(0)).plus(allocation.amount));
         }
       }
-      const pending = source.status === "ACTIVE" ? source.amount.minus(allocated) : new Prisma.Decimal(0);
+      const reduced = source.reductions.reduce((sum, reduction) => sum.plus(reduction.amount), new Prisma.Decimal(0));
+      const netAmount = source.amount.minus(reduced);
+      const pending = source.status === "ACTIVE" ? netAmount.minus(allocated) : new Prisma.Decimal(0);
       const group = byType.get(source.sourceType) ?? { expense: new Prisma.Decimal(0), allocated: new Prisma.Decimal(0), pending: new Prisma.Decimal(0) };
-      if (source.status === "ACTIVE") group.expense = group.expense.plus(source.amount);
+      if (source.status === "ACTIVE") group.expense = group.expense.plus(netAmount);
       group.allocated = group.allocated.plus(inPeriod); group.pending = group.pending.plus(pending); byType.set(source.sourceType, group);
-      return { id: source.id, budgetUnitId: source.budgetUnitId, sourceType: source.sourceType, sourceId: source.sourceId, expenseDate: source.expenseDate.toISOString(), amount: source.amount.toFixed(2), allocated: allocated.toFixed(2), inPeriod: inPeriod.toFixed(2), pending: pending.toFixed(2), status: source.status, movements: source.movements.map(movement => ({ id: movement.id, kind: movement.kind, date: movement.date.toISOString(), reason: movement.reason, correctionId: movement.correction?.id ?? null, amount: movement.allocations.reduce((sum, row) => sum.plus(row.amount), new Prisma.Decimal(0)).toFixed(2) })) };
+      return { id: source.id, budgetUnitId: source.budgetUnitId, sourceType: source.sourceType, sourceId: source.sourceId, settlementId, expenseDate: source.expenseDate.toISOString(), amount: source.amount.toFixed(2), reduced: reduced.toFixed(2), netAmount: netAmount.toFixed(2), reductions: source.reductions.map(reduction => ({ id: reduction.id, date: reduction.date.toISOString(), amount: reduction.amount.toFixed(2), reason: reduction.reason, snapshot: reduction.snapshot })), allocated: allocated.toFixed(2), inPeriod: inPeriod.toFixed(2), pending: pending.toFixed(2), status: source.status, movements: source.movements.map(movement => ({ id: movement.id, kind: movement.kind, date: movement.date.toISOString(), reason: movement.reason, correctionId: movement.correction?.id ?? null, amount: movement.allocations.reduce((sum, row) => sum.plus(row.amount), new Prisma.Decimal(0)).toFixed(2) })) };
     });
     return { year: { id: year.id, year: year.year, governmentEntityId: year.governmentEntityId! }, units: units.map(unit => ({ id: unit.budgetUnitId, name: unit.budgetUnit.name })), objects, items, rules, policies, sources: rows, byObject: [...byObject].map(([id, value]) => ({ id, label: objects.find(object => object.id === id)?.description ?? id, value: value.toFixed(2) })), byItem: [...byItem].map(([id, value]) => ({ id, label: items.find(item => item.id === id)?.description ?? id, value: value.toFixed(2) })), byType: [...byType].map(([type, values]) => ({ type, expense: values.expense.toFixed(2), allocated: values.allocated.toFixed(2), pending: values.pending.toFixed(2) })) };
   }, { isolationLevel: "RepeatableRead" });

@@ -92,7 +92,7 @@ export async function linkMunicipalCostItems(db: PrismaClient, actor: CostActor,
 
 export async function createMunicipalCostRule(db: PrismaClient, actor: CostActor, input: { financialYearId: string; budgetUnitId: string; title: string; sourceType: CostSourceType; selector: Record<string, string>; shares: CostShare[]; priority: number; effectiveFrom: Date; effectiveUntil?: Date }) {
   if (!costSourceTypes.includes(input.sourceType) || !Number.isSafeInteger(input.priority) || !Number.isFinite(input.effectiveFrom.getTime()) || (input.effectiveUntil && (!Number.isFinite(input.effectiveUntil.getTime()) || input.effectiveUntil < input.effectiveFrom))) throw new MunicipalCostError("Origem, prioridade ou vigência da regra inválida.");
-  const keys = new Set(["appropriationId", "employeeId", "payrollCode", "contractId", "costCenterId", "workLocation", "assetId", "materialId", "categoryId", "subcategoryId", "warehouseId"]);
+  const keys = new Set(["appropriationId", "employeeId", "payrollCode", "contractId", "costCenterId", "workLocation", "payrollComponent", "provisionKind", "assetId", "materialId", "categoryId", "subcategoryId", "warehouseId", "departmentId"]);
   if (Object.entries(input.selector).some(([key, value]) => !keys.has(key) || !value?.trim())) throw new MunicipalCostError("Critério de seleção desconhecido ou vazio.");
   distributeCostPercentages(new Prisma.Decimal("100.00"), input.shares);
   return db.$transaction(async tx => {
@@ -101,6 +101,30 @@ export async function createMunicipalCostRule(db: PrismaClient, actor: CostActor
     await validateCostPairs(tx, actor, input.financialYearId, input.budgetUnitId, input.shares);
     if (input.selector.appropriationId && !await tx.budgetAppropriation.count({ where: { id: input.selector.appropriationId, financialYearId: year.id, budgetUnitId: input.budgetUnitId } })) throw new MunicipalCostError("Dotação do critério não pertence à UG/exercício.");
     if (input.selector.costCenterId && !await tx.costCenter.count({ where: { id: input.selector.costCenterId, governmentEntityId: year.governmentEntityId, isActive: true } })) throw new MunicipalCostError("Centro de custo do critério não pertence à entidade.");
+    if (["employeeId", "payrollCode", "workLocation", "payrollComponent", "provisionKind"].some(key => input.selector[key]) && input.sourceType !== "PAYROLL") throw new MunicipalCostError("Critérios individuais de folha exigem origem PAYROLL.");
+    if (["STOCK_CONSUMPTION", "IMMEDIATE_MATERIAL"].includes(input.sourceType)) {
+      if (input.selector.subcategoryId) throw new MunicipalCostError("O cadastro canônico de materiais ainda não possui subclasse; não use um identificador sem origem conciliada.");
+      if (input.selector.materialId && !await tx.material.count({ where: { id: input.selector.materialId, isActive: true, ...(input.selector.categoryId ? { categoryId: input.selector.categoryId } : {}) } })) throw new MunicipalCostError("Produto ativo não corresponde à classe informada.");
+      if (input.selector.categoryId && !await tx.materialCategory.count({ where: { id: input.selector.categoryId, isActive: true } })) throw new MunicipalCostError("Classe de material inválida ou inativa.");
+      const unit = await tx.budgetUnit.findUniqueOrThrow({ where: { id: input.budgetUnitId }, select: { secretariatId: true } });
+      if (input.selector.warehouseId && !await tx.warehouse.count({ where: { id: input.selector.warehouseId, isActive: true, costCenter: { governmentEntityId: year.governmentEntityId, secretariatId: unit.secretariatId, ...(input.selector.costCenterId ? { id: input.selector.costCenterId } : {}) } } })) throw new MunicipalCostError("Almoxarifado/centro da regra não pertence ao ente e secretaria da UG.");
+      if (input.selector.departmentId && !await tx.department.count({ where: { id: input.selector.departmentId, secretariatId: unit.secretariatId } })) throw new MunicipalCostError("Destino do consumo não pertence à secretaria da UG.");
+    }
+    if (input.sourceType === "PAYROLL") {
+      if (input.selector.payrollComponent && !["GROSS", "EMPLOYER"].includes(input.selector.payrollComponent)) throw new MunicipalCostError("Componente da folha deve ser bruto ou encargos patronais.");
+      if (input.selector.provisionKind && !["PROVISAO_FERIAS", "PROVISAO_13", "PROVISAO_LICENCA"].includes(input.selector.provisionKind)) throw new MunicipalCostError("Tipo de provisão inválido.");
+      const unit = await tx.budgetUnit.findUniqueOrThrow({ where: { id: input.budgetUnitId } });
+      const centers = await tx.costCenter.findMany({ where: { governmentEntityId: year.governmentEntityId, secretariatId: unit.secretariatId, isActive: true }, select: { id: true } });
+      if (input.selector.costCenterId && !centers.some(center => center.id === input.selector.costCenterId)) throw new MunicipalCostError("Centro da regra de folha não pertence à secretaria da UG.");
+      if (input.selector.employeeId || input.selector.contractId || input.selector.workLocation) {
+        const where: Prisma.HrEmploymentContractWhereInput = { ...(input.selector.employeeId ? { employeeId: input.selector.employeeId } : {}), ...(input.selector.contractId ? { id: input.selector.contractId } : {}), ...(input.selector.workLocation ? { workLocation: input.selector.workLocation } : {}), costCenterId: { in: centers.map(center => center.id) } };
+        const known = await tx.hrEmploymentContract.count({ where });
+        const captured = await tx.municipalCostSource.count({ where: { financialYearId: year.id, budgetUnitId: input.budgetUnitId, sourceType: "PAYROLL", AND: Object.entries(input.selector).filter(([key]) => ["employeeId", "contractId", "workLocation"].includes(key)).map(([key, value]) => ({ snapshot: { path: ["dimensions", key], equals: value } })) } });
+        if (!known && !captured) throw new MunicipalCostError("Identidade/localização não está conciliada ao centro do ente ou às origens de folha da UG.");
+      }
+      if (input.selector.payrollCode && !await tx.hrPayrollRubric.count({ where: { code: input.selector.payrollCode, type: "PROVENTO", isActive: true, ruleSet: { scope: "PRODUCAO", isDemo: false } } })) throw new MunicipalCostError("Verba deve corresponder a provento cadastrado em parâmetros de produção.");
+      if (input.selector.payrollCode && input.selector.payrollComponent === "EMPLOYER") throw new MunicipalCostError("Encargos patronais não recebem código de provento inventado; selecione componente, contrato ou localização.");
+    }
     const rule = await tx.municipalCostRule.create({ data: { financialYearId: input.financialYearId, budgetUnitId: input.budgetUnitId, title: required(input.title, "Descrição da regra"), sourceType: input.sourceType, priority: input.priority, effectiveFrom: input.effectiveFrom, effectiveUntil: input.effectiveUntil, selector: json(input.selector), shares: json(input.shares), actorId: actor.usuarioId } });
     await writeAuditEvent(tx, { actorUsuarioId: actor.usuarioId, eventType: auditEventTypes.administrativeMutation, targetType: "MUNICIPAL_COST_RULE", targetId: rule.id });
     return rule;

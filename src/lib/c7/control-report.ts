@@ -4,14 +4,23 @@ import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
 import { C7OperationError } from "./operations-service";
 import { readControlNotice } from "./control-notifications";
+import { readControlAudit } from "./control-audits";
 
 type Actor = { usuarioId: string; allowedBudgetUnitIds?: string[] };
 type Report = { title: string; headers: string[]; rows: string[][]; hash: string };
 
-export async function buildControlReport(db: PrismaClient, actor: Actor, input: { planId: string; noticeId?: string }): Promise<Report> {
+export async function buildControlReport(db: PrismaClient, actor: Actor, input: { planId: string; noticeId?: string; auditId?: string }): Promise<Report> {
   return db.$transaction(async tx => {
     const plan = await tx.internalControlPlan.findUnique({ where: { id: input.planId }, include: { budgetUnit: { include: { planningEntityUnit: { include: { governmentEntity: true } } } }, findings: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] }, events: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } } });
     if (!plan || (actor.allowedBudgetUnitIds && (!plan.budgetUnitId || !actor.allowedBudgetUnitIds.includes(plan.budgetUnitId)))) throw new C7OperationError("Plano fora das unidades gestoras autorizadas.");
+    if (input.noticeId && input.auditId) throw new C7OperationError("Selecione uma notificação ou auditoria para impressão.");
+    const visibleAuditIds = new Set(plan.events.filter(event => event.eventType === "AUDIT_SCHEDULED").flatMap(event => {
+      const audit = readControlAudit(event.snapshot);
+      return audit && [plan.ownerId, audit.auditorId, audit.recipientId].includes(actor.usuarioId) ? [event.id] : [];
+    }));
+    const auditEvent = input.auditId ? plan.events.find(event => event.id === input.auditId && visibleAuditIds.has(event.id)) : null;
+    const audit = auditEvent ? readControlAudit(auditEvent.snapshot) : null;
+    if (input.auditId && !audit) throw new C7OperationError("Auditoria indisponível para este usuário.");
     const notice = input.noticeId ? plan.events.find(event => event.id === input.noticeId && event.eventType === "CONTROL_NOTICE_SENT") : null;
     const data = notice ? readControlNotice(notice.snapshot) : null;
     if (input.noticeId && (!notice || !data || (data.recipientId !== actor.usuarioId && notice.actorId !== actor.usuarioId && plan.ownerId !== actor.usuarioId))) throw new C7OperationError("Notificação indisponível para este usuário.");
@@ -20,16 +29,19 @@ export async function buildControlReport(db: PrismaClient, actor: Actor, input: 
       ["Entidade / UG", plan.budgetUnitId ?? "", plan.budgetUnit?.planningEntityUnit?.governmentEntity.name ?? "Legado não conciliado", plan.budgetUnit?.name ?? ""],
       ["Situação", plan.status, "Prazo", plan.dueAt?.toISOString() ?? ""],
     ];
-    if (!input.noticeId) {
+    if (!input.noticeId && !input.auditId) {
       rows.push(["Resumo", String(plan.findings.length), "Apontamentos resolvidos / pendentes", `${plan.findings.filter(finding => finding.status === "RESOLVIDO").length} / ${plan.findings.filter(finding => finding.status !== "RESOLVIDO").length}`]);
       for (const finding of plan.findings) rows.push(["Apontamento", finding.id, `${finding.title} · ${finding.status}`, `${finding.description}\nPrazo: ${finding.dueAt?.toISOString() ?? "não definido"}; responsável: ${finding.responsibleId ?? "não definido"}; GED: ${finding.evidenceDocumentId ?? "não vinculado"}`]);
     }
     for (const event of plan.events) {
       const snapshot = event.snapshot as Prisma.JsonObject;
+      if (typeof snapshot.auditId === "string" && !visibleAuditIds.has(snapshot.auditId)) continue;
+      if (event.eventType.startsWith("AUDIT_") && !visibleAuditIds.has(event.eventType === "AUDIT_SCHEDULED" ? event.id : String(snapshot.auditId))) continue;
+      if (input.auditId && event.id !== input.auditId && snapshot.auditId !== input.auditId) continue;
       if (input.noticeId && event.id !== input.noticeId && snapshot.noticeId !== input.noticeId) continue;
       rows.push([event.eventType, event.id, `${event.createdAt.toISOString()} · usuário ${event.actorId}`, `${event.reason}\nMemória congelada: ${JSON.stringify(event.snapshot)}`]);
     }
-    const title = input.noticeId ? `Notificação e respostas — ${data!.title}` : `Histórico de Controle Interno — ${plan.title}`;
+    const title = input.auditId ? `Auditoria, questionário, respostas e análise — ${audit!.title}` : input.noticeId ? `Notificação e respostas — ${data!.title}` : `Histórico de Controle Interno — ${plan.title}`;
     const headers = ["Tipo", "Identificador", "Referência", "Conteúdo / evidências"];
     const hash = createHash("sha256").update(JSON.stringify({ title, headers, rows })).digest("hex");
     return { title, headers, rows, hash };

@@ -25,6 +25,8 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
     omitted.Revenue = ["budgetUnitId"];
     models.push("InternalControlPlan", "InternalControlFinding", "InternalControlEvent", "HrIntegrationEvent");
     models.push("UsuarioUnidadeGestora", "CostCenter", "HrEmploymentContract");
+    models.push("MaterialMovement");
+    omitted.MaterialMovement = ["quantityDecimal", "unitValueDecimal", "totalValueDecimal"];
     omitted.InternalControlPlan = ["budgetUnitId"];
     const enums = new Set<string>();
     for (const name of models) {
@@ -52,6 +54,9 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
     await pg.exec(readFileSync("prisma/migrations-ibema/20261012160000_internal_control_budget_scope/migration.sql", "utf8"));
     await pg.exec(readFileSync("prisma/migrations-ibema/20261012170000_shared_official_catalog_accounts/migration.sql", "utf8"));
     await pg.exec(readFileSync("prisma/migrations-ibema/20261013200000_municipal_cost_ledger/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261013210000_fiscal_index_definitions/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261013220000_control_audit_event_integrity/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261013230000_material_consumption_costs/migration.sql", "utf8"));
     await pg.exec(`
       CREATE UNIQUE INDEX ON "AccountingEventCatalog" (code);
       CREATE UNIQUE INDEX ON "AccountingPlan" (code);
@@ -65,6 +70,8 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
       CREATE UNIQUE INDEX ON "AccountingTransaction" ("reversalOfId");
       CREATE UNIQUE INDEX ON "AccountingPostingRule" ("eventId", "debitAccountId", "creditAccountId");
       CREATE UNIQUE INDEX ON "MonthlyAccountingClose" ("financialYearId", competence);
+      CREATE UNIQUE INDEX ON "MaterialMovement" ("idempotencyKey");
+      CREATE UNIQUE INDEX ON "MaterialMovement" ("reversedMovementId");
       CREATE UNIQUE INDEX ON "AnnualAccountingClose" ("financialYearId");
       ALTER TABLE "AccountingEntry" ADD FOREIGN KEY ("transactionId") REFERENCES "AccountingTransaction"(id);
       ALTER TABLE "AccountingEntry" ADD FOREIGN KEY ("accountId") REFERENCES "AccountingPlan"(id);

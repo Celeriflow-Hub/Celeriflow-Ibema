@@ -11,6 +11,7 @@ type SettlementOption = { id: string; label: string };
 export function StockOperationsClient({ materials, warehouses, settlements }: { materials: Option[]; warehouses: Option[]; settlements: SettlementOption[] }) {
   const router = useRouter();
   const [operation, setOperation] = useState<Operation>("EXIT");
+  const [consumption, setConsumption] = useState("");
   const [pending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -22,7 +23,7 @@ export function StockOperationsClient({ materials, warehouses, settlements }: { 
       batchNumber: String(formData.get("batchNumber") ?? "") || undefined,
       expirationDate: String(formData.get("expirationDate") ?? "") || undefined,
       unitCost: typeof unitCost === "string" && unitCost !== "" ? Number(unitCost) : undefined,
-      reason: String(formData.get("reason") ?? "") || undefined,
+      reason: `${operation === "EXIT" && consumption ? consumption + ":" : ""}${String(formData.get("reason") ?? "")}` || undefined,
       settlementId: String(formData.get("settlementId") ?? "") || undefined,
       quantity: Number(formData.get("quantity")),
     };
@@ -82,8 +83,17 @@ export function StockOperationsClient({ materials, warehouses, settlements }: { 
         <input name="expirationDate" type="date" className="h-9 rounded-md border bg-background px-3 text-sm" />
       </label>}
       {operation === "EXIT" && <label className="grid gap-1 text-sm font-medium md:col-span-2">
+        Destinação financeira da saída
+        <select aria-label="Destinação financeira da saída" value={consumption} onChange={event => setConsumption(event.target.value)} className="h-9 rounded-md border bg-background px-3 text-sm">
+          <option value="">Saída operacional</option>
+          <option value="CONSUMO_ORCAMENTARIO">Consumo valorizado vinculado à liquidação</option>
+          <option value="CONSUMO_ORCAMENTARIO_DIRETO">Consumo imediato vinculado à liquidação</option>
+        </select>
+        <span className="text-xs font-normal text-muted-foreground">Consumo exige origem de material, UG e centro conciliados. O custo é registrado conforme a política de Custos vigente, sem duplicar a liquidação.</span>
+      </label>}
+      {operation === "EXIT" && <label className="grid gap-1 text-sm font-medium md:col-span-2">
         Liquidação de referência
-        <select name="settlementId" className="h-9 rounded-md border bg-background px-3 text-sm">
+        <select name="settlementId" required={!!consumption} className="h-9 rounded-md border bg-background px-3 text-sm">
           <option value="">Não vincular a uma liquidação</option>
           {settlements.map((settlement) => <option key={settlement.id} value={settlement.id}>{settlement.label}</option>)}
         </select>
@@ -95,7 +105,7 @@ export function StockOperationsClient({ materials, warehouses, settlements }: { 
       </label>}
       <label className="grid gap-1 text-sm font-medium md:col-span-2">
         Justificativa
-        <input name="reason" required maxLength={500} className="h-9 rounded-md border bg-background px-3 text-sm" placeholder="Ex.: nota fiscal, consumo ou correção de saldo" />
+        <input name="reason" required maxLength={470} className="h-9 rounded-md border bg-background px-3 text-sm" placeholder="Ex.: nota fiscal, consumo ou correção de saldo" />
       </label>
       <div className="md:col-span-2 flex items-center gap-3">
         <button type="submit" disabled={pending} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">

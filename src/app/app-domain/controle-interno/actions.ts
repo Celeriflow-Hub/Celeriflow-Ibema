@@ -1,11 +1,13 @@
 "use server";
 
 import { C7OperationError, createInternalControlFinding, createInternalControlPlan, resolveInternalControlFinding, transitionInternalControlPlan, recordInternalControlOpinion } from "@/lib/c7/operations-service";
-import { getTenantContextForModule, getTenantContextForModuleOperation, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
+import { canViewModule, getTenantContextForModule, getTenantContextForModuleOperation, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { publishControlChecklist, answerControlChecklist, runControlChecklistDiagnostics, type ControlChecklistGroup } from "@/lib/c7/control-checklists";
 import { sendControlNotice, respondControlNotice, reviewControlNoticeResponse } from "@/lib/c7/control-notifications";
 import { scheduleControlObligation, completeControlObligation, runControlAgendaAlerts } from "@/lib/c7/control-agenda";
+import { runMunicipalControlDiagnostics } from "@/lib/c7/municipal-diagnostics";
+import { FiscalIndexError } from "@/lib/financeiro/fiscal-indices";
 
 type Result = { error?: string };
 const date = (value?: string) => {
@@ -15,6 +17,20 @@ const date = (value?: string) => {
   return parsed;
 };
 const controlActor = (context: AppContext) => ({ usuarioId: context.user.id, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds });
+
+export async function runMunicipalDiagnosticsAction(input: { planId: string; financialYearId: string; fiscalThrough: string; idempotencyKey: string }): Promise<Result> {
+  try {
+    const context = await getTenantContextForModuleOperation("ADMINISTRACAO", "update");
+    const cut = date(input.fiscalThrough);
+    if (!cut) throw new C7OperationError("Informe o corte fiscal.");
+    cut.setUTCHours(23, 59, 59, 999);
+    const modules = await context.prisma.configuracaoModulo.findMany({ where: { codigo: { in: ["FINANCEIRO", "COMPRAS", "TRIBUTACAO"] }, ativo: true }, select: { codigo: true } });
+    const enabled = (code: string) => modules.some(module => module.codigo === code) && canViewModule(context.user, code);
+    await runMunicipalControlDiagnostics(context.prisma, { ...controlActor(context), sourcePermissions: { financial: enabled("FINANCEIRO"), procurement: enabled("COMPRAS"), tax: enabled("TRIBUTACAO") } }, { ...input, fiscalThrough: cut });
+    revalidatePath("/controle-interno");
+    return {};
+  } catch (error) { return { error: error instanceof C7OperationError || error instanceof FiscalIndexError ? error.message : "Não foi possível executar os diagnósticos municipais." }; }
+}
 
 export async function createControlPlanAction(input: { title: string; reference: string; dueAt?: string; budgetUnitId: string }): Promise<Result> {
   try {

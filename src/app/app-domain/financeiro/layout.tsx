@@ -32,6 +32,7 @@ const navigation: ModuleNavGroup[] = [
   { title: "Contabilidade e Saídas", items: [
     { title: "Contabilidade e Fechamento", href: "/financeiro/contabilidade", icon: "scale" },
     { title: "Relatórios Financeiros", href: "/financeiro/relatorios", icon: "fileText" },
+    { title: "Índices Constitucionais", href: "/financeiro/relatorios/indices-constitucionais", icon: "scale" },
   ] },
 ];
 

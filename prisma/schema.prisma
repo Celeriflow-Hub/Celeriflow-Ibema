@@ -3988,6 +3988,7 @@ model TaxCertificateEvaluation {
 // --- MÃ³dulo 8: Financeiro e ContÃ¡bil ---
 
 model FinancialYear {
+  fiscalIndexDefinitions MunicipalFiscalIndexDefinition[]
   id        String   @id @default(cuid())
   year      Int
   governmentEntityId String?
@@ -7950,6 +7951,23 @@ model MunicipalCostPolicy {
   @@index([governmentEntityId, effectiveFrom, createdAt], map: "MunicipalCostPolicy_scope")
 }
 
+model MunicipalFiscalIndexDefinition {
+  id String @id @default(cuid())
+  financialYearId String
+  financialYear FinancialYear @relation(fields: [financialYearId], references: [id], onDelete: Restrict)
+  code String
+  revision Int
+  legalReference String
+  minimumPercentage Decimal @db.Decimal(9, 4)
+  effectiveFrom DateTime @db.Date
+  definition Json
+  reason String
+  actorId String
+  createdAt DateTime @default(now())
+  @@unique([financialYearId, code, revision])
+  @@index([financialYearId, code, effectiveFrom], map: "MunicipalFiscalIndexDefinition_scope")
+}
+
 model MunicipalCostObject {
   id String @id @default(cuid())
   financialYearId String
@@ -8024,6 +8042,7 @@ model MunicipalCostRule {
 }
 
 model MunicipalCostSource {
+  reductions MunicipalCostSourceReduction[]
   id String @id @default(cuid())
   financialYearId String
   financialYear FinancialYear @relation(fields: [financialYearId], references: [id], onDelete: Restrict)
@@ -8039,6 +8058,20 @@ model MunicipalCostSource {
   movements MunicipalCostMovement[]
   @@unique([sourceType, sourceId])
   @@index([financialYearId, budgetUnitId, expenseDate], map: "MunicipalCostSource_scope")
+}
+
+model MunicipalCostSourceReduction {
+  id String @id @default(cuid())
+  sourceId String
+  source MunicipalCostSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  date DateTime
+  amount Decimal @db.Decimal(18, 2)
+  reason String
+  actorId String
+  idempotencyKey String @unique
+  snapshot Json
+  createdAt DateTime @default(now())
+  @@index([sourceId, date])
 }
 
 model MunicipalCostMovement {
@@ -8157,6 +8190,9 @@ model MaterialStock {
 }
 
 model MaterialMovement {
+  quantityDecimal Decimal? @db.Decimal(18, 6)
+  unitValueDecimal Decimal? @db.Decimal(18, 6)
+  totalValueDecimal Decimal? @db.Decimal(18, 2)
   sstEquipmentItem SstEquipmentDeliveryItem?
   id               String            @id @default(cuid())
   type             String // Entrada, SaÃ­da, Ajuste

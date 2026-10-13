@@ -30,7 +30,10 @@ export async function buildMunicipalCostReport(db: PrismaClient, actor: CostActo
     const data = await readMunicipalCosts(db, actor, input.yearId, municipalCostFilters(input));
     title = `Despesas e apropriações de custos — ${data.year.year}`;
     rows.push(["FILTROS", input.yearId, "", "", "", "", `Despesa ${input.expenseFrom ?? "início"} a ${input.expenseUntil ?? "fim"}; apropriação ${input.appropriationFrom ?? "início"} a ${input.appropriationUntil ?? "fim"}; tipo ${input.sourceType ?? "todos"}; item ${input.itemId ?? "todos"}. Saldo atual considera toda a cadeia; apropriado no período considera o filtro de data.`]);
-    for (const source of data.sources) rows.push([source.sourceType, source.sourceId, source.expenseDate.slice(0, 10), source.amount, source.inPeriod, source.pending, `UG ${source.budgetUnitId}; situação ${source.status}; apropriado atual ${source.allocated} BRL`]);
+    for (const source of data.sources) {
+      rows.push([source.sourceType, source.sourceId, source.expenseDate.slice(0, 10), source.netAmount, source.inPeriod, source.pending, `UG ${source.budgetUnitId}; situação ${source.status}; original ${source.amount} BRL; devoluções ${source.reduced} BRL; apropriado atual ${source.allocated} BRL`]);
+      for (const reduction of source.reductions) rows.push(["DEVOLUÇÃO DA ORIGEM", reduction.id, reduction.date.slice(0, 10), `-${reduction.amount}`, "", "", `${reduction.reason}; memória ${JSON.stringify(reduction.snapshot)}`]);
+    }
     for (const group of data.byType) rows.push([`TOTAL ${group.type}`, "", "", group.expense, group.allocated, group.pending, "Despesa ativa, apropriado no período e saldo atual"]);
     const total = data.byType.reduce((sum, group) => ({ expense: sum.expense.plus(group.expense), allocated: sum.allocated.plus(group.allocated), pending: sum.pending.plus(group.pending) }), { expense: new Prisma.Decimal(0), allocated: new Prisma.Decimal(0), pending: new Prisma.Decimal(0) });
     rows.push(["TOTAL GERAL", "", "", total.expense.toFixed(2), total.allocated.toFixed(2), total.pending.toFixed(2), ""]);

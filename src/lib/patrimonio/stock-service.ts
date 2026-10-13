@@ -1,5 +1,6 @@
-import { type Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
+import { recordStockMunicipalCosts, reduceStockMunicipalCosts } from "@/lib/financeiro/cost-stock-bridge";
 
 export class StockServiceError extends Error {}
 
@@ -91,7 +92,8 @@ export function normalizeStockMovement(input: StockMovementInput): ValidStockMov
   if (input.settlementId?.trim() && input.kind !== "EXIT") {
     throw new StockServiceError("A liquidação pode ser vinculada somente a uma saída de estoque.");
   }
-  if (input.kind === "EXIT" && (input.reason?.trim() === "CONSUMO_ORCAMENTARIO" || input.reason?.trim() === "CONSUMO_ORCAMENTARIO_DIRETO")) {
+  const consumptionReason = input.reason?.trim().split(":")[0];
+  if (input.kind === "EXIT" && (consumptionReason === "CONSUMO_ORCAMENTARIO" || consumptionReason === "CONSUMO_ORCAMENTARIO_DIRETO")) {
     if (!input.settlementId?.trim()) {
       throw new StockServiceError("Saída de estoque por consumo orçamentário exige o vínculo de uma liquidação ativa.");
     }
@@ -210,11 +212,20 @@ export async function applyStockMovement(tx: Prisma.TransactionClient, rawInput:
     : await decreaseStock(tx, input, Math.abs(input.quantity));
 
   const type = input.kind === "ENTRY" ? "Entrada" : input.kind === "EXIT" ? "Saída" : "Ajuste";
+  const quantity = new Prisma.Decimal(String(input.quantity));
+  const unitValue = input.unitCost ?? stock.unitCost;
+  const price = unitValue !== null && unitValue !== undefined ? new Prisma.Decimal(String(unitValue)) : null;
+  const decimalQuantity = quantity.decimalPlaces() <= 6 && quantity.abs().lt("1000000000000") ? quantity : null;
+  const decimalPrice = price?.isFinite() && price.gte(0) && price.decimalPlaces() <= 6 && price.lt("1000000000000") ? price : null;
+  const total = decimalQuantity && decimalPrice ? decimalQuantity.abs().mul(decimalPrice).toDecimalPlaces(2) : null;
   const movement = await tx.materialMovement.create({
     data: {
       type,
       quantity: input.quantity,
-      unitValue: input.unitCost ?? stock.unitCost,
+      unitValue,
+      quantityDecimal: decimalQuantity,
+      unitValueDecimal: decimalPrice,
+      totalValueDecimal: total?.lt("10000000000000000") ? total : null,
       reason: input.reason?.trim() || null,
       warehouseId: input.warehouseId,
       materialId: input.materialId,
@@ -233,6 +244,7 @@ export async function applyStockMovement(tx: Prisma.TransactionClient, rawInput:
       actorEmployeeId: input.actor.employeeId ?? null,
     },
   });
+  await recordStockMunicipalCosts(tx, input.actor, movement);
   return { stock, movement };
 }
 
@@ -262,7 +274,10 @@ export async function returnStockMovement(db: PrismaClient, rawInput: ReturnStoc
   return db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`MATERIAL_MOVEMENT:${movementId}`}))`;
     const existing = await tx.materialMovement.findUnique({ where: { idempotencyKey } });
-    if (existing) return existing;
+    if (existing) {
+      if (existing.operation !== "RETURN" || existing.returnedMovementId !== movementId || existing.quantity !== rawInput.quantity || existing.reason !== reason || existing.actorUsuarioId !== rawInput.actor.usuarioId) throw new StockServiceError("Chave já utilizada para outra devolução de material.");
+      return existing;
+    }
 
     const original = await tx.materialMovement.findUnique({
       where: { id: movementId },
@@ -278,7 +293,13 @@ export async function returnStockMovement(db: PrismaClient, rawInput: ReturnStoc
       where: { returnedMovementId: original.id, operation: "RETURN" },
       _sum: { quantity: true },
     });
-    if ((returned._sum.quantity ?? 0) + rawInput.quantity > original.quantity) {
+    let returnedQuantity = new Prisma.Decimal(String(returned._sum.quantity ?? 0));
+    if (original.quantityDecimal) {
+      const returns = await tx.materialMovement.findMany({ where: { returnedMovementId: original.id, operation: "RETURN" }, select: { quantityDecimal: true } });
+      if (returns.some(row => !row.quantityDecimal)) throw new StockServiceError("Devoluções anteriores sem quantidade Decimal exigem conciliação.");
+      returnedQuantity = returns.reduce((sum, row) => sum.plus(row.quantityDecimal!), new Prisma.Decimal(0));
+    }
+    if (returnedQuantity.plus(String(rawInput.quantity)).gt(original.quantityDecimal ?? String(original.quantity))) {
       throw new StockServiceError("A devolução excede a quantidade da saída original.");
     }
 
@@ -297,6 +318,7 @@ export async function returnStockMovement(db: PrismaClient, rawInput: ReturnStoc
       reason,
       actor: rawInput.actor,
     });
+    await reduceStockMunicipalCosts(tx, rawInput.actor, original, result.movement);
     await writeAuditEvent(tx, {
       actorUsuarioId: rawInput.actor.usuarioId,
       eventType: auditEventTypes.stockReturned,
@@ -315,7 +337,10 @@ export async function reverseStockMovement(db: PrismaClient, rawInput: ReverseSt
   return db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`MATERIAL_MOVEMENT:${movementId}`}))`;
     const existing = await tx.materialMovement.findUnique({ where: { idempotencyKey } });
-    if (existing) return existing;
+    if (existing) {
+      if (existing.operation !== "REVERSAL" || existing.reversedMovementId !== movementId || existing.reason !== reason || existing.actorUsuarioId !== rawInput.actor.usuarioId) throw new StockServiceError("Chave já utilizada para outro estorno de material.");
+      return existing;
+    }
 
     const original = await tx.materialMovement.findUnique({
       where: { id: movementId },
@@ -347,6 +372,7 @@ export async function reverseStockMovement(db: PrismaClient, rawInput: ReverseSt
       reason,
       actor: rawInput.actor,
     });
+    await reduceStockMunicipalCosts(tx, rawInput.actor, original, result.movement);
     await writeAuditEvent(tx, {
       actorUsuarioId: rawInput.actor.usuarioId,
       eventType: auditEventTypes.stockMovementReversed,

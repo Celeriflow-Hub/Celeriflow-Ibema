@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getTenantContextForModuleOperation, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
+import { canViewModule, getTenantContextForModuleOperation, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
 import { allocateMunicipalCost, configureMunicipalCosts, correctMunicipalCost, MunicipalCostError } from "@/lib/financeiro/cost-ledger";
 import { createMunicipalCostObject, deleteMunicipalCostObjectTree, saveMunicipalCostItem, adoptStandardMunicipalCostItems, linkMunicipalCostItems, createMunicipalCostRule, generateMunicipalCostObjectsFromLoa, copyAnnualMunicipalCostRelations } from "@/lib/financeiro/cost-catalog";
 import type { CostSourceType, CostShare, CostAmount } from "@/lib/financeiro/cost-types";
@@ -21,7 +21,12 @@ export async function saveCostItemAction(input: { financialYearId: string; id?: 
 export async function adoptCostItemsAction(financialYearId: string) { return command("create", context => adoptStandardMunicipalCostItems(context.prisma, actor(context), financialYearId)); }
 export async function linkCostItemsAction(input: { objectIds: string[]; itemIds: string[] }) { return command("update", context => linkMunicipalCostItems(context.prisma, actor(context), input)); }
 export async function generateCostObjectsAction(input: { instrumentId: string; financialYearId: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) { return command("create", context => generateMunicipalCostObjectsFromLoa(context.prisma, actor(context), input)); }
-export async function createCostRuleAction(input: { financialYearId: string; budgetUnitId: string; title: string; sourceType: CostSourceType; selector: Record<string, string>; shares: CostShare[]; priority: number; effectiveFrom: string; effectiveUntil?: string }) { return command("create", context => createMunicipalCostRule(context.prisma, actor(context), { ...input, effectiveFrom: date(input.effectiveFrom), effectiveUntil: input.effectiveUntil ? date(input.effectiveUntil) : undefined })); }
+export async function createCostRuleAction(input: { financialYearId: string; budgetUnitId: string; title: string; sourceType: CostSourceType; selector: Record<string, string>; shares: CostShare[]; priority: number; effectiveFrom: string; effectiveUntil?: string }) { return command("create", async context => {
+  if (input.sourceType === "PAYROLL" && ["employeeId", "contractId", "payrollCode", "workLocation"].some(key => input.selector[key])) {
+    if (!canViewModule(context.user, "RH") || !await context.prisma.configuracaoModulo.count({ where: { codigo: "RH", ativo: true } })) throw new MunicipalCostError("Critérios individuais de folha exigem leitura autorizada do módulo RH ativo.");
+  }
+  return createMunicipalCostRule(context.prisma, actor(context), { ...input, effectiveFrom: date(input.effectiveFrom), effectiveUntil: input.effectiveUntil ? date(input.effectiveUntil) : undefined });
+}); }
 export async function allocateCostAction(input: { sourceId: string; date: string; reason: string; idempotencyKey: string; allocations: CostAmount[] }) { return command("create", context => allocateMunicipalCost(context.prisma, actor(context), { ...input, date: date(input.date) })); }
 export async function correctCostAction(input: { movementId: string; date: string; reason: string; idempotencyKey: string; kind: "REVERSAL" | "RESTORATION" }) { return command("update", context => correctMunicipalCost(context.prisma, actor(context), { ...input, date: date(input.date) })); }
 export async function copyAnnualCostRelationsAction(input: { sourceFinancialYearId: string; targetFinancialYearId: string }) { return command("create", context => copyAnnualMunicipalCostRelations(context.prisma, actor(context), input)); }

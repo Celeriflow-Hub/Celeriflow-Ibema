@@ -1802,6 +1802,10 @@ export async function updateBankAccountDetails(
 ) {
   return db.$transaction(async (tx) => {
     await lockBankAssignment(tx, id, input.budgetUnitId?.trim());
+    if (input.resourceSourceId !== undefined) {
+      const currentSource = await tx.bankAccount.findUnique({ where: { id }, select: { resourceSourceId: true } });
+      if (currentSource && currentSource.resourceSourceId !== (input.resourceSourceId.trim() || null) && await tx.treasuryMovement.count({ where: { bankAccountId: id } })) throw new FinanceError("A fonte da conta bancária não pode ser alterada após movimentações; preserve a origem dos saldos em uma nova conta.");
+    }
     if (input.budgetUnitId !== undefined) {
       const currentUnit = await tx.bankAccount.findUnique({ where: { id }, select: { budgetUnitId: true } });
       if (currentUnit && currentUnit.budgetUnitId !== (input.budgetUnitId.trim() || null) && await tx.treasuryMovement.count({ where: { bankAccountId: id } })) throw new FinanceError("A Unidade Gestora da conta bancária não pode ser alterada após movimentações; preserve o histórico em uma nova conta.");

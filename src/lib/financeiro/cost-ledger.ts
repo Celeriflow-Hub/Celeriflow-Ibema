@@ -9,6 +9,10 @@ type Tx = Prisma.TransactionClient;
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const required = (value: string, label: string) => { if (!value?.trim()) throw new MunicipalCostError(`${label} é obrigatório.`); return value.trim(); };
 const fingerprint = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+function sourceMemoryFingerprint(value: unknown): string {
+  const normalize = (entry: Prisma.JsonValue): Prisma.JsonValue => Array.isArray(entry) ? entry.map(normalize) : entry && typeof entry === "object" ? Object.fromEntries(Object.keys(entry).sort().map(key => [key, normalize(entry[key])])) : entry;
+  return fingerprint(normalize(JSON.parse(JSON.stringify(value)) as Prisma.JsonValue));
+}
 
 export async function assertCostScope(tx: Tx, actor: CostActor, financialYearId: string, budgetUnitId?: string | null, completeEntity = false) {
   const year = await tx.financialYear.findUnique({ where: { id: financialYearId } });
@@ -78,6 +82,30 @@ export async function municipalCostPosition(tx: Tx, sourceId: string) {
   return result._sum.amount ?? new Prisma.Decimal(0);
 }
 
+export async function municipalCostSourceCeiling(tx: Tx, source: { id: string; amount: Prisma.Decimal }) {
+  const reductions = await tx.municipalCostSourceReduction.aggregate({ where: { sourceId: source.id }, _sum: { amount: true } });
+  return source.amount.minus(reductions._sum.amount ?? 0);
+}
+
+export async function reduceMunicipalCostSource(tx: Tx, actor: CostActor, input: { sourceId: string; date: Date; amount: Prisma.Decimal; reason: string; idempotencyKey: string; evidence: unknown }) {
+  const origin = await tx.municipalCostSource.findUniqueOrThrow({ where: { id: input.sourceId } });
+  await assertCostScope(tx, actor, origin.financialYearId, origin.budgetUnitId);
+  await lockCostYear(tx, origin.financialYearId);
+  await tx.$queryRaw`SELECT id FROM "MunicipalCostSource" WHERE id=${origin.id} FOR UPDATE`;
+  const requestHash = fingerprint({ ...input, amount: input.amount.toString(), actorId: actor.usuarioId });
+  const replay = await tx.municipalCostSourceReduction.findUnique({ where: { idempotencyKey: required(input.idempotencyKey, "Chave da redução") } });
+  if (replay) { if ((replay.snapshot as Prisma.JsonObject).requestHash !== requestHash) throw new MunicipalCostError("Chave de redução já utilizada com outro conteúdo."); return replay; }
+  await costPeriod(tx, origin.financialYearId, input.date);
+  const source = await tx.municipalCostSource.findUniqueOrThrow({ where: { id: origin.id } });
+  const reason = required(input.reason, "Justificativa da redução");
+  if (source.status !== "ACTIVE" || input.date < source.expenseDate || !input.amount.isFinite() || input.amount.lte(0) || input.amount.decimalPlaces() > 2) throw new MunicipalCostError("Redução exige origem ativa, data posterior e valor positivo em centavos.");
+  const ceiling = (await municipalCostSourceCeiling(tx, source)).minus(input.amount);
+  if (ceiling.lt(await municipalCostPosition(tx, source.id))) throw new MunicipalCostError("Estorne as apropriações excedentes antes de devolver o material; o custo não pode superar o consumo remanescente.");
+  const reduction = await tx.municipalCostSourceReduction.create({ data: { sourceId: source.id, date: input.date, amount: input.amount, reason, actorId: actor.usuarioId, idempotencyKey: input.idempotencyKey.trim(), snapshot: json({ requestHash, evidence: input.evidence, remainingAmount: ceiling.toFixed(2) }) } });
+  await writeAuditEvent(tx, { actorUsuarioId: actor.usuarioId, eventType: auditEventTypes.administrativeMutation, targetType: "MUNICIPAL_COST_SOURCE_REDUCTION", targetId: reduction.id });
+  return reduction;
+}
+
 async function allocateInTransaction(tx: Tx, actor: CostActor, input: { sourceId: string; date: Date; reason: string; idempotencyKey: string; allocations: CostAmount[]; ruleId?: string }) {
   const origin = await tx.municipalCostSource.findUnique({ where: { id: input.sourceId } });
   if (!origin) throw new MunicipalCostError("Origem apropriável não encontrada.");
@@ -104,7 +132,7 @@ async function allocateInTransaction(tx: Tx, actor: CostActor, input: { sourceId
   if (!policy?.enabled || !Array.isArray(policy.sourceTypes) || !policy.sourceTypes.includes(source.sourceType)) throw new MunicipalCostError("A entidade não habilitou apropriação para esta origem na data.");
   await validateCostPairs(tx, actor, source.financialYearId, source.budgetUnitId, allocations);
   const total = allocations.reduce((sum, row) => sum.plus(row.amount), new Prisma.Decimal(0));
-  if ((await municipalCostPosition(tx, source.id)).plus(total).gt(source.amount)) throw new MunicipalCostError("A distribuição excede o saldo a apropriar.");
+  if ((await municipalCostPosition(tx, source.id)).plus(total).gt(await municipalCostSourceCeiling(tx, source))) throw new MunicipalCostError("A distribuição excede o saldo a apropriar.");
   const definitions = await tx.municipalCostObjectItem.findMany({ where: { OR: allocations.map(row => ({ objectId: row.objectId, itemId: row.itemId })) }, include: { object: true, item: true } });
   const ruleDefinition = input.ruleId ? await tx.municipalCostRule.findUniqueOrThrow({ where: { id: input.ruleId } }) : null;
   const movement = await tx.municipalCostMovement.create({ data: { sourceId: source.id, kind: "ALLOCATION", date: input.date, reason, actorId: actor.usuarioId, idempotencyKey: key, snapshot: json({ requestHash, policyId: policy.id, ruleId: input.ruleId ?? null, ruleDefinition, source: { ...source, amount: source.amount.toFixed(2) }, allocations, definitions }), allocations: { create: allocations.map(row => ({ ...row, amount: new Prisma.Decimal(row.amount) })) } } });
@@ -137,7 +165,7 @@ export async function correctMunicipalCost(db: PrismaClient, actor: CostActor, i
     if (input.kind === "RESTORATION") await validateCostPairs(tx, actor, source.financialYearId, source.budgetUnitId, original.allocations);
     const allocations = original.allocations.map(row => ({ objectId: row.objectId, itemId: row.itemId, amount: row.amount.negated() }));
     const balance = (await municipalCostPosition(tx, source.id)).plus(allocations.reduce((sum, row) => sum.plus(row.amount), new Prisma.Decimal(0)));
-    if (balance.lt(0) || balance.gt(source.amount)) throw new MunicipalCostError("A correção ultrapassa a posição apropriada ou o teto da origem.");
+    if (balance.lt(0) || balance.gt(await municipalCostSourceCeiling(tx, source))) throw new MunicipalCostError("A correção ultrapassa a posição apropriada ou o teto da origem.");
     const correction = await tx.municipalCostMovement.create({ data: { sourceId: source.id, kind: input.kind, date: input.date, reason, actorId: actor.usuarioId, idempotencyKey: key, referenceMovementId: original.id, snapshot: json({ requestHash, referenceMovementId: original.id, previousSnapshot: original.snapshot, allocations: allocations.map(row => ({ ...row, amount: row.amount.toFixed(2) })) }), allocations: { create: allocations } } });
     await writeAuditEvent(tx, { actorUsuarioId: actor.usuarioId, eventType: auditEventTypes.administrativeMutation, targetType: "MUNICIPAL_COST_MOVEMENT", targetId: correction.id });
     return correction;
@@ -158,6 +186,8 @@ export async function recordMunicipalCostSource(tx: Tx, actor: CostActor, input:
   const existing = await tx.municipalCostSource.findUnique({ where: { sourceType_sourceId: { sourceType: input.sourceType, sourceId: input.sourceId } } });
   if (existing) {
     if (existing.financialYearId !== input.financialYearId || existing.budgetUnitId !== input.budgetUnitId || existing.expenseDate.getTime() !== input.expenseDate.getTime() || !existing.amount.equals(input.amount)) throw new MunicipalCostError("A origem de custo já existe com dados divergentes.");
+    const frozen = existing.snapshot as Prisma.JsonObject;
+    if (sourceMemoryFingerprint({ dimensions: frozen.dimensions, evidence: frozen.evidence }) !== sourceMemoryFingerprint({ dimensions: input.dimensions, evidence: input.evidence })) throw new MunicipalCostError("A origem de custo já existe com dimensões ou evidências divergentes.");
     return existing;
   }
   const source = await tx.municipalCostSource.create({ data: { financialYearId: input.financialYearId, budgetUnitId: input.budgetUnitId, sourceType: input.sourceType, sourceId: input.sourceId, expenseDate: input.expenseDate, amount: input.amount, snapshot: json({ dimensions: input.dimensions, evidence: input.evidence, policyId: policy.id }) } });

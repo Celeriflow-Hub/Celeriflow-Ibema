@@ -106,6 +106,17 @@ export async function transitionInternalControlPlan(db: PrismaClient, actor: Act
       const checklists = await tx.internalControlEvent.findMany({ where: { planId, eventType: "CHECKLIST_PUBLISHED" } });
       const answers = await tx.internalControlEvent.findMany({ where: { planId, eventType: "CHECKLIST_ANSWERED" } });
       const answered = new Set(answers.map(answer => (answer.snapshot as Prisma.JsonObject).answerKey));
+      const audits = await tx.internalControlEvent.findMany({ where: { planId, eventType: { in: ["AUDIT_SCHEDULED", "AUDIT_CLOSED", "AUDIT_CANCELLED"] } } });
+      const endedAudits = new Set(audits.filter(event => event.eventType !== "AUDIT_SCHEDULED").map(event => (event.snapshot as Prisma.JsonObject).auditId));
+      if (audits.some(event => event.eventType === "AUDIT_SCHEDULED" && !endedAudits.has(event.id))) throw new C7OperationError("Encerre ou cancele fundamentadamente as auditorias pendentes antes de concluir o plano.");
+      const closedAudits = new Set(audits.filter(event => event.eventType === "AUDIT_CLOSED").map(event => (event.snapshot as Prisma.JsonObject).auditId));
+      for (const audit of audits.filter(event => event.eventType === "AUDIT_SCHEDULED" && closedAudits.has(event.id))) {
+        const snapshot = audit.snapshot as Prisma.JsonObject;
+        if (!Array.isArray(snapshot.groups)) throw new C7OperationError("Auditoria encerrada sem questionário conciliado.");
+        for (const group of snapshot.groups) if (group && typeof group === "object" && !Array.isArray(group) && Array.isArray(group.items)) {
+          for (const item of group.items) if (item && typeof item === "object" && !Array.isArray(item)) answered.add(`${snapshot.checklistId}:${item.number}`);
+        }
+      }
       for (const checklist of checklists) {
         const groups = (checklist.snapshot as Prisma.JsonObject).groups;
         if (!Array.isArray(groups)) throw new C7OperationError("Checklist sem grupos conciliados.");

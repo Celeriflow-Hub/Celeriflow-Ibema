@@ -4,8 +4,8 @@ import { Prisma } from "@prisma/client";
 import { createPlanningExecutionFixture } from "./helpers/planning-execution-fixture";
 import { createTaxAssessment, configureTaxFinancialMapping, generateTaxGuide, confirmTaxPayment, enrollAssessmentInActiveDebt } from "../src/lib/tributacao";
 import { reclassifyActiveDebtInTransaction } from "../src/lib/tributacao/accrual-accounting";
-import { returnDebtToOrigin } from "../src/lib/tributacao/s9-service";
-import { createParametrizedAssessment, reviseTaxAssessment, registerCreditEvent, getAssessmentAccount, processCollectionReturn, applyTaxCredit } from "../src/lib/tributacao/s2-service";
+import { issueCda, returnDebtToOrigin, writeOffDebt } from "../src/lib/tributacao/s9-service";
+import { createParametrizedAssessment, reviseTaxAssessment, registerCreditEvent, getAssessmentAccount, processCollectionReturn, applyTaxCredit, generatePartialTaxGuide } from "../src/lib/tributacao/s2-service";
 import { reverseTaxCreditMovement } from "../src/lib/tributacao/credit-reversal";
 import { getBankAccountBalance } from "../src/lib/financeiro";
 import { configureTaxAccountingProfile } from "../src/lib/tributacao/accounting-profile";
@@ -115,7 +115,7 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) {
       const initialPosition = await f.db.taxRegistryEntry.findFirstOrThrow({ where: { entityId: assessment.id, category: "ACCOUNTING_POSITION" } });
       assert.equal((initialPosition.data as Prisma.JsonObject).profileEntryId, firstProfile.id);
       for (const [id, type] of [["debt-right", "Ativo"], ["debt-loss", "VPD"]]) await f.db.accountingPlan.create({ data: { id, code: id, name: id, type } });
-      await f.db.planningCatalogVersion.create({ data: { id: "debt-catalog", year: 2026, label: "Contas de dívida ativa", sourceHash: "debt-fixture-v1", status: "DRAFT", createdById: "ana", entries: { create: ["debt-right", "debt-loss"].map(id => ({ kind: "ACCOUNT", code: id, name: id, canonicalId: id, degree: 7, attributes: { operational: true, pocOnly: false, postingAllowed: true, informationNature: "P", balanceNature: "D", effectiveFrom: "2026-01-01", effectiveUntil: "2026-12-31" } })) } } });
+      await f.db.planningCatalogVersion.create({ data: { id: "debt-catalog", year: 2026, label: "Contas de dívida ativa", normativeReference: "Matriz contábil da fixture isolada", sourceHash: "debt-fixture-v1", status: "DRAFT", createdById: "ana", entries: { create: ["debt-right", "debt-loss"].map(id => ({ kind: "ACCOUNT", code: id, name: id, canonicalId: id, degree: 7, attributes: { operational: true, pocOnly: false, postingAllowed: true, informationNature: "P", balanceNature: "D", effectiveFrom: "2026-01-01", effectiveUntil: "2026-12-31" } })) } } });
       await f.db.planningCatalogVersion.update({ where: { id: "debt-catalog" }, data: { status: "PUBLISHED" } });
       const debt = await enrollAssessmentInActiveDebt(f.db, f.actor, currentAssessment.id);
       const reclassify = () => f.db.$transaction(tx => reclassifyActiveDebtInTransaction(tx, f.actor, debt.id, new Date()));
@@ -133,6 +133,7 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) {
       assert.equal(await sum("right"), rightBefore.minus(1).toFixed(2));
       assert.equal(await sum("debt-right"), "1.00");
       assert.equal(await sum("vpa"), vpaBefore);
+      await issueCda(f.db, f.actor, debt.id);
       const debtGuide = await generateTaxGuide(f.db, f.actor, { assessmentId: currentAssessment.id, dueDate: new Date("2026-12-31") });
       await confirmTaxPayment(f.db, f.actor, { guideId: debtGuide.id, amountPaid: "1", paymentDate: new Date(), paymentMethod: "Manual", idempotencyKey: "debt-accrual-payment" });
       assert.equal(await sum("debt-right"), "0.00");
@@ -141,7 +142,8 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) {
       await reverseTaxPayment(f.db, f.actor, { paymentId: debtPayment.id, date: new Date(), reason: "Estorno da arrecadação de dívida reconhecida", idempotencyKey: "debt-accrual-reversal" });
       assert.equal(await sum("debt-right"), "1.00");
       await f.db.taxGuide.update({ where: { id: debtGuide.id }, data: { status: "Cancelada" } });
-      await registerCreditEvent(f.db, f.actor, { assessmentId: currentAssessment.id, eventType: "EXTINCAO_NAO_FINANCEIRA", amount: "1", reason: "Extinção fundamentada da dívida reconhecida", idempotencyKey: "debt-accrual-extinction" });
+      await assert.rejects(registerCreditEvent(f.db, f.actor, { assessmentId: currentAssessment.id, eventType: "EXTINCAO_NAO_FINANCEIRA", amount: "1", reason: "Extinção fundamentada da dívida reconhecida", idempotencyKey: "debt-accrual-extinction" }), /disponível para extinção/);
+      await writeOffDebt(f.db, f.actor, { debtId: debt.id, reason: "Extinção fundamentada da dívida reconhecida" });
       assert.equal(await sum("debt-right"), "0.00");
       assert.equal(await sum("debt-loss"), "1.00");
       assert.equal(await sum("vpa"), vpaBefore);
@@ -187,6 +189,7 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) {
       await f.db.taxGuide.update({ where: { id: returnedGuide.id }, data: { status: "Cancelada" } });
       await returnDebtToOrigin(f.db, f.actor, returnInput);
       assert.equal(await sum("debt-right"), "0.00");
+      await assert.rejects(generatePartialTaxGuide(f.db, f.actor, { assessmentId: priorCollectionAssessment.id, amount: "2", dueDate: new Date("2026-12-31") }), /disponível.*1.00/);
       const paymentBeforeReturn = await f.db.taxPayment.findUniqueOrThrow({ where: { idempotencyKey: "debt-payment-before-return" } });
       await reverseTaxPayment(f.db, f.actor, { paymentId: paymentBeforeReturn.id, date: new Date(), reason: "Estorno após devolução do direito residual à origem", idempotencyKey: "payment-after-return-reversal" });
       assert.equal(await sum("debt-right"), "0.00");

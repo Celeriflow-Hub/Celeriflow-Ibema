@@ -242,7 +242,10 @@ async function assessmentPosition(tx: Db, assessmentId: string) {
   const total = assessment.finalValueDecimal ?? assessment.originalValueDecimal;
   if (!total) throw new TaxError("O lançamento não possui valor decimal conciliado.");
   const compensated = await taxAssessmentCompensatedValue(tx, assessment.id);
-  const paid = assessment.guides.flatMap((guide) => guide.payments).reduce((sum, payment) => sum.plus(payment.amountPaidDecimal ?? 0), compensated);
+  // O cancelamento documental da guia não estorna recebimentos já confirmados.
+  const payments = await tx.taxPayment.findMany({ where: { guide: { assessmentId }, status: "Confirmado" }, select: { amountPaidDecimal: true } });
+  if (payments.some(payment => payment.amountPaidDecimal === null)) throw new TaxError("Os recebimentos do lançamento exigem conciliação Decimal.");
+  const paid = payments.reduce((sum, payment) => sum.plus(payment.amountPaidDecimal!), compensated);
   const openGuides = assessment.guides.reduce<Prisma.Decimal>((sum, guide) => {
     const paidOnGuide = guide.payments.reduce((value, payment) => value.plus(payment.amountPaidDecimal ?? 0), new Prisma.Decimal(0));
     const guideTotal = guide.totalValueDecimal ?? new Prisma.Decimal(guide.totalValue);

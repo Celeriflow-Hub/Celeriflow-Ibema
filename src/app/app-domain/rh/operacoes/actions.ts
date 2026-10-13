@@ -35,14 +35,15 @@ import { applyPocEmploymentLifecycle } from "@/lib/rh/employment-lifecycle";
 import { dispatchTravelAllowanceExpense } from "@/lib/rh/travel-finance";
 import { openTravelAllowanceProcess } from "@/lib/rh/travel-process";
 import { requestMunicipalAdvance, submitAdvanceReport, reviewAdvanceReport, reopenAdvanceReport, receivePriorYearAdvanceRefund } from "@/lib/rh/municipal-advances";
+import { receiveCurrentYearAdvanceRefund, reverseCurrentYearAdvanceRefund } from "@/lib/financeiro/allowance-expense-refunds";
 
 export async function executeWorkforceOperation(command: string, values: Record<string, string>) {
-  if (["adiantamento-solicitar", "adiantamento-prestar", "adiantamento-revisar", "adiantamento-reabrir", "adiantamento-restituir-anterior"].includes(command)) {
+  if (["adiantamento-solicitar", "adiantamento-prestar", "adiantamento-revisar", "adiantamento-reabrir", "adiantamento-restituir-anterior", "adiantamento-restituir-corrente", "adiantamento-estornar-restituicao-corrente"].includes(command)) {
     try {
       const context = await getTenantContextForModuleOperation("RH", "update");
-      const result = command === "adiantamento-solicitar" ? await requestMunicipalAdvance(context, values) : command === "adiantamento-prestar" ? await submitAdvanceReport(context, values) : command === "adiantamento-reabrir" ? await reopenAdvanceReport(context, values) : command === "adiantamento-restituir-anterior" ? await receivePriorYearAdvanceRefund(context, values) : await reviewAdvanceReport(context, values);
+      const result = command === "adiantamento-solicitar" ? await requestMunicipalAdvance(context, values) : command === "adiantamento-prestar" ? await submitAdvanceReport(context, values) : command === "adiantamento-reabrir" ? await reopenAdvanceReport(context, values) : command === "adiantamento-restituir-anterior" ? await receivePriorYearAdvanceRefund(context, values) : command === "adiantamento-restituir-corrente" ? await receiveCurrentYearAdvanceRefund(context, values) : command === "adiantamento-estornar-restituicao-corrente" ? await reverseCurrentYearAdvanceRefund(context, values) : await reviewAdvanceReport(context, values);
       revalidatePath("/rh/adiantamentos"); revalidatePath("/financeiro/contabilidade");
-      return { id: result.id, message: command === "adiantamento-restituir-anterior" ? "Restituição recebida. Referência financeira para a prestação:" : "Operação de adiantamento registrada.", error: "" };
+      return { id: command === "adiantamento-restituir-corrente" ? `DESPESA:${result.id}` : result.id, message: ["adiantamento-restituir-anterior", "adiantamento-restituir-corrente"].includes(command) ? "Restituição recebida. Referência financeira para a prestação:" : "Operação de adiantamento registrada.", error: "" };
     } catch (error) { return { error: error instanceof Error ? error.message : "Falha na operação de adiantamento." }; }
   }
   if (command === "diaria-processo") {

@@ -2,6 +2,12 @@
 
 ## Situação das fases
 
+**Revisão de 13/10/2026:** [Tributação, Financeiro e Controle Interno](REVISAO_TRIBUTACAO_FINANCEIRO_CONTROLE_2026_10_13.md). Checklists numerados/categorizados, pareceres/providências, histórico de decisões e diagnóstico de fonte bancária implementados; guarda do saldo pago em guia cancelada corrigida. Rodadas PostgreSQL do bloco aprovadas e novo build completo aprovado. P1–P4 e os checklists integrais continuam abertos; o documento distingue desenvolvimento pendente de configuração municipal.
+
+**Continuação de adiantamentos:** regularização de prestação aprovada implementada com revisão independente, inversão de controles, preservação da aprovação e abertura de novo ciclo antes do estorno de restituição. Testes positivos 2025→2026 dos dois entes e regressões de diárias aprovados (4/4); regressão compartilhada após correção do tipo enum da fixture aprovada (27/27), com novo build completo aprovado. Detalhes e limites no documento de revisão; restituição do exercício corrente permanece pendente.
+
+**Devolução do exercício corrente de adiantamentos:** pendência específica implementada por recomposição nativa parcial de empenho/liquidação/pagamento/cotas e caixa, com documentos/partidas e estorno reversível. Originais preservados; correções têm sua própria data e referência `DESPESA:ID` para a prestação. Testes integrados 33/33 e focais ampliados 6/6 aprovados nos dois entes; novo build completo aprovado. Restituições equivalentes nas diárias e demais pendências P1–P4 continuam abertas; detalhes no documento de revisão.
+
 ### Continuação — conciliação municipal N:N e parcial
 
 - A conciliação deixou de exigir banco virtual na abertura/listagem/actions; a interface seleciona contas municipais autorizadas por UG. A sessão passa a guardar o ID da conta, preservando banco/agência/número anteriores. Legados são vinculados na migration somente quando há uma conta física sem ambiguidade.

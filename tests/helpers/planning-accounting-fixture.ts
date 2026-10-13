@@ -23,7 +23,7 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
     const models = ["GovernmentEntity", "BudgetUnit", "Secretariat", "MultiYearPlan", "BudgetGuideline", "AnnualBudgetLaw", "AnnualBudgetRevenueForecast", "AnnualBudgetExpenseFixation", "BudgetGuidelinePriority", "BudgetGuidelineRisk", "BudgetAppropriation", "CreditRequest", "CreditRequestItem", "BudgetReservation", "BudgetMovement", "ProgramPPA", "ObjectivePPA", "IndicatorPPA", "ActionPPA", "GoalPPA", "FinancialYear", "ResourceSource", "RevenueNature", "ExpenseNature", "FinancialAuditLog", "Document", "DocumentVersion", "DocumentClass", "ConfiguracaoParametroInstancia", "AuditEvent", "HealthClinicalDocument", "HealthLabReport", "SstCertificateDocument", "Employee", "Usuario", "CamVereador", "Person", "CamGabinete", "AccountingPlan", "AccountingEntry", "AccountingTransaction", "AccountingEventCatalog", "AccountingPostingRule", "MonthlyAccountingClose", "Tax", "CamProposicao", "CamLei"];
     models.push("Revenue", "Payment", "Commitment", "CommitmentMovement", "Settlement", "BankStatementImport", "BankStatementItem", "BankAccount", "BankReconciliation", "TreasuryMovement", "MonthlyAccountingCloseEvent", "AnnualAccountingClose", "PayableCarryForward", "PayableCarryForwardEvent");
     omitted.Revenue = ["budgetUnitId"];
-    models.push("InternalControlPlan", "InternalControlFinding");
+    models.push("InternalControlPlan", "InternalControlFinding", "InternalControlEvent", "HrIntegrationEvent");
     omitted.InternalControlPlan = ["budgetUnitId"];
     const enums = new Set<string>();
     for (const name of models) {
@@ -40,7 +40,8 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
         if (typeof item.default === "string") fallback = ` DEFAULT '${item.default.replaceAll("'", "''")}'`;
         else if (typeof item.default === "boolean" || typeof item.default === "number") fallback = ` DEFAULT ${item.default}`;
         if (item.type === "DateTime" && item.isRequired) fallback = " DEFAULT CURRENT_TIMESTAMP";
-        return `"${item.name}" ${(types[item.type] ?? "TEXT") + (item.isList ? "[]" : "")}${item.name === "id" ? " PRIMARY KEY" : ""}${fallback}`;
+        const sqlType = item.kind === "enum" ? `"${item.type}"` : types[item.type] ?? "TEXT";
+        return `"${item.name}" ${sqlType}${item.isList ? "[]" : ""}${item.name === "id" ? " PRIMARY KEY" : ""}${fallback}`;
       });
       await pg.exec(`CREATE TABLE "${name}" (${columns.join(",")})`);
     }

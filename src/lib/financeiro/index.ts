@@ -6,6 +6,7 @@ import { assertPlanningPeriodAvailability, assertPlanningReservationYear, getPla
 import { lockPlanningRevenueBudget, recordPlanningRevenueCollection, recordPlanningRevenueReversal, recordPlanningRevenueRedistribution } from "@/lib/planejamento/revenue-execution-bridge";
 import { releasePayrollProvisionsAtSettlement, reversePayrollProvisionSettlement, recordPayrollProvisionPayment, reversePayrollProvisionPayment } from "@/lib/rh/provision-accounting";
 import { reverseAdvancePaymentControl, reverseAdvanceCommitmentControl, assertAdvanceRefundReversalAllowed, recordAdvanceRefundReversal } from "@/lib/rh/municipal-advances";
+import { assertCurrentRefundPaymentMutationAllowed, settledCurrentRefundCorrections } from "./allowance-expense-refunds";
 import { taxCollectionReceivableAccount } from "@/lib/tributacao/accrual-accounting";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -856,7 +857,8 @@ export async function cancelCommitmentInTransaction(tx: Prisma.TransactionClient
     const year = await assertFinancialYearOpen(tx, commitment.appropriation.financialYearId, date);
     await assertAccountingPeriodOpen(tx, year.id, date);
     if (commitment.status === "Anulado") throw new FinanceError("O empenho já está anulado.");
-    if (commitment.settlements.length || commitment.payments.length) throw new FinanceError("Empenhos com liquidações ou pagamentos ativos não podem ser anulados integralmente.");
+    const settledCorrections = await settledCurrentRefundCorrections(tx, commitment.id);
+    if (commitment.settlements.some(row => !settledCorrections.settlements.has(row.id)) || commitment.payments.some(row => !settledCorrections.payments.has(row.id))) throw new FinanceError("Empenhos com liquidações ou pagamentos ativos não podem ser anulados integralmente.");
     const effectiveValue = commitmentValue(commitment.valueDecimal, commitment.movements);
     const canceledAt = date;
     if (effectiveValue.greaterThan(0)) {
@@ -1086,6 +1088,7 @@ export async function cancelSettlement(db: PrismaClient, actor: FinanceActor, se
 }
 
 export async function cancelSettlementInTransaction(tx: Prisma.TransactionClient, actor: FinanceActor, settlementId: string): Promise<Settlement> {
+    await assertCurrentRefundPaymentMutationAllowed(tx, settlementId, "SETTLEMENT");
      const origin = await tx.settlement.findUnique({ where: { id: settlementId }, select: { commitmentId: true } });
      if (!origin) throw new FinanceError("Liquidação não encontrada.");
      await lockCommitment(tx, origin.commitmentId);
@@ -1299,6 +1302,7 @@ export async function reversePayment(
   if (!justification.trim()) throw new FinanceError("A justificativa de estorno do pagamento é obrigatória.");
   return db.$transaction(async (tx) => {
     await lockPayment(tx, paymentId);
+    await assertCurrentRefundPaymentMutationAllowed(tx, paymentId, "PAYMENT");
     await lockPaymentWithholdings(tx, paymentId);
     const payment = await tx.payment.findUnique({
       include: {

@@ -7656,6 +7656,7 @@ model InternalControlPlan {
   updatedAt DateTime  @updatedAt
 
   findings InternalControlFinding[]
+  events   InternalControlEvent[]
 
   @@index([status, dueAt])
   @@index([budgetUnitId, status, dueAt])
@@ -7677,6 +7678,22 @@ model InternalControlFinding {
 
   @@index([planId, status])
   @@index([responsibleId, dueAt])
+}
+
+// Histórico aditivo das decisões de controle; não substitui fatos dos módulos fiscalizados.
+model InternalControlEvent {
+  id          String @id @default(cuid())
+  planId      String
+  plan        InternalControlPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  findingId   String?
+  eventType   String
+  actorId     String
+  reason      String
+  snapshot    Json
+  createdAt   DateTime @default(now())
+
+  @@index([planId, createdAt])
+  @@index([findingId, createdAt])
 }
 
 model FleetOperation {

@@ -163,8 +163,17 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) test(`P4 ${jur
     assert.equal((await reviewAdvanceReport(reviewer, approval)).id, reviewed.id);
     assert.equal((await f.db.hrPortalRequest.findUniqueOrThrow({ where: { id: advance.id } })).status, "PRESTACAO_APROVADA");
     await assert.rejects(reviewAdvanceReport(reviewer, { ...approval, decision: "IMPUGNAR" }), /outra decisão/);
+    const approvedReopen = { requestId: advance.id, requestKey: "approved-correction", date: "2026-09-04", documentId: "documento-fiscal", reason: "Correção fundamentada da prestação previamente aprovada" };
+    await assert.rejects(reopenAdvanceReport(context, approvedReopen), /independente/);
+    await assert.rejects(reopenAdvanceReport(reviewer, { ...approvedReopen, date: "2026-09-02" }), /posterior/);
+    const approvalSnapshot = reviewed.payload;
+    const correctedApproval = await reopenAdvanceReport(reviewer, approvedReopen);
+    assert.equal((correctedApproval.payload as { previousDecision: string }).previousDecision, "APROVAR");
+    assert.deepEqual((await f.db.hrIntegrationEvent.findUniqueOrThrow({ where: { id: reviewed.id } })).payload, approvalSnapshot);
+    await submitAdvanceReport(context, { ...advanceReport, date: "2026-09-05" });
+    await reviewAdvanceReport(reviewer, { ...approval, date: "2026-09-06" });
     await reversePayment(f.db, f.financeReviewer, advancePayment.id, "Estorno financeiro posterior da concessão");
-    await assert.rejects(reviewAdvanceReport(reviewer, approval), /estornado/);
+    await assert.rejects(reviewAdvanceReport(reviewer, { ...approval, date: "2026-09-06" }), /estornado/);
     assert.equal((await f.db.hrPortalRequest.findUniqueOrThrow({ where: { id: advance.id } })).status, "REGULARIZACAO_PENDENTE");
     assert.equal((await f.db.hrIntegrationEvent.findUniqueOrThrow({ where: { sourceKey: `ADIANTAMENTO:REVISAO:${advance.id}` } })).status, "ESTORNADA");
     assert.equal((await f.db.hrIntegrationEvent.findUniqueOrThrow({ where: { sourceKey: `ADIANTAMENTO:PRESTACAO:${advance.id}` } })).status, "ESTORNADA");

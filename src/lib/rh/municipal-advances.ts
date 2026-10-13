@@ -20,20 +20,38 @@ const cycleKey = (base: string, cycle: number) => cycle ? `${base}:CICLO:${cycle
 
 const reportInputSchema = z.object({ requestId: z.string().min(1), date: z.iso.date(), documentId: z.string().min(1), activities: z.string().trim().min(10).max(4000), spentAmount: money, returnedAmount: money.default("0.00"), restitutionRevenueId: z.string().trim().optional().transform(value => value || undefined) }).strict();
 
+async function correctiveAdvancePaymentIds(tx: Prisma.TransactionClient, requestId: string) {
+  const events = await tx.hrIntegrationEvent.findMany({ where: { eventType: { in: ["ADIANTAMENTO_RESTITUICAO_DESPESA", "ADIANTAMENTO_RESTITUICAO_DESPESA_ESTORNADA"] }, OR: [{ payload: { path: ["input", "requestId"], equals: requestId } }, { payload: { path: ["requestId"], equals: requestId } }] }, select: { payload: true } });
+  return events.map(event => z.object({ correctionPaymentId: z.string() }).parse(event.payload).correctionPaymentId);
+}
+
 async function assertAdvanceRestitution(tx: Prisma.TransactionClient, request: HrPortalRequest, input: z.infer<typeof reportInputSchema>, payments: { date: Date; commitment: { appropriation: { financialYearId: string } } }[]) {
   const memory = memorySchema.parse(request.payload);
   const returned = new Prisma.Decimal(input.returnedAmount);
   if (!new Prisma.Decimal(input.spentAmount).plus(returned).eq(memory.assessment.amountBRL)) throw new Error("Despesas comprovadas e restituição devem conciliar integralmente o valor concedido.");
+  const nativeRevenues = await tx.revenue.findMany({ where: { sourceModule: "RH", sourceType: "ADVANCE_ALLOWANCE_REFUND", sourceId: request.id, stage: "ARRECADADA", reversedAt: null }, select: { valueDecimal: true } });
+  const nativeExpenses = await tx.hrIntegrationEvent.findMany({ where: { eventType: "ADIANTAMENTO_RESTITUICAO_DESPESA", status: "CONCLUIDA", payload: { path: ["input", "requestId"], equals: request.id } }, select: { payload: true } });
+  const actualReturned = nativeRevenues.reduce((sum, revenue) => { if (!revenue.valueDecimal) throw new Error("Restituição sem Decimal conciliado."); return sum.plus(revenue.valueDecimal); }, new Prisma.Decimal(0)).plus(nativeExpenses.reduce((sum, event) => sum.plus(z.object({ input: z.object({ amount: money }) }).parse(event.payload).input.amount), new Prisma.Decimal(0)));
   if (returned.isZero()) {
     if (input.restitutionRevenueId) throw new Error("Prestação sem devolução não deve referenciar receita de restituição.");
+    if (!actualReturned.isZero()) throw new Error("Restituição não conciliada: inclua todas as devoluções financeiras vigentes.");
     return;
   }
   if (!input.restitutionRevenueId) throw new Error("Devolução exige referência da restituição financeira nativa.");
+  if (!actualReturned.eq(returned)) throw new Error("Restituição não conciliada: inclua todas as devoluções financeiras vigentes.");
   const ids = input.restitutionRevenueId.split(",").map(id => id.trim());
   if (ids.some(id => !id) || new Set(ids).size !== ids.length) throw new Error("Referências de restituição vazias ou repetidas.");
   const years = await tx.financialYear.findMany({ where: { id: { in: payments.map(payment => payment.commitment.appropriation.financialYearId) } }, select: { id: true, year: true, governmentEntityId: true } });
   let received = new Prisma.Decimal(0);
   for (const id of [...ids].sort()) {
+    if (id.startsWith("DESPESA:")) {
+      const event = await tx.hrIntegrationEvent.findUniqueOrThrow({ where: { id: id.slice(8) } });
+      const position = z.object({ input: z.object({ requestId: z.string(), date: z.iso.date(), amount: money }), budgetUnitId: z.string(), governmentEntityId: z.string(), financialYearId: z.string(), treasuryMovementId: z.string() }).parse(event.payload);
+      const movement = await tx.treasuryMovement.findUniqueOrThrow({ where: { id: position.treasuryMovementId } });
+      if (event.eventType !== "ADIANTAMENTO_RESTITUICAO_DESPESA" || event.status !== "CONCLUIDA" || position.input.requestId !== request.id || position.budgetUnitId !== memory.input.budgetUnitId || position.input.date > input.date || !years.some(year => year.id === position.financialYearId && year.governmentEntityId === position.governmentEntityId) || movement.direction !== "Entrada" || movement.status !== "Confirmado" || !movement.valueDecimal.eq(position.input.amount)) throw new Error("Restituição de despesa não conciliada com prestação, exercício, UG ou caixa.");
+      received = received.plus(position.input.amount);
+      continue;
+    }
     await tx.$queryRaw`SELECT id FROM "Revenue" WHERE id=${id} FOR UPDATE`;
     const revenue = await tx.revenue.findUniqueOrThrow({ where: { id }, include: { treasuryMovement: true, financialYear: true } });
     const revenueYear = revenue.financialYear;
@@ -73,7 +91,7 @@ export async function receivePriorYearAdvanceRefund(context: AppContext, raw: un
     if (!bank.isActive || bank.budgetUnitId !== memory.input.budgetUnitId) throw new Error("Conta da restituição deve pertencer à UG original do adiantamento.");
     const document = await tx.document.findUniqueOrThrow({ where: { id: input.documentId } });
     if (document.status !== "Válido") throw new Error("Restituição exige comprovante GED válido.");
-    const payments = await tx.payment.findMany({ where: { status: "Paga", commitment: { reservation: { expense: { sourceModule: "RH", sourceType: "ADVANCE_ALLOWANCE", sourceId: request.id } } } }, include: { commitment: { include: { appropriation: { include: { financialYear: true } } } } }, orderBy: { id: "asc" } });
+    const payments = await tx.payment.findMany({ where: { id: { notIn: await correctiveAdvancePaymentIds(tx, request.id) }, status: "Paga", commitment: { reservation: { expense: { sourceModule: "RH", sourceType: "ADVANCE_ALLOWANCE", sourceId: request.id } } } }, include: { commitment: { include: { appropriation: { include: { financialYear: true } } } } }, orderBy: { id: "asc" } });
     let paid = new Prisma.Decimal(0);
     for (const payment of payments) {
       await tx.$queryRaw`SELECT id FROM "Payment" WHERE id=${payment.id} FOR UPDATE`;
@@ -92,7 +110,8 @@ export async function receivePriorYearAdvanceRefund(context: AppContext, raw: un
       if (!priorRevenue.reversedAt) throw new Error("Comprovante já utilizado nesta restituição; repita a chave original para recuperar o mesmo recebimento.");
     }
     const refunds = await tx.revenue.findMany({ where: { sourceModule: "RH", sourceType: "ADVANCE_ALLOWANCE_REFUND", sourceId: request.id, stage: "ARRECADADA", reversedAt: null }, select: { valueDecimal: true } });
-    const refunded = refunds.reduce((sum, revenue) => { if (!revenue.valueDecimal) throw new Error("Restituição histórica sem Decimal conciliado."); return sum.plus(revenue.valueDecimal); }, new Prisma.Decimal(0));
+    const expenseRefunds = await tx.hrIntegrationEvent.findMany({ where: { eventType: "ADIANTAMENTO_RESTITUICAO_DESPESA", status: "CONCLUIDA", payload: { path: ["input", "requestId"], equals: request.id } }, select: { payload: true } });
+    const refunded = refunds.reduce((sum, revenue) => { if (!revenue.valueDecimal) throw new Error("Restituição histórica sem Decimal conciliado."); return sum.plus(revenue.valueDecimal); }, new Prisma.Decimal(0)).plus(expenseRefunds.reduce((sum, event) => sum.plus(z.object({ input: z.object({ amount: money }) }).parse(event.payload).input.amount), new Prisma.Decimal(0)));
     if (refunded.plus(amount).gt(paid)) throw new Error("Restituições parciais acumuladas excedem o valor pago do adiantamento.");
     const revenue = await recordConfirmedRevenue(tx, actorFor(context), { date, value: amount, bankAccountId: bank.id, revenueNatureId: input.revenueNatureId, resourceSourceId: input.resourceSourceId, history: input.reason, sourceModule: "RH", sourceType: "ADVANCE_ALLOWANCE_REFUND", sourceId: request.id, eventType: "ADVANCE_PRIOR_YEAR_REFUNDED", idempotencyKey: `${key}:REVENUE` });
     const event = await enqueueHrIntegration(tx, { sourceKey: key, domain: "FINANCEIRO", environment: "PRODUCAO", eventType: "ADIANTAMENTO_RESTITUICAO_RECEBIDA", payload: { input, requestId: request.id, actorId: context.user.id, revenueId: revenue.id, documentId: input.documentId, paymentIds: payments.map(payment => payment.id), governmentEntityId: binding.governmentEntityId, budgetUnitId: bank.budgetUnitId, returnedTotal: refunded.plus(amount).toFixed(2) } });
@@ -194,7 +213,7 @@ export async function submitAdvanceReport(context: AppContext, raw: unknown) {
     if (request.kind !== "ADIANTAMENTO" || !["DEFERIDA", "PRESTACAO_EM_ANALISE", "PRESTACAO_APROVADA", "PRESTACAO_IMPUGNADA"].includes(request.status) || input.date < memory.input.date) throw new Error("Prestação exige adiantamento concedido e data compatível com a origem.");
     const document = await tx.document.findUniqueOrThrow({ where: { id: input.documentId } });
     if (document.status !== "Válido") throw new Error("Prestação exige comprovantes GED válidos.");
-    const payments = await tx.payment.findMany({ where: { status: "Paga", commitment: { reservation: { expense: { sourceModule: "RH", sourceType: "ADVANCE_ALLOWANCE", sourceId: request.id } } } }, include: { commitment: { include: { appropriation: true } } }, orderBy: { id: "asc" } });
+    const payments = await tx.payment.findMany({ where: { id: { notIn: await correctiveAdvancePaymentIds(tx, request.id) }, status: "Paga", commitment: { reservation: { expense: { sourceModule: "RH", sourceType: "ADVANCE_ALLOWANCE", sourceId: request.id } } } }, include: { commitment: { include: { appropriation: true } } }, orderBy: { id: "asc" } });
     for (const payment of payments) {
       await tx.$queryRaw`SELECT id FROM "Payment" WHERE id=${payment.id} FOR UPDATE`;
       const current = await tx.payment.findUniqueOrThrow({ where: { id: payment.id } });
@@ -325,29 +344,32 @@ export async function reopenAdvanceReport(context: AppContext, raw: unknown) {
       if (JSON.stringify(stored.input) !== JSON.stringify(input)) throw new Error("Reabertura já registrada com outros dados.");
       return previous;
     }
-    if (request.kind !== "ADIANTAMENTO" || request.status !== "PRESTACAO_IMPUGNADA") throw new Error("Reapresentação exige prestação impugnada.");
+    if (request.kind !== "ADIANTAMENTO" || !["PRESTACAO_IMPUGNADA", "PRESTACAO_APROVADA"].includes(request.status)) throw new Error("Reapresentação exige prestação aprovada ou impugnada.");
     const current = await advanceCycle(tx, request.id);
     const reviewKey = cycleKey(`ADIANTAMENTO:REVISAO:${request.id}`, current.cycle);
     const reportKey = cycleKey(`ADIANTAMENTO:PRESTACAO:${request.id}`, current.cycle);
     const report = await tx.hrIntegrationEvent.findUniqueOrThrow({ where: { sourceKey: reportKey } });
     const review = await tx.hrIntegrationEvent.findUniqueOrThrow({ where: { sourceKey: reviewKey } });
     const presenterId = z.object({ actorId: z.string() }).parse(report.payload).actorId;
-    const decision = z.object({ input: z.object({ date: z.iso.date(), decision: z.literal("IMPUGNAR") }) }).parse(review.payload);
-    if (request.actorId === context.user.id || presenterId === context.user.id || input.date < decision.input.date || report.status !== "CONCLUIDA" || review.status !== "CONCLUIDA") throw new Error("Reabertura exige revisão independente e competência posterior ou igual à impugnação.");
+    const decision = z.object({ input: z.object({ date: z.iso.date(), decision: z.enum(["APROVAR", "IMPUGNAR"]) }) }).parse(review.payload);
+    const expectedStatus = decision.input.decision === "APROVAR" ? "PRESTACAO_APROVADA" : "PRESTACAO_IMPUGNADA";
+    if (request.status !== expectedStatus || request.actorId === context.user.id || presenterId === context.user.id || input.date < decision.input.date || report.status !== "CONCLUIDA" || review.status !== "CONCLUIDA") throw new Error("Reabertura exige revisão independente, decisão conciliada e competência posterior ou igual à revisão.");
     const document = await tx.document.findUniqueOrThrow({ where: { id: input.documentId } });
     if (document.status !== "Válido") throw new Error("Reabertura exige parecer GED válido.");
     const memory = memorySchema.parse(request.payload);
     const binding = await tx.planningEntityUnit.findUniqueOrThrow({ where: { budgetUnitId: memory.input.budgetUnitId } });
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`RH:ADVANCE:HOLDER:${binding.governmentEntityId}:${memory.contract.employee.personId}`}))`;
     const date = new Date(`${input.date}T00:00:00Z`);
     const year = await tx.financialYear.findFirstOrThrow({ where: { governmentEntityId: binding.governmentEntityId, year: date.getUTCFullYear() } });
     for (const event of [review, report]) {
       const id = z.object({ transactionId: z.string() }).parse(event.payload).transactionId;
       const original = await tx.accountingTransaction.findUniqueOrThrow({ where: { id }, include: { entries: true } });
+      if (original.budgetUnitId !== memory.input.budgetUnitId || original.governmentEntityId !== binding.governmentEntityId || original.sourceId !== request.id || original.date > date || !original.entries.length || original.entries.some(entry => !entry.valueDecimal || entry.valueDecimal.lte(0))) throw new Error("Partida de prestação/revisão sem origem, escopo, data ou valores conciliados.");
       await postAccountingTransactionInTransaction(tx, actorFor(context), { financialYearId: year.id, governmentEntityId: binding.governmentEntityId, budgetUnitId: memory.input.budgetUnitId, date, history: `Reabertura de prestação: ${input.reason}`, sourceModule: "RH", sourceType: "ADVANCE_CONTROL_REVERSAL", sourceId: request.id, eventType: "ADVANCE_REPORT_REOPENED", idempotencyKey: `${key}:${event.id}`, reversalOfId: original.id, lines: original.entries.map(entry => ({ accountId: entry.accountId, type: entry.type === "Débito" ? "Crédito" : "Débito", value: entry.valueDecimal! })) });
       await tx.hrIntegrationEvent.update({ where: { id: event.id }, data: { status: "ESTORNADA" } });
     }
     const result = { cycle: current.cycle + 1, reopenedDate: input.date };
-    const event = await enqueueHrIntegration(tx, { sourceKey: key, domain: "FINANCEIRO", environment: "PRODUCAO", eventType: "ADIANTAMENTO_PRESTACAO_REABERTA", payload: { input, presenterId, actorId: context.user.id, previousReportId: report.id, previousReviewId: review.id, previousCycle: current.cycle } });
+    const event = await enqueueHrIntegration(tx, { sourceKey: key, domain: "FINANCEIRO", environment: "PRODUCAO", eventType: "ADIANTAMENTO_PRESTACAO_REABERTA", payload: { input, presenterId, actorId: context.user.id, previousReportId: report.id, previousReviewId: review.id, previousCycle: current.cycle, previousDecision: decision.input.decision, previousRequestStatus: request.status } });
     await tx.hrIntegrationEvent.update({ where: { id: event.id }, data: { status: "CONCLUIDA", result } });
     const cycleSourceKey = `ADIANTAMENTO:CICLO:${request.id}`;
     await enqueueHrIntegration(tx, { sourceKey: cycleSourceKey, domain: "FINANCEIRO", environment: "PRODUCAO", eventType: "ADIANTAMENTO_CICLO_ATUAL", payload: { requestId: request.id } });

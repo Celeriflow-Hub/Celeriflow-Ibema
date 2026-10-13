@@ -4,7 +4,7 @@ import { assertCemeteryTransferAllowed, assertLotCanReceiveGrave, cemeteryFeeAmo
 import { confirmTaxPaymentInTransaction, createTaxAssessment, createTaxAssessmentInTransaction, enrollAssessmentInActiveDebt, generateTaxGuide, generateTaxGuideInTransaction } from "./index";
 import { activeDebtAccessFilter, resolveTaxAssessmentScope, resolveTaxFinancialYear, taxAssessmentAccessFilter, taxAssessmentCompensatedValue, taxScopeSnapshot } from "./scope";
 import { assertAccountingPeriodOpen } from "@/lib/financeiro";
-import { postTaxAssessmentAdjustment } from "./accrual-accounting";
+import { postTaxAssessmentAdjustment, reclassifyActiveDebtInTransaction, returnActiveDebtReceivableInTransaction } from "./accrual-accounting";
 import { MUNICIPALITY_LABEL, MUNICIPALITY_NAME } from "@/lib/municipality-identity";
 import { lockWorkflowRows, validateBurialIdentity, validateTransferPair, validateWorkflowDate, workflowRequest } from "../cemeteries/workflow";
 import { recordCemeteryFeeEvent, chargeCemeteryFeeEvent } from "../cemeteries/fees-service";
@@ -197,19 +197,26 @@ function cdaSnapshot(debt: { id: string; originDebtType: string; year: number; o
 // Emissão da CDA com numeração sequencial e primeira versão (TRI-347/349).
 export async function issueCda(db: PrismaClient, actor: Actor, debtId: string) {
   return db.$transaction(async (tx) => {
+    const origin = await tx.activeDebt.findUniqueOrThrow({ where: { id: debtId }, select: { assessmentId: true } });
+    if (origin.assessmentId) await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${origin.assessmentId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "ActiveDebt" WHERE id = ${debtId} FOR UPDATE`;
     await assertDebtAccess(tx, actor, debtId);
     const debt = await tx.activeDebt.findUnique({ where: { id: debtId }, include: { taxpayer: { include: { person: true, company: true } } } });
     if (!debt) throw new TributarioS9Error("Dívida não encontrada.");
     if (!["VALIDADA", "PENDENTE_DE_VALIDACAO", "INSCRITA"].includes(debt.status)) throw new TributarioS9Error("Dívida fora do estágio de emissão de CDA.");
-    if (debt.cdaNumber) return debt;
+    if (debt.cdaNumber) {
+      await reclassifyActiveDebtInTransaction(tx, fullActor(actor), debt.id, new Date());
+      return tx.activeDebt.findUniqueOrThrow({ where: { id: debt.id } });
+    }
     const sequence = await nextSequence(tx, debt.year, "CDA");
     const cdaNumber = formatCdaNumber(debt.year, sequence);
     const taxpayer = { name: taxpayerName(debt.taxpayer), document: taxpayerDocument(debt.taxpayer) };
     const updated = await tx.activeDebt.update({ where: { id: debt.id }, data: { cdaNumber, status: "INSCRITA" } });
     await tx.taxCdaVersion.create({ data: { activeDebtId: debt.id, versionNumber: 1, cdaNumber, contentSnapshot: cdaSnapshot(debt, taxpayer, cdaNumber, 1) } });
+    await reclassifyActiveDebtInTransaction(tx, fullActor(actor), debt.id, new Date());
     await debtEvent(tx, actor, debt.id, "CDA_EMITIDA", `CDA ${cdaNumber} emitida (versão 1).`, { cdaNumber });
     return updated;
-  });
+  }, { timeout: 60000 });
 }
 
 export async function annotateCda(db: PrismaClient, actor: Actor, input: { debtId: string; annotation: string }) {
@@ -329,10 +336,24 @@ export async function resumeDebt(db: PrismaClient, actor: Actor, debtId: string)
 export async function returnDebtToOrigin(db: PrismaClient, actor: Actor, input: { debtId: string; reason: string }) {
   if (!input.reason.trim()) throw new TributarioS9Error("Informe o motivo da devolução.");
   return db.$transaction(async (tx) => {
+    const origin = await tx.activeDebt.findUniqueOrThrow({ where: { id: input.debtId }, select: { assessmentId: true } });
+    if (origin.assessmentId) await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${origin.assessmentId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "ActiveDebt" WHERE id = ${input.debtId} FOR UPDATE`;
+    await assertDebtAccess(tx, actor, input.debtId);
+    const debt = await tx.activeDebt.findUniqueOrThrow({ where: { id: input.debtId } });
+    if (debt.status === "DEVOLVIDA") {
+      const event = await tx.taxActiveDebtEvent.findFirst({ where: { activeDebtId: debt.id, eventType: "DEVOLUCAO_ORIGEM" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }] });
+      if (!event || event.description !== input.reason.trim()) throw new TributarioS9Error("Dívida já devolvida com outro motivo ou sem histórico conciliado.");
+      return debt;
+    }
+    if (!["VALIDADA", "INSCRITA", "Inscrita", "EM_COBRANCA", "PENDENTE_DE_VALIDACAO"].includes(debt.status)) throw new TributarioS9Error("Devolução exige dívida disponível na cobrança administrativa; concilie os estágios posteriores antes da devolução.");
+    if (debt.assessmentId && await tx.taxGuide.count({ where: { assessmentId: debt.assessmentId, status: { notIn: ["Cancelada", "Paga"] } } })) throw new TributarioS9Error("Cancele as guias abertas antes de devolver a dívida à origem.");
+    const position = await returnActiveDebtReceivableInTransaction(tx, fullActor(actor), debt.id, new Date(), input.reason);
     const updated = await tx.activeDebt.update({ where: { id: input.debtId }, data: { status: "DEVOLVIDA" } });
-    await debtEvent(tx, actor, input.debtId, "DEVOLUCAO_ORIGEM", input.reason.trim(), {});
+    if (debt.assessmentId) await tx.taxAssessment.update({ where: { id: debt.assessmentId }, data: { status: "Revisado" } });
+    await debtEvent(tx, actor, input.debtId, "DEVOLUCAO_ORIGEM", input.reason.trim(), { registryEntryId: position?.id ?? null });
     return updated;
-  });
+  }, { timeout: 60000 });
 }
 
 // Pagamento da dívida inscrita pela guia confirmada no motor (TRI-360).
@@ -1005,7 +1026,7 @@ export async function issueCemeteryFee(db: PrismaClient, actor: Actor, input: { 
     if (input.movementId) await tx.taxBurialMovement.update({ where: { id: input.movementId }, data: { feeAssessmentId: assessment.id } });
     if (input.concessionId) await tx.taxGraveConcession.update({ where: { id: input.concessionId }, data: { feeAssessmentId: assessment.id } });
     return { assessment, guide };
-  });
+  }, { timeout: 60000 });
 }
 
 // Taxa de cemitério não paga segue para dívida ativa (TRI-436).

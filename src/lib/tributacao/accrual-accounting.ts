@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
-import { postAccountingTransactionInTransaction, type FinanceActor } from "@/lib/financeiro";
-import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxScopeSnapshot } from "./scope";
+import { postAccountingEventInTransaction, postAccountingTransactionInTransaction, type FinanceActor } from "@/lib/financeiro";
+import { assertPublishedAccountClassification } from "@/lib/financeiro/account-catalog";
+import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxAssessmentCompensatedValue, taxScopeSnapshot } from "./scope";
 
 type Profile = { receivableAccountId: string; revenueAccountId: string; deductionAccountId: string; lossAccountId: string; budgetUnitId: string; governmentEntityId: string; catalogVersionId: string };
 function profile(value: Prisma.JsonValue): Profile {
@@ -45,7 +46,80 @@ export async function recognizedTaxProfile(tx: Prisma.TransactionClient, actor: 
   const selected = profile(positions[0].data);
   const original = typeof data.recognitionTransactionId === "string" ? await tx.accountingTransaction.findUnique({ where: { id: data.recognitionTransactionId }, include: { entries: true } }) : null;
   if (selected.budgetUnitId !== scope.budgetUnitId || selected.governmentEntityId !== scope.governmentEntityId || !original || original.status !== "POSTADO" || original.sourceId !== assessment.id || original.eventType !== "TAX_ASSESSMENT_RECOGNIZED" || original.budgetUnitId !== scope.budgetUnitId || original.governmentEntityId !== scope.governmentEntityId || date < original.date || original.entries.length !== 2 || !original.entries.some(entry => entry.accountId === selected.receivableAccountId && entry.type === "Débito" && entry.valueDecimal?.eq(String(data.originalValue))) || !original.entries.some(entry => entry.accountId === selected.revenueAccountId && entry.type === "Crédito" && entry.valueDecimal?.eq(String(data.originalValue)))) throw new Error("Direito tributário sem partida original conciliada ou data compatível.");
-  return selected;
+  const debtPosition = await tx.taxRegistryEntry.findMany({ where: { entityType: "TAX_ASSESSMENT", entityId: assessmentId, category: "DEBT_ACCOUNTING_POSITION", status: "ATIVO" } });
+  if (debtPosition.length > 1) throw new Error("Reclassificação contábil da dívida ativa ambígua.");
+  if (!debtPosition.length) return selected;
+  const debtData = taxScopeSnapshot(debtPosition[0].data);
+  if (typeof debtData.receivableAccountId !== "string" || typeof debtData.lossAccountId !== "string" || typeof debtData.transactionId !== "string" || typeof debtData.amount !== "string" || debtData.budgetUnitId !== selected.budgetUnitId || debtData.governmentEntityId !== selected.governmentEntityId) throw new Error("Posição da dívida ativa incompleta ou fora do ente de origem.");
+  const reclassification = await tx.accountingTransaction.findUniqueOrThrow({ where: { id: debtData.transactionId }, include: { entries: true, reversedBy: { select: { id: true } } } });
+  if (reclassification.status !== "POSTADO" || reclassification.reversedBy || reclassification.budgetUnitId !== selected.budgetUnitId || reclassification.governmentEntityId !== selected.governmentEntityId || reclassification.sourceModule !== "TRIBUTACAO" || reclassification.sourceType !== "ACTIVE_DEBT_RECLASSIFICATION" || reclassification.sourceId !== assessmentId || date < reclassification.date || reclassification.entries.length !== 2 || !reclassification.entries.some(entry => entry.accountId === debtData.receivableAccountId && entry.type === "Débito" && entry.valueDecimal?.eq(debtData.amount as string)) || !reclassification.entries.some(entry => entry.accountId === selected.receivableAccountId && entry.type === "Crédito" && entry.valueDecimal?.eq(debtData.amount as string))) throw new Error("Dívida ativa sem partida original de reclassificação conciliada.");
+  return { ...selected, receivableAccountId: debtData.receivableAccountId, lossAccountId: debtData.lossAccountId };
+}
+
+/** Reclassifies an already recognized receivable without recognizing legacy debt or a second VPA. */
+export async function reclassifyActiveDebtInTransaction(tx: Prisma.TransactionClient, actor: FinanceActor, debtId: string, date: Date) {
+  if (!Number.isFinite(date.valueOf())) throw new Error("Data da reclassificação inválida.");
+  const origin = await tx.activeDebt.findUniqueOrThrow({ where: { id: debtId }, select: { assessmentId: true } });
+  if (!origin.assessmentId) return null;
+  await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${origin.assessmentId} FOR UPDATE`;
+  await tx.$queryRaw`SELECT id FROM "ActiveDebt" WHERE id = ${debtId} FOR UPDATE`;
+  const debt = await tx.activeDebt.findUniqueOrThrow({ where: { id: debtId } });
+  if (debt.assessmentId !== origin.assessmentId) throw new Error("Origem da dívida alterada durante a reclassificação.");
+  const existing = await tx.taxRegistryEntry.findFirst({ where: { entityType: "TAX_ASSESSMENT", entityId: debt.assessmentId, category: "DEBT_ACCOUNTING_POSITION", status: "ATIVO" } });
+  const selected = await recognizedTaxProfile(tx, actor, debt.assessmentId, date);
+  if (!selected) return null;
+  if (existing) return existing;
+  const assessment = await tx.taxAssessment.findUniqueOrThrow({ where: { id: debt.assessmentId } });
+  if (debt.budgetUnitId !== selected.budgetUnitId || debt.governmentEntityId !== selected.governmentEntityId) throw new Error("Dívida ativa diverge da UG/ente do direito reconhecido.");
+  const eventCode = `TAX_ACTIVE_DEBT:${assessment.taxId}:${selected.budgetUnitId}`;
+  const lossCode = `TAX_ACTIVE_DEBT_EXTINCTION:${assessment.taxId}:${selected.budgetUnitId}`;
+  const [event, loss] = await Promise.all([
+    tx.accountingEventCatalog.findUnique({ where: { code: eventCode }, include: { rules: { where: { isActive: true } } } }),
+    tx.accountingEventCatalog.findUnique({ where: { code: lossCode }, include: { rules: { where: { isActive: true } } } }),
+  ]);
+  if (!event?.isActive || !loss?.isActive || event.rules.length !== 1 || loss.rules.length !== 1 || event.rules[0].isReference || loss.rules[0].isReference || event.rules[0].creditAccountId !== selected.receivableAccountId || loss.rules[0].creditAccountId !== event.rules[0].debitAccountId || new Set([selected.receivableAccountId, event.rules[0].debitAccountId, loss.rules[0].debitAccountId]).size !== 3) throw new Error("Dívida ativa reconhecida exige matriz municipal por tributo/UG: direito DA contra direito original e VPD de extinção contra direito DA.");
+  const lossAccount = await tx.accountingPlan.findUniqueOrThrow({ where: { id: loss.rules[0].debitAccountId } });
+  const debtAccount = await tx.accountingPlan.findUniqueOrThrow({ where: { id: event.rules[0].debitAccountId } });
+  if (lossAccount.type !== "VPD" || debtAccount.type !== "Ativo") throw new Error("Reclassificação da dívida exige conta analítica de ativo e VPD de extinção.");
+  await assertPublishedAccountClassification(tx, [{ id: lossAccount.id }, { id: debtAccount.id }], date);
+  const payments = await tx.taxPayment.findMany({ where: { guide: { assessmentId: assessment.id }, status: "Confirmado" }, select: { amountPaidDecimal: true } });
+  if (payments.some(payment => !payment.amountPaidDecimal) || !assessment.finalValueDecimal) throw new Error("Reclassificação exige saldo Decimal conciliado.");
+  const paid = payments.reduce((sum, payment) => sum.plus(payment.amountPaidDecimal!), new Prisma.Decimal(0)).plus(await taxAssessmentCompensatedValue(tx, assessment.id));
+  const value = assessment.finalValueDecimal.minus(paid);
+  if (value.lte(0)) throw new Error("Direito sem saldo positivo para reclassificação em dívida ativa.");
+  const year = await resolveTaxFinancialYear(tx, date.getUTCFullYear(), selected);
+  const priorEditions = await tx.taxRegistryEntry.count({ where: { entityType: "TAX_ASSESSMENT", entityId: assessment.id, category: "DEBT_ACCOUNTING_POSITION" } });
+  const key = `ACTIVE_DEBT:${debt.id}:RECLASSIFICATION${priorEditions ? `:EDITION:${priorEditions + 1}` : ""}`;
+  const transaction = await postAccountingEventInTransaction(tx, actor, { financialYearId: year.id, governmentEntityId: selected.governmentEntityId, budgetUnitId: selected.budgetUnitId, date, eventCode, value, history: `Reclassificação em dívida ativa — ${debt.cdaNumber ?? debt.id}`, sourceModule: "TRIBUTACAO", sourceType: "ACTIVE_DEBT_RECLASSIFICATION", sourceId: assessment.id, idempotencyKey: key });
+  const lines = await tx.accountingEntry.findMany({ where: { transactionId: transaction.id } });
+  if (lines.length !== 2 || !lines.some(line => line.accountId === debtAccount.id && line.type === "Débito" && line.valueDecimal?.eq(value)) || !lines.some(line => line.accountId === selected.receivableAccountId && line.type === "Crédito" && line.valueDecimal?.eq(value))) throw new Error("Matriz mudou durante a reclassificação; repita com a configuração vigente conciliada.");
+  const entry = await tx.taxRegistryEntry.create({ data: { entityType: "TAX_ASSESSMENT", entityId: assessment.id, category: "DEBT_ACCOUNTING_POSITION", title: "Direito reconhecido reclassificado em dívida ativa", status: "ATIVO", source: "CONTABILIDADE", actorUsuarioId: actor.usuarioId, data: { debtId: debt.id, budgetUnitId: selected.budgetUnitId, governmentEntityId: selected.governmentEntityId, originalReceivableAccountId: selected.receivableAccountId, receivableAccountId: event.rules[0].debitAccountId, lossAccountId: loss.rules[0].debitAccountId, eventCode, lossCode, transactionId: transaction.id, amount: value.toFixed(2), reclassifiedAt: date.toISOString() } } });
+  await tx.activeDebt.update({ where: { id: debt.id }, data: { updatedValue: Number(value), updatedValueDecimal: value } });
+  await tx.taxAuditLog.create({ data: { action: "RECLASSIFY_ACTIVE_DEBT", entityType: "ActiveDebt", entityId: debt.id, authorUsuarioId: actor.usuarioId, authorEmployeeId: actor.employeeId, payload: { registryEntryId: entry.id, accountingTransactionId: transaction.id, amount: value.toFixed(2), ...selected } } });
+  return entry;
+}
+
+export async function returnActiveDebtReceivableInTransaction(tx: Prisma.TransactionClient, actor: FinanceActor, debtId: string, date: Date, reason: string) {
+  const debt = await tx.activeDebt.findUniqueOrThrow({ where: { id: debtId } });
+  if (!debt.assessmentId) return null;
+  const selected = await recognizedTaxProfile(tx, actor, debt.assessmentId, date);
+  const position = await tx.taxRegistryEntry.findFirst({ where: { entityType: "TAX_ASSESSMENT", entityId: debt.assessmentId, category: "DEBT_ACCOUNTING_POSITION", status: "ATIVO" } });
+  if (!position) return null;
+  if (!selected) throw new Error("Devolução de dívida contabilizada sem reconhecimento original conciliado.");
+  const data = taxScopeSnapshot(position.data);
+  if (typeof data.originalReceivableAccountId !== "string" || debt.budgetUnitId !== selected.budgetUnitId || debt.governmentEntityId !== selected.governmentEntityId) throw new Error("Devolução da dívida diverge da conta original/UG/ente preservados.");
+  const assessment = await tx.taxAssessment.findUniqueOrThrow({ where: { id: debt.assessmentId } });
+  const payments = await tx.taxPayment.findMany({ where: { guide: { assessmentId: assessment.id }, status: "Confirmado" }, select: { amountPaidDecimal: true } });
+  if (!assessment.finalValueDecimal || payments.some(payment => !payment.amountPaidDecimal)) throw new Error("Devolução da dívida exige posição Decimal conciliada.");
+  const paid = payments.reduce((sum, payment) => sum.plus(payment.amountPaidDecimal!), new Prisma.Decimal(0)).plus(await taxAssessmentCompensatedValue(tx, assessment.id));
+  const residual = assessment.finalValueDecimal.minus(paid);
+  if (residual.lte(0)) throw new Error("Dívida extinta não possui direito residual para devolver à origem.");
+  const year = await resolveTaxFinancialYear(tx, date.getUTCFullYear(), selected);
+  const transaction = await postAccountingTransactionInTransaction(tx, actor, { financialYearId: year.id, governmentEntityId: selected.governmentEntityId, budgetUnitId: selected.budgetUnitId, date, history: reason.trim(), sourceModule: "TRIBUTACAO", sourceType: "ACTIVE_DEBT_RETURN", sourceId: assessment.id, eventType: "ACTIVE_DEBT_RETURNED_TO_ORIGIN", idempotencyKey: `ACTIVE_DEBT:${position.id}:RETURN`, lines: [{ accountId: data.originalReceivableAccountId, type: "Débito", value: residual }, { accountId: selected.receivableAccountId, type: "Crédito", value: residual }] });
+  await tx.taxRegistryEntry.update({ where: { id: position.id }, data: { status: "DEVOLVIDA" } });
+  const entry = await tx.taxRegistryEntry.create({ data: { entityType: "TAX_ASSESSMENT", entityId: assessment.id, category: "DEBT_RETURN_POSITION", title: "Direito residual devolvido à origem", status: "ATIVO", source: "CONTABILIDADE", actorUsuarioId: actor.usuarioId, data: { debtId, originalPositionId: position.id, amount: residual.toFixed(2), transactionId: transaction.id, reason: reason.trim(), returnedAt: date.toISOString(), budgetUnitId: selected.budgetUnitId, governmentEntityId: selected.governmentEntityId } } });
+  await tx.taxAuditLog.create({ data: { action: "RETURN_ACTIVE_DEBT_RECEIVABLE", entityType: "ActiveDebt", entityId: debtId, authorUsuarioId: actor.usuarioId, authorEmployeeId: actor.employeeId, payload: { registryEntryId: entry.id, originalPositionId: position.id, accountingTransactionId: transaction.id, amount: residual.toFixed(2), reason: reason.trim() } } });
+  return entry;
 }
 
 export async function postTaxAssessmentAdjustment(tx: Prisma.TransactionClient, actor: FinanceActor, input: { assessmentId: string; date: Date; delta: Prisma.Decimal; kind: "REVISION" | "BENEFIT" | "EXTINCTION"; idempotencyKey: string; reason: string }) {
@@ -56,6 +130,28 @@ export async function postTaxAssessmentAdjustment(tx: Prisma.TransactionClient, 
   if (increase && input.kind !== "REVISION") throw new Error("Benefício ou extinção não pode aumentar o direito.");
   const value = input.delta.abs();
   return postAccountingTransactionInTransaction(tx, actor, { financialYearId: year.id, budgetUnitId: selected.budgetUnitId, governmentEntityId: selected.governmentEntityId, date: input.date, history: input.reason, sourceModule: "TRIBUTACAO", sourceType: "TAX_ASSESSMENT_ADJUSTMENT", sourceId: input.assessmentId, eventType: `TAX_ASSESSMENT_${input.kind}`, idempotencyKey: input.idempotencyKey, lines: [{ accountId: increase ? selected.receivableAccountId : input.kind === "EXTINCTION" ? selected.lossAccountId : selected.deductionAccountId, type: "Débito", value }, { accountId: increase ? selected.revenueAccountId : selected.receivableAccountId, type: "Crédito", value }] });
+}
+
+/** A historical reversal restores its original account; route the restored right to the current frozen account. */
+export async function reclassifyRestoredTaxReceivable(tx: Prisma.TransactionClient, actor: FinanceActor, input: { assessmentId: string; originalTransactionId: string; amount: Prisma.Decimal; date: Date; idempotencyKey: string; reason: string }) {
+  const selected = await recognizedTaxProfile(tx, actor, input.assessmentId, input.date);
+  if (!selected) return null;
+  const positions = await tx.taxRegistryEntry.findMany({ where: { entityType: "TAX_ASSESSMENT", entityId: input.assessmentId, category: "DEBT_ACCOUNTING_POSITION", status: { in: ["ATIVO", "DEVOLVIDA"] } } });
+  if (!positions.length) return null;
+  const accounts = new Set<string>([selected.receivableAccountId]);
+  for (const position of positions) {
+    const data = taxScopeSnapshot(position.data);
+    if (typeof data.originalReceivableAccountId !== "string" || typeof data.receivableAccountId !== "string" || data.budgetUnitId !== selected.budgetUnitId || data.governmentEntityId !== selected.governmentEntityId) throw new Error("Contas e escopo das reclassificações históricas não foram preservados.");
+    accounts.add(data.originalReceivableAccountId);
+    accounts.add(data.receivableAccountId);
+  }
+  const original = await tx.accountingTransaction.findUniqueOrThrow({ where: { id: input.originalTransactionId }, include: { entries: true, reversedBy: { select: { id: true } } } });
+  if (original.status !== "POSTADO" || !original.reversedBy || original.budgetUnitId !== selected.budgetUnitId || original.governmentEntityId !== selected.governmentEntityId || input.amount.lte(0)) throw new Error("Estorno do direito sem partida original conciliada.");
+  const credits = original.entries.filter(entry => entry.type === "Crédito" && accounts.has(entry.accountId));
+  if (credits.length !== 1 || !credits[0].valueDecimal?.eq(input.amount)) throw new Error("Partida original não contém baixa única do direito pelo valor estornado.");
+  if (credits[0].accountId === selected.receivableAccountId) return null;
+  const year = await resolveTaxFinancialYear(tx, input.date.getUTCFullYear(), selected);
+  return postAccountingTransactionInTransaction(tx, actor, { financialYearId: year.id, budgetUnitId: selected.budgetUnitId, governmentEntityId: selected.governmentEntityId, date: input.date, history: input.reason, sourceModule: "TRIBUTACAO", sourceType: "ACTIVE_DEBT_RESTORATION", sourceId: input.assessmentId, eventType: "ACTIVE_DEBT_RECEIVABLE_RESTORED", idempotencyKey: input.idempotencyKey, lines: [{ accountId: selected.receivableAccountId, type: "Débito", value: input.amount }, { accountId: credits[0].accountId, type: "Crédito", value: input.amount }] });
 }
 
 export async function taxCollectionReceivableAccount(tx: Prisma.TransactionClient, actor: FinanceActor, input: { sourceModule: string; sourceType: string; sourceId?: string; date: Date }) {

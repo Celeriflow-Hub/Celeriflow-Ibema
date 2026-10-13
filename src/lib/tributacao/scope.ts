@@ -28,6 +28,25 @@ export function activeDebtAccessFilter(budgetUnitIds?: string[]): Prisma.ActiveD
   return { OR: [{ budgetUnitId: { in: budgetUnitIds } }, { budgetUnitId: null, assessment: taxAssessmentAccessFilter(budgetUnitIds) }] };
 }
 
+/** Refreshes the debt from canonical confirmed payments, compensations and assessment value. */
+export async function synchronizeAssessmentDebt(tx: Prisma.TransactionClient, actor: TaxActor, assessmentId: string) {
+  const debt = await tx.activeDebt.findUnique({ where: { assessmentId } });
+  if (!debt) return null;
+  const assessment = await tx.taxAssessment.findUniqueOrThrow({ where: { id: assessmentId } });
+  const scope = await resolveTaxAssessmentScope(tx, actor, assessment.taxId, assessment.calculationSnapshot);
+  if ((debt.budgetUnitId && debt.budgetUnitId !== scope.budgetUnitId) || (debt.governmentEntityId && debt.governmentEntityId !== scope.governmentEntityId)) throw new Error("Dívida diverge da UG/ente do lançamento original.");
+  const total = assessment.finalValueDecimal ?? assessment.originalValueDecimal;
+  if (!total) throw new Error("Dívida sem valor Decimal conciliado do lançamento.");
+  const payments = await tx.taxPayment.findMany({ where: { guide: { assessmentId }, status: "Confirmado" }, select: { amountPaidDecimal: true } });
+  const paid = payments.reduce((sum, payment) => {
+    if (!payment.amountPaidDecimal) throw new Error("Arrecadação da dívida sem Decimal conciliado.");
+    return sum.plus(payment.amountPaidDecimal);
+  }, await taxAssessmentCompensatedValue(tx, assessmentId));
+  const remaining = Prisma.Decimal.max(0, total.minus(paid));
+  const collecting = ["Paga", "PAGA", "Inscrita", "INSCRITA", "EM_COBRANCA", "Parcelada", "PARCELADA", "EM_PROTESTO", "AJUIZADA"].includes(debt.status);
+  return tx.activeDebt.update({ where: { id: debt.id }, data: { updatedValue: Number(remaining), updatedValueDecimal: remaining, ...(collecting ? { status: remaining.isZero() ? "PAGA" : ["EM_PROTESTO", "AJUIZADA"].includes(debt.status) ? debt.status : paid.gt(0) ? "EM_COBRANCA" : "INSCRITA" } : {}) } });
+}
+
 export async function resolveTaxAssessmentScope(db: Db, actor: TaxActor, taxId: string, snapshot?: Prisma.JsonValue | null) {
   const stored = taxScopeSnapshot(snapshot);
   const mapping = typeof stored.budgetUnitId === "string" ? null : await db.taxFinancialMapping.findUnique({ where: { taxId }, select: { defaultBankAccount: { select: { budgetUnitId: true } } } });

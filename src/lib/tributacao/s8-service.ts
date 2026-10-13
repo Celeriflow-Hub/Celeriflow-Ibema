@@ -3,7 +3,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertAccountingPeriodOpen } from "@/lib/financeiro";
 import type { TaxActor } from "./index";
 import { postTaxAssessmentAdjustment } from "./accrual-accounting";
-import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxAssessmentCompensatedValue, taxScopeSnapshot } from "./scope";
+import { resolveTaxAssessmentScope, resolveTaxFinancialYear, synchronizeAssessmentDebt, taxAssessmentCompensatedValue, taxScopeSnapshot } from "./scope";
 import {
   allocateInstallmentPayment,
   calculateBenefit,
@@ -721,6 +721,7 @@ export async function grantBenefit(
     } });
     const entry = await tx.taxRegistryEntry.create({ data: { entityType: "TAX_ASSESSMENT", entityId: current.id, category: "CREDIT_EVENT", title: `Benefício: ${rule.name}`, status: "ATIVO", source: "BENEFICIO", actorUsuarioId: actor.usuarioId, documentId: request.documentId, data: { ...scope, eventType: "BENEFICIO", grantId: grant.id, ruleId: rule.id, legalReference: rule.legalReference, amount: applied.toFixed(2), oldValue: total.toFixed(2), newValue: finalValue.toFixed(2), reducesAssessmentValue: true, reason: request.reason } } });
     await tx.taxAssessment.update({ where: { id: current.id }, data: { finalValueDecimal: finalValue, status: finalValue.eq(paid) ? "Extinto" : "Revisado", calculationSnapshot: { ...taxScopeSnapshot(current.calculationSnapshot), currentValue: finalValue.toFixed(2), lastBenefitGrantId: grant.id } } });
+    await synchronizeAssessmentDebt(tx, actor, current.id);
     await tx.taxIntegrationEvent.create({ data: { integrationCode: "FISCAL_ENGINE", eventType: "BENEFIT_GRANTED", idempotencyKey: `BENEFIT:${grant.id}`, status: "PROCESSADO", evidenceLevel: "L1", taxpayerId: current.taxpayerId, payload: { ...scope, assessmentId: current.id, grantId: grant.id }, result: { registryEntryId: entry.id, amount: applied.toFixed(2), renunciation: result.renunciation.toFixed(2) }, processedAt: now } });
     await tx.taxAuditLog.create({ data: { action: "GRANT_BENEFIT", entityType: "TaxBenefitGrant", entityId: grant.id, authorUsuarioId: actor.usuarioId, authorEmployeeId: actor.employeeId, payload: { ...scope, assessmentId: current.id, registryEntryId: entry.id, amount: applied.toFixed(2), reason: request.reason } } });
     return grant;

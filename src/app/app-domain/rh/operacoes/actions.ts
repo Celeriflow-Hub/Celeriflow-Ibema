@@ -34,15 +34,15 @@ import { accountPayrollProvision } from "@/lib/rh/provision-accounting";
 import { applyPocEmploymentLifecycle } from "@/lib/rh/employment-lifecycle";
 import { dispatchTravelAllowanceExpense } from "@/lib/rh/travel-finance";
 import { openTravelAllowanceProcess } from "@/lib/rh/travel-process";
-import { requestMunicipalAdvance, submitAdvanceReport, reviewAdvanceReport, reopenAdvanceReport } from "@/lib/rh/municipal-advances";
+import { requestMunicipalAdvance, submitAdvanceReport, reviewAdvanceReport, reopenAdvanceReport, receivePriorYearAdvanceRefund } from "@/lib/rh/municipal-advances";
 
 export async function executeWorkforceOperation(command: string, values: Record<string, string>) {
-  if (["adiantamento-solicitar", "adiantamento-prestar", "adiantamento-revisar", "adiantamento-reabrir"].includes(command)) {
+  if (["adiantamento-solicitar", "adiantamento-prestar", "adiantamento-revisar", "adiantamento-reabrir", "adiantamento-restituir-anterior"].includes(command)) {
     try {
       const context = await getTenantContextForModuleOperation("RH", "update");
-      const result = command === "adiantamento-solicitar" ? await requestMunicipalAdvance(context, values) : command === "adiantamento-prestar" ? await submitAdvanceReport(context, values) : command === "adiantamento-reabrir" ? await reopenAdvanceReport(context, values) : await reviewAdvanceReport(context, values);
+      const result = command === "adiantamento-solicitar" ? await requestMunicipalAdvance(context, values) : command === "adiantamento-prestar" ? await submitAdvanceReport(context, values) : command === "adiantamento-reabrir" ? await reopenAdvanceReport(context, values) : command === "adiantamento-restituir-anterior" ? await receivePriorYearAdvanceRefund(context, values) : await reviewAdvanceReport(context, values);
       revalidatePath("/rh/adiantamentos"); revalidatePath("/financeiro/contabilidade");
-      return { id: result.id, message: "Operação de adiantamento registrada.", error: "" };
+      return { id: result.id, message: command === "adiantamento-restituir-anterior" ? "Restituição recebida. Referência financeira para a prestação:" : "Operação de adiantamento registrada.", error: "" };
     } catch (error) { return { error: error instanceof Error ? error.message : "Falha na operação de adiantamento." }; }
   }
   if (command === "diaria-processo") {

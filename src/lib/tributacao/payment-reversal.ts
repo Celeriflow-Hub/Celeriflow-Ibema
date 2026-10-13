@@ -3,6 +3,7 @@ import { getBankAccountBalance, postAccountingTransactionInTransaction, reverseR
 import { TaxError, type TaxActor } from "./index";
 import { resolveTaxAssessmentScope, taxAssessmentCompensatedValue, taxScopeSnapshot } from "./scope";
 import { assertTaxCreditScope } from "./credit-finance";
+import { reclassifyRestoredTaxReceivable } from "./accrual-accounting";
 
 /** Reverses a collection and its unused excess without erasing any origin record. */
 export async function reverseTaxPayment(db: PrismaClient, actor: TaxActor, input: {
@@ -41,6 +42,12 @@ export async function reverseTaxPayment(db: PrismaClient, actor: TaxActor, input
     await tx.$queryRaw`SELECT id FROM "BankAccount" WHERE id = ${payment.bankAccountId} FOR UPDATE`;
     if ((await getBankAccountBalance(tx, payment.bankAccountId, input.date)).lt(payment.amountPaidDecimal.plus(excess))) throw new TaxError("Saldo insuficiente para estornar pagamento e excedente integralmente.");
     const reversal = await reverseRevenueInTransaction(tx, actor, { revenueId: payment.revenueIntegration.revenueId, taxPaymentId: payment.id, date: input.date, justification: input.reason });
+    const debtPosition = await tx.taxRegistryEntry.findFirst({ where: { entityType: "TAX_ASSESSMENT", entityId: payment.guide.assessmentId, category: "DEBT_ACCOUNTING_POSITION", status: { in: ["ATIVO", "DEVOLVIDA"] } }, select: { id: true } });
+    if (debtPosition) {
+      const originals = await tx.accountingTransaction.findMany({ where: { sourceModule: "TRIBUTARIO", sourceType: "TAX_PAYMENT", sourceId: payment.revenueIntegration.revenueId, eventType: "RECEITA_ARRECADADA", status: "POSTADO", reversalOfId: null }, select: { id: true } });
+      if (originals.length !== 1) throw new TaxError("Arrecadação da dívida sem partida canônica original única.");
+      await reclassifyRestoredTaxReceivable(tx, actor, { assessmentId: payment.guide.assessmentId, originalTransactionId: originals[0].id, amount: payment.amountPaidDecimal, date: input.date, idempotencyKey: `${key}:DA_RESTORATION`, reason: `Recomposição do direito em dívida ativa após estorno do pagamento ${payment.id}` });
+    }
     for (const credit of credits) {
       const data = taxScopeSnapshot(credit.data);
       const original = await tx.accountingTransaction.findUniqueOrThrow({ where: { id: String(data.ingressTransactionId) }, include: { entries: true } });
@@ -60,13 +67,14 @@ export async function reverseTaxPayment(db: PrismaClient, actor: TaxActor, input
     const sum = (rows: typeof paid) => rows.reduce((total, row) => { if (!row.amountPaidDecimal) throw new TaxError("Pagamento histórico sem Decimal conciliado."); return total.plus(row.amountPaidDecimal); }, new Prisma.Decimal(0));
     const guidePaid = sum(paid.filter((row) => row.guideId === payment.guideId));
     if (!payment.guide.totalValueDecimal) throw new TaxError("Guia sem Decimal conciliado.");
-    await tx.taxGuide.update({ where: { id: payment.guideId }, data: { status: guidePaid.gte(payment.guide.totalValueDecimal) ? "Paga" : guidePaid.gt(0) ? "Parcial" : "Emitida" } });
+    if (payment.guide.status !== "Cancelada") await tx.taxGuide.update({ where: { id: payment.guideId }, data: { status: guidePaid.gte(payment.guide.totalValueDecimal) ? "Paga" : guidePaid.gt(0) ? "Parcial" : "Emitida" } });
     const assessment = payment.guide.assessment;
     const total = assessment.finalValueDecimal ?? assessment.originalValueDecimal;
     if (!total) throw new TaxError("Lançamento sem Decimal conciliado.");
     const extinguished = sum(paid).plus(await taxAssessmentCompensatedValue(tx, assessment.id));
     const debt = await tx.activeDebt.findUnique({ where: { assessmentId: assessment.id } });
-    await tx.taxAssessment.update({ where: { id: assessment.id }, data: { status: extinguished.gte(total) ? "Pago" : debt ? "Dívida Ativa" : extinguished.gt(0) ? "Parcial" : "Emitido" } });
+    const activeDebt = debt && !["DEVOLVIDA", "CANCELADA", "BAIXADA", "BAIXADA_PRESCRICAO"].includes(debt.status);
+    await tx.taxAssessment.update({ where: { id: assessment.id }, data: { status: extinguished.gte(total) ? "Pago" : activeDebt ? "Dívida Ativa" : extinguished.gt(0) ? "Parcial" : "Emitido" } });
     if (debt) {
       const remaining = Prisma.Decimal.max(0, total.minus(extinguished));
       const paymentAudit = await tx.taxAuditLog.findFirst({ where: { action: "CONFIRM_PAYMENT", entityType: "TaxPayment", entityId: payment.id }, orderBy: { createdAt: "asc" }, select: { payload: true } });

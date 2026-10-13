@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { calculateAccountBalance, evaluateFiscalRule, parseFiscalRuleConfiguration } from "./fiscal-engine";
 import { confirmTaxPaymentInTransaction, TaxError, type TaxActor } from "./index";
-import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxAssessmentCompensatedValue } from "./scope";
+import { resolveTaxAssessmentScope, resolveTaxFinancialYear, synchronizeAssessmentDebt, taxAssessmentCompensatedValue } from "./scope";
 import { assertTaxCreditScope, recordTaxExcessInTransaction, resolveCreditDestinationScope } from "./credit-finance";
 import { assertAccountingPeriodOpen, postAccountingEventInTransaction } from "@/lib/financeiro";
 import { recognizeTaxAssessmentInTransaction, postTaxAssessmentAdjustment, recognizedTaxProfile } from "./accrual-accounting";
@@ -170,6 +170,7 @@ export async function reviseTaxAssessment(db: PrismaClient, actor: TaxActor, inp
       actorUsuarioId: actor.usuarioId, version,
     } });
     await tx.taxAssessment.update({ where: { id: assessment.id }, data: { finalValueDecimal: newValue, taxableBaseDecimal: input.taxableBase === undefined ? undefined : new Prisma.Decimal(String(input.taxableBase)), calculationSnapshot: { ...jsonObject(assessment.calculationSnapshot), currentVersion: version + 1, currentValue: newValue.toFixed(2), lastRevisionEntryId: entry.id }, status: newValue.eq(position.paid) ? "Pago" : "Revisado" } });
+    await synchronizeAssessmentDebt(tx, actor, assessment.id);
     await tx.taxIntegrationEvent.create({ data: { integrationCode: "FISCAL_ENGINE", eventType: "ASSESSMENT_REVISED", idempotencyKey: `REVISION:${input.idempotencyKey}`, status: "PROCESSADO", evidenceLevel: "L1", taxpayerId: assessment.taxpayerId, payload: { assessmentId: assessment.id, request, ...scope }, result: { registryEntryId: entry.id, delta: delta.toFixed(2) }, processedAt: new Date() } });
     await audit(tx, actor, "REVISE", "TaxAssessment", assessment.id, { entryId: entry.id, oldValue: oldValue.toFixed(2), newValue: newValue.toFixed(2), delta: delta.toFixed(2) });
     return entry;
@@ -221,6 +222,7 @@ export async function registerCreditEvent(db: PrismaClient, actor: TaxActor, inp
       await postTaxAssessmentAdjustment(tx, actor, { assessmentId: assessment.id, date, delta: amountValue.negated(), kind: "EXTINCTION", idempotencyKey: `${key}:ACCOUNTING`, reason: input.reason.trim() });
       extinction = { oldValue: position.total.toFixed(2), newValue: finalValue.toFixed(2), reducesAssessmentValue: true, operationFinancialYearId: year.id };
       await tx.taxAssessment.update({ where: { id: assessment.id }, data: { finalValueDecimal: finalValue, status: finalValue.eq(position.paid) ? "Extinto" : "Revisado", calculationSnapshot: { ...jsonObject(position.assessment.calculationSnapshot), currentValue: finalValue.toFixed(2), lastExtinctionKey: key } } });
+      await synchronizeAssessmentDebt(tx, actor, assessment.id);
     }
     const entry = await tx.taxRegistryEntry.create({ data: {
       entityType: "TAX_ASSESSMENT", entityId: assessment.id, category: "CREDIT_EVENT", title: input.eventType.replaceAll("_", " "),
@@ -426,6 +428,7 @@ export async function applyTaxCredit(db: PrismaClient, actor: TaxActor, input: {
       const transaction = await postAccountingEventInTransaction(tx, actor, { financialYearId: year.id, ...scope, date, value: requested, eventCode: "TAX_CREDIT_COMPENSATED", history: `Compensação tributária ${credit.id} → ${assessment.id}`, sourceModule: "TRIBUTACAO", sourceType: "TAX_CREDIT_COMPENSATION", sourceId: credit.id, idempotencyKey: `${key}:ACCOUNTING`, creditAccountId: recognized?.receivableAccountId });
       accountingTransactionId = transaction.id;
       await tx.taxAssessment.update({ where: { id: assessment.id }, data: { status: requested.equals(position.balance) ? "Pago" : "Parcial" } });
+      await synchronizeAssessmentDebt(tx, actor, assessment.id);
     }
     const remaining = available.minus(requested).toDecimalPlaces(2);
     await tx.taxRegistryEntry.update({ where: { id: credit.id }, data: { data: { ...data, available: remaining.toFixed(2) }, status: remaining.equals(0) ? "UTILIZADO" : "DISPONIVEL" } });

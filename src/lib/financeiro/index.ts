@@ -5,7 +5,7 @@ import { calculateRetentionDueDate, calculateRetentions, getActiveRetentionRules
 import { assertPlanningPeriodAvailability, assertPlanningReservationYear, getPlanningBudgetRestrictions, lockPlanningBudgetForAppropriation, recordPlanningFinanceExecution } from "@/lib/planejamento/execution-bridge";
 import { lockPlanningRevenueBudget, recordPlanningRevenueCollection, recordPlanningRevenueReversal, recordPlanningRevenueRedistribution } from "@/lib/planejamento/revenue-execution-bridge";
 import { releasePayrollProvisionsAtSettlement, reversePayrollProvisionSettlement, recordPayrollProvisionPayment, reversePayrollProvisionPayment } from "@/lib/rh/provision-accounting";
-import { reverseAdvancePaymentControl, reverseAdvanceCommitmentControl } from "@/lib/rh/municipal-advances";
+import { reverseAdvancePaymentControl, reverseAdvanceCommitmentControl, assertAdvanceRefundReversalAllowed, recordAdvanceRefundReversal } from "@/lib/rh/municipal-advances";
 import { taxCollectionReceivableAccount } from "@/lib/tributacao/accrual-accounting";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -2113,6 +2113,7 @@ export async function reverseRevenueInTransaction(
   input: { revenueId: string; date: Date; justification: string; taxPaymentId?: string },
 ) {
   if (!input.justification.trim()) throw new FinanceError("A justificativa do estorno da receita e obrigatoria.");
+    await assertAdvanceRefundReversalAllowed(tx, actor, input.revenueId);
     await lockRevenue(tx, input.revenueId);
     const revenue = await tx.revenue.findUnique({
       where: { id: input.revenueId },
@@ -2162,6 +2163,7 @@ export async function reverseRevenueInTransaction(
       creditAccountId: bankAccount?.accountingPlanId ?? undefined,
     });
     await recordPlanningRevenueReversal(tx, actor, revenue, input.date);
+    await recordAdvanceRefundReversal(tx, actor, { revenueId: revenue.id, reversalId: reversal.id, date: input.date, reason: input.justification });
     await audit(tx, actor, "REVERSE", "Revenue", revenue.id, { stage: reversed.stage, reversalId: reversal.id, treasuryMovementId: movement.id, value: jsonMoney(value), justification: reversal.justification, originRevenueId: revenue.id }, year.id);
     return reversal;
 }

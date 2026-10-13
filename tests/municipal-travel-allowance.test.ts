@@ -7,7 +7,7 @@ import { approveExpenseRequest, createBudgetReservation, createCommitment, creat
 import type { AppContext } from "../src/lib/platform/tenant-context";
 import { openTravelAllowanceProcess, completeTravelAllowanceProcess, rejectTravelAllowanceProcess } from "../src/lib/rh/travel-process";
 import { approveGenericWorkflowProcess, concludeGenericWorkflowProcess, rejectGenericWorkflowProcess, recordGenericWorkflowReceipt } from "../src/lib/protocols/generic-workflow-runtime";
-import { requestMunicipalAdvance, submitAdvanceReport, reviewAdvanceReport, reopenAdvanceReport } from "../src/lib/rh/municipal-advances";
+import { requestMunicipalAdvance, submitAdvanceReport, reviewAdvanceReport, reopenAdvanceReport, receivePriorYearAdvanceRefund } from "../src/lib/rh/municipal-advances";
 import { buildMunicipalAdvanceDocument } from "../src/lib/rh/advance-document";
 
 for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) test(`P4 ${jurisdiction}: diária municipal autorizada e paga exige prestação nativa, GED, UG e replay`, async () => {
@@ -144,7 +144,18 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) test(`P4 ${jur
     await createRevenue(f.db, f.actor, { date, value: 1, revenueNatureId: "receita", resourceSourceId: "livre", bankAccountId: "banco", sourceModule: "FINANCEIRO", sourceType: "FUNDING", eventType: "RECEIPT", idempotencyKey: "advance-funding" });
     const advancePayment = await createPayment(f.db, f.financeReviewer, { orderNumber: "ADVANCE-OP", date, value: "1.00", commitmentId: advanceCommitment.commitmentId, settlementId: advanceSettlement.id, bankAccountId: "banco", supplierId: "fornecedor", paymentMethod: "Transferência" });
     await updatePaymentStatus(f.db, f.financeReviewer, advancePayment.id, "Paga");
+    const beforeReport = await f.db.accountingTransaction.count();
+    await assert.rejects(receivePriorYearAdvanceRefund(context, { requestId: advance.id, requestKey: "current-year-refund", date: "2026-09-02", amount: "0.40", bankAccountId: "banco", revenueNatureId: "receita", resourceSourceId: "livre", documentId: "documento-fiscal", reason: "Devolução parcial do valor não utilizado" }), /exercício anterior|recomposição/);
+    assert.equal(await f.db.revenue.count({ where: { sourceModule: "RH", sourceType: "ADVANCE_ALLOWANCE_REFUND", sourceId: advance.id } }), 0);
+    await assert.rejects(submitAdvanceReport(context, { ...advanceReport, spentAmount: "0.60", returnedAmount: "0.30" }), /conciliar integralmente/);
+    await assert.rejects(submitAdvanceReport(context, { ...advanceReport, spentAmount: "0.60", returnedAmount: "0.40" }), /referência da restituição/);
+    await assert.rejects(submitAdvanceReport(context, { ...advanceReport, returnedAmount: "0.00", restitutionRevenueId: "receita-estranha" }), /sem devolução/);
+    assert.equal(await f.db.accountingTransaction.count(), beforeReport);
+    assert.equal((await f.db.hrPortalRequest.findUniqueOrThrow({ where: { id: advance.id } })).status, "DEFERIDA");
     await submitAdvanceReport(context, advanceReport);
+    const replayedReport = await submitAdvanceReport(context, { ...advanceReport, returnedAmount: "0" });
+    assert.equal(replayedReport.sourceKey, `ADIANTAMENTO:PRESTACAO:${advance.id}`);
+    assert.equal(await f.db.hrIntegrationEvent.count({ where: { sourceKey: replayedReport.sourceKey } }), 1);
     const approval = { requestId: advance.id, date: "2026-09-03", decision: "APROVAR", reason: "Comprovantes regulares e prestação integral aprovada", documentId: "documento-fiscal" };
     await assert.rejects(reviewAdvanceReport(context, approval), /independente/);
     await assert.rejects(requestMunicipalAdvance(context, { ...advanceInput, requestKey: "third-advance" }), /pendente/);

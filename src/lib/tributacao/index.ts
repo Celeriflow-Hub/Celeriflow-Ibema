@@ -183,12 +183,13 @@ export async function generateTaxGuideInTransaction(tx: Prisma.TransactionClient
     const assessment = await tx.taxAssessment.findUnique({ where: { id: input.assessmentId }, include: { guides: { where: { status: { not: "Cancelada" } } } } });
     if (!assessment || ["Cancelado", "Pago", "Extinto", "Suspenso"].includes(assessment.status)) throw new TaxError("O lançamento tributário não está disponível para geração de guia.");
     const snapshot = taxScopeSnapshot(assessment.calculationSnapshot);
-    if (typeof snapshot.legacyOriginDebtId === "string") {
-      const debt = await tx.activeDebt.findUniqueOrThrow({ where: { id: snapshot.legacyOriginDebtId } });
+    const enrolledDebt = await tx.activeDebt.findUnique({ where: { assessmentId: assessment.id } });
+    if (enrolledDebt || typeof snapshot.legacyOriginDebtId === "string") {
+      const debt = enrolledDebt ?? await tx.activeDebt.findUniqueOrThrow({ where: { id: String(snapshot.legacyOriginDebtId) } });
       const origin = await resolveTaxAssessmentScope(tx, actor, assessment.taxId, assessment.calculationSnapshot);
-      if (debt.assessmentId !== assessment.id || debt.year !== assessment.year || debt.budgetUnitId !== origin.budgetUnitId || debt.governmentEntityId !== origin.governmentEntityId) throw new TaxError("Origem histórica da guia diverge da dívida municipal.");
+      if (debt.assessmentId !== assessment.id || debt.year !== assessment.year || (debt.budgetUnitId && debt.budgetUnitId !== origin.budgetUnitId) || (debt.governmentEntityId && debt.governmentEntityId !== origin.governmentEntityId) || (typeof snapshot.legacyOriginDebtId === "string" && debt.id !== snapshot.legacyOriginDebtId)) throw new TaxError("Origem histórica da guia diverge da dívida municipal.");
       await resolveTaxFinancialYear(tx, new Date().getUTCFullYear(), origin);
-      if (input.dueDate.getUTCFullYear() !== new Date().getUTCFullYear()) throw new TaxError("Nova DAM de origem histórica exige vencimento no exercício corrente.");
+      if (input.dueDate.getUTCFullYear() !== new Date().getUTCFullYear()) throw new TaxError("Nova DAM de dívida ativa exige vencimento no exercício corrente.");
     } else {
       await assessmentYearScope(tx, actor, assessment.year, assessment.taxId, assessment.calculationSnapshot);
       if (input.dueDate.getFullYear() !== assessment.year) throw new TaxError("O vencimento da guia deve pertencer ao exercício do lançamento.");

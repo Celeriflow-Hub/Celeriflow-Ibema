@@ -89,7 +89,13 @@ Contas oficiais TCE-PR adotadas em `aurora-asset-depreciation-accounts-2026-v1`,
 
 VPD móveis `3.3.3.1.1.01.01.00.00.00.00.00`; imóveis `3.3.3.1.1.01.02.00.00.00.00.00`. Terrenos não integram a categoria depreciável. Vidas úteis são estimativas municipais ajustáveis à avaliação de implantação; nenhum número de lei foi presumido e nenhum bem antigo foi reclassificado. Integração de depreciação/ajustes está em implementação, sem validação final após as alterações patrimoniais.
 
-### Redução a valor recuperável e posição patrimonial
+### Dívida ativa — contas e roteamento preservado
+
+`adopt-aurora-active-debt-accounts.ts --apply` aplicado/reaplicado: edição `aurora-active-debt-accounts-2026-v1`, hash `dfe5e966457a3f4fba57f9aff4768547681ba29d3657ce53e4d020dc7c78d3de`, seis contas oficiais e uma auditoria. Direitos de IPTU/ITBI/ISS: `1.1.2.5.1.01.05/06/07.00.00.00.00.00`; VPD de extinção: `3.6.5.1.1.01.01.05/06/07.00.00.00.00`. São 252 eventos (reclassificação/extinção × três tributos × 42 UGs), sem mudança de contas históricas.
+
+Na emissão de nova CDA, direito já reconhecido é reclassificado pelo saldo residual, sem segunda VPA. `DEBT_ACCOUNTING_POSITION` preserva conta DA/VPD/partida; recebimento/extinção usam essas contas. Estornos de fatos anteriores mantêm inversão histórica e transferem o direito restaurado para a conta DA na mesma transação. Legados não recebem reconhecimento retroativo. Parametrização aplicada não equivale à validação funcional final nem ativa perfil de constituição quando falta vínculo arrecadador.
+
+### Redução a valor recuperável e posição patrimonial durável
 
 `adopt-aurora-asset-impairment-profiles.ts --apply` aplicado com uma auditoria: edição `aurora-asset-impairment-accounts-2026-v1`, hash `932a7ab3d7b66625733aa0601761692648799405edcdd7ba9f1791293ae65d01`. Para as seis categorias acima, VPD `3.6.1.5.1.<grupo>.00.00.00.00.00` contra redutora `1.2.3.9.1.<grupo>.00.00.00.00.00`, grupos `01.01`, `01.02`, `01.03`, `01.05`, `01.99` e `02.99`, respectivamente. Origem TCE-PR 2026, natureza patrimonial, débito da VPD e crédito da redutora conferidos. Avaliação/laudo permanecem evidência obrigatória do ajuste.
 

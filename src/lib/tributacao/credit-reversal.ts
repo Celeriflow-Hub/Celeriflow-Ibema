@@ -2,7 +2,8 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertAccountingPeriodOpen, postAccountingTransactionInTransaction } from "@/lib/financeiro";
 import { TaxError, type TaxActor } from "./index";
 import { assertTaxCreditScope } from "./credit-finance";
-import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxScopeSnapshot, taxAssessmentCompensatedValue } from "./scope";
+import { reclassifyRestoredTaxReceivable } from "./accrual-accounting";
+import { resolveTaxAssessmentScope, resolveTaxFinancialYear, synchronizeAssessmentDebt, taxScopeSnapshot, taxAssessmentCompensatedValue } from "./scope";
 
 export async function reverseTaxCreditMovement(db: PrismaClient, actor: TaxActor, input: {
   movementId: string; date: Date; reason: string; idempotencyKey: string; proofDocumentId?: string;
@@ -74,12 +75,14 @@ export async function reverseTaxCreditMovement(db: PrismaClient, actor: TaxActor
         lines: original.entries.map((entry) => { if (!entry.valueDecimal) throw new TaxError("Partida original sem Decimal conciliado."); return { accountId: entry.accountId, type: entry.type === "Débito" ? "Crédito" as const : "Débito" as const, value: entry.valueDecimal }; }),
       });
       transactionId = transaction.id;
+      await reclassifyRestoredTaxReceivable(tx, actor, { assessmentId: assessment.id, originalTransactionId: original.id, amount, date: input.date, idempotencyKey: `${key}:DA_RESTORATION`, reason: `Recomposição do direito em dívida ativa após estorno da compensação ${movement.id}` });
       await tx.taxRegistryEntry.update({ where: { id: movement.id }, data: { status: "ESTORNADO" } });
       const payments = await tx.taxPayment.findMany({ where: { guide: { assessmentId: assessment.id }, status: "Confirmado" }, select: { amountPaidDecimal: true } });
       const extinguished = payments.reduce((sum, payment) => { if (!payment.amountPaidDecimal) throw new TaxError("Pagamento sem Decimal conciliado."); return sum.plus(payment.amountPaidDecimal); }, await taxAssessmentCompensatedValue(tx, assessment.id));
       const assessmentTotal = assessment.finalValueDecimal ?? assessment.originalValueDecimal;
       if (!assessmentTotal) throw new TaxError("Débito sem Decimal conciliado.");
       await tx.taxAssessment.update({ where: { id: assessment.id }, data: { status: extinguished.gte(assessmentTotal) ? "Pago" : extinguished.gt(0) ? "Parcial" : "Lançado" } });
+      await synchronizeAssessmentDebt(tx, actor, assessment.id);
     } else if (data.operation === "TRANSFERIR") {
       const destinations = await tx.taxRegistryEntry.findMany({ where: { category: "TAX_CREDIT", source: "TRANSFERENCIA", data: { path: ["movementId"], equals: movement.id } } });
       if (destinations.length !== 1) throw new TaxError("Transferência sem crédito de destino único.");

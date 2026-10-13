@@ -3,6 +3,7 @@
 import { AssetLifecycleError, depreciateAssetsForMonth, recordAssetDisposal, recordAssetValueAdjustment, type AssetValueAdjustmentType } from "@/lib/patrimonio/asset-lifecycle";
 import { getTenantContextForModuleOperation, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { FinanceError } from "@/lib/financeiro";
+import { reverseAssetValuation } from "@/lib/patrimonio/valuation-reversal";
 import { revalidatePath } from "next/cache";
 
 type ActionResult = { error?: string; message?: string };
@@ -20,10 +21,11 @@ function parseCompetence(value: string) {
   return date;
 }
 
-export async function runMonthlyDepreciation(competence: string): Promise<ActionResult> {
+export async function runMonthlyDepreciation(competence: string, budgetUnitId: string): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("PATRIMONIO", "create");
-    const result = await depreciateAssetsForMonth(context.prisma, parseCompetence(competence));
+    await getTenantContextForModuleOperation("FINANCEIRO", "create");
+    const result = await depreciateAssetsForMonth(context.prisma, parseCompetence(competence), { budgetUnitId, actor: { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds } });
     revalidatePath("/patrimonio/ciclo-vida");
     revalidatePath("/patrimonio/bens");
     revalidatePath("/patrimonio");
@@ -76,6 +78,8 @@ export async function registerAssetValueAdjustment(input: {
   value: string;
   justification: string;
   evidence: string;
+  budgetUnitId: string;
+  idempotencyKey: string;
 }): Promise<ActionResult> {
   try {
     const date = new Date(`${input.date}T12:00:00.000Z`);
@@ -84,7 +88,8 @@ export async function registerAssetValueAdjustment(input: {
     }
     const value = Number(input.value.replace(",", "."));
     const context = await getTenantContextForModuleOperation("PATRIMONIO", "update");
-    await recordAssetValueAdjustment(context.prisma, { ...input, date, value });
+    await getTenantContextForModuleOperation("FINANCEIRO", "create");
+    await recordAssetValueAdjustment(context.prisma, { ...input, date, value }, { budgetUnitId: input.budgetUnitId, actor: { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds } });
     revalidatePath("/patrimonio/ciclo-vida");
     revalidatePath("/patrimonio/bens");
     revalidatePath("/patrimonio");
@@ -92,4 +97,18 @@ export async function registerAssetValueAdjustment(input: {
   } catch (error) {
     return { error: messageFor(error) };
   }
+}
+
+export async function reverseAssetValuationAction(input: { kind: "DEPRECIATION" | "ADJUSTMENT"; recordId: string; date: string; reason: string; idempotencyKey: string; budgetUnitId: string }): Promise<ActionResult> {
+  try {
+    const context = await getTenantContextForModuleOperation("PATRIMONIO", "update");
+    await getTenantContextForModuleOperation("FINANCEIRO", "update");
+    const date = new Date(`${input.date}T12:00:00.000Z`);
+    if (!input.date || !Number.isFinite(date.valueOf()) || date.toISOString().slice(0, 10) !== input.date) throw new AssetLifecycleError("Data do estorno inválida.");
+    await reverseAssetValuation(context.prisma, { budgetUnitId: input.budgetUnitId, actor: { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds } }, { ...input, date });
+    revalidatePath("/patrimonio/ciclo-vida");
+    revalidatePath("/patrimonio/bens");
+    revalidatePath("/financeiro/contabilidade");
+    return { message: "Fato patrimonial estornado com linhas originais preservadas e valor do bem recomposto." };
+  } catch (error) { return { error: messageFor(error) }; }
 }

@@ -4,6 +4,7 @@ import { TaxError, configureTaxFinancialMapping, configureTaxParameter, configur
 import { executeTaxRefund } from "@/lib/tributacao/credit-finance";
 import { reverseTaxCreditMovement } from "@/lib/tributacao/credit-reversal";
 import { grantBenefit } from "@/lib/tributacao/s8-service";
+import { configureTaxAccountingProfile } from "@/lib/tributacao/accounting-profile";
 import { FinanceError } from "@/lib/financeiro";
 import {
   approveRefundRequest,
@@ -26,6 +27,17 @@ import { getTenantContextForModule, getTenantContextForModuleOperation, isSystem
 import { revalidatePath } from "next/cache";
 
 type ActionResult = { error?: string };
+export async function saveTaxAccountingProfileAction(data: { taxId: string; budgetUnitId: string; catalogVersionId: string; receivableAccountId: string; revenueAccountId: string; deductionAccountId: string; lossAccountId: string; effectiveFrom: string; effectiveUntil: string; reason: string; idempotencyKey: string; supersedesEntryId?: string }): Promise<ActionResult> {
+  try {
+    const context = await getTenantContextForModuleOperation("TRIBUTACAO", "update");
+    const effectiveFrom = new Date(`${data.effectiveFrom}T00:00:00.000Z`);
+    const effectiveUntil = new Date(`${data.effectiveUntil}T23:59:59.999Z`);
+    if (![data.effectiveFrom, data.effectiveUntil].every(value => /^\d{4}-\d{2}-\d{2}$/.test(value)) || !Number.isFinite(effectiveFrom.getTime()) || !Number.isFinite(effectiveUntil.getTime()) || effectiveFrom.toISOString().slice(0, 10) !== data.effectiveFrom || effectiveUntil.toISOString().slice(0, 10) !== data.effectiveUntil) return { error: "Informe datas de vigência válidas." };
+    await configureTaxAccountingProfile(context.prisma, taxActor(context), { ...data, effectiveFrom, effectiveUntil });
+    revalidatePath("/tributacao/motor-fiscal");
+    return {};
+  } catch (error) { return { error: error instanceof Error ? error.message : "Não foi possível registrar o perfil contábil." }; }
+}
 const taxActor = (context: AppContext) => ({ usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds });
 const message = (error: unknown) => error instanceof TaxError || error instanceof FinanceError ? error.message : "Nao foi possivel concluir a operacao tributaria interna.";
 

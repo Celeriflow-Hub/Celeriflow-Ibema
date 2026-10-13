@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertAccountingPeriodOpen } from "@/lib/financeiro";
 import type { TaxActor } from "./index";
+import { postTaxAssessmentAdjustment } from "./accrual-accounting";
 import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxAssessmentCompensatedValue, taxScopeSnapshot } from "./scope";
 import {
   allocateInstallmentPayment,
@@ -713,6 +714,7 @@ export async function grantBenefit(
     const applied = balance.minus(result.finalAmount);
     if (applied.lte(0)) throw new TributarioS8Error("O benefício deve reduzir o saldo do lançamento.");
     const finalValue = total.minus(applied);
+    await postTaxAssessmentAdjustment(tx, actor, { assessmentId: current.id, date: now, delta: applied.negated(), kind: "BENEFIT", idempotencyKey: `BENEFIT:${current.id}:${rule.id}:ACCOUNTING`, reason: request.reason });
     const grant = await tx.taxBenefitGrant.create({ data: {
       ...key, originalAmountDecimal: balance, creditDecimal: result.credit, reductionDecimal: result.reduction, renunciationDecimal: result.renunciation, finalAmountDecimal: result.finalAmount,
       calculationSnapshot: json({ ...scope, operationFinancialYearId: year.id, request, rule: { id: rule.id, code: rule.code, legalReference: rule.legalReference, calculation: rule.calculation }, result, oldValue: total.toFixed(2), newValue: finalValue.toFixed(2), effect: "REDUCAO_DEBITO_SEM_CAIXA" }), grantedByUsuarioId: actor.usuarioId, grantedAt: now,

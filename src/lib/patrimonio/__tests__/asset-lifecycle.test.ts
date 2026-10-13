@@ -39,8 +39,11 @@ test("records a configuration pending item instead of faking disposal accounting
   const pending: Array<Record<string, unknown>> = [];
   let status = "Ativo";
   const transaction = {
+    $queryRaw: async () => [{ id: "asset-1" }],
+    assetValueAdjustment: { findFirst: async () => null },
+    assetValueHistory: { findFirst: async () => null },
     asset: {
-      findUnique: async () => ({ id: "asset-1", status, currentValue: 75, maintenances: [] }),
+      findUnique: async () => ({ id: "asset-1", status, acquisitionDate: new Date("2026-01-01"), currentValue: 75, maintenances: [] }),
       update: async ({ data }: { data: { status: string } }) => { status = data.status; },
     },
     assetWriteOff: {

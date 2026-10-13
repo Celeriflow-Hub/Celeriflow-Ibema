@@ -46,6 +46,10 @@ export async function operateAsset(context: AppContext, raw: unknown) {
     if (input.kind === "transfer") {
       const department = await tx.department.findFirst({ where: { id: input.departmentId, isActive: true } });
       if (!department) throw new AssetOperationError("Selecione um setor ativo.");
+      if (asset.budgetUnitId) {
+        const unit = await tx.budgetUnit.findUniqueOrThrow({ where: { id: asset.budgetUnitId }, select: { secretariatId: true } });
+        if (department.secretariatId !== unit.secretariatId) throw new AssetOperationError("Transferência para outra UG exige conciliação contábil da origem antes da mudança de lotação.");
+      }
       if (input.responsibleId && !await tx.employee.count({ where: { id: input.responsibleId, departmentId: input.departmentId, isActive: true } })) throw new AssetOperationError("O responsável deve ser servidor ativo do setor de destino.");
       const responsibleId = input.responsibleId || null;
       if (asset.departmentId === input.departmentId && asset.responsibleId === responsibleId) throw new AssetOperationError("Informe um setor ou responsável diferente do atual.");

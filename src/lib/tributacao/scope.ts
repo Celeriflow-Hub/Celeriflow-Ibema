@@ -22,6 +22,12 @@ export function taxAssessmentAccessFilter(budgetUnitIds?: string[]): Prisma.TaxA
   return { OR: budgetUnitIds.map((budgetUnitId) => ({ calculationSnapshot: { path: ["budgetUnitId"], equals: budgetUnitId } })) };
 }
 
+export function activeDebtAccessFilter(budgetUnitIds?: string[]): Prisma.ActiveDebtWhereInput {
+  if (!budgetUnitIds) return {};
+  if (!budgetUnitIds.length) return { id: { in: [] } };
+  return { OR: [{ budgetUnitId: { in: budgetUnitIds } }, { budgetUnitId: null, assessment: taxAssessmentAccessFilter(budgetUnitIds) }] };
+}
+
 export async function resolveTaxAssessmentScope(db: Db, actor: TaxActor, taxId: string, snapshot?: Prisma.JsonValue | null) {
   const stored = taxScopeSnapshot(snapshot);
   const mapping = typeof stored.budgetUnitId === "string" ? null : await db.taxFinancialMapping.findUnique({ where: { taxId }, select: { defaultBankAccount: { select: { budgetUnitId: true } } } });

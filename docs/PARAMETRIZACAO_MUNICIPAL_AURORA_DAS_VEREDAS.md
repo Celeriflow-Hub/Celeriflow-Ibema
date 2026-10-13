@@ -52,6 +52,49 @@ Procedimento inicial estimado: um adiantamento pendente por titular/pessoa no me
 
 Prestação impugnada pode ser reaberta por responsável independente com parecer GED e fundamento. A reabertura reverte as partidas da rodada anterior na data autorizada e cria novo ciclo de apresentação/revisão, sem alterar documentos ou decisões originais. O titular permanece com pendência até aprovação. Histórico completo, inclusive rodadas estornadas, disponível em PDF/CSV/XLSX na página do adiantamento, com acesso autorizado por UG.
 
+## Contas para reconhecimento patrimonial tributário
+
+Edição `aurora-tax-accrual-accounts-2026-v1`, hash `87804d9fcb481ded62b0b7834c4b311aa3a382fa833c33766039e7a1713fc77d`; `scripts/adopt-aurora-tax-accrual-accounts.ts --apply` aplicado e reaplicado. Origem oficial PCASPM TCE-PR 2026 v1.0d, com dez contas analíticas de natureza patrimonial e vigência 2026. Cadastro/IDs/edição fonte preservados.
+
+| Tributo | Direito a receber | VPA | Dedução da VPA |
+| --- | --- | --- | --- |
+| IPTU | 1.1.2.1.1.01.05.00.00.00.00.00 | 4.1.1.2.1.02.00.00.00.00.00.00 | 4.1.1.2.1.97.02.00.00.00.00.00 |
+| ITBI | 1.1.2.1.1.01.06.00.00.00.00.00 | 4.1.1.2.1.04.00.00.00.00.00.00 | 4.1.1.2.1.97.04.00.00.00.00.00 |
+| ISS | 1.1.2.1.1.01.07.00.00.00.00.00 | 4.1.1.3.1.02.00.00.00.00.00.00 | 4.1.1.3.1.97.02.00.00.00.00.00 |
+
+Desincorporação de créditos a receber: `3.6.5.1.1.03.00.00.00.00.00.00`. IDs canônicos seguem `aurora-account:<código oficial>`. A edição disponibiliza contas; perfis por tributo/UG e produtores contábeis específicos ainda não foram ativados. Reconhecimento e arrecadação serão tratados em conjunto para que o recebimento baixe o direito sem reconhecer uma segunda VPA. Não houve conversão ou reconhecimento automático dos lançamentos legados.
+
+### Produtores integrados e ativação por UG
+
+Serviço de reconhecimento integrado às constituições manual/parametrizada, revisão, benefício, extinção, arrecadação e compensação. Perfis usam `TaxRegistryEntry`, categoria `ACCOUNTING_PROFILE`, separados das regras de cálculo; cada constituição reconhecida guarda `ACCOUNTING_POSITION` com contas/perfil e partida originais. O recebimento mantém a receita orçamentária e baixa o direito; os estornos invertem as linhas históricas. Ensaios conjuntos com a regressão tributária: 20/20 aprovados no PostgreSQL isolado, incluindo Prefeitura e Câmara.
+
+`scripts/adopt-aurora-tax-accrual-profiles.ts` confere edição municipal, escopo do mapeamento financeiro, vigência e sobreposição antes de ativar perfil aditivo por tributo/UG. No banco atual ainda não há `BankAccount` nem `TaxFinancialMapping`; leitura retorna `AGUARDANDO_VINCULO_FINANCEIRO` para IPTU/ITBI/ISS, sem ativar perfis. Parametrizar natureza/fonte/conta arrecadadora com UG e então aplicar/reaplicar os perfis. Lançamentos antigos continuam com seu tratamento histórico; reclassificação da dívida e separação dos acréscimos ainda precisam de integração própria.
+
+Alternativamente à adoção pelo script, o motor fiscal possui cadastro operacional de perfil por tributo/UG, independente de conta bancária. Selecionar edição municipal publicada, direito/VPA/dedução/desincorporação, vigência e fundamento. Substituição informa a edição corrente e cria nova versão com início posterior; a edição anterior e as posições já reconhecidas são preservadas. Arrecadação permanece dependente de natureza/fonte/conta nativas. Cadastro/replay/substituição/concorrência/seleção da vigência passaram em ensaios internos nos dois entes; ativação efetiva no banco atual e conferência autenticada ainda pendentes.
+
+## Depreciação patrimonial municipal
+
+Contas oficiais TCE-PR adotadas em `aurora-asset-depreciation-accounts-2026-v1`, hash `0790aa2cbf586a64a72f7327e14b8869e49b7223deeeefb732d6a4f70f5cfce5`: dezoito redutoras de depreciação acumulada e duas VPD de bens móveis/imóveis. Origem/vigência/D-C/escrituração conferidos; adoção aditiva aplicada e reaplicada, com uma auditoria.
+
+`adopt-aurora-asset-depreciation-profiles.ts --apply` criou seis categorias e regras operacionais `ASSET_DEPRECIATION:<id da categoria>`:
+
+| Categoria inicial | Vida útil estimada | Redutora oficial |
+| --- | --- | --- |
+| Máquinas/equipamentos/ferramentas | 120 meses | 1.2.3.8.1.01.01.00.00.00.00.00 |
+| Informática | 60 meses | 1.2.3.8.1.01.02.00.00.00.00.00 |
+| Móveis/utensílios | 120 meses | 1.2.3.8.1.01.03.00.00.00.00.00 |
+| Veículos | 60 meses | 1.2.3.8.1.01.05.00.00.00.00.00 |
+| Demais bens móveis | 60 meses | 1.2.3.8.1.01.99.00.00.00.00.00 |
+| Edificações/demais imóveis depreciáveis | 600 meses | 1.2.3.8.1.02.99.00.00.00.00.00 |
+
+VPD móveis `3.3.3.1.1.01.01.00.00.00.00.00`; imóveis `3.3.3.1.1.01.02.00.00.00.00.00`. Terrenos não integram a categoria depreciável. Vidas úteis são estimativas municipais ajustáveis à avaliação de implantação; nenhum número de lei foi presumido e nenhum bem antigo foi reclassificado. Integração de depreciação/ajustes está em implementação, sem validação final após as alterações patrimoniais.
+
+### Redução a valor recuperável e posição patrimonial
+
+`adopt-aurora-asset-impairment-profiles.ts --apply` aplicado com uma auditoria: edição `aurora-asset-impairment-accounts-2026-v1`, hash `932a7ab3d7b66625733aa0601761692648799405edcdd7ba9f1791293ae65d01`. Para as seis categorias acima, VPD `3.6.1.5.1.<grupo>.00.00.00.00.00` contra redutora `1.2.3.9.1.<grupo>.00.00.00.00.00`, grupos `01.01`, `01.02`, `01.03`, `01.05`, `01.99` e `02.99`, respectivamente. Origem TCE-PR 2026, natureza patrimonial, débito da VPD e crédito da redutora conferidos. Avaliação/laudo permanecem evidência obrigatória do ajuste.
+
+Migration aditiva `20261013010000_asset_valuation_scope_decimal` aplicada sem alterar registros antigos: UG e posições Decimal duráveis dos novos fatos, com vínculo direto da partida no histórico/ajuste. Estornos operacionais preservam os registros e invertem as contas das linhas originais; critérios financeiros/finalização P1–P4 ainda em implementação, com testes funcionais finais pendentes.
+
 ## Diretriz vigente
 
 Em 12/10/2026, o responsável determinou que a ausência de documentos municipais não interrompa a implementação. Os fluxos devem funcionar com dados e parâmetros iniciais estimados, ajustáveis na implantação, apresentados como operações municipais. Prefeitura e Câmara permanecem segregadas.

@@ -1,19 +1,25 @@
-import { getTenantContextForModule } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
+import { activeDebtAccessFilter, taxAssessmentAccessFilter } from "@/lib/tributacao/scope";
 import { daBook, ensureS9Defaults, listEnrollmentCandidates, selectProtestCandidates } from "@/lib/tributacao/s9-service";
 import DividaAtivaClient from "./DividaAtivaClient";
 export const dynamic = "force-dynamic";
 export default async function DividaAtivaPage() {
   const { prisma, user } = await getTenantContextForModule("TRIBUTACAO");
+  const allowed = isSystemAdministrator(user) ? undefined : user.allowedBudgetUnitIds;
+  const assessmentAccess = taxAssessmentAccessFilter(allowed);
+  const debtAccess = activeDebtAccessFilter(allowed);
+  const visibleDebtIds = allowed ? (await prisma.activeDebt.findMany({ where: debtAccess, select: { id: true } })).map(row => row.id) : [];
   await ensureS9Defaults(prisma, { usuarioId: user.id });
-  const [taxpayers, candidates, debts, portfolios, protestBatches, executionBatches, guides, protestCandidates] = await Promise.all([
+  const [taxpayers, candidates, debts, portfolios, protestBatches, executionBatches, guides, protestCandidates, budgetUnits] = await Promise.all([
     prisma.taxpayer.findMany({ where: { status: "Ativo" }, include: { person: true, company: true }, orderBy: { createdAt: "asc" }, take: 200 }),
-    listEnrollmentCandidates(prisma),
-    prisma.activeDebt.findMany({ include: { taxpayer: { include: { person: true, company: true } }, }, orderBy: { createdAt: "desc" }, take: 200 }),
-    prisma.taxDaPortfolio.findMany({ include: { items: true }, orderBy: { createdAt: "desc" }, take: 50 }),
-    prisma.taxProtestBatch.findMany({ include: { items: true }, orderBy: { createdAt: "desc" }, take: 50 }),
-    prisma.taxExecutionBatch.findMany({ include: { cases: { include: { events: { orderBy: { createdAt: "desc" }, take: 6 } } } }, orderBy: { createdAt: "desc" }, take: 50 }),
-    prisma.taxGuide.findMany({ where: { status: { notIn: ["Cancelada", "Paga"] } }, include: { assessment: { include: { activeDebt: { select: { id: true } } } } }, orderBy: { createdAt: "desc" }, take: 100 }),
-    selectProtestCandidates(prisma),
+    listEnrollmentCandidates(prisma, allowed),
+    prisma.activeDebt.findMany({ where: debtAccess, include: { taxpayer: { include: { person: true, company: true } }, }, orderBy: { createdAt: "desc" }, take: 200 }),
+    prisma.taxDaPortfolio.findMany({ where: allowed ? { items: { some: { activeDebtId: { in: visibleDebtIds } }, every: { activeDebtId: { in: visibleDebtIds } } } } : {}, include: { items: true }, orderBy: { createdAt: "desc" }, take: 50 }),
+    prisma.taxProtestBatch.findMany({ where: allowed ? { items: { some: { activeDebtId: { in: visibleDebtIds } }, every: { activeDebtId: { in: visibleDebtIds } } } } : {}, include: { items: true }, orderBy: { createdAt: "desc" }, take: 50 }),
+    prisma.taxExecutionBatch.findMany({ where: allowed ? { cases: { some: { activeDebtId: { in: visibleDebtIds } }, every: { activeDebtId: { in: visibleDebtIds } } } } : {}, include: { cases: { include: { events: { orderBy: { createdAt: "desc" }, take: 6 } } } }, orderBy: { createdAt: "desc" }, take: 50 }),
+    prisma.taxGuide.findMany({ where: { status: { notIn: ["Cancelada", "Paga"] }, assessment: assessmentAccess }, include: { assessment: { include: { activeDebt: { select: { id: true } } } } }, orderBy: { createdAt: "desc" }, take: 100 }),
+    selectProtestCandidates(prisma, allowed),
+    prisma.budgetUnit.findMany({ where: { ...(allowed ? { id: { in: allowed } } : {}), planningEntityUnit: { isNot: null } }, select: { id: true, code: true, name: true }, orderBy: { code: "asc" } }),
   ]);
   const debtIds = debts.map((row) => row.id);
   const [versions, suspensions, events] = await Promise.all([
@@ -21,10 +27,11 @@ export default async function DividaAtivaPage() {
     prisma.taxDebtSuspension.findMany({ where: { activeDebtId: { in: debtIds } }, orderBy: { createdAt: "desc" } }),
     prisma.taxActiveDebtEvent.findMany({ where: { activeDebtId: { in: debtIds } }, orderBy: { createdAt: "desc" }, take: 400 }),
   ]);
-  const book = await daBook(prisma);
+  const book = await daBook(prisma, undefined, allowed);
   const names = new Map(taxpayers.map((row) => [row.id, row.company?.corporateName ?? row.person?.fullName ?? row.id]));
   const nameOf = (id: string) => names.get(id) ?? id;
   return <DividaAtivaClient data={{
+    budgetUnits,
     taxpayers: taxpayers.map((row) => ({ id: row.id, name: nameOf(row.id), document: row.company?.cnpj ?? row.person?.cpf ?? "" })),
     candidates,
     debts: debts.map((row) => ({

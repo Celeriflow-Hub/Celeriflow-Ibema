@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { FinanceError, recordConfirmedRevenue, type FinanceActor } from "@/lib/financeiro";
 import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxScopeSnapshot, taxAssessmentCompensatedValue } from "./scope";
+import { recognizeTaxAssessmentInTransaction } from "./accrual-accounting";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -109,14 +110,31 @@ export async function createTaxAssessment(
   actor: TaxActor,
   input: { year: number; taxId: string; taxpayerId: string; taxableBase: Prisma.Decimal | string | number; rate: Prisma.Decimal | string | number; discount?: Prisma.Decimal | string | number; interest?: Prisma.Decimal | string | number; penalty?: Prisma.Decimal | string | number; correction?: Prisma.Decimal | string | number; competence?: Date; realEstateId?: string; economicRegistrationId?: string },
 ) {
+  return db.$transaction(tx => createTaxAssessmentInTransaction(tx, actor, input));
+}
+
+export async function createTaxAssessmentInTransaction(
+  tx: Prisma.TransactionClient,
+  actor: TaxActor,
+  input: { year: number; taxId: string; taxpayerId: string; taxableBase: Prisma.Decimal | string | number; rate: Prisma.Decimal | string | number; discount?: Prisma.Decimal | string | number; interest?: Prisma.Decimal | string | number; penalty?: Prisma.Decimal | string | number; correction?: Prisma.Decimal | string | number; competence?: Date; realEstateId?: string; economicRegistrationId?: string },
+  options?: { legacyDebtOriginId: string },
+) {
   const calculation = calculateTaxAssessment(input);
-  return db.$transaction(async (tx) => {
-    const scope = await assessmentYearScope(tx, actor, input.year, input.taxId);
+    const legacyDebt = options ? await tx.activeDebt.findUniqueOrThrow({ where: { id: options.legacyDebtOriginId } }) : null;
+    if (legacyDebt && (legacyDebt.assessmentId || !legacyDebt.budgetUnitId || !legacyDebt.governmentEntityId || legacyDebt.year !== input.year || legacyDebt.taxpayerId !== input.taxpayerId || !legacyDebt.updatedValueDecimal?.eq(calculation.finalValue) || input.realEstateId || input.economicRegistrationId)) throw new TaxError("Regularização da origem histórica diverge da dívida municipal preservada.");
+    const scope = legacyDebt
+      ? await (async () => {
+        const origin = await resolveTaxAssessmentScope(tx, actor, input.taxId, { budgetUnitId: legacyDebt.budgetUnitId, governmentEntityId: legacyDebt.governmentEntityId });
+        const financialYear = await resolveTaxFinancialYear(tx, new Date().getUTCFullYear(), origin);
+        return { ...origin, financialYear };
+      })()
+      : await assessmentYearScope(tx, actor, input.year, input.taxId);
     const [tax, taxpayer] = await Promise.all([
-      tx.tax.findUnique({ where: { id: input.taxId }, select: { id: true, isActive: true } }),
+      tx.tax.findUnique({ where: { id: input.taxId }, select: { id: true, name: true, isActive: true } }),
       tx.taxpayer.findUnique({ where: { id: input.taxpayerId }, select: { id: true, status: true } }),
     ]);
     if (!tax?.isActive || taxpayer?.status !== "Ativo") throw new TaxError("Tributo ativo e contribuinte ativo são obrigatórios para o lançamento.");
+    if (legacyDebt && (tax.name !== legacyDebt.originDebtType || !["INSCRITA", "Inscrita", "EM_COBRANCA", "EM_PROTESTO", "AJUIZADA"].includes(legacyDebt.status))) throw new TaxError("Origem histórica exige tributo conciliado e dívida disponível para cobrança.");
     if (input.realEstateId) {
       const property = await tx.realEstate.findUnique({ where: { id: input.realEstateId }, select: { taxpayerId: true } });
       if (!property || property.taxpayerId !== input.taxpayerId) throw new TaxError("O imóvel deve pertencer ao contribuinte do lançamento.");
@@ -140,16 +158,16 @@ export async function createTaxAssessment(
         penaltyValueDecimal: calculation.penalty,
         correctionValueDecimal: calculation.correction,
         finalValueDecimal: calculation.finalValue,
-        calculationSnapshot: { taxableBase: calculation.taxableBase.toFixed(2), rate: calculation.rate.toString(), discount: calculation.discount.toFixed(2), interest: calculation.interest.toFixed(2), penalty: calculation.penalty.toFixed(2), correction: calculation.correction.toFixed(2), finalValue: calculation.finalValue.toFixed(2), budgetUnitId: scope.budgetUnitId, governmentEntityId: scope.financialYear.governmentEntityId, financialYearId: scope.financialYear.id },
+        calculationSnapshot: { taxableBase: calculation.taxableBase.toFixed(2), rate: calculation.rate.toString(), discount: calculation.discount.toFixed(2), interest: calculation.interest.toFixed(2), penalty: calculation.penalty.toFixed(2), correction: calculation.correction.toFixed(2), finalValue: calculation.finalValue.toFixed(2), budgetUnitId: scope.budgetUnitId, governmentEntityId: scope.financialYear.governmentEntityId, financialYearId: scope.financialYear.id, ...(legacyDebt ? { legacyOriginDebtId: legacyDebt.id, originalFiscalYear: legacyDebt.year, recognitionPolicy: "PRESERVE_LEGACY_NO_RETROACTIVE_RECOGNITION" } : {}) },
         taxId: input.taxId,
         taxpayerId: input.taxpayerId,
         realEstateId: input.realEstateId,
         economicRegistrationId: input.economicRegistrationId,
       },
     });
-    await audit(tx, actor, "CREATE", "TaxAssessment", assessment.id, { assessmentNumber, finalValue: calculation.finalValue.toFixed(2) });
+    if (!legacyDebt) await recognizeTaxAssessmentInTransaction(tx, actor, assessment.id);
+    await audit(tx, actor, "CREATE", "TaxAssessment", assessment.id, { assessmentNumber, finalValue: calculation.finalValue.toFixed(2), legacyOriginDebtId: legacyDebt?.id ?? null });
     return assessment;
-  });
 }
 
 export async function generateTaxGuide(
@@ -157,19 +175,33 @@ export async function generateTaxGuide(
   actor: TaxActor,
   input: { assessmentId: string; dueDate: Date; documentId?: string },
 ) {
-  return db.$transaction(async (tx) => {
+  return db.$transaction(tx => generateTaxGuideInTransaction(tx, actor, input));
+}
+
+export async function generateTaxGuideInTransaction(tx: Prisma.TransactionClient, actor: TaxActor, input: { assessmentId: string; dueDate: Date; documentId?: string }) {
     await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${input.assessmentId} FOR UPDATE`;
     const assessment = await tx.taxAssessment.findUnique({ where: { id: input.assessmentId }, include: { guides: { where: { status: { not: "Cancelada" } } } } });
     if (!assessment || ["Cancelado", "Pago", "Extinto", "Suspenso"].includes(assessment.status)) throw new TaxError("O lançamento tributário não está disponível para geração de guia.");
-    await assessmentYearScope(tx, actor, assessment.year, assessment.taxId, assessment.calculationSnapshot);
-    if (input.dueDate.getFullYear() !== assessment.year) throw new TaxError("O vencimento da guia deve pertencer ao exercício do lançamento.");
+    const snapshot = taxScopeSnapshot(assessment.calculationSnapshot);
+    if (typeof snapshot.legacyOriginDebtId === "string") {
+      const debt = await tx.activeDebt.findUniqueOrThrow({ where: { id: snapshot.legacyOriginDebtId } });
+      const origin = await resolveTaxAssessmentScope(tx, actor, assessment.taxId, assessment.calculationSnapshot);
+      if (debt.assessmentId !== assessment.id || debt.year !== assessment.year || debt.budgetUnitId !== origin.budgetUnitId || debt.governmentEntityId !== origin.governmentEntityId) throw new TaxError("Origem histórica da guia diverge da dívida municipal.");
+      await resolveTaxFinancialYear(tx, new Date().getUTCFullYear(), origin);
+      if (input.dueDate.getUTCFullYear() !== new Date().getUTCFullYear()) throw new TaxError("Nova DAM de origem histórica exige vencimento no exercício corrente.");
+    } else {
+      await assessmentYearScope(tx, actor, assessment.year, assessment.taxId, assessment.calculationSnapshot);
+      if (input.dueDate.getFullYear() !== assessment.year) throw new TaxError("O vencimento da guia deve pertencer ao exercício do lançamento.");
+    }
     if (assessment.guides.length) throw new TaxError("O lançamento já possui guia ativa. Cancele-a formalmente antes de emitir outra.");
     if (input.documentId) {
       const document = await tx.document.findUnique({ where: { id: input.documentId }, select: { status: true } });
       if (document?.status !== "Válido") throw new TaxError("O documento GED da guia deve estar válido.");
     }
-    const total = (assessment.finalValueDecimal ?? requiredAmount(assessment.originalValueDecimal, "TaxAssessment.originalValueDecimal")).minus(await taxAssessmentCompensatedValue(tx, assessment.id));
-    if (total.lte(0)) throw new TaxError("Lançamento integralmente extinto por compensação.");
+    const assessmentPayments = await tx.taxPayment.findMany({ where: { guide: { assessmentId: assessment.id }, status: "Confirmado" }, select: { amountPaidDecimal: true } });
+    const paid = assessmentPayments.reduce((sum, payment) => sum.plus(requiredAmount(payment.amountPaidDecimal, "TaxPayment.amountPaidDecimal")), new Prisma.Decimal(0));
+    const total = (assessment.finalValueDecimal ?? requiredAmount(assessment.originalValueDecimal, "TaxAssessment.originalValueDecimal")).minus(await taxAssessmentCompensatedValue(tx, assessment.id)).minus(paid);
+    if (total.lte(0)) throw new TaxError("Lançamento integralmente extinto por pagamento ou compensação.");
     const guideNumber = await nextNumber(tx, assessment.year, "GUIDE");
     const guide = await tx.taxGuide.create({
       data: { assessmentId: assessment.id, guideNumber, totalValue: legacyAmount(total), totalValueDecimal: total, dueDate: input.dueDate, documentId: input.documentId, calculationSnapshot: assessment.calculationSnapshot ?? undefined, status: "Emitida" },
@@ -177,7 +209,6 @@ export async function generateTaxGuide(
     await tx.taxAssessment.update({ where: { id: assessment.id }, data: { status: "Emitido" } });
     await audit(tx, actor, "CREATE", "TaxGuide", guide.id, { guideNumber, assessmentId: assessment.id, totalValue: total.toFixed(2), documentId: input.documentId ?? null });
     return guide;
-  });
 }
 
 export async function confirmTaxPayment(
@@ -195,6 +226,8 @@ export async function confirmTaxPaymentInTransaction(
 ) {
   const paidAmount = amount(input.amountPaid);
   if (!input.idempotencyKey.trim()) throw new TaxError("A confirmação de pagamento exige chave de idempotência.");
+    const guideOrigin = await tx.taxGuide.findUniqueOrThrow({ where: { id: input.guideId }, select: { assessmentId: true } });
+    await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${guideOrigin.assessmentId} FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM "TaxGuide" WHERE id = ${input.guideId} FOR UPDATE`;
     const existing = await tx.taxPayment.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { guide: { include: { assessment: true } } } });
     if (existing) {
@@ -223,6 +256,11 @@ export async function confirmTaxPaymentInTransaction(
     const paidBefore = guide.payments.reduce((total, payment) => total.plus(requiredAmount(payment.amountPaidDecimal, "TaxPayment.amountPaidDecimal")), new Prisma.Decimal(0));
     const total = requiredAmount(guide.totalValueDecimal, "TaxGuide.totalValueDecimal");
     if (paidBefore.plus(paidAmount).greaterThan(total)) throw new TaxError("O pagamento acumulado excede o valor da guia.");
+    const assessmentTotal = guide.assessment.finalValueDecimal ?? requiredAmount(guide.assessment.originalValueDecimal, "TaxAssessment.originalValueDecimal");
+    const priorAssessmentPayments = await tx.taxPayment.findMany({ where: { guide: { assessmentId: guide.assessmentId }, status: "Confirmado" }, select: { amountPaidDecimal: true } });
+    const priorAssessmentPaid = priorAssessmentPayments.reduce((sum, payment) => sum.plus(requiredAmount(payment.amountPaidDecimal, "TaxPayment.amountPaidDecimal")), new Prisma.Decimal(0));
+    const compensated = await taxAssessmentCompensatedValue(tx, guide.assessmentId);
+    if (paidAmount.gt(Prisma.Decimal.max(0, assessmentTotal.minus(priorAssessmentPaid).minus(compensated)))) throw new TaxError("O pagamento excede o saldo do lançamento conciliado entre todas as guias e compensações.");
     const payment = await tx.taxPayment.create({
       data: { guideId: guide.id, amountPaid: legacyAmount(paidAmount), amountPaidDecimal: paidAmount, paymentDate: input.paymentDate, paymentMethod: input.paymentMethod.trim(), bankAccountId, proofDocumentId: input.proofDocumentId, idempotencyKey: input.idempotencyKey.trim(), sourceId: guide.id, status: "Confirmado" },
     });
@@ -255,11 +293,16 @@ export async function confirmTaxPaymentInTransaction(
       select: { amountPaidDecimal: true },
     });
     const assessmentPaidValue = assessmentPayments.reduce((sum, current) => sum.plus(requiredAmount(current.amountPaidDecimal, "TaxPayment.amountPaidDecimal")), new Prisma.Decimal(0));
-    const assessmentTotal = guide.assessment.finalValueDecimal ?? requiredAmount(guide.assessment.originalValueDecimal, "TaxAssessment.originalValueDecimal");
-    const assessmentPaid = assessmentPaidValue.plus(await taxAssessmentCompensatedValue(tx, guide.assessmentId)).greaterThanOrEqualTo(assessmentTotal);
+    const assessmentPaid = assessmentPaidValue.plus(compensated).greaterThanOrEqualTo(assessmentTotal);
     await tx.taxAssessment.update({ where: { id: guide.assessmentId }, data: { status: assessmentPaid ? "Pago" : "Parcial" } });
+    const debt = await tx.activeDebt.findUnique({ where: { assessmentId: guide.assessmentId } });
+    if (debt) {
+      const remaining = Prisma.Decimal.max(0, assessmentTotal.minus(assessmentPaidValue).minus(compensated));
+      const collecting = ["Paga", "PAGA", "Inscrita", "INSCRITA", "EM_COBRANCA", "Parcelada", "PARCELADA", "EM_PROTESTO", "AJUIZADA"].includes(debt.status);
+      await tx.activeDebt.update({ where: { id: debt.id }, data: { updatedValue: Number(remaining), updatedValueDecimal: remaining, ...(collecting ? { status: remaining.isZero() ? "PAGA" : ["EM_PROTESTO", "AJUIZADA"].includes(debt.status) ? debt.status : "EM_COBRANCA" } : {}) } });
+    }
     if (!revenue.treasuryMovement) throw new TaxError("A integração financeira não gerou movimento de tesouraria.");
-    await audit(tx, actor, "CONFIRM_PAYMENT", "TaxPayment", payment.id, { guideId: guide.id, amountPaid: paidAmount.toFixed(2), revenueId: revenue.id, treasuryMovementId: revenue.treasuryMovement.id, proofDocumentId: input.proofDocumentId ?? null });
+    await audit(tx, actor, "CONFIRM_PAYMENT", "TaxPayment", payment.id, { guideId: guide.id, amountPaid: paidAmount.toFixed(2), revenueId: revenue.id, treasuryMovementId: revenue.treasuryMovement.id, proofDocumentId: input.proofDocumentId ?? null, activeDebtId: debt?.id ?? null, debtStatusBefore: debt?.status ?? null });
     return tx.taxGuide.findUniqueOrThrow({ where: { id: guide.id } });
 }
 
@@ -370,14 +413,14 @@ export async function enrollAssessmentInActiveDebt(db: PrismaClient, actor: TaxA
     await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${assessmentId} FOR UPDATE`;
     const assessment = await tx.taxAssessment.findUnique({ where: { id: assessmentId }, include: { tax: { select: { name: true } }, activeDebt: true } });
     if (!assessment) throw new TaxError("Lancamento tributario nao encontrado.");
-    await resolveTaxAssessmentScope(tx, actor, assessment.taxId, assessment.calculationSnapshot);
+    const debtScope = await resolveTaxAssessmentScope(tx, actor, assessment.taxId, assessment.calculationSnapshot);
     if (assessment.activeDebt) return assessment.activeDebt;
     if (["Pago", "Cancelado", "Suspenso"].includes(assessment.status)) throw new TaxError("Somente lancamento tributario pendente pode seguir para base de divida ativa.");
     const payments = await tx.taxPayment.findMany({ where: { guide: { assessmentId }, status: "Confirmado" }, select: { amountPaidDecimal: true } });
     const collected = payments.reduce((sum, payment) => sum.plus(requiredAmount(payment.amountPaidDecimal, "TaxPayment.amountPaidDecimal")), new Prisma.Decimal(0));
     const value = (assessment.finalValueDecimal ?? requiredAmount(assessment.originalValueDecimal, "TaxAssessment.originalValueDecimal")).minus(collected).minus(await taxAssessmentCompensatedValue(tx, assessment.id));
     if (value.lte(0)) throw new TaxError("Lancamento sem saldo pendente para inscricao em divida ativa.");
-    const debt = await tx.activeDebt.create({ data: { taxpayerId: assessment.taxpayerId, assessmentId: assessment.id, year: assessment.year, originDebtType: assessment.tax.name, originalValue: legacyAmount(value), originalValueDecimal: value, updatedValue: legacyAmount(value), updatedValueDecimal: value, status: "PENDENTE_DE_VALIDACAO" } });
+    const debt = await tx.activeDebt.create({ data: { taxpayerId: assessment.taxpayerId, assessmentId: assessment.id, year: assessment.year, originDebtType: assessment.tax.name, budgetUnitId: debtScope.budgetUnitId, governmentEntityId: debtScope.governmentEntityId, originalValue: legacyAmount(value), originalValueDecimal: value, updatedValue: legacyAmount(value), updatedValueDecimal: value, status: "PENDENTE_DE_VALIDACAO" } });
     await tx.taxAssessment.update({ where: { id: assessment.id }, data: { status: "Dívida Ativa" } });
     await audit(tx, actor, "CREATE", "ActiveDebt", debt.id, { assessmentId: assessment.id, value: value.toFixed(2), status: debt.status });
     return debt;

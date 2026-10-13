@@ -6,6 +6,7 @@ import { assertPlanningPeriodAvailability, assertPlanningReservationYear, getPla
 import { lockPlanningRevenueBudget, recordPlanningRevenueCollection, recordPlanningRevenueReversal, recordPlanningRevenueRedistribution } from "@/lib/planejamento/revenue-execution-bridge";
 import { releasePayrollProvisionsAtSettlement, reversePayrollProvisionSettlement, recordPayrollProvisionPayment, reversePayrollProvisionPayment } from "@/lib/rh/provision-accounting";
 import { reverseAdvancePaymentControl, reverseAdvanceCommitmentControl } from "@/lib/rh/municipal-advances";
+import { taxCollectionReceivableAccount } from "@/lib/tributacao/accrual-accounting";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -1976,6 +1977,7 @@ export async function recordConfirmedRevenue(
       sourceId: revenue.id,
       idempotencyKey: `${input.idempotencyKey}:RECEITA_ARRECADADA`,
       debitAccountId: bankAccount.accountingPlanId ?? undefined,
+      creditAccountId: await taxCollectionReceivableAccount(tx, actor, input),
   });
   await recordPlanningRevenueCollection(tx, actor, revenue);
   await audit(tx, actor, "CREATE", "Revenue", revenue.id, { stage: revenue.stage, classification: revenue.classification, value: jsonMoney(value), treasuryMovementId: movement.id, sourceModule: revenue.sourceModule, sourceType: revenue.sourceType, sourceId: revenue.sourceId }, year.id);
@@ -2672,11 +2674,14 @@ export async function configureAccountingPostingRule(
   if (!input.eventCode.trim() || !input.eventName.trim()) throw new FinanceError("Codigo e nome do evento contabil sao obrigatorios.");
   if (input.debitAccountId === input.creditAccountId) throw new FinanceError("A regra contabil exige contas de debito e credito diferentes.");
   return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`ACCOUNTING_RULE:${input.eventCode.trim()}`}, 0))::text`;
     const accounts = await tx.accountingPlan.count({ where: { id: { in: [input.debitAccountId, input.creditAccountId] } } });
     if (accounts !== 2) throw new FinanceError("As contas da regra contabil nao foram encontradas.");
     const event = await tx.accountingEventCatalog.upsert({ where: { code: input.eventCode.trim() }, create: { code: input.eventCode.trim(), name: input.eventName.trim(), description: input.description?.trim() || undefined }, update: { name: input.eventName.trim(), description: input.description?.trim() || undefined, isActive: true } });
+    const replaced = await tx.accountingPostingRule.findMany({ where: { eventId: event.id, isActive: true, NOT: { debitAccountId: input.debitAccountId, creditAccountId: input.creditAccountId } }, select: { id: true } });
+    if (replaced.length) await tx.accountingPostingRule.updateMany({ where: { id: { in: replaced.map(rule => rule.id) } }, data: { isActive: false } });
     const rule = await tx.accountingPostingRule.upsert({ where: { eventId_debitAccountId_creditAccountId: { eventId: event.id, debitAccountId: input.debitAccountId, creditAccountId: input.creditAccountId } }, create: { eventId: event.id, debitAccountId: input.debitAccountId, creditAccountId: input.creditAccountId, description: input.description?.trim() || undefined, isReference: input.isReference ?? false }, update: { isActive: true, description: input.description?.trim() || undefined, isReference: input.isReference ?? false } });
-    await audit(tx, actor, "UPSERT", "AccountingPostingRule", rule.id, { eventCode: event.code, debitAccountId: rule.debitAccountId, creditAccountId: rule.creditAccountId, isReference: rule.isReference });
+    await audit(tx, actor, "UPSERT", "AccountingPostingRule", rule.id, { eventCode: event.code, debitAccountId: rule.debitAccountId, creditAccountId: rule.creditAccountId, isReference: rule.isReference, replacedRuleIds: replaced.map(previous => previous.id) });
     return rule;
   });
 }

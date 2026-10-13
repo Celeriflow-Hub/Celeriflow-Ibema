@@ -1302,6 +1302,7 @@ model PlanningLegislativeLink {
 }
 
 model GovernmentEntity {
+  activeDebts ActiveDebt[]
   incomingPlanningTransfers PlanningBudgetLine[] @relation("PlanningTransferDestination")
   id        String             @id @default(cuid())
   code      String             @unique
@@ -2817,6 +2818,10 @@ model ActiveDebt {
   cdaNumber            String?  @unique
   sourceKey            String?  @unique // Idempotência de inscrição manual/arquivo: mesma origem nunca duplica dívida
   status               String   @default("Inscrita") // Inscrita, Em CobranÃ§a, Parcelada, Protestada, Ajuizada, Paga
+  budgetUnitId String?
+  budgetUnit BudgetUnit? @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  governmentEntityId String?
+  governmentEntity GovernmentEntity? @relation(fields: [governmentEntityId], references: [id], onDelete: Restrict)
 
   taxpayerId          String
   taxpayer            Taxpayer          @relation(fields: [taxpayerId], references: [id])
@@ -2829,6 +2834,8 @@ model ActiveDebt {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  @@index([budgetUnitId, year, status])
+  @@index([governmentEntityId, year, status])
 }
 
 // TRIB-S9 — Histórico de estágios da dívida ativa (TRI-358) e escrituração de movimentos (TRI-366)
@@ -4321,6 +4328,8 @@ model CreditRequestItem {
 }
 
 model BudgetUnit {
+  activeDebts ActiveDebt[]
+  assets Asset[]
   functionalPortalServices HrPortalServiceConfiguration[]
   planningLines PlanningBudgetLine[]
   planningDemands PlanningCommunityDemand[]
@@ -5178,6 +5187,8 @@ model AccountingTransaction {
   reversedBy       AccountingTransaction? @relation("AccountingReversal")
   entries          AccountingEntry[]
   assetWriteOff    AssetWriteOff?         @relation("AssetWriteOffAccountingTransaction")
+  assetDepreciation AssetValueHistory? @relation("AssetDepreciationAccounting")
+  assetValueAdjustment AssetValueAdjustment? @relation("AssetAdjustmentAccounting")
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
 
@@ -7582,6 +7593,10 @@ model Asset {
   acquisitionDate   DateTime
   acquisitionValue  Float
   currentValue      Float
+  acquisitionValueDecimal Decimal? @db.Decimal(18, 2)
+  currentValueDecimal Decimal? @db.Decimal(18, 2)
+  budgetUnitId String?
+  budgetUnit BudgetUnit? @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
   incorporationDate DateTime?
 
   categoryId String
@@ -7622,6 +7637,7 @@ model Asset {
   segurancaRegistros SegurancaMobilidadeRegistro[] @relation("SegurancaRegistroAsset")
   fleetOperations    FleetOperation[]
   fleetUnit          FleetUnit?
+  @@index([budgetUnitId, status])
 }
 
 model InternalControlPlan {
@@ -7689,6 +7705,11 @@ model AssetValueHistory {
   openingValue   Float
   depreciation   Float
   closingValue   Float
+  openingValueDecimal Decimal? @db.Decimal(18, 2)
+  depreciationDecimal Decimal? @db.Decimal(18, 2)
+  closingValueDecimal Decimal? @db.Decimal(18, 2)
+  accountingTransactionId String? @unique
+  accountingTransaction AccountingTransaction? @relation("AssetDepreciationAccounting", fields: [accountingTransactionId], references: [id], onDelete: Restrict)
   lifeSpanMonths Int
   createdAt      DateTime @default(now())
 
@@ -7768,6 +7789,11 @@ model AssetValueAdjustment {
   openingValue    Float
   adjustmentValue Float
   closingValue    Float
+  openingValueDecimal Decimal? @db.Decimal(18, 2)
+  adjustmentValueDecimal Decimal? @db.Decimal(18, 2)
+  closingValueDecimal Decimal? @db.Decimal(18, 2)
+  accountingTransactionId String? @unique
+  accountingTransaction AccountingTransaction? @relation("AssetAdjustmentAccounting", fields: [accountingTransactionId], references: [id], onDelete: Restrict)
   justification   String
   evidence        String
 

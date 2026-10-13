@@ -2,16 +2,23 @@
 
 import { useState, useTransition } from "react";
 import { ReferencePicker } from "@/app/app-domain/frotas/ReferencePicker";
-import { registerAssetDisposal, registerAssetValueAdjustment, runMonthlyDepreciation } from "./actions";
+import { registerAssetDisposal, registerAssetValueAdjustment, runMonthlyDepreciation, reverseAssetValuationAction } from "./actions";
 
 type ClassificationOption = { id: string; code: string; name: string };
-export function AssetLifecycleClient({ initialCompetence, budgetUnits, bankAccounts, revenueNatures, resourceSources }: {
+export function AssetLifecycleClient({ initialCompetence, budgetUnits, bankAccounts, revenueNatures, resourceSources, valuationRecords }: {
   initialCompetence: string; budgetUnits: ClassificationOption[];
   bankAccounts: { id: string; bankName: string; accountNumber: string; budgetUnitId: string | null }[];
   revenueNatures: ClassificationOption[]; resourceSources: ClassificationOption[];
+  valuationRecords: { id: string; kind: "DEPRECIATION" | "ADJUSTMENT"; label: string }[];
 }) {
   const [isPending, startTransition] = useTransition();
   const [competence, setCompetence] = useState(initialCompetence);
+  const [valuationUnitId, setValuationUnitId] = useState("");
+  const [adjustmentKey, setAdjustmentKey] = useState("");
+  const [reversalRecordId, setReversalRecordId] = useState("");
+  const [reversalDate, setReversalDate] = useState(initialCompetence ? `${initialCompetence}-01` : "");
+  const [reversalReason, setReversalReason] = useState("");
+  const [reversalKey, setReversalKey] = useState("");
   const [assetId, setAssetId] = useState("");
   const [assetLabel, setAssetLabel] = useState("");
   const [type, setType] = useState<"Baixa" | "Alienação">("Baixa");
@@ -51,7 +58,8 @@ export function AssetLifecycleClient({ initialCompetence, budgetUnits, bankAccou
             Competência
             <input className="h-9 rounded-md border px-3" type="month" value={competence} onChange={(event) => setCompetence(event.target.value)} />
           </label>
-          <button type="button" className="h-9 rounded-md bg-amber-600 px-4 text-sm font-medium text-white disabled:opacity-50" disabled={isPending || !competence} onClick={() => startTransition(async () => showResult(await runMonthlyDepreciation(competence)))}>
+           <select aria-label="Unidade gestora da depreciação" className="h-9 rounded-md border px-3 text-sm" value={valuationUnitId} onChange={event => setValuationUnitId(event.target.value)}><option value="">Unidade gestora responsável</option>{budgetUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.code} — {unit.name}</option>)}</select>
+           <button type="button" className="h-9 rounded-md bg-amber-600 px-4 text-sm font-medium text-white disabled:opacity-50" disabled={isPending || !competence || !valuationUnitId} onClick={() => startTransition(async () => showResult(await runMonthlyDepreciation(competence, valuationUnitId)))}>
             Processar competência
           </button>
         </div>
@@ -111,16 +119,20 @@ export function AssetLifecycleClient({ initialCompetence, budgetUnits, bankAccou
         <form className="mt-4 grid gap-2" onSubmit={(event) => {
           event.preventDefault();
           startTransition(async () => {
-            const result = await registerAssetValueAdjustment({ assetId, date: adjustmentDate, type: adjustmentType, value: adjustmentValue, justification: adjustmentJustification, evidence: adjustmentEvidence });
+            const key = adjustmentKey || crypto.randomUUID();
+            setAdjustmentKey(key);
+            const result = await registerAssetValueAdjustment({ assetId, date: adjustmentDate, type: adjustmentType, value: adjustmentValue, justification: adjustmentJustification, evidence: adjustmentEvidence, budgetUnitId: valuationUnitId, idempotencyKey: key });
             showResult(result);
             if (!result.error) {
               setAdjustmentValue("");
               setAdjustmentJustification("");
               setAdjustmentEvidence("");
+              setAdjustmentKey("");
             }
           });
         }}>
           <ReferencePicker endpoint="/api/patrimonio/referencias" kind="assets" label="Bem para ajuste de valor" value={assetId} selectedLabel={assetLabel} required onChange={selectAsset} />
+          <select aria-label="Unidade gestora do ajuste" required className="h-9 rounded-md border px-3 text-sm" value={valuationUnitId} onChange={event => setValuationUnitId(event.target.value)}><option value="">Unidade gestora responsável</option>{budgetUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.code} — {unit.name}</option>)}</select>
           <div className="grid grid-cols-2 gap-2">
             <select className="h-9 rounded-md border px-3 text-sm" value={adjustmentType} onChange={(event) => setAdjustmentType(event.target.value as typeof adjustmentType)}>
               <option value="REVALUATION">Reavaliação</option>
@@ -133,6 +145,28 @@ export function AssetLifecycleClient({ initialCompetence, budgetUnits, bankAccou
           <input className="h-9 rounded-md border px-3 text-sm" placeholder="Justificativa" required value={adjustmentJustification} onChange={(event) => setAdjustmentJustification(event.target.value)} />
           <textarea className="min-h-20 rounded-md border px-3 py-2 text-sm" placeholder="Laudo, processo ou outra evidência" required value={adjustmentEvidence} onChange={(event) => setAdjustmentEvidence(event.target.value)} />
           <button className="h-9 rounded-md border border-amber-600 px-4 text-sm font-medium text-amber-700 disabled:opacity-50" disabled={isPending || !assetId}>Registrar ajuste</button>
+        </form>
+      </section>
+      <section className="rounded-lg border bg-white p-4 lg:col-span-3">
+        <h3 className="font-semibold">Estorno de valorização patrimonial</h3>
+        <p className="mt-1 text-sm text-muted-foreground">Selecione um fato contabilizado da página atual. Estorne em ordem inversa; as partidas e os históricos originais são preservados.</p>
+        <form className="mt-4 grid gap-2 sm:grid-cols-2" onSubmit={event => {
+          event.preventDefault();
+          const record = valuationRecords.find(row => row.id === reversalRecordId);
+          if (!record) return;
+          startTransition(async () => {
+            const key = reversalKey || crypto.randomUUID();
+            setReversalKey(key);
+            const result = await reverseAssetValuationAction({ kind: record.kind, recordId: record.id, budgetUnitId: valuationUnitId, date: reversalDate, reason: reversalReason, idempotencyKey: key });
+            showResult(result);
+            if (!result.error) { setReversalKey(""); setReversalReason(""); setReversalRecordId(""); }
+          });
+        }}>
+          <select aria-label="Fato patrimonial a estornar" required className="h-9 rounded-md border px-3 text-sm" value={reversalRecordId} onChange={event => setReversalRecordId(event.target.value)}><option value="">Fato patrimonial contabilizado</option>{valuationRecords.map(record => <option key={record.id} value={record.id}>{record.label}</option>)}</select>
+          <select aria-label="Unidade gestora do estorno" required className="h-9 rounded-md border px-3 text-sm" value={valuationUnitId} onChange={event => setValuationUnitId(event.target.value)}><option value="">Unidade gestora responsável</option>{budgetUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.code} — {unit.name}</option>)}</select>
+          <input aria-label="Data do estorno patrimonial" required type="date" className="h-9 rounded-md border px-3 text-sm" value={reversalDate} onChange={event => setReversalDate(event.target.value)} />
+          <input aria-label="Fundamento do estorno patrimonial" required minLength={10} className="h-9 rounded-md border px-3 text-sm" placeholder="Fundamento do estorno" value={reversalReason} onChange={event => setReversalReason(event.target.value)} />
+          <button className="h-9 rounded-md border border-amber-600 px-4 text-sm font-medium text-amber-700 disabled:opacity-50" disabled={isPending || !reversalRecordId || !valuationUnitId}>Estornar fato patrimonial</button>
         </form>
       </section>
       {(message || error) && <p className={`text-sm lg:col-span-3 ${error ? "text-red-600" : "text-emerald-700"}`}>{error ?? message}</p>}

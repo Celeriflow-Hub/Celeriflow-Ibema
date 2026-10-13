@@ -5,6 +5,7 @@ import { confirmTaxPaymentInTransaction, TaxError, type TaxActor } from "./index
 import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxAssessmentCompensatedValue } from "./scope";
 import { assertTaxCreditScope, recordTaxExcessInTransaction, resolveCreditDestinationScope } from "./credit-finance";
 import { assertAccountingPeriodOpen, postAccountingEventInTransaction } from "@/lib/financeiro";
+import { recognizeTaxAssessmentInTransaction, postTaxAssessmentAdjustment, recognizedTaxProfile } from "./accrual-accounting";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -105,6 +106,7 @@ export async function createParametrizedAssessment(
       payload: { originKey: input.originKey.trim(), parameterId: parameter.id, taxableBase: String(input.taxableBase) },
       result: { assessmentId: assessment.id, assessmentNumber, principal: calculation.principal.toFixed(2) }, processedAt: new Date(),
     } });
+    await recognizeTaxAssessmentInTransaction(tx, actor, assessment.id);
     await audit(tx, actor, "CREATE_PARAMETRIZED", "TaxAssessment", assessment.id, { parameterId: parameter.id, originKey: input.originKey.trim(), principal: calculation.principal.toFixed(2) });
     return assessment;
   });
@@ -158,6 +160,7 @@ export async function reviseTaxAssessment(db: PrismaClient, actor: TaxActor, inp
       memory = { mode: "MOTOR", ...calculation.memory, parameterId };
     }
     const delta = newValue.minus(oldValue).toDecimalPlaces(2);
+    await postTaxAssessmentAdjustment(tx, actor, { assessmentId: assessment.id, date, delta, kind: "REVISION", idempotencyKey: `REVISION:${input.idempotencyKey}:ACCOUNTING`, reason: input.reason.trim() });
     if (newValue.lt(position.paid)) throw new TaxError("A revisão não pode reduzir o débito abaixo dos pagamentos e compensações já efetivados.");
     const version = await tx.taxRegistryEntry.count({ where: { entityType: "TAX_ASSESSMENT", entityId: assessment.id, category: "CREDIT_EVENT" } }) + 1;
     const entry = await tx.taxRegistryEntry.create({ data: {
@@ -215,6 +218,7 @@ export async function registerCreditEvent(db: PrismaClient, actor: TaxActor, inp
       amountValue ??= position.balance;
       if (amountValue.lte(0) || amountValue.gt(position.balance)) throw new TaxError("A extinção excede o saldo disponível do débito.");
       const finalValue = position.total.minus(amountValue);
+      await postTaxAssessmentAdjustment(tx, actor, { assessmentId: assessment.id, date, delta: amountValue.negated(), kind: "EXTINCTION", idempotencyKey: `${key}:ACCOUNTING`, reason: input.reason.trim() });
       extinction = { oldValue: position.total.toFixed(2), newValue: finalValue.toFixed(2), reducesAssessmentValue: true, operationFinancialYearId: year.id };
       await tx.taxAssessment.update({ where: { id: assessment.id }, data: { finalValueDecimal: finalValue, status: finalValue.eq(position.paid) ? "Extinto" : "Revisado", calculationSnapshot: { ...jsonObject(position.assessment.calculationSnapshot), currentValue: finalValue.toFixed(2), lastExtinctionKey: key } } });
     }
@@ -326,8 +330,11 @@ export async function processCollectionReturn(db: PrismaClient, actor: TaxActor,
     if (payload.amount !== receivedAmount.toFixed(2) || payload.occurredAt !== input.occurredAt.toISOString() || (input.guideNumber ?? null) !== (payload.guideNumber ?? null) || (payload.bankAccountId ?? null) !== (input.bankAccountId ?? null) || (existing.externalReference ?? null) !== (input.externalReference ?? null) || (payload.returnStatus ?? "CONFIRMADO") !== input.status) throw new TaxError("Retorno já registrado com outros dados.");
     return existing;
   }
-  const matched = input.guideNumber ? await tx.taxGuide.findFirst({ where: { OR: [{ guideNumber: input.guideNumber }, { id: input.guideNumber }] }, select: { id: true } }) : null;
-  if (matched) await tx.$queryRaw`SELECT id FROM "TaxGuide" WHERE id = ${matched.id} FOR UPDATE`;
+   const matched = input.guideNumber ? await tx.taxGuide.findFirst({ where: { OR: [{ guideNumber: input.guideNumber }, { id: input.guideNumber }] }, select: { id: true, assessmentId: true } }) : null;
+   if (matched) {
+     await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${matched.assessmentId} FOR UPDATE`;
+     await tx.$queryRaw`SELECT id FROM "TaxGuide" WHERE id = ${matched.id} FOR UPDATE`;
+   }
   const guide = matched ? await tx.taxGuide.findUnique({ where: { id: matched.id }, include: { assessment: true, payments: { where: { status: "Confirmado" } } } }) : null;
   if (guide) await assessmentScope(tx, actor, guide.assessment);
   if (input.status !== "CONFIRMADO" || !guide) {
@@ -337,8 +344,12 @@ export async function processCollectionReturn(db: PrismaClient, actor: TaxActor,
     return rejected;
   }
   const guideTotal = guide.totalValueDecimal ?? new Prisma.Decimal(String(guide.totalValue));
-  const paidBefore = guide.payments.reduce((sum, payment) => sum.plus(payment.amountPaidDecimal ?? 0), new Prisma.Decimal(0));
-  const outstanding = Prisma.Decimal.max(guideTotal.minus(paidBefore), 0);
+   const paidBefore = guide.payments.reduce((sum, payment) => { if (!payment.amountPaidDecimal) throw new TaxError("Pagamento histórico sem Decimal conciliado."); return sum.plus(payment.amountPaidDecimal); }, new Prisma.Decimal(0));
+   const assessmentPayments = await tx.taxPayment.findMany({ where: { guide: { assessmentId: guide.assessmentId }, status: "Confirmado" }, select: { amountPaidDecimal: true } });
+   const assessmentPaid = assessmentPayments.reduce((sum, payment) => { if (!payment.amountPaidDecimal) throw new TaxError("Pagamento histórico sem Decimal conciliado."); return sum.plus(payment.amountPaidDecimal); }, new Prisma.Decimal(0));
+   const assessmentTotal = guide.assessment.finalValueDecimal ?? guide.assessment.originalValueDecimal;
+   if (!assessmentTotal) throw new TaxError("Lançamento sem Decimal conciliado.");
+   const outstanding = Prisma.Decimal.max(0, Prisma.Decimal.min(guideTotal.minus(paidBefore), assessmentTotal.minus(assessmentPaid).minus(await taxAssessmentCompensatedValue(tx, guide.assessmentId))));
   if (outstanding.lessThanOrEqualTo(0)) throw new TaxError("O DAM já está integralmente pago.");
   const applied = Prisma.Decimal.min(receivedAmount, outstanding);
   await confirmTaxPaymentInTransaction(tx, actor, { guideId: guide.id, amountPaid: applied, paymentDate: input.occurredAt, paymentMethod: "Retorno bancário", idempotencyKey: key, bankAccountId: input.bankAccountId });
@@ -411,7 +422,8 @@ export async function applyTaxCredit(db: PrismaClient, actor: TaxActor, input: {
       const position = await assessmentPosition(tx, assessment.id);
       if (requested.gt(position.availableForGuide)) throw new TaxError("Compensação excede o saldo livre; cancele as guias abertas antes de compensar.");
       const year = await resolveTaxFinancialYear(tx, date.getUTCFullYear(), scope);
-      const transaction = await postAccountingEventInTransaction(tx, actor, { financialYearId: year.id, ...scope, date, value: requested, eventCode: "TAX_CREDIT_COMPENSATED", history: `Compensação tributária ${credit.id} → ${assessment.id}`, sourceModule: "TRIBUTACAO", sourceType: "TAX_CREDIT_COMPENSATION", sourceId: credit.id, idempotencyKey: `${key}:ACCOUNTING` });
+      const recognized = await recognizedTaxProfile(tx, actor, assessment.id, date);
+      const transaction = await postAccountingEventInTransaction(tx, actor, { financialYearId: year.id, ...scope, date, value: requested, eventCode: "TAX_CREDIT_COMPENSATED", history: `Compensação tributária ${credit.id} → ${assessment.id}`, sourceModule: "TRIBUTACAO", sourceType: "TAX_CREDIT_COMPENSATION", sourceId: credit.id, idempotencyKey: `${key}:ACCOUNTING`, creditAccountId: recognized?.receivableAccountId });
       accountingTransactionId = transaction.id;
       await tx.taxAssessment.update({ where: { id: assessment.id }, data: { status: requested.equals(position.balance) ? "Pago" : "Parcial" } });
     }

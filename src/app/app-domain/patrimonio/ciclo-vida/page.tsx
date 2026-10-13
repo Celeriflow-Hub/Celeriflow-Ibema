@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Prisma } from "@prisma/client";
 import { AssetLifecycleClient } from "./AssetLifecycleClient";
 import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
 import { ErpPageTitle } from "@/components/app-ui/erp/ErpPageTitle";
@@ -54,7 +55,7 @@ export default async function AssetLifecyclePage({
   const allowed = isSystemAdministrator(user) ? undefined : user.allowedBudgetUnitIds;
   const canCollect = canPerformModuleOperation(user, "FINANCEIRO", "create");
   const [budgetUnits, bankAccounts, revenueNatures, resourceSources] = await Promise.all([
-    prisma.budgetUnit.findMany({ where: { ...(allowed ? { id: { in: allowed } } : {}), planningEntityUnit: { isNot: null } }, select: { id: true, code: true, name: true }, orderBy: { code: "asc" } }),
+    prisma.budgetUnit.findMany({ where: { ...(allowed ? { id: { in: allowed } } : {}), planningEntityUnit: { isNot: null } }, select: { id: true, code: true, name: true, secretariatId: true }, orderBy: { code: "asc" } }),
     canCollect ? prisma.bankAccount.findMany({ where: { isActive: true, ...(allowed ? { budgetUnitId: { in: allowed } } : {}) }, select: { id: true, bankName: true, accountNumber: true, budgetUnitId: true }, orderBy: { bankName: "asc" } }) : [],
     canCollect ? prisma.revenueNature.findMany({ select: { id: true, code: true, name: true }, orderBy: { code: "asc" } }) : [],
     canCollect ? prisma.resourceSource.findMany({ select: { id: true, code: true, name: true }, orderBy: { code: "asc" } }) : [],
@@ -62,13 +63,14 @@ export default async function AssetLifecyclePage({
   const params = await searchParams;
   const view = parseLifecycleView(params?.view);
   const requestedPage = parsePatrimonioListPage(params?.page);
+  const assetAccess: Prisma.AssetWhereInput = allowed ? { OR: [{ budgetUnitId: { in: allowed } }, { budgetUnitId: null, purchaseReceiptItem: { purchaseReceipt: { commitment: { appropriation: { budgetUnitId: { in: allowed } } } } } }, { budgetUnitId: null, purchaseReceiptItemId: null, department: { secretariatId: { in: budgetUnits.map(unit => unit.secretariatId) } } }] } : {};
   const activeAssetWhere = { status: { notIn: ["Baixado", "Inativo"] } };
 
   const [assetTotal, activeAssetValue, writeOffTotal, adjustmentTotal] = await Promise.all([
-    view === "posicao" ? prisma.asset.count() : Promise.resolve(0),
-    view === "posicao" ? prisma.asset.aggregate({ where: activeAssetWhere, _sum: { currentValue: true } }) : Promise.resolve({ _sum: { currentValue: 0 } }),
-    view === "baixas" ? prisma.assetWriteOff.count() : Promise.resolve(0),
-    view === "ajustes" ? prisma.assetValueAdjustment.count() : Promise.resolve(0),
+    view === "posicao" ? prisma.asset.count({ where: assetAccess }) : Promise.resolve(0),
+    view === "posicao" ? prisma.asset.aggregate({ where: { ...activeAssetWhere, ...assetAccess }, _sum: { currentValue: true } }) : Promise.resolve({ _sum: { currentValue: 0 } }),
+    view === "baixas" ? prisma.assetWriteOff.count({ where: { asset: assetAccess } }) : Promise.resolve(0),
+    view === "ajustes" ? prisma.assetValueAdjustment.count({ where: { asset: assetAccess } }) : Promise.resolve(0),
   ]);
 
   const total = view === "posicao" ? assetTotal : view === "baixas" ? writeOffTotal : adjustmentTotal;
@@ -81,6 +83,7 @@ export default async function AssetLifecyclePage({
   const [assets, writeOffs, adjustments] = await Promise.all([
     view === "posicao"
       ? prisma.asset.findMany({
+          where: assetAccess,
           ...pageWindow,
           orderBy: { patrimonyNumber: "asc" },
           select: {
@@ -88,18 +91,20 @@ export default async function AssetLifecyclePage({
             patrimonyNumber: true,
             name: true,
             currentValue: true,
+            currentValueDecimal: true,
             status: true,
             category: { select: { name: true, lifeSpan: true } },
             valueHistory: {
               orderBy: { referenceMonth: "desc" },
               take: 1,
-              select: { referenceMonth: true, depreciation: true },
+              select: { id: true, referenceMonth: true, depreciation: true, accountingTransactionId: true, accountingTransaction: { select: { reversedBy: { select: { id: true } } } } },
             },
           },
         })
       : Promise.resolve([]),
     view === "baixas"
       ? prisma.assetWriteOff.findMany({
+          where: { asset: assetAccess },
           ...pageWindow,
           orderBy: { date: "desc" },
           select: {
@@ -117,6 +122,7 @@ export default async function AssetLifecyclePage({
       : Promise.resolve([]),
     view === "ajustes"
       ? prisma.assetValueAdjustment.findMany({
+          where: { asset: assetAccess },
           ...pageWindow,
           orderBy: { date: "desc" },
           select: {
@@ -125,6 +131,10 @@ export default async function AssetLifecyclePage({
             type: true,
             adjustmentValue: true,
             closingValue: true,
+            adjustmentValueDecimal: true,
+            closingValueDecimal: true,
+            accountingTransactionId: true,
+            accountingTransaction: { select: { reversedBy: { select: { id: true } } } },
             evidence: true,
             asset: { select: { patrimonyNumber: true, name: true } },
           },
@@ -134,6 +144,10 @@ export default async function AssetLifecyclePage({
 
   const totalBookValue = activeAssetValue._sum?.currentValue ?? 0;
   const initialCompetence = new Date().toISOString().slice(0, 7);
+  const valuationRecords = [
+    ...assets.flatMap(asset => asset.valueHistory.filter(row => row.accountingTransactionId && !row.accountingTransaction?.reversedBy).map(row => ({ id: row.id, kind: "DEPRECIATION" as const, label: `${asset.patrimonyNumber} — depreciação ${row.referenceMonth.toISOString().slice(0, 7)}` }))),
+    ...adjustments.filter(row => row.accountingTransactionId && !row.accountingTransaction?.reversedBy).map(row => ({ id: row.id, kind: "ADJUSTMENT" as const, label: `${row.asset.patrimonyNumber} — ${adjustmentLabel(row.type)} ${row.date.toISOString().slice(0, 10)}` })),
+  ];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2 sm:p-3">
@@ -146,7 +160,7 @@ export default async function AssetLifecyclePage({
           Operações de ciclo de vida (depreciação, baixas e reavaliação)
         </summary>
         <div className="border-t border-slate-200 p-3">
-          <AssetLifecycleClient initialCompetence={initialCompetence} budgetUnits={budgetUnits} bankAccounts={bankAccounts} revenueNatures={revenueNatures} resourceSources={resourceSources} />
+          <AssetLifecycleClient valuationRecords={valuationRecords} initialCompetence={initialCompetence} budgetUnits={budgetUnits} bankAccounts={bankAccounts} revenueNatures={revenueNatures} resourceSources={resourceSources} />
         </div>
       </details>
 
@@ -248,7 +262,7 @@ export default async function AssetLifecyclePage({
                       {asset.category?.lifeSpan ? `${asset.category.lifeSpan} anos` : "—"}
                     </td>
                     <td className="px-3 py-0 text-right font-semibold tabular-nums text-emerald-800">
-                      {currency(asset.currentValue)}
+                      {currency(Number(asset.currentValueDecimal ?? asset.currentValue))}
                     </td>
                   </tr>
                 ))
@@ -335,10 +349,10 @@ export default async function AssetLifecyclePage({
                       <span className="block truncate font-semibold">{adjustmentLabel(adjustment.type)}</span>
                     </td>
                     <td className="px-3 py-0 text-right font-semibold tabular-nums text-emerald-800">
-                      {currency(adjustment.adjustmentValue)}
+                      {currency(Number(adjustment.adjustmentValueDecimal ?? adjustment.adjustmentValue))}
                     </td>
                     <td className="px-3 py-0 text-right font-bold tabular-nums">
-                      {currency(adjustment.closingValue)}
+                      {currency(Number(adjustment.closingValueDecimal ?? adjustment.closingValue))}
                     </td>
                   </tr>
                 ))

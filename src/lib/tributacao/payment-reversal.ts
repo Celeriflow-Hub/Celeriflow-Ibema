@@ -12,7 +12,8 @@ export async function reverseTaxPayment(db: PrismaClient, actor: TaxActor, input
   return db.$transaction(async (tx) => {
     const key = `TAX_PAYMENT_REVERSAL:${input.idempotencyKey.trim()}`;
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))::text`;
-    const origin = await tx.taxPayment.findUniqueOrThrow({ where: { id: input.paymentId }, select: { guideId: true } });
+    const origin = await tx.taxPayment.findUniqueOrThrow({ where: { id: input.paymentId }, select: { guideId: true, guide: { select: { assessmentId: true } } } });
+    await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${origin.guide.assessmentId} FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM "TaxGuide" WHERE id = ${origin.guideId} FOR UPDATE`;
     const payment = await tx.taxPayment.findUniqueOrThrow({ where: { id: input.paymentId }, include: { guide: { include: { assessment: true } }, revenueIntegration: true } });
     const scope = await resolveTaxAssessmentScope(tx, actor, payment.guide.assessment.taxId, payment.guide.assessment.calculationSnapshot);
@@ -66,7 +67,14 @@ export async function reverseTaxPayment(db: PrismaClient, actor: TaxActor, input
     const extinguished = sum(paid).plus(await taxAssessmentCompensatedValue(tx, assessment.id));
     const debt = await tx.activeDebt.findUnique({ where: { assessmentId: assessment.id } });
     await tx.taxAssessment.update({ where: { id: assessment.id }, data: { status: extinguished.gte(total) ? "Pago" : debt ? "Dívida Ativa" : extinguished.gt(0) ? "Parcial" : "Emitido" } });
-    if (debt?.status === "Paga") await tx.activeDebt.update({ where: { id: debt.id }, data: { status: "Inscrita" } });
+    if (debt) {
+      const remaining = Prisma.Decimal.max(0, total.minus(extinguished));
+      const paymentAudit = await tx.taxAuditLog.findFirst({ where: { action: "CONFIRM_PAYMENT", entityType: "TaxPayment", entityId: payment.id }, orderBy: { createdAt: "asc" }, select: { payload: true } });
+      const previousStatus = taxScopeSnapshot(paymentAudit?.payload).debtStatusBefore;
+      const legalStatus = ["EM_PROTESTO", "AJUIZADA"].includes(String(previousStatus)) ? String(previousStatus) : ["EM_PROTESTO", "AJUIZADA"].includes(debt.status) ? debt.status : null;
+      const collecting = ["Paga", "PAGA", "Inscrita", "INSCRITA", "EM_COBRANCA", "Parcelada", "PARCELADA", "EM_PROTESTO", "AJUIZADA"].includes(debt.status);
+      await tx.activeDebt.update({ where: { id: debt.id }, data: { updatedValue: Number(remaining), updatedValueDecimal: remaining, ...(collecting ? { status: remaining.isZero() ? "PAGA" : legalStatus ?? (extinguished.gt(0) ? "EM_COBRANCA" : "INSCRITA") } : {}) } });
+    }
     const event = await tx.taxIntegrationEvent.create({ data: { integrationCode: "TAX_PAYMENT", eventType: "PAYMENT_REVERSED", idempotencyKey: key, status: "PROCESSADO", evidenceLevel: "L1", taxpayerId: assessment.taxpayerId, payload: { paymentId: payment.id, date: input.date.toISOString(), reason: input.reason.trim(), ...scope }, result: { revenueReversalId: reversal.id, excessReversed: excess.toFixed(2), creditIds: credits.map((credit) => credit.id) }, processedAt: new Date() } });
     await tx.taxAuditLog.create({ data: { action: "REVERSE_PAYMENT", entityType: "TaxPayment", entityId: payment.id, authorUsuarioId: actor.usuarioId, authorEmployeeId: actor.employeeId, payload: { integrationEventId: event.id, revenueReversalId: reversal.id, reason: input.reason.trim() } } });
     return event;

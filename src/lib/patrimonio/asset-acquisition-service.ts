@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 import { applyStockMovement } from "./stock-service";
 import { nextAssetPatrimonyNumber } from "./identifiers";
@@ -8,6 +8,7 @@ export class AssetAcquisitionError extends Error {}
 export type AssetAcquisitionActor = {
   usuarioId: string;
   employeeId?: string | null;
+  allowedBudgetUnitIds?: string[];
 };
 
 export type AssetAcquisitionInput = {
@@ -47,6 +48,7 @@ export async function acquireAssetFromPurchaseReceipt(db: PrismaClient, actor: A
             receivedAt: true,
             status: true,
             contract: { select: { supplierId: true } },
+            commitment: { select: { appropriation: { select: { budgetUnitId: true, budgetUnit: { select: { secretariatId: true } } } } } },
           },
         },
       },
@@ -54,6 +56,8 @@ export async function acquireAssetFromPurchaseReceipt(db: PrismaClient, actor: A
     if (!receiptItem || receiptItem.purchaseReceipt.status !== "APPROVED") {
       throw new AssetAcquisitionError("O tombamento exige um item de recebimento de compra aprovado.");
     }
+    const originUnit = receiptItem.purchaseReceipt.commitment?.appropriation.budgetUnitId;
+    if (actor.allowedBudgetUnitIds && (!originUnit || !actor.allowedBudgetUnitIds.includes(originUnit))) throw new AssetAcquisitionError("Recebimento sem UG conciliada ou fora das unidades gestoras autorizadas.");
     if (receiptItem.quantityIncorporated >= receiptItem.quantity) {
       throw new AssetAcquisitionError("Todos os itens deste recebimento já foram tombados.");
     }
@@ -72,11 +76,12 @@ export async function acquireAssetFromPurchaseReceipt(db: PrismaClient, actor: A
 
     const [category, department, responsible] = await Promise.all([
       tx.assetCategory.findFirst({ where: { id: input.categoryId, isActive: true }, select: { id: true } }),
-      input.departmentId ? tx.department.findFirst({ where: { id: input.departmentId, isActive: true }, select: { id: true } }) : null,
+      input.departmentId ? tx.department.findFirst({ where: { id: input.departmentId, isActive: true }, select: { id: true, secretariatId: true } }) : null,
       input.responsibleId ? tx.employee.findFirst({ where: { id: input.responsibleId, departmentId: input.departmentId!, isActive: true }, select: { id: true } }) : null,
     ]);
     if (!category) throw new AssetAcquisitionError("Categoria patrimonial não encontrada ou inativa.");
     if (input.departmentId && !department) throw new AssetAcquisitionError("Setor responsável não encontrado.");
+    if (originUnit && (!department || department.secretariatId !== receiptItem.purchaseReceipt.commitment!.appropriation.budgetUnit.secretariatId)) throw new AssetAcquisitionError("Setor do tombamento deve pertencer à lotação administrativa da UG de origem.");
     if (input.responsibleId && !responsible) throw new AssetAcquisitionError("O servidor responsável deve estar ativo e vinculado ao setor selecionado.");
 
     const patrimonyNumber = await nextAssetPatrimonyNumber(tx);
@@ -115,6 +120,9 @@ export async function acquireAssetFromPurchaseReceipt(db: PrismaClient, actor: A
         incorporationDate: receiptItem.purchaseReceipt.receivedAt,
         acquisitionValue: receiptItem.unitCost,
         currentValue: receiptItem.unitCost,
+        acquisitionValueDecimal: new Prisma.Decimal(String(receiptItem.unitCost)).toDecimalPlaces(2),
+        currentValueDecimal: new Prisma.Decimal(String(receiptItem.unitCost)).toDecimalPlaces(2),
+        budgetUnitId: originUnit,
         categoryId: category.id,
         departmentId: department?.id,
         responsibleId: responsible?.id,

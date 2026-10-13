@@ -1,7 +1,7 @@
 "use server";
 
 import { acquireAssetFromPurchaseReceipt, AssetAcquisitionError, type AssetAcquisitionInput } from "@/lib/patrimonio/asset-acquisition-service";
-import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { assetOperationWhere, AssetOperationError } from "@/lib/patrimonio/asset-operations";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -29,7 +29,7 @@ function revalidateAssetPages() {
 export async function acquireAssetFromReceiptAction(input: AssetAcquisitionInput): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("PATRIMONIO", "create");
-    const asset = await acquireAssetFromPurchaseReceipt(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, input);
+    const asset = await acquireAssetFromPurchaseReceipt(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, input);
     revalidatePath("/patrimonio/bens");
     revalidatePath("/patrimonio");
     return { assetId: asset.id };

@@ -1,13 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertCemeteryTransferAllowed, assertLotCanReceiveGrave, cemeteryFeeAmount, concessionSituation, executionNext, formatCdaNumber, graveHasVacancy, internalProtocol, nextCdaVersion, occupancyStats, protestNext, sumBy, trendByMonth, validateEnrollmentEligibility, TributarioS9Error } from "./s9-engine";
-import { confirmTaxPayment, createTaxAssessment, enrollAssessmentInActiveDebt, generateTaxGuide } from "./index";
+import { confirmTaxPaymentInTransaction, createTaxAssessment, createTaxAssessmentInTransaction, enrollAssessmentInActiveDebt, generateTaxGuide, generateTaxGuideInTransaction } from "./index";
+import { activeDebtAccessFilter, resolveTaxAssessmentScope, resolveTaxFinancialYear, taxAssessmentAccessFilter, taxAssessmentCompensatedValue, taxScopeSnapshot } from "./scope";
+import { assertAccountingPeriodOpen } from "@/lib/financeiro";
+import { postTaxAssessmentAdjustment } from "./accrual-accounting";
 import { MUNICIPALITY_LABEL, MUNICIPALITY_NAME } from "@/lib/municipality-identity";
 import { lockWorkflowRows, validateBurialIdentity, validateTransferPair, validateWorkflowDate, workflowRequest } from "../cemeteries/workflow";
 import { recordCemeteryFeeEvent, chargeCemeteryFeeEvent } from "../cemeteries/fees-service";
 
-type Actor = { usuarioId: string; employeeId?: string | null };
-const fullActor = (actor: Actor) => ({ usuarioId: actor.usuarioId, employeeId: actor.employeeId ?? null });
+type Actor = { usuarioId: string; employeeId?: string | null; allowedBudgetUnitIds?: string[] };
+const fullActor = (actor: Actor) => ({ usuarioId: actor.usuarioId, employeeId: actor.employeeId ?? null, allowedBudgetUnitIds: actor.allowedBudgetUnitIds });
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const money = (value: number | string | Prisma.Decimal) => new Prisma.Decimal(String(value)).toDecimalPlaces(2);
 const code = (prefix: string) => `${prefix}-${new Date().getUTCFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`;
@@ -60,7 +63,18 @@ async function nextSequence(tx: Prisma.TransactionClient, year: number, document
   return sequence.currentValue;
 }
 
+async function assertDebtAccess(db: PrismaClient | Prisma.TransactionClient, actor: Actor, debtId: string) {
+  if (!actor.allowedBudgetUnitIds) return;
+  const debt = await db.activeDebt.findFirst({ where: { id: debtId, ...activeDebtAccessFilter(actor.allowedBudgetUnitIds) }, select: { id: true, budgetUnitId: true, governmentEntityId: true } });
+  if (!debt) throw new TributarioS9Error("Dívida sem origem municipal conciliada ou fora das unidades gestoras autorizadas.");
+  if (debt.budgetUnitId) {
+    const binding = await db.planningEntityUnit.findUnique({ where: { budgetUnitId: debt.budgetUnitId }, select: { governmentEntityId: true } });
+    if (!binding || binding.governmentEntityId !== debt.governmentEntityId) throw new TributarioS9Error("O vínculo municipal da UG diverge da dívida original; concilie o histórico antes da operação.");
+  }
+}
+
 async function debtEvent(tx: Prisma.TransactionClient, actor: Actor, activeDebtId: string, eventType: string, description: string, payload?: unknown) {
+  await assertDebtAccess(tx, actor, activeDebtId);
   return tx.taxActiveDebtEvent.create({ data: { activeDebtId, eventType, description, payload: payload === undefined ? undefined : json(payload), actorUsuarioId: actor.usuarioId } });
 }
 
@@ -89,9 +103,9 @@ export async function ensureS9Defaults(db: PrismaClient, actor: Actor) {
 }
 
 // S9-A — Débitos elegíveis com validação prévia (TRI-340/341). Reutiliza lançamentos e dívida existentes.
-export async function listEnrollmentCandidates(db: PrismaClient) {
+export async function listEnrollmentCandidates(db: PrismaClient, allowedBudgetUnitIds?: string[]) {
   const assessments = await db.taxAssessment.findMany({
-    where: { status: { in: ["Lançado", "Emitido", "Parcial"] } },
+    where: { status: { in: ["Lançado", "Emitido", "Parcial"] }, ...taxAssessmentAccessFilter(allowedBudgetUnitIds) },
     include: { tax: { select: { name: true } }, activeDebt: { select: { id: true } }, taxpayer: { include: { person: { include: { addresses: true } }, company: { include: { addresses: true } } } } },
     orderBy: { createdAt: "desc" },
     take: 200,
@@ -116,27 +130,42 @@ export async function listEnrollmentCandidates(db: PrismaClient) {
 export async function enrollAssessmentDebt(db: PrismaClient, actor: Actor, assessmentId: string) {
   const debt = await enrollAssessmentInActiveDebt(db, fullActor(actor), assessmentId);
   await db.$transaction(async (tx) => {
-    await debtEvent(tx, actor, debt.id, "INSCRICAO", `Débito inscrito em dívida ativa a partir do lançamento ${assessmentId}.`, { assessmentId });
+    await tx.$queryRaw`SELECT id FROM "ActiveDebt" WHERE id = ${debt.id} FOR UPDATE`;
+    await assertDebtAccess(tx, actor, debt.id);
+    const previous = await tx.taxActiveDebtEvent.findFirst({ where: { activeDebtId: debt.id, eventType: "INSCRICAO" }, select: { id: true } });
+    if (!previous) await debtEvent(tx, actor, debt.id, "INSCRICAO", `Débito inscrito em dívida ativa a partir do lançamento ${assessmentId}.`, { assessmentId });
   });
   return debt;
 }
 
 // Inscrição manual/arquivo com chave de origem idempotente: mesma origem nunca cria segunda dívida.
-export async function enrollManualDebt(db: PrismaClient, actor: Actor, input: { taxpayerId: string; originDebtType: string; year: number; value: number; sourceKey: string; competence?: Date }) {
+export async function enrollManualDebt(db: PrismaClient, actor: Actor, input: { taxpayerId: string; originDebtType: string; year: number; value: number; sourceKey: string; competence?: Date; budgetUnitId?: string }) {
   if (!input.sourceKey.trim()) throw new TributarioS9Error("A chave de origem é obrigatória para inscrição manual/arquivo.");
   const key = input.sourceKey.trim();
-  const existing = await db.activeDebt.findUnique({ where: { sourceKey: key } });
-  if (existing) return { debt: existing, created: false as const };
+  const budgetUnitId = input.budgetUnitId?.trim();
+  if (!budgetUnitId || (actor.allowedBudgetUnitIds && !actor.allowedBudgetUnitIds.includes(budgetUnitId))) throw new TributarioS9Error("Selecione a UG municipal autorizada de origem da dívida.");
+  if (!Number.isInteger(input.year) || input.year < 1900 || input.year > new Date().getUTCFullYear()) throw new TributarioS9Error("Exercício de origem da dívida inválido.");
+  if (input.competence && (!Number.isFinite(input.competence.valueOf()) || input.competence.getUTCFullYear() !== input.year)) throw new TributarioS9Error("Competência da dívida deve pertencer ao exercício de origem.");
   const taxpayer = await db.taxpayer.findUnique({ where: { id: input.taxpayerId } });
   if (!taxpayer || taxpayer.status !== "Ativo") throw new TributarioS9Error("Contribuinte ativo é obrigatório.");
   const value = money(input.value);
   if (value.lessThanOrEqualTo(0)) throw new TributarioS9Error("Valor do débito inválido.");
   const debt = await db.$transaction(async (tx) => {
-    const created = await tx.activeDebt.create({ data: { taxpayerId: taxpayer.id, originDebtType: input.originDebtType.trim() || "Débito manual", year: input.year, originalValue: Number(value), originalValueDecimal: value, updatedValue: Number(value), updatedValueDecimal: value, sourceKey: key, status: "PENDENTE_DE_VALIDACAO" } });
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`DA:MANUAL:${key}`}, 0))::text`;
+    const binding = await tx.planningEntityUnit.findUniqueOrThrow({ where: { budgetUnitId }, select: { governmentEntityId: true } });
+    const existing = await tx.activeDebt.findUnique({ where: { sourceKey: key } });
+    if (existing) {
+      await assertDebtAccess(tx, actor, existing.id);
+      if (existing.budgetUnitId !== budgetUnitId || existing.governmentEntityId !== binding.governmentEntityId || existing.taxpayerId !== input.taxpayerId || existing.originDebtType !== (input.originDebtType.trim() || "Débito manual") || existing.year !== input.year || !existing.originalValueDecimal?.eq(value)) throw new TributarioS9Error("Origem da dívida já inscrita com outros dados; preserve e concilie o registro anterior.");
+      const enrollment = await tx.taxActiveDebtEvent.findFirst({ where: { activeDebtId: existing.id, eventType: "INSCRICAO" }, orderBy: { createdAt: "asc" }, select: { payload: true } });
+      if (!enrollment || (taxScopeSnapshot(enrollment.payload).competence ?? null) !== (input.competence?.toISOString() ?? null)) throw new TributarioS9Error("Competência da inscrição anterior diverge da repetição da origem.");
+      return { debt: existing, created: false as const };
+    }
+    const created = await tx.activeDebt.create({ data: { taxpayerId: taxpayer.id, originDebtType: input.originDebtType.trim() || "Débito manual", year: input.year, budgetUnitId, governmentEntityId: binding.governmentEntityId, originalValue: Number(value), originalValueDecimal: value, updatedValue: Number(value), updatedValueDecimal: value, sourceKey: key, status: "PENDENTE_DE_VALIDACAO" } });
     await debtEvent(tx, actor, created.id, "INSCRICAO", `Inscrição manual/arquivo registrada com chave ${key}.`, { sourceKey: key, competence: input.competence ?? null });
-    return created;
+    return { debt: created, created: true as const };
   });
-  return { debt, created: true as const };
+  return debt;
 }
 
 export async function validateDebt(db: PrismaClient, actor: Actor, debtId: string) {
@@ -168,6 +197,7 @@ function cdaSnapshot(debt: { id: string; originDebtType: string; year: number; o
 // Emissão da CDA com numeração sequencial e primeira versão (TRI-347/349).
 export async function issueCda(db: PrismaClient, actor: Actor, debtId: string) {
   return db.$transaction(async (tx) => {
+    await assertDebtAccess(tx, actor, debtId);
     const debt = await tx.activeDebt.findUnique({ where: { id: debtId }, include: { taxpayer: { include: { person: true, company: true } } } });
     if (!debt) throw new TributarioS9Error("Dívida não encontrada.");
     if (!["VALIDADA", "PENDENTE_DE_VALIDACAO", "INSCRITA"].includes(debt.status)) throw new TributarioS9Error("Dívida fora do estágio de emissão de CDA.");
@@ -211,6 +241,7 @@ export async function createCdaVersion(db: PrismaClient, actor: Actor, debtId: s
 export async function signCdaInternal(db: PrismaClient, actor: Actor, versionId: string) {
   const version = await db.taxCdaVersion.findUnique({ where: { id: versionId } });
   if (!version) throw new TributarioS9Error("Versão de CDA não encontrada.");
+  await assertDebtAccess(db, actor, version.activeDebtId);
   if (version.signatureStatus !== "NAO_ASSINADA") return version;
   return db.$transaction(async (tx) => {
     const updated = await tx.taxCdaVersion.update({ where: { id: version.id }, data: { signatureStatus: "ASSINATURA_INTERNA", signedByUsuarioId: actor.usuarioId, signedAt: new Date() } });
@@ -221,7 +252,7 @@ export async function signCdaInternal(db: PrismaClient, actor: Actor, versionId:
 
 // Carteiras de dívida ativa com atualização (TRI-342/343).
 export async function createDaPortfolio(db: PrismaClient, actor: Actor, input: { name: string; minValue?: number; statuses?: string[] }) {
-  const debts = await db.activeDebt.findMany({ where: { status: { in: input.statuses?.length ? input.statuses : ["INSCRITA", "VALIDADA", "EM_COBRANCA"] } }, orderBy: { createdAt: "asc" }, take: 300 });
+  const debts = await db.activeDebt.findMany({ where: { status: { in: input.statuses?.length ? input.statuses : ["INSCRITA", "VALIDADA", "EM_COBRANCA"] }, ...activeDebtAccessFilter(actor.allowedBudgetUnitIds) }, orderBy: { createdAt: "asc" }, take: 300 });
   const eligible = debts.filter((row) => Number(row.updatedValueDecimal ?? row.updatedValue) >= (input.minValue ?? 0));
   if (!eligible.length) throw new TributarioS9Error("Nenhuma dívida elegível para a carteira.");
   return db.taxDaPortfolio.create({
@@ -230,9 +261,11 @@ export async function createDaPortfolio(db: PrismaClient, actor: Actor, input: {
   });
 }
 
-export async function refreshDaPortfolio(db: PrismaClient, portfolioId: string) {
-  const items = await db.taxDaPortfolioItem.findMany({ where: { portfolioId } });
+export async function refreshDaPortfolio(db: PrismaClient, portfolioId: string, actor?: Actor) {
   return db.$transaction(async (tx) => {
+    const items = await tx.taxDaPortfolioItem.findMany({ where: { portfolioId } });
+    if (actor?.allowedBudgetUnitIds && !items.length) throw new TributarioS9Error("Carteira sem itens municipais conciliados para o escopo autorizado.");
+    if (actor) for (const item of items) await assertDebtAccess(tx, actor, item.activeDebtId);
     for (const item of items) {
       const debt = await tx.activeDebt.findUnique({ where: { id: item.activeDebtId }, select: { updatedValueDecimal: true, updatedValue: true, status: true } });
       if (!debt) { await tx.taxDaPortfolioItem.delete({ where: { id: item.id } }); continue; }
@@ -245,16 +278,32 @@ export async function refreshDaPortfolio(db: PrismaClient, portfolioId: string) 
 
 // DAM da dívida inscrita pelo motor de guias (TRI-353/354).
 export async function issueDaGuide(db: PrismaClient, actor: Actor, input: { debtId: string; dueDate: Date }) {
-  const debt = await db.activeDebt.findUnique({ where: { id: input.debtId } });
-  if (!debt?.cdaNumber) throw new TributarioS9Error("Emita a CDA antes da guia.");
-  if (debt.assessmentId) return generateTaxGuide(db, fullActor(actor), { assessmentId: debt.assessmentId, dueDate: input.dueDate });
-  const tax = await db.tax.findFirst({ where: { name: debt.originDebtType, isActive: true } });
-  if (!tax) throw new TributarioS9Error(`Cadastre o tributo "${debt.originDebtType}" para gerar a guia pelo motor.`);
-  const value = money(debt.updatedValueDecimal ?? debt.updatedValue);
-  const assessment = await createTaxAssessment(db, fullActor(actor), { year: debt.year, taxId: tax.id, taxpayerId: debt.taxpayerId, taxableBase: value, rate: 100, competence: new Date(Date.UTC(debt.year, 0, 1, 12)) });
-  await db.activeDebt.update({ where: { id: debt.id }, data: { assessmentId: assessment.id } });
-  await debtEvent(db as unknown as Prisma.TransactionClient, actor, debt.id, "GUIA_EMITIDA", "Lançamento de origem regularizado pelo motor para emissão da DAM.", { assessmentId: assessment.id });
-  return generateTaxGuide(db, fullActor(actor), { assessmentId: assessment.id, dueDate: input.dueDate });
+  if (!Number.isFinite(input.dueDate.valueOf())) throw new TributarioS9Error("Vencimento da guia inválido.");
+  return db.$transaction(async tx => {
+    const origin = await tx.activeDebt.findUniqueOrThrow({ where: { id: input.debtId }, select: { assessmentId: true } });
+    if (origin.assessmentId) await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${origin.assessmentId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "ActiveDebt" WHERE id = ${input.debtId} FOR UPDATE`;
+    await assertDebtAccess(tx, actor, input.debtId);
+    const debt = await tx.activeDebt.findUniqueOrThrow({ where: { id: input.debtId } });
+    if (!debt.cdaNumber || !["INSCRITA", "Inscrita", "EM_COBRANCA", "EM_PROTESTO", "AJUIZADA"].includes(debt.status)) throw new TributarioS9Error("A guia exige CDA emitida e dívida disponível para cobrança.");
+    let assessmentId = debt.assessmentId;
+    if (!assessmentId) {
+      const taxes = await tx.tax.findMany({ where: { name: debt.originDebtType, isActive: true }, select: { id: true } });
+      if (taxes.length !== 1) throw new TributarioS9Error(`Concilie um único tributo ativo para a origem "${debt.originDebtType}".`);
+      if (!debt.updatedValueDecimal || debt.updatedValueDecimal.lte(0)) throw new TributarioS9Error("Dívida manual sem saldo Decimal conciliado.");
+      const assessment = await createTaxAssessmentInTransaction(tx, fullActor(actor), { year: debt.year, taxId: taxes[0].id, taxpayerId: debt.taxpayerId, taxableBase: debt.updatedValueDecimal, rate: 100, competence: new Date(Date.UTC(debt.year, 0, 1, 12)) }, { legacyDebtOriginId: debt.id });
+      assessmentId = assessment.id;
+      await tx.activeDebt.update({ where: { id: debt.id }, data: { assessmentId } });
+    }
+    const existing = await tx.taxGuide.findFirst({ where: { assessmentId, status: { not: "Cancelada" } } });
+    if (existing) {
+      if (existing.dueDate.getTime() !== input.dueDate.getTime()) throw new TributarioS9Error("A dívida já possui guia com outro vencimento; cancele-a formalmente antes de reemitir.");
+      return existing;
+    }
+    const guide = await generateTaxGuideInTransaction(tx, fullActor(actor), { assessmentId, dueDate: input.dueDate });
+    await debtEvent(tx, actor, debt.id, "GUIA_EMITIDA", "DAM emitida pela origem nativa da dívida, sem duplicar constituição histórica.", { assessmentId, guideId: guide.id });
+    return guide;
+  }, { timeout: 60000 });
 }
 
 export async function suspendDebt(db: PrismaClient, actor: Actor, input: { debtId: string; reason: string; legalGround?: string; endsAt?: Date }) {
@@ -288,53 +337,97 @@ export async function returnDebtToOrigin(db: PrismaClient, actor: Actor, input: 
 
 // Pagamento da dívida inscrita pela guia confirmada no motor (TRI-360).
 export async function settleDebtByGuide(db: PrismaClient, actor: Actor, input: { debtId: string; guideId: string; amount: number; paymentMethod: string; idempotencyKey: string }) {
-  const debt = await db.activeDebt.findUnique({ where: { id: input.debtId } });
-  if (!debt) throw new TributarioS9Error("Dívida não encontrada.");
-  const guide = await confirmTaxPayment(db, fullActor(actor), { guideId: input.guideId, amountPaid: input.amount, paymentDate: new Date(), paymentMethod: input.paymentMethod, idempotencyKey: input.idempotencyKey });
   return db.$transaction(async (tx) => {
-    const paid = guide.status === "Paga";
-    const updated = await tx.activeDebt.update({ where: { id: debt.id }, data: paid ? { status: "PAGA", updatedValue: 0, updatedValueDecimal: new Prisma.Decimal(0) } : { status: "EM_COBRANCA" } });
-    if (debt.assessmentId) await tx.taxAssessment.update({ where: { id: debt.assessmentId }, data: { status: paid ? "Pago" : "Parcial" } });
-    await debtEvent(tx, actor, debt.id, "PAGAMENTO", `Baixa de R$ ${money(input.amount).toFixed(2)} pela guia ${guide.guideNumber ?? guide.id}.`, { guideId: guide.id });
+    const originGuide = await tx.taxGuide.findUniqueOrThrow({ where: { id: input.guideId } });
+    await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${originGuide.assessmentId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "TaxGuide" WHERE id = ${input.guideId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "ActiveDebt" WHERE id = ${input.debtId} FOR UPDATE`;
+    const debt = await tx.activeDebt.findUniqueOrThrow({ where: { id: input.debtId } });
+    if (!debt.assessmentId || originGuide.assessmentId !== debt.assessmentId) throw new TributarioS9Error("A guia não pertence ao lançamento da dívida selecionada.");
+    const previous = await tx.taxPayment.findUnique({ where: { idempotencyKey: input.idempotencyKey.trim() } });
+    if (!previous && !["INSCRITA", "Inscrita", "EM_COBRANCA", "Parcelada", "PARCELADA", "EM_PROTESTO", "AJUIZADA"].includes(debt.status)) throw new TributarioS9Error("Dívida suspensa, devolvida ou baixada não admite novo pagamento por este fluxo.");
+    if (previous?.status !== undefined && previous.status !== "Confirmado") throw new TributarioS9Error("Pagamento anterior estornado; utilize uma nova operação fundamentada.");
+    const guide = await confirmTaxPaymentInTransaction(tx, fullActor(actor), { guideId: input.guideId, amountPaid: input.amount, paymentDate: previous?.paymentDate ?? new Date(), paymentMethod: input.paymentMethod, idempotencyKey: input.idempotencyKey });
+    const assessment = await tx.taxAssessment.findUniqueOrThrow({ where: { id: debt.assessmentId } });
+    const payments = await tx.taxPayment.findMany({ where: { guide: { assessmentId: debt.assessmentId }, status: "Confirmado" }, select: { amountPaidDecimal: true } });
+    if (payments.some(payment => !payment.amountPaidDecimal)) throw new TributarioS9Error("Pagamento legado sem valor Decimal conciliado.");
+    const total = assessment.finalValueDecimal ?? assessment.originalValueDecimal;
+    if (!total) throw new TributarioS9Error("Dívida sem posição Decimal do lançamento original.");
+    const paid = payments.reduce((sum, payment) => sum.plus(payment.amountPaidDecimal!), new Prisma.Decimal(0)).plus(await taxAssessmentCompensatedValue(tx, assessment.id));
+    const remaining = Prisma.Decimal.max(0, total.minus(paid));
+    const updated = await tx.activeDebt.update({ where: { id: debt.id }, data: { status: remaining.isZero() ? "PAGA" : ["EM_PROTESTO", "AJUIZADA"].includes(debt.status) ? debt.status : "EM_COBRANCA", updatedValue: Number(remaining), updatedValueDecimal: remaining } });
+    if (!previous) await debtEvent(tx, actor, debt.id, "PAGAMENTO", `Baixa de R$ ${money(input.amount).toFixed(2)} pela guia ${guide.guideNumber ?? guide.id}.`, { guideId: guide.id, paymentKey: input.idempotencyKey, remaining: remaining.toFixed(2) });
     return updated;
-  });
+  }, { timeout: 60000 });
 }
 
 // Baixa manual justificada (TRI-361) e automática por prescrição (TRI-362).
+async function extinguishDebt(tx: Prisma.TransactionClient, actor: Actor, debtId: string, reason: string, cause: "MANUAL" | "PRESCRIPTION") {
+  const origin = await tx.activeDebt.findUniqueOrThrow({ where: { id: debtId }, select: { assessmentId: true } });
+  if (!origin.assessmentId) throw new TributarioS9Error("Extinção exige lançamento de origem conciliado; regularize a dívida manual antes da baixa.");
+  await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${origin.assessmentId} FOR UPDATE`;
+  await tx.$queryRaw`SELECT id FROM "ActiveDebt" WHERE id = ${debtId} FOR UPDATE`;
+  await assertDebtAccess(tx, actor, debtId);
+  const debt = await tx.activeDebt.findUniqueOrThrow({ where: { id: debtId } });
+  const assessment = await tx.taxAssessment.findUniqueOrThrow({ where: { id: origin.assessmentId } });
+  const key = `DA:${debtId}:EXTINCTION:${cause}`;
+  const previous = await tx.taxIntegrationEvent.findUnique({ where: { idempotencyKey: key } });
+  if (previous) {
+    const payload = taxScopeSnapshot(previous.payload);
+    if (payload.reason !== reason.trim() || payload.assessmentId !== assessment.id) throw new TributarioS9Error("Baixa da dívida já registrada com outros dados.");
+    return debt;
+  }
+  if (!["INSCRITA", "Inscrita", "VALIDADA", "EM_COBRANCA", "EM_PROTESTO", "AJUIZADA"].includes(debt.status)) throw new TributarioS9Error("Dívida fora do estágio de extinção; concilie suspensão, parcelamento ou baixa anterior.");
+  if (await tx.taxGuide.count({ where: { assessmentId: assessment.id, status: { notIn: ["Cancelada", "Paga"] } } })) throw new TributarioS9Error("Cancele as guias abertas antes da extinção da dívida.");
+  const scope = await resolveTaxAssessmentScope(tx, fullActor(actor), assessment.taxId, assessment.calculationSnapshot);
+  const date = new Date();
+  const year = await resolveTaxFinancialYear(tx, date.getUTCFullYear(), scope);
+  await assertAccountingPeriodOpen(tx, year.id, date);
+  const payments = await tx.taxPayment.findMany({ where: { guide: { assessmentId: assessment.id }, status: "Confirmado" }, select: { amountPaidDecimal: true } });
+  if (payments.some(payment => !payment.amountPaidDecimal)) throw new TributarioS9Error("Arrecadação histórica sem Decimal conciliado.");
+  const extinguished = payments.reduce((sum, payment) => sum.plus(payment.amountPaidDecimal!), new Prisma.Decimal(0)).plus(await taxAssessmentCompensatedValue(tx, assessment.id));
+  const total = assessment.finalValueDecimal ?? assessment.originalValueDecimal;
+  if (!total) throw new TributarioS9Error("Dívida sem valor Decimal do lançamento de origem.");
+  const balance = total.minus(extinguished);
+  if (balance.lte(0)) throw new TributarioS9Error("Dívida já extinta por pagamento ou compensação; não crie segunda extinção.");
+  const transaction = await postTaxAssessmentAdjustment(tx, fullActor(actor), { assessmentId: assessment.id, date, delta: balance.negated(), kind: "EXTINCTION", idempotencyKey: `${key}:ACCOUNTING`, reason: reason.trim() });
+  const entry = await tx.taxRegistryEntry.create({ data: { entityType: "TAX_ASSESSMENT", entityId: assessment.id, category: "CREDIT_EVENT", title: cause === "MANUAL" ? "Extinção por baixa fundamentada da dívida" : "Extinção por prescrição da dívida", status: "ATIVO", source: "DIVIDA_ATIVA", actorUsuarioId: actor.usuarioId, data: { ...scope, eventType: "EXTINCAO_NAO_FINANCEIRA", cause, debtId, amount: balance.toFixed(2), oldValue: total.toFixed(2), newValue: extinguished.toFixed(2), reducesAssessmentValue: true, reason: reason.trim(), operationFinancialYearId: year.id, accountingTransactionId: transaction?.id ?? null } } });
+  await tx.taxAssessment.update({ where: { id: assessment.id }, data: { finalValueDecimal: extinguished, status: "Extinto", calculationSnapshot: { ...taxScopeSnapshot(assessment.calculationSnapshot), currentValue: extinguished.toFixed(2), lastExtinctionKey: key } } });
+  const updated = await tx.activeDebt.update({ where: { id: debtId }, data: { status: cause === "MANUAL" ? "BAIXADA" : "BAIXADA_PRESCRICAO", updatedValue: 0, updatedValueDecimal: 0 } });
+  await tx.taxIntegrationEvent.create({ data: { integrationCode: "ACTIVE_DEBT", eventType: "EXTINCAO_NAO_FINANCEIRA", idempotencyKey: key, status: "PROCESSADO", evidenceLevel: "L1", taxpayerId: assessment.taxpayerId, payload: { debtId, assessmentId: assessment.id, cause, reason: reason.trim(), ...scope }, result: { registryEntryId: entry.id, accountingTransactionId: transaction?.id ?? null, extinguishedAmount: balance.toFixed(2) }, processedAt: date } });
+  await debtEvent(tx, actor, debtId, cause === "MANUAL" ? "BAIXA_MANUAL" : "BAIXA_PRESCRICAO", reason.trim(), { registryEntryId: entry.id, accountingTransactionId: transaction?.id ?? null, amount: balance.toFixed(2) });
+  return updated;
+}
+
 export async function writeOffDebt(db: PrismaClient, actor: Actor, input: { debtId: string; reason: string }) {
   if (!input.reason.trim()) throw new TributarioS9Error("A baixa manual exige justificativa.");
-  return db.$transaction(async (tx) => {
-    const updated = await tx.activeDebt.update({ where: { id: input.debtId }, data: { status: "BAIXADA" } });
-    await debtEvent(tx, actor, input.debtId, "BAIXA_MANUAL", input.reason.trim(), {});
-    return updated;
-  });
+  return db.$transaction(tx => extinguishDebt(tx, actor, input.debtId, input.reason, "MANUAL"), { timeout: 60000 });
 }
 
 export async function runPrescription(db: PrismaClient, actor: Actor, years = 5) {
   if (!Number.isInteger(years) || years < 1) throw new TributarioS9Error("Prazo prescricional inválido.");
   const limit = new Date();
   limit.setUTCFullYear(limit.getUTCFullYear() - years);
-  const debts = await db.activeDebt.findMany({ where: { status: { in: ["INSCRITA", "VALIDADA", "EM_COBRANCA"] }, createdAt: { lt: limit } }, select: { id: true } });
+  const debts = await db.activeDebt.findMany({ where: { status: { in: ["INSCRITA", "VALIDADA", "EM_COBRANCA"] }, createdAt: { lt: limit }, ...activeDebtAccessFilter(actor.allowedBudgetUnitIds) }, select: { id: true } });
   for (const row of debts) {
     await db.$transaction(async (tx) => {
-      await tx.activeDebt.update({ where: { id: row.id }, data: { status: "BAIXADA_PRESCRICAO" } });
-      await debtEvent(tx, actor, row.id, "BAIXA_PRESCRICAO", `Baixa automática por prescrição (${years} anos).`, { years });
-    });
+      await extinguishDebt(tx, actor, row.id, `Baixa por prazo prescricional parametrizado (${years} anos), sujeita à conferência municipal da exigibilidade.`, "PRESCRIPTION");
+    }, { timeout: 60000 });
   }
   return { count: debts.length, years };
 }
 
 // Livro de dívida ativa por exercício e origem (TRI-351) e relatórios gerenciais (TRI-365/403..407).
-export async function daBook(db: PrismaClient, year?: number) {
-  const debts = await db.activeDebt.findMany({ where: year ? { year } : {}, include: { taxpayer: { include: { person: true, company: true } } }, orderBy: [{ year: "asc" }, { createdAt: "asc" }], take: 500 });
+export async function daBook(db: PrismaClient, year?: number, allowedBudgetUnitIds?: string[]) {
+  const debts = await db.activeDebt.findMany({ where: { ...(year ? { year } : {}), ...activeDebtAccessFilter(allowedBudgetUnitIds) }, include: { taxpayer: { include: { person: true, company: true } } }, orderBy: [{ year: "asc" }, { createdAt: "asc" }], take: 500 });
   return debts.map((row) => ({ id: row.id, year: row.year, cda: row.cdaNumber ?? "SEM CDA", origin: row.originDebtType, taxpayer: taxpayerName(row.taxpayer), original: Number(row.originalValueDecimal ?? row.originalValue), updated: Number(row.updatedValueDecimal ?? row.updatedValue), status: row.status }));
 }
 
 // S9-B — Protesto com status internos e retorno controlado (TRI-373..380/386).
-export async function selectProtestCandidates(db: PrismaClient) {
+export async function selectProtestCandidates(db: PrismaClient, allowedBudgetUnitIds?: string[]) {
   const open = await db.taxProtestItem.findMany({ where: { status: { in: ["SELECIONADA", "REMESSA_PREPARADA", "EM_ACOMPANHAMENTO"] } }, select: { activeDebtId: true } });
   const busy = new Set(open.map((row) => row.activeDebtId));
-  const debts = await db.activeDebt.findMany({ where: { status: { in: ["INSCRITA", "EM_COBRANCA"] }, cdaNumber: { not: null } }, include: { taxpayer: { include: { person: true, company: true } } }, orderBy: { createdAt: "desc" }, take: 200 });
+  const debts = await db.activeDebt.findMany({ where: { status: { in: ["INSCRITA", "EM_COBRANCA"] }, cdaNumber: { not: null }, ...activeDebtAccessFilter(allowedBudgetUnitIds) }, include: { taxpayer: { include: { person: true, company: true } } }, orderBy: { createdAt: "desc" }, take: 200 });
   return debts.filter((row) => !busy.has(row.id)).map((row) => ({ id: row.id, cda: row.cdaNumber!, taxpayer: taxpayerName(row.taxpayer), value: Number(row.updatedValueDecimal ?? row.updatedValue), status: row.status }));
 }
 
@@ -362,7 +455,13 @@ export async function createProtestBatch(db: PrismaClient, actor: Actor, debtIds
 }
 
 export async function registerProtestReturn(db: PrismaClient, actor: Actor, input: { batchId: string; returns: { itemId: string; code: string; message: string }[] }) {
+  if (!input.returns.length) throw new TributarioS9Error("Informe ao menos um item para o retorno do protesto.");
   return db.$transaction(async (tx) => {
+    if (actor.allowedBudgetUnitIds) {
+      const items = await tx.taxProtestItem.findMany({ where: { batchId: input.batchId }, select: { activeDebtId: true } });
+      if (!items.length) throw new TributarioS9Error("Lote de protesto sem itens municipais conciliados.");
+      for (const item of items) await assertDebtAccess(tx, actor, item.activeDebtId);
+    }
     for (const row of input.returns) {
       const item = await tx.taxProtestItem.findFirst({ where: { id: row.itemId, batchId: input.batchId } });
       if (!item) throw new TributarioS9Error("Item de protesto não encontrado no lote.");
@@ -381,10 +480,18 @@ export async function resolveProtestItem(db: PrismaClient, actor: Actor, input: 
   return db.$transaction(async (tx) => {
     const item = await tx.taxProtestItem.findUnique({ where: { id: input.itemId } });
     if (!item) throw new TributarioS9Error("Item de protesto não encontrado.");
-    const status = protestNext("EM_ACOMPANHAMENTO", input.action === "BAIXAR_PAGAMENTO" ? "BAIXAR_PAGAMENTO" : input.action === "CANCELAR" ? "CANCELAR" : "ANUIR");
+    const status = protestNext(item.status, input.action === "BAIXAR_PAGAMENTO" ? "BAIXAR_PAGAMENTO" : input.action === "CANCELAR" ? "CANCELAR" : "ANUIR");
     const updated = await tx.taxProtestItem.update({ where: { id: item.id }, data: { status, resolvedAt: new Date(), consentIssuedAt: input.action === "ANUIR" ? new Date() : undefined } });
     if (input.action === "BAIXAR_PAGAMENTO") {
       const debt = await tx.activeDebt.findUnique({ where: { id: item.activeDebtId } });
+      if (!debt?.assessmentId) throw new TributarioS9Error("Baixa de protesto por pagamento exige lançamento e arrecadação nativa conciliados.");
+      await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${debt.assessmentId} FOR UPDATE`;
+      const assessment = await tx.taxAssessment.findUniqueOrThrow({ where: { id: debt.assessmentId } });
+      const payments = await tx.taxPayment.findMany({ where: { guide: { assessmentId: debt.assessmentId }, status: "Confirmado" }, select: { amountPaidDecimal: true } });
+      if (payments.some(payment => !payment.amountPaidDecimal)) throw new TributarioS9Error("Arrecadação histórica sem Decimal conciliado.");
+      const paid = payments.reduce((sum, payment) => sum.plus(payment.amountPaidDecimal!), new Prisma.Decimal(0)).plus(await taxAssessmentCompensatedValue(tx, debt.assessmentId));
+      const total = assessment.finalValueDecimal ?? assessment.originalValueDecimal;
+      if (!total || total.lte(0) || paid.lt(total)) throw new TributarioS9Error("Receba ou compense integralmente a dívida pela origem financeira antes de baixar o protesto por pagamento.");
       await tx.activeDebt.update({ where: { id: item.activeDebtId }, data: { status: "PAGA", updatedValue: 0, updatedValueDecimal: new Prisma.Decimal(0) } });
       if (debt?.assessmentId) await tx.taxAssessment.update({ where: { id: debt.assessmentId }, data: { status: "Pago" } });
       await debtEvent(tx, actor, item.activeDebtId, "PAGAMENTO", `Protesto baixado por pagamento: ${input.reason.trim()}.`, { itemId: item.id });
@@ -462,6 +569,8 @@ export async function registerMni(db: PrismaClient, actor: Actor, caseId: string
 
 export async function scheduleHearing(db: PrismaClient, actor: Actor, input: { caseId: string; date: Date; notes?: string }) {
   return db.$transaction(async (tx) => {
+    const executionCase = await tx.taxExecutionCase.findUniqueOrThrow({ where: { id: input.caseId }, select: { activeDebtId: true } });
+    await assertDebtAccess(tx, actor, executionCase.activeDebtId);
     const updated = await tx.taxExecutionCase.update({ where: { id: input.caseId }, data: { nextHearingAt: input.date, hearingNotes: input.notes?.trim() || null, events: { create: { eventType: "AUDIENCIA", description: `Agenda do procurador: ${input.date.toLocaleString("pt-BR")}${input.notes?.trim() ? ` — ${input.notes.trim()}` : ""}.`, actorUsuarioId: actor.usuarioId } } } });
     return updated;
   });

@@ -273,7 +273,7 @@ export async function createDmsDeclaration(db: PrismaClient, actor: TaxActor | n
     }
     const taxes = await tx.tax.findMany({ where: { isActive: true, serviceActivities: { some: { isActive: true } }, ...(actor?.allowedBudgetUnitIds ? { financialMapping: { isActive: true, defaultBankAccount: { budgetUnitId: { in: actor.allowedBudgetUnitIds } } } } : {}) }, select: { id: true } });
     if (taxes.length !== 1) throw new TributarioS4Error("DMS exige tributo de serviço único e roteamento municipal conciliado.");
-    const scope = await resolveTaxAssessmentScope(tx, actor ?? { usuarioId: "NFSE_WEBSERVICE" }, taxes[0].id);
+    const scope = await resolveTaxAssessmentScope(tx, actor ?? { usuarioId: "NFSE_WEBSERVICE", employeeId: null }, taxes[0].id);
     let rectified: string | null = null;
     if (input.rectifiesDeclarationId) {
       await tx.$queryRaw`SELECT id FROM "NfseDmsDeclaration" WHERE id=${input.rectifiesDeclarationId} FOR UPDATE`;
@@ -286,7 +286,7 @@ export async function createDmsDeclaration(db: PrismaClient, actor: TaxActor | n
       rectified = old.id;
     }
     const rawPayload = asJson(input.payload ?? {});
-    const payload = taxScopeSnapshot(rawPayload);
+    const payload = taxScopeSnapshot(rawPayload as Prisma.JsonValue);
     if (payload.automatic === true || typeof payload.invoiceId === "string") throw new TributarioS4Error("Origem automática não pode ser informada na declaração manual.");
     return tx.nfseDmsDeclaration.create({ data: { protocol: `DMS-${randomUUID().slice(0, 8).toUpperCase()}`, taxpayerId: taxpayer.id, economicRegistrationId: input.economicRegistrationId || null, competence: input.competence, direction, channel: required(input.channel, "Canal"), detailMode: required(input.detailMode, "Detalhamento"), noMovement: input.noMovement, rectifiesDeclarationId: rectified, serviceValueDecimal: submitted[0], deductionValueDecimal: submitted[1], ownIssDecimal: submitted[2], retainedIssDecimal: submitted[3], payload: asJson({ ...payload, ...scope, taxId: taxes[0].id, automatic: false }), createdByUsuarioId: actor?.usuarioId } });
   }, { timeout: 60000 });
@@ -300,11 +300,15 @@ export async function createDeductionCredit(db: PrismaClient, actor: TaxActor, i
 }
 
 export async function createOccasionalRequest(db: PrismaClient, actor: TaxActor, input: { providerTaxpayerId: string; takerTaxpayerId?: string; serviceActivityId: string; serviceDescription: string; serviceValue: number; deductions: number; paymentRequired: boolean }) {
-  const activity = await db.taxServiceActivity.findFirst({ where: { id: input.serviceActivityId, isActive: true } });
+  return db.$transaction((tx) => createOccasionalRequestInTransaction(tx, actor, input));
+}
+
+export async function createOccasionalRequestInTransaction(tx: Prisma.TransactionClient, actor: TaxActor, input: { providerTaxpayerId: string; takerTaxpayerId?: string; serviceActivityId: string; serviceDescription: string; serviceValue: number; deductions: number; paymentRequired: boolean }) {
+  const activity = await tx.taxServiceActivity.findFirst({ where: { id: input.serviceActivityId, isActive: true } });
   if (!activity?.issRate) throw new TributarioS4Error("Atividade sem alíquota configurada.");
-  await resolveTaxAssessmentScope(db, actor, activity.taxId);
+  await resolveTaxAssessmentScope(tx, actor, activity.taxId);
   const calc = calculateNfse({ serviceValue: input.serviceValue, deductions: input.deductions, ratePercent: activity.issRate, retained: false });
-  return db.nfseOccasionalRequest.create({ data: { requestNumber: await db.$transaction((tx) => nextNumber(tx, "NFSE_AVULSA", "NSA")), providerTaxpayerId: input.providerTaxpayerId, takerTaxpayerId: input.takerTaxpayerId || null, serviceActivityId: activity.id, serviceDescription: required(input.serviceDescription, "Descrição"), serviceValueDecimal: calc.serviceValue, deductionValueDecimal: calc.deductions, taxAmountDecimal: calc.iss, paymentRequired: input.paymentRequired, createdByUsuarioId: actor.usuarioId } });
+  return tx.nfseOccasionalRequest.create({ data: { requestNumber: await nextNumber(tx, "NFSE_AVULSA", "NSA"), providerTaxpayerId: input.providerTaxpayerId, takerTaxpayerId: input.takerTaxpayerId || null, serviceActivityId: activity.id, serviceDescription: required(input.serviceDescription, "Descrição"), serviceValueDecimal: calc.serviceValue, deductionValueDecimal: calc.deductions, taxAmountDecimal: calc.iss, paymentRequired: input.paymentRequired, createdByUsuarioId: actor.usuarioId } });
 }
 
 export async function approveOccasionalRequest(db: PrismaClient, actor: TaxActor, id: string) {

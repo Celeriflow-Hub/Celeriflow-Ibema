@@ -8,6 +8,8 @@ Construir o canal externo unificado de Aurora das Veredas, acessível pelo Porta
 
 Este documento é planejamento, não declaração de implementação. Complementa os planos integrados de Compras/Processos/Serviços e o fechamento do Portal do Servidor/Transparência.
 
+Execução posterior: [SERVICOS_INTEGRADOS_EXECUCAO_20261013.md](SERVICOS_INTEGRADOS_EXECUCAO_20261013.md). O inventário e as rotas propostas abaixo são o diagnóstico inicial; as rotas efetivas e o desenvolvimento entregue estão registrados nesse documento, sem declarar fechamento integral dos blocos PA/PD/SP.
+
 ## 2. Fontes e contagem
 
 - Checklist real POC MÓDULOS EXECUTIVO e CAMARA: bloco Executivo, **p.151–163, 119 itens**.

@@ -102,7 +102,8 @@ test("gráfico mensal não transforma data/valor ausente em zero",()=>{
 test("solicitação usa chave privada hasheada; resposta nunca inclui identidade ou narrativa",async()=>{
  let stored:Record<string,unknown>|null=null;
  const fake={configuracaoParametroInstancia:{findFirst:async()=>null},transparencyCitizenRequest:{create:async({data}:{data:Record<string,unknown>})=>{stored=data;return data;},findFirst:async({where,select}:{where:Record<string,unknown>;select:Record<string,unknown>})=>{assert.ok(!("name"in select)&&!("email"in select)&&!("message"in select)&&!("accessHash"in select));if(!stored||stored.accessHash!==where.accessHash||stored.protocol!==where.protocol)return null;return {protocol:stored.protocol,status:"RESPONDIDO",response:"Resposta reservada",appeals:[],nativeTicket:null,nativeOmbudsman:null};}}};
- const db={...fake,$transaction:async(callback:(tx:unknown)=>unknown)=>callback(fake)} as unknown as PrismaClient;
+  const channel={...fake,processType:{upsert:async()=>({id:"channel-type",isActive:true})},subject:{upsert:async()=>({id:"channel-subject",isActive:true})},processSequence:{upsert:async()=>({nextNumber:2})},process:{create:async()=>({id:"channel-process",protocolNumber:"PROC-TEST-000001"})}};
+  const db={...channel,$transaction:async(callback:(tx:unknown)=>unknown)=>callback(channel)} as unknown as PrismaClient;
  const receipt=await createCitizenRequest(db,{type:"ESIC",name:"Solicitante de teste",email:"teste@example.test",subject:"Solicitação de teste",message:"Solicito informação pública para testar o acompanhamento."});
  assert.ok(stored);assert.notEqual(stored!["accessHash"],receipt.token);assert.equal(await consultCitizenRequest(db,receipt.protocol,"0".repeat(64)),null);assert.equal((await consultCitizenRequest(db,receipt.protocol,receipt.token))?.status,"RESPONDIDO");
  await assert.rejects(createCitizenRequest(db,{type:"ESIC",subject:"Teste",message:"Pedido sem nome e sem email para conferência."}));

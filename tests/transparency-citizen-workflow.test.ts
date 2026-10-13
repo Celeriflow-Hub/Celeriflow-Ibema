@@ -7,7 +7,8 @@ import {createCitizenRequest,consultCitizenRequest,appealCitizenRequest,rateCiti
 function fixture(){
  const token="a".repeat(64),hash=createHash("sha256").update(token).digest("hex"),protocol="2026-ABCDEF123456";let stored:Record<string,unknown>={id:"request-one",protocol,accessHash:hash,type:"ESIC",status:"RESPONDIDO",respondedAt:new Date(),appeals:[],nativeTicket:null,nativeOmbudsman:null};let created:Record<string,unknown>|null=null;const scores=new Map<string,unknown>();
  const fake={configuracaoParametroInstancia:{findFirst:async()=>null},transparencyCitizenRequest:{create:async({data}:{data:Record<string,unknown>})=>{created=data;return data;},findFirst:async({where}:{where:Record<string,unknown>})=>where.accessHash===stored.accessHash?stored:null,findUniqueOrThrow:async()=>({id:"request-one"})},transparencyCitizenAppeal:{create:async({data}:{data:Record<string,unknown>})=>{const list=stored.appeals as unknown[];list.push({...data,respondedAt:null});return data;}},transparencySatisfaction:{upsert:async({where,create,update}:{where:{requestId:string};create:unknown;update:unknown})=>{scores.set(where.requestId,scores.has(where.requestId)?update:create);}}};
- const db={...fake,$transaction:async(callback:(tx:unknown)=>unknown)=>callback(fake)} as unknown as PrismaClient;
+  const channel={...fake,processType:{upsert:async()=>({id:"channel-type",isActive:true})},subject:{upsert:async()=>({id:"channel-subject",isActive:true})},processSequence:{upsert:async()=>({nextNumber:2})},process:{create:async()=>({id:"channel-process",protocolNumber:"PROC-TEST-000001"})}};
+  const db={...channel,$transaction:async(callback:(tx:unknown)=>unknown)=>callback(channel)} as unknown as PrismaClient;
  return {db,token,protocol,stored:()=>stored,created:()=>created,scores,setStored:(value:Record<string,unknown>)=>{stored=value;}};
 }
 

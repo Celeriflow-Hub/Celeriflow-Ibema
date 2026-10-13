@@ -79,7 +79,15 @@ export async function createItbiDeclaration(db: PrismaClient, actor: TaxActor, i
   responsibleTaxpayerId?: string; responsibilityType?: "SOLIDARIO" | "SUBSIDIARIO"; isLeasehold?: boolean; leaseholdDetails?: string;
   cadastralUpdateMode: "MANUAL" | "AUTO_ON_APPROVAL" | "AUTO_ON_PAYMENT";
 }) {
-  return db.$transaction(async (tx) => {
+  return db.$transaction((tx) => createItbiDeclarationInTransaction(tx, actor, input));
+}
+
+export async function createItbiDeclarationInTransaction(tx: Prisma.TransactionClient, actor: TaxActor, input: {
+  transactionTypeId: string; realEstateId: string; processId: string; registryOffice: string; transmittedFractionPercent: number;
+  declaredPropertyValue: number; sellerTaxpayerId: string; buyers: { taxpayerId: string; sharePercent: number }[];
+  responsibleTaxpayerId?: string; responsibilityType?: "SOLIDARIO" | "SUBSIDIARIO"; isLeasehold?: boolean; leaseholdDetails?: string;
+  cadastralUpdateMode: "MANUAL" | "AUTO_ON_APPROVAL" | "AUTO_ON_PAYMENT";
+}) {
     const [transactionType, property, process] = await Promise.all([
       tx.itbiTransactionType.findFirst({ where: { id: input.transactionTypeId, isActive: true } }),
       tx.realEstate.findUnique({ where: { id: input.realEstateId } }),
@@ -114,7 +122,6 @@ export async function createItbiDeclaration(db: PrismaClient, actor: TaxActor, i
       events: { create: { eventType: "DECLARACAO_CRIADA", description: "Declaração criada com cálculo persistido.", actorUsuarioId: actor.usuarioId, payload: json({ protocolNumber: process.protocolNumber }) } },
     }, include: { parties: true } });
     return declaration;
-  });
 }
 
 export async function transmitItbiDeclaration(db: PrismaClient, actor: TaxActor, declarationId: string) {

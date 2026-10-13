@@ -20,7 +20,7 @@ export async function createTaxDocumentFixture(jurisdiction: "EXECUTIVE" | "LEGI
     await f.db.economicRegistration.create({ data: { id: "document-registration", municipalInsc: "DOC-01", taxpayerId: "seller", status: "Ativo" } });
     await f.db.taxServiceActivity.create({ data: { id: "document-activity", taxId: "ISS", code: "SERVICO", name: "Serviço", issRate: "5", isActive: true } });
     await f.db.taxParameter.create({ data: { id: "document-parameter", taxId: "ISS", code: "ISS", name: "ISS", calculationType: "PERCENTUAL_BASE", configuration: { formula: "PERCENTUAL_BASE", rate: "5", nfseCancellationDays: 10 }, effectiveFrom: new Date("2026-01-01") } });
-    await f.db.nfseCredentialRequest.create({ data: { taxpayerId: "seller", economicRegistrationId: "document-registration", serviceActivityId: "document-activity", status: "HABILITADO" } });
+    await f.db.nfseCredentialRequest.create({ data: { taxpayerId: "seller", economicRegistrationId: "document-registration", serviceActivityId: "document-activity", status: "HABILITADO", termsAcceptedAt: new Date("2026-01-01"), createdByUsuarioId: f.actor.usuarioId } });
     return { ...f, scope: { budgetUnitId: "ug", governmentEntityId: binding.governmentEntityId } };
   } catch (error) { await f.close(); throw error; }
 }

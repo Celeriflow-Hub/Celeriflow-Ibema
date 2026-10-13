@@ -102,6 +102,7 @@ const MAIN_MENU: MenuItem[] = [
   { label: "Autoatendimento", href: "/portal/minha-area", children: [
     { label: "Solicitar serviço", href: "/portal/minha-area/servicos" },
     { label: "Acompanhar meus processos", href: "/portal/minha-area/processos" },
+    { label: "Meus pedidos e respostas", href: "/portal/minha-area/solicitacoes" },
     { label: "Entrar na minha área", href: "/portal/entrar" },
   ] },
   { label: "Todos Serviços", href: "/portal/servicos" },

@@ -14,6 +14,7 @@ test("materiais: devoluções sucessivas conservam os centavos do consumo e mem�
   const f = await createPlanningAccountingFixture();
   try {
     await f.db.financialYear.update({ where: { id: "ano" }, data: { status: "Aberto" } });
+    await f.db.usuario.update({ where: { id: actor.usuarioId }, data: { ativo: true } });
     await f.db.usuarioUnidadeGestora.create({ data: { usuarioId: actor.usuarioId, budgetUnitId: "ug" } });
     await configureMunicipalCosts(f.db, actor, { financialYearId: "ano", enabled: true, sourceTypes: ["STOCK_CONSUMPTION"], effectiveFrom: new Date("2026-01-01"), reason: "Consumo conciliado da fixture" });
     const original = await f.db.materialMovement.create({ data: { id: "consumo", type: "Saída", operation: "REGULAR", warehouseId: "almoxarifado", materialId: "material", quantity: 3, quantityDecimal: "3", unitValue: 0.016667, unitValueDecimal: "0.016667", totalValueDecimal: "0.05", settlementId: "comprovacao", reason: "CONSUMO_ORCAMENTARIO:Consumo municipal", date } });

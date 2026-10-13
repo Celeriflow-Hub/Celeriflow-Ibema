@@ -44,7 +44,7 @@ export async function buildMunicipalCostReport(db: PrismaClient, actor: CostActo
 export async function renderMunicipalCostReport(report: Report, format: "PDF" | "CSV") {
   if (format === "CSV") {
     const quote = (value: string) => `"${(/^[\s]*[=+@-]/.test(value) ? "'" + value : value).replaceAll('"', '""')}"`;
-    return { bytes: Buffer.from("\uFEFF" + [report.headers, ...report.rows, ["SHA-256", report.hash]].map(row => row.map(quote).join(";")).join("\r\n"), contentType: "text/csv; charset=utf-8", extension: "csv" };
+    return { bytes: Buffer.from("\uFEFF" + [report.headers, ...report.rows, ["SHA-256", report.hash]].map(row => row.map(quote).join(";")).join("\r\n")), contentType: "text/csv; charset=utf-8", extension: "csv" };
   }
   const pdf = new PDFDocument({ size: "A4", margin: 40, bufferPages: true }); const chunks: Buffer[] = [];
   const bytes = new Promise<Buffer>((resolve, reject) => { pdf.on("data", chunk => chunks.push(Buffer.from(chunk))); pdf.on("end", () => resolve(Buffer.concat(chunks))); pdf.on("error", reject); });

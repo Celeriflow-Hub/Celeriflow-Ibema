@@ -4,6 +4,8 @@
 
 Plano: [PLANO_PORTAL_AUTOATENDIMENTO.md](PLANO_PORTAL_AUTOATENDIMENTO.md). B01–B16 são as bases de código descritas nesse plano. A00–A10 são as fases propostas.
 
+**Atualização de execução (13/10/2026):** o núcleo de catálogo versionado, acesso/conferência, pedido–Process–executor, complemento/resposta/documento e programação foi implementado. Consulte [SERVICOS_INTEGRADOS_EXECUCAO_20261013.md](SERVICOS_INTEGRADOS_EXECUCAO_20261013.md) para evidências e pendências atuais. As linhas abaixo preservam o levantamento inicial; os estados P/R/N/E não são selo de aceite posterior.
+
 **Legenda:** P = superfície externa parcial; R = fonte/fluxo reaproveitável em módulo ou área especializada, sem aceite do portal geral; N = operação externa geral não localizada; E = integração/contrato externo ainda necessário. Nenhum desses estados representa homologação integral. A matriz integrada anterior de 356 itens é preservada como levantamento histórico.
 
 | PA | Descritivo | Requisito | Estado/base atual | Fase e entrega necessária |

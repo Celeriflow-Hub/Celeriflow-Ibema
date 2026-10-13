@@ -158,6 +158,7 @@ export function PortalLoginCard({ audience, destination, initialError = "", sess
         </form>
 
         {!isCitizen && <Link href="/portal-servidor/recuperar-senha" className="mt-4 inline-flex text-sm font-semibold text-sky-800 hover:underline">Esqueci minha senha</Link>}
+        {isCitizen && <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold"><Link href="/portal/cadastrar" className="text-emerald-800 hover:underline">Solicitar acesso / consultar solicitação</Link><Link href="/portal/recuperar-senha" className="text-emerald-800 hover:underline">Esqueci minha senha</Link></div>}
 
         {isCitizen && (
           <>

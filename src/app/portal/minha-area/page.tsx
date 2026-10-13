@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ClipboardList, FilePlus2, ShieldCheck } from "lucide-react";
 import { getCitizenAccount } from "@/lib/portal-cidadao/access";
+import { ServiceNotices } from "@/components/portal-institucional/ServiceNotices";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,8 @@ export default async function CitizenAreaPage() {
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Autoatendimento • Cidadão e contribuinte</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Olá, {account.nome}</h1>
         <p className="mt-2 text-sm text-slate-600">Sua área de serviços e acompanhamento de processos.</p>
+        <div className="mt-4 space-y-3"><ServiceNotices authenticated /></div>
+        <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold"><Link href="/portal/minha-area/solicitacoes" className="text-emerald-800 hover:underline">Meus pedidos, pendências e respostas</Link><Link href="/portal-servidor" className="text-sky-800 hover:underline">Portal do Servidor</Link><Link href="/portal/tributario" className="text-emerald-800 hover:underline">Área do contribuinte</Link></div>
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
           <Link href="/portal/minha-area/servicos" className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 transition hover:border-emerald-500 focus-visible:outline-2 focus-visible:outline-emerald-700">
             <FilePlus2 className="size-7 text-emerald-700" aria-hidden="true" />

@@ -4,9 +4,9 @@ export function citizenReturnTo(value: unknown): string {
   if (typeof value !== "string") return "/portal/minha-area";
   try {
     const url = new URL(value, "https://portal.invalid");
-    const allowed = ["/portal/minha-area", "/portal/minha-area/servicos", "/portal/minha-area/processos"];
+    const allowed = ["/portal/minha-area", "/portal/minha-area/servicos", "/portal/minha-area/processos", "/portal/minha-area/solicitacoes", "/portal/tributario", "/portal/nfse"];
     if (url.origin !== "https://portal.invalid" || !value.startsWith("/") || value.includes("\\")) return "/portal/minha-area";
-    if (!allowed.includes(url.pathname) && !/^\/portal\/minha-area\/processos\/[^/]+$/.test(url.pathname)) return "/portal/minha-area";
+    if (!allowed.includes(url.pathname) && !/^\/portal\/minha-area\/(?:processos|solicitacoes|servicos)\/[^/]+$/.test(url.pathname)) return "/portal/minha-area";
     return url.pathname + url.search;
   } catch {
     return "/portal/minha-area";
@@ -23,6 +23,8 @@ export function citizenProcessWhere(usuarioId: string, taxpayerIds: string[], no
     ombudsman: { is: null },
     functionalPortalBinding: { is: null },
     sstCertificates: { none: {} },
+    transparencyCitizenRequests: { none: {} },
+    citizenAccessApplication: { is: null },
     OR: [
       { citizenAccesses: { some: { usuarioId, revokedAt: null, grantedAt: { lte: now }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } } },
       ...(taxpayerIds.length ? [

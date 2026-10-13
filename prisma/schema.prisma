@@ -445,6 +445,7 @@ model CalendarEvent {
 
 // Pessoas FÃ­sicas
 model Person {
+  citizenRegistryIdentities CitizenRegistryIdentity[]
   legislativeAdvisors CamAdvisor[]
   sstEquipmentEvents SstEquipmentEvent[]
   sstElectionElectors SstElectionElector[]
@@ -548,6 +549,7 @@ model Person {
 
 // Pessoas JurÃ­dicas
 model Company {
+  citizenRegistryIdentities CitizenRegistryIdentity[]
   sstOperatedHealthPlans SstHealthPlan[]
   constructionProfile ConstructionCompanyProfile?
   sstExamLaboratories SstOccupationalExam[]
@@ -1937,6 +1939,9 @@ model Subject {
 
 // Processo / Protocolo Principal
 model Process {
+  citizenAccessApplication CitizenAccessApplication?
+  externalServiceRequest PortalServiceRequest?
+  transparencyCitizenRequests TransparencyCitizenRequest[]
   citizenAccesses ProcessCitizenAccess[]
   functionalPortalBinding HrPortalRequestBinding?
   portalOrigin String?
@@ -2607,6 +2612,8 @@ model OfficialDiary {
 }
 
 model PublicService {
+  digitalConfiguration PortalServiceConfiguration?
+  favorites PortalServiceFavorite[]
   functionalPortalConfiguration HrPortalServiceConfiguration?
   id           String   @id @default(cuid())
   name         String
@@ -13745,6 +13752,7 @@ model ObrasMedicao {
 }
 
 model ObrasServico {
+  portalRequest PortalServiceRequest?
   id        String  @id @default(cuid())
   protocolo String  @unique
   tipo      String // Tapa-buraco, IluminaÃ§Ã£o, Poda, Limpeza
@@ -14295,6 +14303,10 @@ model TransparencyCriterionEvidence {
 }
 
 model TransparencyCitizenRequest {
+  requestKeyHash String? @unique
+  inputHash String?
+  processId String?
+  process Process? @relation(fields: [processId], references: [id], onDelete: Restrict)
   id String @id @default(cuid())
   protocol String @unique
   accessHash String @unique
@@ -14322,6 +14334,8 @@ model TransparencyCitizenRequest {
   @@index([status, createdAt])
 }
 model TransparencySatisfaction {
+  qualityRating Int?
+  deadlineRating Int?
   id String @id @default(cuid())
   requestId String @unique
   request TransparencyCitizenRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
@@ -14466,6 +14480,7 @@ model ConfiguracaoPerfil {
 }
 
 model Usuario {
+  citizenRegistryIdentity CitizenRegistryIdentity?
   citizenProcessAccesses ProcessCitizenAccess[] @relation("CitizenProcessViewer")
   grantedCitizenProcessAccesses ProcessCitizenAccess[] @relation("CitizenProcessGrantor")
   functionalPortalBindings HrPortalRequestBinding[]
@@ -16833,6 +16848,194 @@ model ProcessCitizenAccess {
 
   @@unique([processId, usuarioId])
   @@index([usuarioId, revokedAt, expiresAt])
+}
+
+model PortalServiceConfiguration {
+  id String @id @default(cuid())
+  publicServiceId String @unique
+  publicService PublicService @relation(fields: [publicServiceId], references: [id], onDelete: Restrict)
+  slug String @unique
+  group String
+  provider String
+  audience String @default("CIDADAO")
+  requiresLogin Boolean @default(true)
+  published Boolean @default(false)
+  featured Boolean @default(false)
+  sortOrder Int @default(0)
+  version Int @default(1)
+  configuration Json
+  versions PortalServiceVersion[]
+  requests PortalServiceRequest[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CitizenAccessApplication {
+  id String @id @default(cuid())
+  firebaseUid String @unique
+  email String
+  name String
+  declaredDocument String
+  requestHash String
+  processId String @unique
+  process Process @relation(fields: [processId], references: [id], onDelete: Restrict)
+  status String @default("PENDENTE")
+  reason String?
+  decidedById String?
+  decidedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([status, createdAt])
+}
+
+model CitizenRegistryIdentity {
+  id String @id @default(cuid())
+  usuarioId String @unique
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  personId String?
+  person Person? @relation(fields: [personId], references: [id], onDelete: Restrict)
+  companyId String?
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  grantedById String
+  evidence String
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+}
+
+model PortalServiceVersion {
+  id String @id @default(cuid())
+  serviceId String
+  service PortalServiceConfiguration @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  version Int
+  snapshot Json
+  createdById String
+  createdAt DateTime @default(now())
+  @@unique([serviceId, version])
+}
+
+model PortalServiceRequest {
+  id String @id @default(cuid())
+  serviceId String
+  service PortalServiceConfiguration @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  serviceVersion Int
+  snapshot Json
+  actorId String
+  taxpayerId String?
+  processId String @unique
+  process Process @relation(fields: [processId], references: [id], onDelete: Restrict)
+  worksServiceId String? @unique
+  executorType String @default("SOLICITACAO")
+  executorId String?
+  worksService ObrasServico? @relation(fields: [worksServiceId], references: [id], onDelete: Restrict)
+  requestKey String
+  inputHash String
+  payload Json
+  status String @default("RECEBIDO")
+  revision Int @default(1)
+  pendingDocumentCodes Json @default("[]")
+  events PortalServiceRequestEvent[]
+  uploads PortalServiceUpload[]
+  schedules PortalScheduleRequest[]
+  rating PortalServiceRating?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([actorId, requestKey])
+  @@index([actorId, status, createdAt])
+}
+
+model PortalServiceRequestEvent {
+  id String @id @default(cuid())
+  requestId String
+  request PortalServiceRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  actorId String
+  kind String
+  text String
+  requestKey String
+  inputHash String @default("")
+  visible Boolean @default(true)
+  documentVersionId String?
+  createdAt DateTime @default(now())
+  @@unique([requestId, requestKey])
+}
+
+model PortalServiceUpload {
+  id String @id @default(cuid())
+  ownerId String
+  serviceId String
+  serviceVersion Int
+  code String
+  documentId String @unique
+  documentVersionId String @unique
+  filename String
+  pathname String @unique
+  requestId String?
+  request PortalServiceRequest? @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  targetRequestId String?
+  createdAt DateTime @default(now())
+  @@index([ownerId, requestId])
+}
+
+model PortalServiceFavorite {
+  id String @id @default(cuid())
+  actorId String
+  publicServiceId String
+  publicService PublicService @relation(fields: [publicServiceId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  @@unique([actorId, publicServiceId])
+}
+
+model PortalServiceRating {
+  id String @id @default(cuid())
+  requestId String @unique
+  request PortalServiceRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  serviceScore Int
+  qualityScore Int
+  deadlineScore Int
+  comment String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PortalServiceNotice {
+  id String @id @default(cuid())
+  title String
+  text String
+  audience String @default("PUBLICO")
+  popup Boolean @default(false)
+  startsAt DateTime
+  endsAt DateTime
+  active Boolean @default(true)
+  createdById String
+  createdAt DateTime @default(now())
+}
+
+model PortalServiceSchedule {
+  id String @id @default(cuid())
+  resourceKey String
+  startsAt DateTime
+  endsAt DateTime
+  type String
+  reason String
+  status String @default("PROGRAMADO")
+  employeeId String?
+  teamId String?
+  assetId String?
+  laborQuantity Decimal @default(0) @db.Decimal(12, 2)
+  laborUnitCost Decimal @default(0) @db.Decimal(18, 2)
+  realizedQuantity Decimal @default(0) @db.Decimal(12, 2)
+  createdById String
+  links PortalScheduleRequest[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([resourceKey, startsAt, endsAt, status])
+}
+
+model PortalScheduleRequest {
+  id String @id @default(cuid())
+  scheduleId String
+  schedule PortalServiceSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+  requestId String
+  request PortalServiceRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  @@unique([scheduleId, requestId])
 }
 
 model TaxBenefitRule {

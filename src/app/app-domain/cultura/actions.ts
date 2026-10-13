@@ -1,4 +1,5 @@
 "use server";
+import { createScopedSpaceReservation } from "@/lib/portal-cidadao/space-reservations";
 
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -127,10 +128,8 @@ export async function createReserva(data: { spaceId: string; personId?: string; 
     parsed.data.eventId ? prisma.culturaEvento.findFirst({ where: { id: parsed.data.eventId, active: true }, select: { id: true } }) : null,
   ]);
   if (!space || (parsed.data.personId && !person) || (parsed.data.companyId && !company) || (parsed.data.eventId && !event)) return { error: "Uma das referências informadas não está disponível." };
-  const conflict = await prisma.culturaReserva.findFirst({ where: { spaceId: space.id, active: true, status: { in: ["Solicitada", "Aprovada"] }, startsAt: { lt: endsAt }, endsAt: { gt: startsAt } }, select: { id: true } });
-  if (conflict) return { error: "Já existe uma reserva para este espaço no período informado." };
-  try { await prisma.culturaReserva.create({ data: { spaceId: space.id, personId: person?.id, companyId: company?.id, eventId: event?.id, startsAt, endsAt, purpose: parsed.data.purpose } }); }
-  catch (error) { return { error: databaseError(error, "Não foi possível solicitar a reserva.") }; }
+  try { await prisma.$transaction((tx) => createScopedSpaceReservation(tx, { spaceId: space.id, personId: person?.id, companyId: company?.id, eventId: event?.id, startsAt, endsAt, purpose: parsed.data.purpose })); }
+  catch (error) { return { error: error instanceof Error ? error.message : databaseError(error, "Não foi possível solicitar a reserva.") }; }
   revalidate("/cultura/espacos-reservas");
   return {};
 }

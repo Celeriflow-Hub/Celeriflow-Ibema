@@ -41,6 +41,9 @@ export default async function ProtocolosDashboardPage() {
         description="Visão consolidada de processos, prazos, ouvidoria e avisos públicos."
         icon={<ClipboardList className="size-5 shrink-0 text-emerald-700" />}
       />
+      <div className="flex flex-wrap gap-3 text-sm font-semibold"><Link href="/protocolos/servicos" className="rounded border border-emerald-300 bg-white px-4 py-2 text-emerald-800">Catálogo de serviços</Link><Link href="/protocolos/servicos/solicitacoes" className="rounded border border-emerald-300 bg-white px-4 py-2 text-emerald-800">Solicitações do Autoatendimento e programação</Link></div>
+      <div className="flex flex-wrap gap-3 text-sm"><a href="/api/portal/servicos/relatorio" className="text-emerald-800 underline">Relatório integral de ocorrências</a><a href="/api/portal/servicos/relatorio?executed=1" className="text-emerald-800 underline">Relatório de serviços executados</a></div>
+      {context.protocolAccess.isAdmin && <Link href="/protocolos/servicos/acessos" className="text-sm font-semibold text-emerald-800 underline">Conferir solicitações de acesso do cidadão</Link>}
 
       <section className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Indicadores de processos e protocolos">
         {stats.map((stat) => (

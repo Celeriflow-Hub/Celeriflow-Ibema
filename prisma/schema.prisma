@@ -1936,6 +1936,7 @@ model Subject {
 
 // Processo / Protocolo Principal
 model Process {
+  citizenAccesses ProcessCitizenAccess[]
   functionalPortalBinding HrPortalRequestBinding?
   portalOrigin String?
   portalPurpose String?
@@ -14283,6 +14284,8 @@ model ConfiguracaoPerfil {
 }
 
 model Usuario {
+  citizenProcessAccesses ProcessCitizenAccess[] @relation("CitizenProcessViewer")
+  grantedCitizenProcessAccesses ProcessCitizenAccess[] @relation("CitizenProcessGrantor")
   functionalPortalBindings HrPortalRequestBinding[]
   recruitmentApplications HrRecruitmentApplication[] @relation("RecruitmentApplicant")
   recruitmentDecisions HrRecruitmentApplication[] @relation("RecruitmentDecider")
@@ -16630,6 +16633,24 @@ model TaxpayerPortalAccess {
 
   @@unique([usuarioId, taxpayerId])
   @@index([taxpayerId, status])
+}
+
+// Explicit authorization to the external status projection, never to internal documents.
+model ProcessCitizenAccess {
+  id                 String @id @default(cuid())
+  processId          String
+  process            Process @relation(fields: [processId], references: [id], onDelete: Cascade)
+  usuarioId          String
+  usuario            Usuario @relation("CitizenProcessViewer", fields: [usuarioId], references: [id], onDelete: Cascade)
+  grantedByUsuarioId String
+  grantedBy          Usuario @relation("CitizenProcessGrantor", fields: [grantedByUsuarioId], references: [id], onDelete: Restrict)
+  reason             String
+  grantedAt          DateTime @default(now())
+  expiresAt          DateTime?
+  revokedAt          DateTime?
+
+  @@unique([processId, usuarioId])
+  @@index([usuarioId, revokedAt, expiresAt])
 }
 
 model TaxBenefitRule {

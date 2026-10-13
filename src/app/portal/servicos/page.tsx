@@ -10,6 +10,14 @@ export const metadata: Metadata = {
 
 const GROUPS: { id: string; title: string; items: { label: string; href: string; external?: boolean }[] }[] = [
   {
+    id: "autoatendimento",
+    title: "Autoatendimento do cidadão e contribuinte",
+    items: [
+      { label: "Solicitar serviço (entrar na minha área)", href: "/portal/minha-area/servicos" },
+      { label: "Acompanhar meus processos", href: "/portal/minha-area/processos" },
+    ],
+  },
+  {
     id: "informacao",
     title: "Informação e participação",
     items: [

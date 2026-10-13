@@ -4,6 +4,7 @@ import { getProtocolContext, protocolScope } from "@/lib/protocols/access";
 import { canViewModule } from "@/lib/platform/tenant-context";
 import { notFound } from "next/navigation";
 import ProcessControls from "./ProcessControls";
+import CitizenAccessPanel from "./CitizenAccessPanel";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 
 export const dynamic = "force-dynamic";
@@ -12,17 +13,18 @@ export default async function ProcessoDetalhesPage({
   params,
   searchParams,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
   searchParams?: Promise<{ returnTo?: string | string[] }>;
 }) {
   const requestTime = new Date();
+  const { id } = await params;
   const context = await getProtocolContext();
   const { prisma, user } = context;
   const requestedReturnTo = searchParams ? await searchParams : {};
   const rawReturnTo = Array.isArray(requestedReturnTo.returnTo) ? requestedReturnTo.returnTo[0] : requestedReturnTo.returnTo;
   const returnTo = rawReturnTo?.startsWith("/protocolos/processos") ? rawReturnTo : "/protocolos/processos";
   const processo = await prisma.process.findFirst({
-    where: { id: params.id, ...protocolScope(context) },
+    where: { id, ...protocolScope(context) },
     include: {
       processType: true,
       subject: true,
@@ -81,6 +83,8 @@ export default async function ProcessoDetalhesPage({
     ? Math.ceil((processo.expectedCompletionAt.getTime() - requestTime.getTime()) / 86_400_000)
     : null;
   const genericStage = processo.genericWorkflowInstance?.definition.stages.find((stage) => stage.position === processo.genericWorkflowInstance?.currentPosition) || null;
+  const canManageCitizenAccess = context.protocolAccess.canUpdate && (context.protocolAccess.isAdmin || canOperate) && Boolean(await prisma.process.findFirst({ where: { id: processo.id, ombudsman: { is: null }, functionalPortalBinding: { is: null }, sstCertificates: { none: {} } }, select: { id: true } }));
+  const citizenAccesses = canManageCitizenAccess ? await prisma.processCitizenAccess.findMany({ where: { processId: processo.id }, include: { usuario: { select: { nome: true, email: true } } }, orderBy: { grantedAt: "desc" } }) : [];
 
   return (
     <PageFrame className="max-w-6xl space-y-3">
@@ -130,6 +134,8 @@ export default async function ProcessoDetalhesPage({
           } : null}
         />
       </div>
+
+      {canManageCitizenAccess && <CitizenAccessPanel processId={processo.id} accesses={citizenAccesses.map((access) => ({ id: access.id, name: access.usuario.nome, email: access.usuario.email, expiresAt: access.expiresAt?.toLocaleDateString("pt-BR") || null, state: access.revokedAt ? "Revogado" : access.expiresAt && access.expiresAt <= requestTime ? "Expirado" : "Ativo" }))} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         

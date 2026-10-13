@@ -99,7 +99,7 @@ export function PortalLoginCard({ audience, destination, initialError = "", sess
             {isCitizen ? "Entrar na minha área" : "Portal do Servidor"}
           </h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            {isCitizen ? "Use uma conta já autorizada pela administração municipal." : "Use seu e-mail institucional cadastrado e sua senha. O acesso funcional é permitido enquanto seu cadastro estiver ativo."}
+            {isCitizen ? "Entre com e-mail e senha ou com sua conta Google para solicitar serviços e acompanhar seus processos. Use uma conta autorizada pela administração municipal." : "Use seu e-mail institucional cadastrado e sua senha. O acesso funcional é permitido enquanto seu cadastro estiver ativo."}
           </p>
         </div>
 
@@ -170,7 +170,7 @@ export function PortalLoginCard({ audience, destination, initialError = "", sess
               <Button type="button" variant="outline" className="h-11 w-full" onClick={handleGoogleLogin} disabled={pendingMethod !== null}>
                 {pendingMethod === "google" ? <Loader2 className="size-4 animate-spin" /> : <><span className="text-base font-bold text-blue-600" aria-hidden="true">G</span>Entrar com Google</>}
               </Button>
-              <ConfiguredProvider label="Gov.br" />
+              <ConfiguredProvider label="Entrar com gov.br" />
             </div>
           </>
         )}
@@ -188,9 +188,9 @@ export function PortalLoginCard({ audience, destination, initialError = "", sess
 
 function ConfiguredProvider({ label }: { label: string }) {
   return (
-    <Button type="button" variant="outline" className="h-11 w-full justify-between" disabled>
+    <Button type="button" variant="outline" className="h-11 w-full justify-between border-slate-200 bg-slate-100 text-slate-500 disabled:opacity-100" disabled aria-describedby="govbr-provider-status">
       <span>{label}</span>
-      <span className="text-xs font-normal">Em configuração</span>
+      <span id="govbr-provider-status" className="text-xs font-normal">Em configuração</span>
     </Button>
   );
 }

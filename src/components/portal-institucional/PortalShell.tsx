@@ -99,6 +99,11 @@ const MAIN_MENU: MenuItem[] = [
       { label: "Perguntas Frequentes", href: "/portal/perguntas-frequentes" },
     ],
   },
+  { label: "Autoatendimento", href: "/portal/minha-area", children: [
+    { label: "Solicitar serviço", href: "/portal/minha-area/servicos" },
+    { label: "Acompanhar meus processos", href: "/portal/minha-area/processos" },
+    { label: "Entrar na minha área", href: "/portal/entrar" },
+  ] },
   { label: "Todos Serviços", href: "/portal/servicos" },
   { label: "Licitações", href: "/portal/licitacoes-e-contratos" },
 ];

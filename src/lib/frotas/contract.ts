@@ -39,7 +39,7 @@ export const fleetMutationSchema = z.discriminatedUnion("kind", [
     assetId: optionalText, responsibleId: optionalText, parentId: optionalText, notes: optionalNote,
   }).strict() }).strict(),
   z.object({ ...base, kind: z.literal("route"), data: z.object({ ...edit, code: text, name: text, origin: text, destination: text, itinerary: description, departmentId: text, active: z.enum(["true", "false"]).transform(v => v === "true") }).strict() }).strict(),
-  z.object({ ...base, kind: z.literal("usage"), data: z.object({ unitId: text, routeId: optionalText, employeeId: optionalText,
+  z.object({ ...base, kind: z.literal("usage"), data: z.object({ unitId: text, routeId: optionalText, employeeId: optionalText, driverId: optionalText,
     startedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/), endedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
     purpose: description, initialReading: optionalReading, finalReading: optionalReading,
   }).strict() }).strict(),

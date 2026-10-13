@@ -5,6 +5,8 @@ import { AccessError, canPerformModuleOperation, canViewModule, isSystemAdminist
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 import { dateOnly, fleetMutationOperation, fleetMutationSchema, nextOccurrence, todayInBrazil, type FleetMutation } from "./contract";
 import { applyStockMovement } from "@/lib/patrimonio/stock-service";
+import { validateFleetHistoricalUsage } from "./control-motion";
+import { FleetControlError } from "./control-access";
 
 export class FleetError extends Error {}
 export type FleetScope = { actorId: string; employeeId: string | null; departmentId: string | null; administrator: boolean; canReadAssets: boolean; canIssueStock: boolean };
@@ -105,16 +107,19 @@ async function apply(tx: Tx, scope: FleetScope, input: FleetMutation): Promise<{
     }
     case "usage": {
       const d = input.data, unit = await requireUnit(tx, scope, d.unitId);
-      if (unit.category !== "VEICULO") throw new FleetError("O histórico de utilização deve selecionar um veículo.");
+      if (!["VEICULO", "MAQUINA"].includes(unit.category)) throw new FleetError("O histórico de utilização deve selecionar veículo ou máquina.");
       if (unit.status === "EM_MANUTENCAO") throw new FleetError("O veículo está em manutenção e não pode registrar nova utilização.");
       const startedAt = new Date(`${d.startedAt}:00-03:00`), endedAt = new Date(`${d.endedAt}:00-03:00`);
       dateOnly(d.startedAt.slice(0, 10)); dateOnly(d.endedAt.slice(0, 10));
       if (Number.isNaN(startedAt.valueOf()) || Number.isNaN(endedAt.valueOf()) || startedAt > endedAt || !/^([01]\d|2[0-3]):[0-5]\d$/.test(d.startedAt.slice(11)) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(d.endedAt.slice(11))) throw new FleetError("Informe um período de utilização válido (horário de Brasília).");
       if ((d.initialReading === null) !== (d.finalReading === null) || (d.initialReading !== null && decimal(d.finalReading)!.lt(decimal(d.initialReading)!))) throw new FleetError("Informe as duas leituras; a final deve ser igual ou maior que a inicial.");
       const employee = await requireEmployee(tx, scope, d.employeeId, unit.departmentId);
+      let eligibility;
+      try { eligibility = await validateFleetHistoricalUsage(tx, scope, { unitId: unit.id, employeeId: d.employeeId, driverId: d.driverId, startedAt, endedAt, initialReading: decimal(d.initialReading), finalReading: decimal(d.finalReading) }); }
+      catch (error) { if (error instanceof FleetControlError) throw new FleetError(error.message); throw error; }
       const route = d.routeId ? await tx.fleetRoute.findFirst({ where: { id: d.routeId, departmentId: unit.departmentId!, active: true } }) : null;
       if (d.routeId && !route) throw new FleetError("Selecione uma rota ativa do mesmo setor do veículo.");
-      const row = await tx.fleetUsage.create({ data: { ...d, startedAt, endedAt, initialReading: decimal(d.initialReading), finalReading: decimal(d.finalReading), employeeName: employee?.name, routeSnapshot: route ? `${route.code} · ${route.name} | ${route.origin} → ${route.destination} | ${route.itinerary}` : null, createdById } });
+      const row = await tx.fleetUsage.create({ data: { ...d, ...eligibility, startedAt, endedAt, initialReading: decimal(d.initialReading), finalReading: decimal(d.finalReading), employeeName: employee?.name || eligibility.employeeName, routeSnapshot: route ? `${route.code} · ${route.name} | ${route.origin} → ${route.destination} | ${route.itinerary}` : null, createdById } });
       return { targetType: "FLEET_USAGE", targetId: row.id };
     }
     case "plan": {
@@ -147,6 +152,7 @@ async function apply(tx: Tx, scope: FleetScope, input: FleetMutation): Promise<{
     case "completeOrder": {
       const d = input.data, order = await tx.fleetWorkOrder.findFirst({ where: { id: d.orderId, unit: departmentWhere(scope) } });
       if (!order) throw new FleetError("OS não encontrada ou fora do seu setor.");
+      if (await tx.fleetAuthorization.findFirst({ where: { workOrderId: order.id }, select: { id: true } })) throw new FleetError("Conclua esta OS pela autorização de serviço em Gestão de Frota, com a conferência da oficina quando terceirizada.");
       if (order.status === "CONCLUIDA") {
         if (order.completedAt?.getTime() !== dateOnly(d.completedAt).getTime() || order.performed !== d.performed || order.result !== d.result || (order.actualCost?.toString() ?? null) !== (decimal(d.actualCost)?.toString() ?? null)) throw new FleetError("A OS já foi concluída com outros dados; seu histórico foi preservado.");
         return { targetType: "FLEET_WORK_ORDER", targetId: order.id };
@@ -160,7 +166,7 @@ async function apply(tx: Tx, scope: FleetScope, input: FleetMutation): Promise<{
       if (order.assetMaintenanceId) await tx.assetMaintenance.update({ where: { id: order.assetMaintenanceId }, data: { status: "Concluída", endDate: completedAt, description: `${d.performed}\nResultado: ${d.result}`, cost: d.actualCost === null ? null : Number(d.actualCost) } });
       const expense = { unitId: order.unitId, nature: "MANUTENCAO", occurredAt: completedAt, amount: decimal(d.actualCost), description: d.performed, sourceType: "OS", sourceId: order.id, sourceKey: order.assetMaintenanceId ? `asset-maintenance:${order.assetMaintenanceId}` : `order:${order.id}`, reference: d.reference, createdById };
       await tx.fleetExpense.upsert({ where: { sourceKey: expense.sourceKey }, create: expense, update: { description: expense.description, reference: expense.reference, createdById } });
-      await tx.fleetPlan.updateMany({ where: { id: order.planId, nextDueAt: { lte: order.scheduledAt } }, data: { nextDueAt: nextOccurrence(order.scheduledAt, order.intervalDays) } });
+      if (order.planId) await tx.fleetPlan.updateMany({ where: { id: order.planId, nextDueAt: { lte: order.scheduledAt } }, data: { nextDueAt: nextOccurrence(order.scheduledAt, order.intervalDays) } });
       return { targetType: "FLEET_WORK_ORDER", targetId: order.id };
     }
     case "consumption": {

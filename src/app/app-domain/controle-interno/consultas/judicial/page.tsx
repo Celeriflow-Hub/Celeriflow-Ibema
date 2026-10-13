@@ -16,10 +16,13 @@ export default async function ControlJudicialConsultation({ searchParams }: { se
   const selected = filters.entityId ?? entities[0]?.id;
   if (!selected || !entities.some(entity => entity.id === selected)) return <p className="p-5">Entidade fora das UGs autorizadas no Controle.</p>;
   const where = { ...judicialCaseWhere(context, selected, filters), budgetUnitId: { in: units.filter(unit => unit.governmentEntityId === selected && (context.protocolAccess.isAdmin || context.user.allowedBudgetUnitIds.includes(unit.budgetUnitId))).map(unit => unit.budgetUnitId) } };
+  // Infer the aggregate before composing the transaction tuple. Prisma's
+  // contextual groupBy inference otherwise widens _count to its input union.
+  const statusCounts = control.prisma.processJudicialCase.groupBy({ by: ["status"], where, orderBy: { status: "asc" }, _count: { _all: true } });
   const [count, cases, statuses] = await control.prisma.$transaction([
     control.prisma.processJudicialCase.count({ where }),
     control.prisma.processJudicialCase.findMany({ where, include: { process: { select: { protocolNumber: true, status: true } }, events: { orderBy: { version: "desc" }, take: 1 } }, orderBy: [{ openedAt: "desc" }, { id: "desc" }], take: 50, skip: (filters.page - 1) * 50 }),
-    control.prisma.processJudicialCase.groupBy({ by: ["status"], where, orderBy: { status: "asc" }, _count: { _all: true } }),
+    statusCounts,
   ], { isolationLevel: "RepeatableRead" });
   const href = (page: number) => `?${new URLSearchParams({ entityId: selected, page: String(page), status: filters.status ?? "", q: filters.q ?? "", from: filters.from ?? "", through: filters.through ?? "" })}`;
   const style = "block rounded border p-2";

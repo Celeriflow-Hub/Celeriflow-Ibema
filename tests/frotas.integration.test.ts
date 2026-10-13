@@ -18,16 +18,19 @@ import { canPerformModuleOperation, canViewModule, type AppContext } from "../sr
 import { operateAsset } from "../src/lib/patrimonio/asset-operations";
 import { recordAssetDisposal } from "../src/lib/patrimonio/asset-lifecycle";
 import { applyStockMovement } from "../src/lib/patrimonio/stock-service";
+import { syntheticCpf } from "../src/lib/poc/fixture-catalog";
 
 test("Frotas · persistência e cenários da POC em banco isolado", { timeout: 180000 }, async t => {
   const memory = await PGlite.create();
   const generated = spawnSync(process.execPath, ["node_modules/prisma/build/index.js", "migrate", "diff", "--from-empty", "--to-schema", "prisma/schema.prisma", "--script"], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
   assert.equal(generated.status, 0, generated.stderr);
   await memory.exec(generated.stdout);
+  await memory.exec('DROP TABLE "FleetExternalEvent", "FleetExternalThrottle", "FleetControlEvent", "FleetSequence", "FleetAttachment", "FleetClaim", "FleetFinePayment", "FleetFine", "FleetComponentInstallation", "FleetComponent", "FleetWorkshopReport", "FleetAuthorization", "FleetFuelQuota", "FleetFuelAgreement", "FleetProvider", "FleetGateEvent", "FleetTrip", "FleetBooking", "FleetDestination", "FleetUnitControl", "FleetMachineType", "FleetDriver", "FleetCatalogEntry", "FleetCatalogVersion" CASCADE;');
   // Only this newly created in-memory database is reset, to execute the exact incremental migration.
   await memory.exec('DROP TABLE "FleetAssetEvent", "FleetMutation", "FleetExpense", "FleetOccurrence", "FleetDocument", "FleetConsumption", "FleetWorkOrder", "FleetPlan", "FleetUsage", "FleetRoute", "FleetUnit" CASCADE; ALTER TABLE "AssetMaintenance" DROP COLUMN "fleetPreviousStatus";');
   await memory.exec(readFileSync("prisma/migrations/20260918193000_add_independent_fleet_module/migration.sql", "utf8"));
   await memory.exec(readFileSync("prisma/migrations/20260918213000_integrate_fleet_assets_stock/migration.sql", "utf8"));
+  await memory.exec(readFileSync("prisma/migrations-ibema/20261014010000_complete_fleet_checklist/migration.sql", "utf8"));
   const socket = new PGLiteSocketServer({ db: memory, port: 0, host: "127.0.0.1", maxConnections: 1 });
   await socket.start();
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: `postgresql://postgres:postgres@${socket.getServerConn()}/postgres?sslmode=disable`, max: 1 }) });
@@ -44,6 +47,8 @@ test("Frotas · persistência e cenários da POC em banco isolado", { timeout: 1
     assert.equal(query().pageSize, 20);
     assert.equal(query({ pageSize: 5 }).pageSize, 20);
     const ids: string[] = [], planIds: string[] = [], orderIds: string[] = [];
+    const driverPerson = await db.person.create({ data: { fullName: "Condutor canônico DEMO", cpf: syntheticCpf(500) } });
+    const demoDriver = await db.fleetDriver.create({ data: { personId: driverPerson.id, departmentId: department.id, outsourced: true, cnhNumber: "12345678901", cnhCategories: ["B"], cnhExpiresAt: dateOnly("2030-12-31"), policyReference: "Política sintética do banco isolado", createdById: actor.id } });
     const codes = ["V-DEMO-01", "V-DEMO-02", "M-DEMO-01", "E-DEMO-01", "A-DEMO-01"];
     const categories = ["VEICULO", "VEICULO", "MAQUINA", "EQUIPAMENTO", "AGREGADO"] as const;
     await t.test("FRO-001/011 · quatro categorias, reabertura e atualização protegida", async () => {
@@ -68,8 +73,9 @@ test("Frotas · persistência e cenários da POC em banco isolado", { timeout: 1
     });
     await t.test("FRO-004/010 · rotas, utilizações e leituras coerentes", async () => {
       const route = await mutation({ kind: "route", data: { code: "R-DEMO-01", name: "Rota DEMO", origin: "Centro DEMO", destination: "Escola DEMO", itinerary: "Percurso original DEMO", departmentId: department.id, active: "true" } } as Omit<FleetMutationInput, "requestId">);
+      for (const unitId of [ids[0], ids[1]]) await db.fleetUnitControl.create({ data: { unitId, allowedLicenseCategories: ["B"] } });
       const trips = [[ids[0], "2026-09-03T08:00", "2026-09-03T10:00", "10000", "10060"], [ids[0], "2026-09-05T13:00", "2026-09-05T15:00", "10060", "10100"], [ids[1], "2026-09-06T09:00", "2026-09-06T12:00", "5000", "5120"]];
-      for (const [unitId, startedAt, endedAt, initialReading, finalReading] of trips) await mutation({ kind: "usage", data: { unitId, startedAt, endedAt, initialReading, finalReading, routeId: route.id, purpose: "Deslocamento administrativo DEMO" } } as Omit<FleetMutationInput, "requestId">);
+      for (const [unitId, startedAt, endedAt, initialReading, finalReading] of trips) await mutation({ kind: "usage", data: { unitId, driverId: demoDriver.id, startedAt, endedAt, initialReading, finalReading, routeId: route.id, purpose: "Deslocamento administrativo DEMO" } } as Omit<FleetMutationInput, "requestId">);
       const list = await queryFleet(context, query({ area: "utilizacao", unitId: ids[0] })); assert.equal(list.total, 2); assert.deepEqual(new Set(list.rows.map(r => r.cells.distance)), new Set(["60 km", "40 km"]));
       const old = await db.fleetRoute.findUniqueOrThrow({ where: { id: route.id } });
       await mutation({ kind: "route", data: { id: old.id, version: old.updatedAt.toISOString(), code: old.code, name: old.name, origin: old.origin, destination: old.destination, itinerary: "Percurso alterado DEMO", departmentId: department.id, active: "true" } } as Omit<FleetMutationInput, "requestId">);

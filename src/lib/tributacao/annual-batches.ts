@@ -9,7 +9,7 @@ export const annualBatchInput = z.object({ taxId: z.string().min(1), parameterId
 export type AnnualBatchInput = z.infer<typeof annualBatchInput>;
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
 function digest(value: unknown) {
-  const sort = (entry: Prisma.JsonValue): Prisma.JsonValue => Array.isArray(entry) ? entry.map(sort) : entry && typeof entry === "object" ? Object.fromEntries(Object.keys(entry).sort().map(key => [key, sort(entry[key])])) : entry;
+  const sort = (entry: Prisma.JsonValue): Prisma.JsonValue => Array.isArray(entry) ? entry.map(sort) : entry && typeof entry === "object" ? Object.fromEntries(Object.entries(entry).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).flatMap(([key, value]) => value === undefined ? [] : [[key, sort(value)]])) : entry;
   return createHash("sha256").update(JSON.stringify(sort(JSON.parse(JSON.stringify(value))))).digest("hex");
 }
 const ruleMemory = (rule: Awaited<ReturnType<typeof resolveFiscalRule>>) => ({ parameterId: rule.parameter.id, configuration: rule.configuration, effectiveFrom: rule.parameter.effectiveFrom.toISOString(), effectiveUntil: rule.parameter.effectiveUntil?.toISOString() ?? null });

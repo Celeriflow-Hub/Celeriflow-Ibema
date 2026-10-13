@@ -19,7 +19,7 @@ export default async function ControlJudicialConsultation({ searchParams }: { se
   const [count, cases, statuses] = await control.prisma.$transaction([
     control.prisma.processJudicialCase.count({ where }),
     control.prisma.processJudicialCase.findMany({ where, include: { process: { select: { protocolNumber: true, status: true } }, events: { orderBy: { version: "desc" }, take: 1 } }, orderBy: [{ openedAt: "desc" }, { id: "desc" }], take: 50, skip: (filters.page - 1) * 50 }),
-    control.prisma.processJudicialCase.groupBy({ by: ["status"], where, _count: { _all: true } }),
+    control.prisma.processJudicialCase.groupBy({ by: ["status"], where, orderBy: { status: "asc" }, _count: { _all: true } }),
   ], { isolationLevel: "RepeatableRead" });
   const href = (page: number) => `?${new URLSearchParams({ entityId: selected, page: String(page), status: filters.status ?? "", q: filters.q ?? "", from: filters.from ?? "", through: filters.through ?? "" })}`;
   const style = "block rounded border p-2";

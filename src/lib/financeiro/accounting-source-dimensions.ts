@@ -26,7 +26,7 @@ export async function resolveAccountingSourceDimensions(tx: Prisma.TransactionCl
       while (movementId) {
         if (visited.has(movementId)) throw new Error("Ciclo documental na origem do consumo de estoque.");
         visited.add(movementId);
-        const movement = await tx.materialMovement.findUniqueOrThrow({ where: { id: movementId }, select: { settlementId: true, returnedMovementId: true, reversedMovementId: true } });
+        const movement: Prisma.MaterialMovementGetPayload<{ select: { settlementId: true; returnedMovementId: true; reversedMovementId: true } }> = await tx.materialMovement.findUniqueOrThrow({ where: { id: movementId }, select: { settlementId: true, returnedMovementId: true, reversedMovementId: true } });
         if (movement.settlementId) {
           const settlement = await tx.settlement.findUniqueOrThrow({ where: { id: movement.settlementId }, select: { commitment: { select: { appropriation: { select: appropriationSelection } } } } });
           appropriation = settlement.commitment.appropriation;

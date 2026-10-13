@@ -13,10 +13,11 @@ export async function readPlanningRclExecution(context: PlanningContext, entityI
   planningDateSchema.parse(asOf);
   if (asOf > new Date().toISOString().slice(0, 10)) throw new Error("RCL executada não admite corte futuro.");
   const units = await context.prisma.planningEntityUnit.findMany({ where: { governmentEntityId: entityId }, select: { budgetUnitId: true } });
+  if (!units.length || references.some(reference => !units.some(unit => unit.budgetUnitId === reference.budgetUnitId))) throw new AccessError("Composição da RCL contém unidade fora da entidade selecionada.", 403);
   if (!isSystemAdministrator(context.user) && units.some((unit) => !context.user.allowedBudgetUnitIds.includes(unit.budgetUnitId))) throw new AccessError("RCL do ente exige todas as unidades autorizadas.", 403);
   const until = new Date(`${asOf}T23:59:59.999Z`), from = new Date(Date.UTC(until.getUTCFullYear(), until.getUTCMonth() - 11, 1));
   const months = Array.from({ length: 12 }, (_, index) => new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + index, 1)));
-  const years = await context.prisma.financialYear.findMany({ where: { year: { in: [...new Set(months.map((month) => month.getUTCFullYear()))] } }, select: { id: true, year: true } });
+  const years = await context.prisma.financialYear.findMany({ where: { governmentEntityId: entityId, year: { in: [...new Set(months.map((month) => month.getUTCFullYear()))] } }, select: { id: true, year: true } });
   const closes = await context.prisma.monthlyAccountingClose.findMany({ where: { financialYearId: { in: years.map((year) => year.id) }, competence: { gte: from, lte: until }, status: "FECHADO" }, select: { competence: true } });
   if (months.some((month) => !closes.some((close) => close.competence.getTime() === month.getTime()))) return { status: "INCOMPLETE" as const, rows: months.map((month) => ({ competência: month.toISOString().slice(0, 7), situação: closes.some((close) => close.competence.getTime() === month.getTime()) ? "Fechada" : "Histórico/fechamento não confirmado" })), total: null };
   const definitions = references.filter((reference) => reference.revenueNature).map((reference) => ({ revenueNatureId: reference.revenueNature!.id, resourceSourceId: reference.resourceSourceId, bankAccount: { is: { budgetUnitId: reference.budgetUnitId } } }));

@@ -1,5 +1,7 @@
 import { getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import LiquidacoesClient from "./LiquidacoesClient"
+import { SettlementCostsPanel } from "../custos/SettlementCostsPanel";
+import { readMunicipalCosts } from "@/lib/financeiro/cost-overview";
 
 export default async function LiquidacoesPage() {
   const context = await getTenantContextForModule("FINANCEIRO");
@@ -19,6 +21,7 @@ export default async function LiquidacoesPage() {
             }
           },
           purchaseReceipt: { select: { number: true } },
+          appropriation: { select: { financialYearId: true } },
         },
       },
       author: true,
@@ -85,5 +88,8 @@ export default async function LiquidacoesPage() {
     return { ...commitment, value, settledValue, availableToSettle: value - settledValue };
   })
 
-  return <LiquidacoesClient settlements={displaySettlements} commitments={displayCommitments} employees={employees} documents={documents} retentionRules={retentionRules.map((rule) => ({ ...rule, calculationBasePercentage: Number(rule.calculationBasePercentage), ratePercentage: Number(rule.ratePercentage) }))} />
+  const years = await prisma.financialYear.findMany({ where: { id: { in: [...new Set(settlements.map(row => row.commitment.appropriation.financialYearId))] }, governmentEntityId: { not: null } }, select: { id: true } });
+  const costData = await Promise.all(years.map(year => readMunicipalCosts(prisma, { usuarioId: context.user.id, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, year.id)));
+  const settlementIds = new Set(settlements.map(row => row.id));
+  return <><LiquidacoesClient settlements={displaySettlements} commitments={displayCommitments} employees={employees} documents={documents} retentionRules={retentionRules.map((rule) => ({ ...rule, calculationBasePercentage: Number(rule.calculationBasePercentage), ratePercentage: Number(rule.ratePercentage) }))} /><SettlementCostsPanel sources={costData.flatMap(data => data.sources.filter(source => ["SETTLEMENT", "PAYROLL"].includes(source.sourceType) && settlementIds.has(source.sourceId)).map(source => ({ ...source, financialYearId: data.year.id })))} objects={costData.flatMap(data => data.objects.filter(object => object.isActive))} items={costData.flatMap(data => data.items.filter(item => item.isActive))} /></>;
 }

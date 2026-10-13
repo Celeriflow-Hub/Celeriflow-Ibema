@@ -79,6 +79,7 @@ export async function resolveInternalControlFinding(db: PrismaClient, actor: Act
     if (!finding || finding.status === "RESOLVIDO") throw new C7OperationError("Apontamento não encontrado ou já resolvido.");
     assertPlanScope(actor, finding.plan.budgetUnitId);
     if (finding.plan.status !== "ABERTO") throw new C7OperationError("A resolução exige plano aberto.");
+    await assertControlNoticesReviewed(tx, finding.planId, id);
     const resolved = await tx.internalControlFinding.update({ where: { id }, data: { status: "RESOLVIDO", resolvedAt: new Date() } });
     await tx.internalControlEvent.create({ data: { planId: finding.planId, findingId: id, eventType: "FINDING_RESOLVED", actorId: actor.usuarioId, reason: justification, snapshot: { previousStatus: finding.status, status: resolved.status, evidenceDocumentId: finding.evidenceDocumentId, resolvedAt: resolved.resolvedAt!.toISOString() } } });
     await writeAuditEvent(tx, { actorUsuarioId: required(actor.usuarioId, "Usuário responsável"), eventType: auditEventTypes.internalControlFindingRegistered, targetType: "INTERNAL_CONTROL_FINDING", targetId: resolved.id });
@@ -98,6 +99,10 @@ export async function transitionInternalControlPlan(db: PrismaClient, actor: Act
     if (plan.status !== expected) throw new C7OperationError("O plano não está no estágio esperado para essa decisão.");
     if (input.status === "CONCLUIDO" && await tx.internalControlFinding.count({ where: { planId, status: { not: "RESOLVIDO" } } })) throw new C7OperationError("Resolva todos os apontamentos antes de concluir o plano.");
     if (input.status === "CONCLUIDO") {
+      await assertControlNoticesReviewed(tx, planId);
+      const agenda = await tx.internalControlEvent.findMany({ where: { planId, eventType: { in: ["CONTROL_OBLIGATION_SCHEDULED", "CONTROL_OBLIGATION_COMPLETED"] } } });
+      const completed = new Set(agenda.filter(event => event.eventType === "CONTROL_OBLIGATION_COMPLETED").map(event => (event.snapshot as Prisma.JsonObject).obligationId));
+      if (agenda.some(event => event.eventType === "CONTROL_OBLIGATION_SCHEDULED" && !completed.has(event.id))) throw new C7OperationError("Baixe as obrigações pendentes da agenda antes de concluir o plano.");
       const checklists = await tx.internalControlEvent.findMany({ where: { planId, eventType: "CHECKLIST_PUBLISHED" } });
       const answers = await tx.internalControlEvent.findMany({ where: { planId, eventType: "CHECKLIST_ANSWERED" } });
       const answered = new Set(answers.map(answer => (answer.snapshot as Prisma.JsonObject).answerKey));
@@ -117,6 +122,12 @@ export async function transitionInternalControlPlan(db: PrismaClient, actor: Act
     await writeAuditEvent(tx, { actorUsuarioId: actor.usuarioId, eventType: auditEventTypes.administrativeMutation, targetType: "INTERNAL_CONTROL_PLAN", targetId: planId });
     return updated;
   });
+}
+
+async function assertControlNoticesReviewed(tx: Prisma.TransactionClient, planId: string, findingId?: string) {
+  const events = await tx.internalControlEvent.findMany({ where: { planId, ...(findingId ? { findingId } : {}), eventType: { in: ["CONTROL_NOTICE_SENT", "CONTROL_NOTICE_REVIEWED"] } } });
+  const reviewed = new Set(events.filter(event => event.eventType === "CONTROL_NOTICE_REVIEWED").map(event => (event.snapshot as Prisma.JsonObject).noticeId));
+  if (events.some(event => event.eventType === "CONTROL_NOTICE_SENT" && !reviewed.has(event.id))) throw new C7OperationError("Responda e analise as notificações pendentes antes de encerrar.");
 }
 
 export async function recordInternalControlOpinion(db: PrismaClient, actor: Actor, input: { findingId: string; opinion: string; correctiveAction: string; recruitment: boolean; employeeId?: string }) {

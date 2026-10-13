@@ -3,8 +3,9 @@ import { getFleetExpenseIndicators } from "@/lib/frotas/indicators";
 import { dateOnly } from "@/lib/frotas/contract";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
+import { MunicipalCostIndicators } from "./MunicipalCostIndicators";
 
-export default async function IndicadoresPage({ searchParams }: { searchParams: Promise<{ start?: string; end?: string }> }) {
+export default async function IndicadoresPage({ searchParams }: { searchParams: Promise<{ start?: string; end?: string; costYearId?: string }> }) {
   const context = await getTenantContextForModule("ADMINISTRACAO");
   const { prisma } = context;
   const unitScope = isSystemAdministrator(context.user) ? {} : { budgetUnitId: { in: context.user.allowedBudgetUnitIds } };
@@ -38,6 +39,7 @@ export default async function IndicadoresPage({ searchParams }: { searchParams: 
         <button className="h-8 rounded bg-slate-800 px-3 text-xs font-semibold text-white hover:bg-slate-900">Aplicar</button>
       </form>
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{cards.map(([title, value, description]) => <section key={title} className="rounded border border-slate-300 bg-white p-3 shadow-sm"><p className="text-xs font-medium text-slate-500">{title}</p><p className="mt-1 text-2xl font-bold text-slate-800">{value}</p><p className="mt-1 text-[11px] text-slate-500">{description}</p></section>)}</div>
+      <MunicipalCostIndicators context={context} start={start} end={end} yearId={params.costYearId} />
     </PageFrame>
   );
 }

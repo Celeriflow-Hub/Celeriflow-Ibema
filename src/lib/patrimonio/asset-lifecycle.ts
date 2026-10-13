@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { FinanceError, postAccountingEventInTransaction, recordConfirmedRevenue, type FinanceActor } from "@/lib/financeiro";
 import { resolveAssetValuationScope, assertAssetValuationOrigin, postAssetValuation, type AssetValuationContext } from "./valuation-accounting";
+import { recordMunicipalCostSource } from "@/lib/financeiro/cost-ledger";
 
 export class AssetLifecycleError extends Error {}
 
@@ -178,6 +179,7 @@ export async function depreciateAssetsForMonth(db: PrismaClient, referenceDate: 
         const transaction = await postAssetValuation(tx, accounting, { assetId: asset.id, date: postingDate, eventCode: `ASSET_DEPRECIATION:${currentAsset.categoryId}`, value: depreciation, key: `PATRIMONIO:DEPRECIATION:${asset.id}:${referenceMonth.toISOString()}`, history: `Depreciação patrimonial ${asset.id}` });
         await tx.assetValueHistory.update({ where: { id: history.id }, data: { accountingTransactionId: transaction.id } });
         await tx.asset.update({ where: { id: asset.id }, data: { currentValue: closingValue, currentValueDecimal: closing, budgetUnitId: accounting.budgetUnitId } });
+        await recordMunicipalCostSource(tx, accounting.actor, { financialYearId: scope.financialYearId, budgetUnitId: accounting.budgetUnitId, sourceType: "DEPRECIATION", sourceId: history.id, expenseDate: postingDate, amount: depreciation, dimensions: { assetId: asset.id, categoryId: currentAsset.categoryId }, evidence: { assetId: asset.id, historyId: history.id, accountingTransactionId: transaction.id, referenceMonth: referenceMonth.toISOString(), opening: opening.toFixed(2), closing: closing.toFixed(2) } });
         await tx.financialAuditLog.create({ data: { action: "ASSET_DEPRECIATION", entityType: "AssetValueHistory", entityId: history.id, authorUsuarioId: accounting.actor.usuarioId, authorEmployeeId: accounting.actor.employeeId, financialYearId: scope.financialYearId, payload: { assetId: asset.id, budgetUnitId: accounting.budgetUnitId, accountingTransactionId: transaction.id, opening: opening.toFixed(2), depreciation: depreciation.toFixed(2), closing: closing.toFixed(2) } } });
         return true;
       })();

@@ -15,6 +15,7 @@ const navigation: ModuleNavGroup[] = [
     { title: "Liquidações", href: "/financeiro/liquidacoes", icon: "receipt" },
     { title: "Pagamentos", href: "/financeiro/pagamentos", icon: "walletCards" },
     { title: "Restos a Pagar", href: "/financeiro/restos-a-pagar", icon: "clipboardList" },
+    { title: "Gestão e Controle de Custos", href: "/financeiro/custos", icon: "scale" },
   ] },
   { title: "Receitas", items: [
     { title: "Lançamentos de Receita", href: "/financeiro/receitas", icon: "walletCards" },

@@ -50,3 +50,19 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) test(`Controle
     assert.deepEqual((await f.db.internalControlEvent.findUniqueOrThrow({ where: { id: regular.id } })).snapshot, regular.snapshot);
   } finally { await f.close(); }
 });
+
+test("Controle: cópia selecionada conserva origem e não replica respostas", async () => {
+  const f = await createPlanningAccountingFixture();
+  try {
+    const actor = { usuarioId: "ana", allowedBudgetUnitIds: ["ug"] };
+    const plan = await createInternalControlPlan(f.db, actor, { title: "Controle municipal", reference: "Exercício 2026", budgetUnitId: "ug" });
+    const original = await publishControlChecklist(f.db, actor, { planId: plan.id, title: "Edição de origem", category: "Financeiro", groups: [{ name: "Despesas", responses: ["Regular", "Irregular"], irregularResponse: "Irregular", items: [{ number: 1, question: "Empenho conferido?" }, { number: 2, question: "Liquidação conferida?" }] }] });
+    await answerControlChecklist(f.db, actor, { checklistId: original.id, number: 1, response: "Regular", reason: "Conferência documental concluída" });
+    const copy = await publishControlChecklist(f.db, actor, { planId: plan.id, title: "Nova edição", category: "Financeiro", copiedFromId: original.id, selectedSourceNumbers: [2], groups: [{ name: "Liquidações", responses: ["Regular", "Irregular"], irregularResponse: "Irregular", items: [{ number: 2, question: "Liquidação e ateste conferidos?" }] }] });
+    const memory = copy.snapshot as { provenance: { sourceEditionId: string; selectedSourceNumbers: number[]; sourceSnapshotHash: string } };
+    assert.equal(memory.provenance.sourceEditionId, original.id); assert.deepEqual(memory.provenance.selectedSourceNumbers, [2]); assert.match(memory.provenance.sourceSnapshotHash, /^[a-f0-9]{64}$/);
+    assert.equal(await f.db.internalControlEvent.count({ where: { eventType: "CHECKLIST_ANSWERED", snapshot: { path: ["checklistId"], equals: copy.id } } }), 0);
+    assert.deepEqual((await f.db.internalControlEvent.findUniqueOrThrow({ where: { id: original.id } })).snapshot, original.snapshot);
+    await assert.rejects(publishControlChecklist(f.db, actor, { planId: plan.id, title: "Seleção inválida", category: "Financeiro", copiedFromId: original.id, selectedSourceNumbers: [99], groups: [{ name: "Grupo", responses: ["Regular", "Irregular"], irregularResponse: "Irregular", items: [{ number: 99, question: "Pergunta" }] }] }), /Seleção de itens/);
+  } finally { await f.close(); }
+});

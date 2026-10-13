@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { BankReconciliationSession } from "@prisma/client";
 import { importBankStatementCsv, matchBankStatementItemToTreasuryMovement } from "@/lib/financeiro";
 import { runAutoReconciliation } from "@/lib/financeiro/reconciliation-engine";
+import { importBankStatementOfx } from "@/lib/financeiro/ofx-import";
 import { allocateBankReconciliation, confirmMunicipalReconciliation, openMunicipalReconciliation, readReconciliationPosition, reopenMunicipalReconciliation, reverseBankReconciliationAllocation } from "@/lib/financeiro/reconciliation-allocations";
 import { getTenantContextForModule, getTenantContextForModuleOperation, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
 
@@ -35,6 +36,21 @@ export async function matchBankStatementItemAction(data: { statementItemId: stri
     await matchBankStatementItemToTreasuryMovement(context.prisma, actorFor(context), data);
     refresh();
     return {};
+  } catch (error) { return { error: message(error) }; }
+}
+
+export async function importBankStatementFileAction(data: { bankAccountId: string; base64: string; fileName: string }): Promise<ActionResult<{ id: string; checksum: string }>> {
+  try {
+    const input = z.object({ bankAccountId: z.string().trim().min(1), base64: z.string().min(1).max(2800000).regex(/^[A-Za-z0-9+/]+={0,2}$/), fileName: z.string().trim().min(1).max(255).regex(/\.(?:csv|ofx)$/i) }).parse(data);
+    const bytes = Buffer.from(input.base64, "base64");
+    if (bytes.toString("base64") !== input.base64 || bytes.length > 2 * 1024 * 1024) return { error: "Arquivo inválido ou maior que 2 MB." };
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
+    const actor = actorFor(context);
+    const result = /\.ofx$/i.test(input.fileName)
+      ? await importBankStatementOfx(context.prisma, actor, { bankAccountId: input.bankAccountId, bytes, fileName: input.fileName })
+      : await importBankStatementCsv(context.prisma, actor, { bankAccountId: input.bankAccountId, content: new TextDecoder("utf-8", { fatal: true }).decode(bytes), originalBytes: bytes, fileName: input.fileName.replace(/[\\/:]/g, "_") });
+    refresh();
+    return { data: { id: result.id, checksum: result.checksum } };
   } catch (error) { return { error: message(error) }; }
 }
 

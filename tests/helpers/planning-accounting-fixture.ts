@@ -24,6 +24,7 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
     models.push("Revenue", "Payment", "Commitment", "CommitmentMovement", "Settlement", "BankStatementImport", "BankStatementItem", "BankAccount", "BankReconciliation", "TreasuryMovement", "MonthlyAccountingCloseEvent", "AnnualAccountingClose", "PayableCarryForward", "PayableCarryForwardEvent");
     omitted.Revenue = ["budgetUnitId"];
     models.push("InternalControlPlan", "InternalControlFinding", "InternalControlEvent", "HrIntegrationEvent");
+    models.push("UsuarioUnidadeGestora", "CostCenter", "HrEmploymentContract");
     omitted.InternalControlPlan = ["budgetUnitId"];
     const enums = new Set<string>();
     for (const name of models) {
@@ -35,7 +36,7 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
         enums.add(field.type);
       }
       const columns = model.fields.filter((item) => item.kind !== "object" && !omitted[name]?.includes(item.name)).map((item) => {
-        const types: Record<string, string> = { Int: "INTEGER", Float: "DOUBLE PRECISION", Decimal: "NUMERIC(18,6)", DateTime: "TIMESTAMP(3)", Boolean: "BOOLEAN", Json: "JSONB" };
+        const types: Record<string, string> = { Int: "INTEGER", Float: "DOUBLE PRECISION", Decimal: "NUMERIC(18,6)", DateTime: "TIMESTAMP(3)", Boolean: "BOOLEAN", Json: "JSONB", Bytes: "BYTEA" };
         let fallback = "";
         if (typeof item.default === "string") fallback = ` DEFAULT '${item.default.replaceAll("'", "''")}'`;
         else if (typeof item.default === "boolean" || typeof item.default === "number") fallback = ` DEFAULT ${item.default}`;
@@ -50,6 +51,7 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
     await pg.exec(readFileSync("prisma/migrations-ibema/20261012150000_accounting_year_scope_update_guard/migration.sql", "utf8"));
     await pg.exec(readFileSync("prisma/migrations-ibema/20261012160000_internal_control_budget_scope/migration.sql", "utf8"));
     await pg.exec(readFileSync("prisma/migrations-ibema/20261012170000_shared_official_catalog_accounts/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261013200000_municipal_cost_ledger/migration.sql", "utf8"));
     await pg.exec(`
       CREATE UNIQUE INDEX ON "AccountingEventCatalog" (code);
       CREATE UNIQUE INDEX ON "AccountingPlan" (code);

@@ -4,9 +4,16 @@ import { C7OperationError, createInternalControlFinding, createInternalControlPl
 import { getTenantContextForModule, getTenantContextForModuleOperation, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { publishControlChecklist, answerControlChecklist, runControlChecklistDiagnostics, type ControlChecklistGroup } from "@/lib/c7/control-checklists";
+import { sendControlNotice, respondControlNotice, reviewControlNoticeResponse } from "@/lib/c7/control-notifications";
+import { scheduleControlObligation, completeControlObligation, runControlAgendaAlerts } from "@/lib/c7/control-agenda";
 
 type Result = { error?: string };
-const date = (value?: string) => value ? new Date(`${value}T12:00:00.000Z`) : undefined;
+const date = (value?: string) => {
+  if (!value) return undefined;
+  const parsed = new Date(`${value}T12:00:00.000Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) throw new C7OperationError("Data inválida.");
+  return parsed;
+};
 const controlActor = (context: AppContext) => ({ usuarioId: context.user.id, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds });
 
 export async function createControlPlanAction(input: { title: string; reference: string; dueAt?: string; budgetUnitId: string }): Promise<Result> {
@@ -60,7 +67,7 @@ export async function recordControlOpinionAction(input: { findingId: string; opi
   } catch (error) { return { error: error instanceof C7OperationError ? error.message : "Não foi possível registrar o parecer." }; }
 }
 
-export async function publishControlChecklistAction(input: { planId: string; title: string; category: string; lines: string }): Promise<Result> {
+export async function publishControlChecklistAction(input: { planId: string; title: string; category: string; lines: string; groups?: ControlChecklistGroup[]; copiedFromId?: string; selectedSourceNumbers?: number[] }): Promise<Result> {
   try {
     const context = await getTenantContextForModuleOperation("ADMINISTRACAO", "create");
     const groups = new Map<string, ControlChecklistGroup>();
@@ -75,7 +82,7 @@ export async function publishControlChecklistAction(input: { planId: string; tit
       group.items.push({ number: Number(number), question, ...(diagnosticRule ? { diagnosticRule: "BANK_ACCOUNT_SOURCE" as const } : {}) });
       groups.set(name, group);
     }
-    await publishControlChecklist(context.prisma, controlActor(context), { ...input, groups: [...groups.values()] });
+    await publishControlChecklist(context.prisma, controlActor(context), { ...input, groups: input.groups ?? [...groups.values()] });
     revalidatePath("/controle-interno");
     return {};
   } catch (error) { return { error: error instanceof C7OperationError ? error.message : "Não foi possível publicar o checklist." }; }
@@ -98,4 +105,58 @@ export async function runControlChecklistDiagnosticsAction(checklistId: string):
     revalidatePath("/controle-interno");
     return {};
   } catch (error) { return { error: error instanceof C7OperationError ? error.message : "Não foi possível executar o diagnóstico." }; }
+}
+
+export async function sendControlNoticeAction(input: { planId: string; findingId?: string; recipientId: string; title: string; message: string; dueAt: string; documentIds: string[]; idempotencyKey: string }): Promise<Result> {
+  try {
+    const context = await getTenantContextForModuleOperation("ADMINISTRACAO", "create");
+    await sendControlNotice(context.prisma, controlActor(context), { ...input, dueAt: date(input.dueAt) ?? new Date(NaN) });
+    revalidatePath("/controle-interno");
+    return {};
+  } catch (error) { return { error: error instanceof C7OperationError ? error.message : "Não foi possível enviar a notificação." }; }
+}
+
+export async function respondControlNoticeAction(input: { noticeId: string; response: string; documentIds: string[] }): Promise<Result> {
+  try {
+    const context = await getTenantContextForModule("ADMINISTRACAO");
+    await respondControlNotice(context.prisma, controlActor(context), input);
+    revalidatePath("/controle-interno");
+    return {};
+  } catch (error) { return { error: error instanceof C7OperationError ? error.message : "Não foi possível registrar a resposta." }; }
+}
+
+export async function reviewControlNoticeResponseAction(input: { noticeId: string; accepted: boolean; reason: string }): Promise<Result> {
+  try {
+    const context = await getTenantContextForModuleOperation("ADMINISTRACAO", "update");
+    await reviewControlNoticeResponse(context.prisma, controlActor(context), input);
+    revalidatePath("/controle-interno");
+    return {};
+  } catch (error) { return { error: error instanceof C7OperationError ? error.message : "Não foi possível analisar a resposta." }; }
+}
+
+export async function scheduleControlObligationAction(input: { planId: string; title: string; description: string; dueAt: string; criticality: "BAIXA" | "MEDIA" | "ALTA"; alertDays: number; expirationDays: number; viewerIds: string[]; closerIds: string[]; costCenterId?: string; idempotencyKey: string }): Promise<Result> {
+  try {
+    const context = await getTenantContextForModuleOperation("ADMINISTRACAO", "create");
+    await scheduleControlObligation(context.prisma, controlActor(context), { ...input, dueAt: date(input.dueAt) ?? new Date(NaN) });
+    revalidatePath("/controle-interno");
+    return {};
+  } catch (error) { return { error: error instanceof C7OperationError ? error.message : "Não foi possível agendar a obrigação." }; }
+}
+
+export async function completeControlObligationAction(input: { obligationId: string; reason: string }): Promise<Result> {
+  try {
+    const context = await getTenantContextForModule("ADMINISTRACAO");
+    await completeControlObligation(context.prisma, controlActor(context), input);
+    revalidatePath("/controle-interno");
+    return {};
+  } catch (error) { return { error: error instanceof C7OperationError ? error.message : "Não foi possível baixar a obrigação." }; }
+}
+
+export async function runControlAgendaAlertsAction(planId: string): Promise<Result> {
+  try {
+    const context = await getTenantContextForModuleOperation("ADMINISTRACAO", "create");
+    await runControlAgendaAlerts(context.prisma, controlActor(context), planId);
+    revalidatePath("/controle-interno");
+    return {};
+  } catch (error) { return { error: error instanceof C7OperationError ? error.message : "Não foi possível processar os alertas." }; }
 }

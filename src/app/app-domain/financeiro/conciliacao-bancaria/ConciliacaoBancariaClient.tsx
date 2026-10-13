@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { GitCompare, CheckCircle2, FileSpreadsheet, ArrowRightLeft, Sparkles, Scale } from "lucide-react";
-import { allocateReconciliationAction, confirmReconciliationSessionAction, openReconciliationSessionAction, runAutoReconciliationAction } from "./actions";
+import { allocateReconciliationAction, confirmReconciliationSessionAction, openReconciliationSessionAction, runAutoReconciliationAction, importBankStatementFileAction } from "./actions";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { ReconciliationAllocationForm } from "./ReconciliationAllocationForm";
 import type { ReconciliationMatchResult } from "@/lib/financeiro/reconciliation-engine";
@@ -47,6 +47,26 @@ export default function ConciliacaoBancariaClient({ initialSessions = [], accoun
   const [loading, setLoading] = useState(false);
   const [confirmReceipt, setConfirmReceipt] = useState<ConfirmReceipt | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [importReceipt, setImportReceipt] = useState<{ id: string; checksum: string } | null>(null);
+
+  async function handleImport(event: React.FormEvent) {
+    event.preventDefault();
+    if (!file || !accountId) return;
+    setLoading(true); setErrorMsg(null); setImportReceipt(null);
+    try {
+      if (file.size > 2 * 1024 * 1024) throw new Error("O arquivo deve ter no máximo 2 MB.");
+      if (!/\.(csv|ofx)$/i.test(file.name)) throw new Error("Envie um arquivo CSV ou OFX.");
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let binary = "";
+      for (const byte of bytes) binary += String.fromCharCode(byte);
+      const result = await importBankStatementFileAction({ bankAccountId: accountId, base64: btoa(binary), fileName: file.name });
+      if (result.error) throw new Error(result.error);
+      setImportReceipt(result.data ?? null);
+      setMatchResults([]); setConfirmReceipt(null);
+    } catch (error) { setErrorMsg(error instanceof Error ? error.message : "Falha na importação."); }
+    finally { setLoading(false); }
+  }
 
   async function handleOpenSession(e: React.FormEvent) {
     e.preventDefault();
@@ -133,6 +153,12 @@ export default function ConciliacaoBancariaClient({ initialSessions = [], accoun
       </div>
 
       {/* Grid: Abertura & Painel de Saldos */}
+      <form onSubmit={handleImport} className="flex flex-wrap items-center gap-3 rounded border bg-white p-3 text-xs">
+        <label htmlFor="statement-file" className="font-semibold">Extrato da conta selecionada (CSV/OFX)</label>
+        <input id="statement-file" type="file" accept=".csv,.ofx" required onChange={event => setFile(event.target.files?.[0] ?? null)} />
+        <button disabled={loading || !accountId || !file} className="rounded border px-3 py-2 font-semibold">Importar extrato</button>
+        {importReceipt && <span role="status">Extrato importado · SHA-256 {importReceipt.checksum} · <a className="underline" href={`/api/financeiro/extratos-importados/${importReceipt.id}`}>Baixar original</a> · <a className="underline" href={`/api/financeiro/extratos-importados/${importReceipt.id}?format=PDF`}>Imprimir extrato</a></span>}
+      </form>
       {initialSessions.length > 0 && <select aria-label="Sessões de conciliação" className="w-full rounded border p-2 text-xs" value={activeSession?.id ?? ""} onChange={(event) => { setActiveSession(initialSessions.find((session) => session.id === event.target.value) ?? null); setMatchResults([]); setConfirmReceipt(null); setErrorMsg(null); }}><option value="">Selecionar sessão anterior</option>{initialSessions.map((session) => <option key={session.id} value={session.id}>{session.banco} · {session.contaNumero} · {session.periodo} · {session.status}</option>)}</select>}
       <div className="grid grid-cols-1 gap-2 lg:grid-cols-12">
         {/* Form Abertura */}

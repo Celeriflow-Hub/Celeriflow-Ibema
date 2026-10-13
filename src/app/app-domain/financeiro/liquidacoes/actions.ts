@@ -11,9 +11,10 @@ import {
 } from "@/lib/compras/procurement-finance-bridge";
 import { assertBudgetUnitAccess, getTenantContextForModuleOperation, isSystemAdministrator, type AppContext } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
+import { MunicipalCostError } from "@/lib/financeiro/cost-ledger";
 
 type ActionResult = { error?: string };
-const message = (error: unknown) => error instanceof FinanceError || error instanceof ProcurementFinanceBridgeError ? error.message : "Não foi possível concluir a liquidação.";
+const message = (error: unknown) => error instanceof FinanceError || error instanceof ProcurementFinanceBridgeError || error instanceof MunicipalCostError ? error.message : "Não foi possível concluir a liquidação.";
 
 async function assertCommitmentAccess(context: AppContext, commitmentId: string) {
   const commitment = await context.prisma.commitment.findUnique({

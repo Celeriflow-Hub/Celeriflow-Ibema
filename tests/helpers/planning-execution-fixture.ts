@@ -16,6 +16,7 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
     models.push("TaxActiveDebtEvent", "TaxProtestItem", "TaxProtestBatch", "TaxCdaVersion");
     models.push("PurchaseReceipt", "PurchaseReceiptItem", "InstrumentMeasurement");
     models.push("BankStatementImport", "BankStatementItem", "BankReconciliationSession", "BankReconciliationMatch", "BankReconciliationAllocationGroup", "BankReconciliationAllocation", "BankReconciliation");
+    models.push("Bank", "BankBranch");
     models.push("Payroll", "HrPayrollRun", "HrIntegrationEvent", "SstBenefitPayrollScope");
     models.push("HrEmploymentContract", "HrRightEntry", "HrPayrollStatement");
     models.push("HrPayrollRuleSet", "HrPayrollRule", "HrEmploymentRegime", "HrEmploymentRevision", "HrPortalRequest", "CostCenter");
@@ -37,7 +38,7 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
         enums.add(field.type);
       }
       const columns = model.fields.filter((item) => item.kind !== "object").map((item) => {
-        const types: Record<string, string> = { Int: "INTEGER", Float: "DOUBLE PRECISION", Decimal: "NUMERIC(18,6)", DateTime: "TIMESTAMP(3)", Boolean: "BOOLEAN", Json: "JSONB" };
+        const types: Record<string, string> = { Int: "INTEGER", Float: "DOUBLE PRECISION", Decimal: "NUMERIC(18,6)", DateTime: "TIMESTAMP(3)", Boolean: "BOOLEAN", Json: "JSONB", Bytes: "BYTEA" };
         let fallback = "";
         if (typeof item.default === "string") fallback = ` DEFAULT '${item.default.replaceAll("'", "''")}'`;
         else if (typeof item.default === "boolean" || typeof item.default === "number") fallback = ` DEFAULT ${item.default}`;

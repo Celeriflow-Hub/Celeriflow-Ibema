@@ -2,6 +2,8 @@
 
 ## Escopo e estado do controle
 
+A continuação solicitada para P5–P10 está registrada em [EXECUCAO_P5_P10_2026_10_13.md](EXECUCAO_P5_P10_2026_10_13.md), com requisitos associados a cada entrega e limites de atendimento. Não houve nova rodada de verificações.
+
 Fontes: `CONTROLE_REQUISITOS.json`, EXE-02/LEG-02, EXE-03, EXE-12–17 e EXE-24–26, plano consolidado P1–P4 e plano de Custos/Controle Interno. São 823 registros de checklist: 378 financeiros nos dois entes, 36 de Controle Interno e 409 tributários. Os 189 textos financeiros são compartilhados entre Prefeitura/Câmara, mas exigem verificação operacional independente.
 
 Esta revisão **não substitui a matriz individual, não promove busca lexical a atendimento e não registra aceite integral**. A matriz P0 conserva a fotografia original. Os desenvolvimentos abaixo têm evidências próprias e limites identificados.

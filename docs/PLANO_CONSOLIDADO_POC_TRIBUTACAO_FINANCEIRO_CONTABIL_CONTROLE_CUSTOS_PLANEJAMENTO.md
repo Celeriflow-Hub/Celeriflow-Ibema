@@ -558,6 +558,8 @@ Obter documentos/parâmetros locais durante as primeiras fases. **Isso não é i
 
 ### P5 — completar jornadas tributárias e elaboração/manutenção de Planejamento
 
+**Registro da execução P5–P10 em 13/10/2026:** [entregas locais, requisitos vinculados e pendências](poc-p0/EXECUCAO_P5_P10_2026_10_13.md). As alterações novas ainda não foram validadas; o registro não encerra fases nem promove requisitos a ATENDE.
+
 **Dependência:** P1; etapas com efeitos financeiros exigem P2–P4. Cadastros sem esses efeitos podem avançar paralelamente após a fundação.
 
 - Executar todas as linhas da seção 5: campos/relacionamentos/histórico/espelhos por data, formulários/regras configuráveis, vistorias/mapas, cópias/lotes, unificação/desmembramento, alvarás e ITBI.

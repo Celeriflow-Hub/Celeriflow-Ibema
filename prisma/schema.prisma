@@ -1327,6 +1327,7 @@ model GovernmentEntity {
   planningInstruments PlanningInstrument[]
   accountingTransactions AccountingTransaction[]
   financialYears FinancialYear[]
+  costPolicies MunicipalCostPolicy[]
 
   @@index([parentId, status])
   @@index([type, status])
@@ -4011,6 +4012,10 @@ model FinancialYear {
   budgetGuidelines               BudgetGuideline[]
   creditRequests                 CreditRequest[]
   retentionRules                 RetentionRule[]
+  costObjects                    MunicipalCostObject[]
+  costItems                      MunicipalCostItem[]
+  costSources                    MunicipalCostSource[]
+  costRules                      MunicipalCostRule[]
 
   @@unique([governmentEntityId, year])
   @@index([year, status])
@@ -4332,6 +4337,9 @@ model CreditRequestItem {
 }
 
 model BudgetUnit {
+  municipalCostObjects MunicipalCostObject[]
+  municipalCostRules MunicipalCostRule[]
+  municipalCostSources MunicipalCostSource[]
   activeDebts ActiveDebt[]
   assets Asset[]
   functionalPortalServices HrPortalServiceConfiguration[]
@@ -5015,6 +5023,9 @@ model BankStatementImport {
   checksum      String
   status        String              @default("Importado")
   importedAt    DateTime            @default(now())
+  originalBytes Bytes?
+  originalEncoding String?
+  processingSnapshot Json?
   items         BankStatementItem[]
 
   @@unique([bankAccountId, checksum])
@@ -7923,6 +7934,141 @@ model CostCenter {
   @@index([secretariatId])
   @@index([departmentId])
   @@index([administrativeUnitId])
+}
+
+// Custos municipais: origens canônicas, distribuição Decimal e histórico aditivo.
+model MunicipalCostPolicy {
+  id String @id @default(cuid())
+  governmentEntityId String
+  governmentEntity GovernmentEntity @relation(fields: [governmentEntityId], references: [id], onDelete: Restrict)
+  effectiveFrom DateTime @db.Date
+  enabled Boolean
+  sourceTypes Json
+  reason String
+  actorId String
+  createdAt DateTime @default(now())
+  @@index([governmentEntityId, effectiveFrom, createdAt], map: "MunicipalCostPolicy_scope")
+}
+
+model MunicipalCostObject {
+  id String @id @default(cuid())
+  financialYearId String
+  financialYear FinancialYear @relation(fields: [financialYearId], references: [id], onDelete: Restrict)
+  budgetUnitId String?
+  budgetUnit BudgetUnit? @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  code String
+  description String
+  detailedDescription String
+  parentId String?
+  parent MunicipalCostObject? @relation("MunicipalCostTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children MunicipalCostObject[] @relation("MunicipalCostTree")
+  sourceKey String
+  sourceSnapshot Json
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  links MunicipalCostObjectItem[]
+  allocations MunicipalCostAllocation[]
+  @@unique([financialYearId, code])
+  @@unique([financialYearId, sourceKey])
+  @@index([financialYearId, budgetUnitId, parentId], map: "MunicipalCostObject_scope")
+}
+
+model MunicipalCostItem {
+  id String @id @default(cuid())
+  financialYearId String
+  financialYear FinancialYear @relation(fields: [financialYearId], references: [id], onDelete: Restrict)
+  identifier String
+  description String
+  detailedDescription String
+  identificationClass String
+  behavior String
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  links MunicipalCostObjectItem[]
+  allocations MunicipalCostAllocation[]
+  @@unique([financialYearId, identifier])
+}
+
+model MunicipalCostObjectItem {
+  id String @id @default(cuid())
+  objectId String
+  object MunicipalCostObject @relation(fields: [objectId], references: [id], onDelete: Restrict)
+  itemId String
+  item MunicipalCostItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  copiedFromId String?
+  copiedFrom MunicipalCostObjectItem? @relation("MunicipalCostRelationCopy", fields: [copiedFromId], references: [id], onDelete: Restrict)
+  copies MunicipalCostObjectItem[] @relation("MunicipalCostRelationCopy")
+  createdAt DateTime @default(now())
+  @@unique([objectId, itemId])
+}
+
+model MunicipalCostRule {
+  id String @id @default(cuid())
+  financialYearId String
+  financialYear FinancialYear @relation(fields: [financialYearId], references: [id], onDelete: Restrict)
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  title String
+  sourceType String
+  selector Json
+  shares Json
+  priority Int @default(0)
+  effectiveFrom DateTime @db.Date
+  effectiveUntil DateTime? @db.Date
+  isActive Boolean @default(true)
+  retiredAt DateTime?
+  retirementReason String?
+  actorId String
+  createdAt DateTime @default(now())
+  @@index([financialYearId, budgetUnitId, sourceType, effectiveFrom], map: "MunicipalCostRule_scope")
+}
+
+model MunicipalCostSource {
+  id String @id @default(cuid())
+  financialYearId String
+  financialYear FinancialYear @relation(fields: [financialYearId], references: [id], onDelete: Restrict)
+  budgetUnitId String
+  budgetUnit BudgetUnit @relation(fields: [budgetUnitId], references: [id], onDelete: Restrict)
+  sourceType String
+  sourceId String
+  expenseDate DateTime
+  amount Decimal @db.Decimal(18, 2)
+  status String @default("ACTIVE")
+  snapshot Json
+  createdAt DateTime @default(now())
+  movements MunicipalCostMovement[]
+  @@unique([sourceType, sourceId])
+  @@index([financialYearId, budgetUnitId, expenseDate], map: "MunicipalCostSource_scope")
+}
+
+model MunicipalCostMovement {
+  id String @id @default(cuid())
+  sourceId String
+  source MunicipalCostSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  kind String
+  date DateTime
+  reason String
+  actorId String
+  idempotencyKey String @unique
+  referenceMovementId String? @unique
+  referenceMovement MunicipalCostMovement? @relation("MunicipalCostCorrections", fields: [referenceMovementId], references: [id], onDelete: Restrict)
+  correction MunicipalCostMovement? @relation("MunicipalCostCorrections")
+  snapshot Json
+  createdAt DateTime @default(now())
+  allocations MunicipalCostAllocation[]
+  @@index([sourceId, date], map: "MunicipalCostMovement_source")
+}
+
+model MunicipalCostAllocation {
+  id String @id @default(cuid())
+  movementId String
+  movement MunicipalCostMovement @relation(fields: [movementId], references: [id], onDelete: Restrict)
+  objectId String
+  object MunicipalCostObject @relation(fields: [objectId], references: [id], onDelete: Restrict)
+  itemId String
+  item MunicipalCostItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  amount Decimal @db.Decimal(18, 2)
+  @@unique([movementId, objectId, itemId])
 }
 
 model MaterialCategory {

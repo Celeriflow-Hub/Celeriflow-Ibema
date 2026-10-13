@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { ControlChecklistGroup } from "@/lib/c7/control-checklists";
 import { publishControlChecklistAction, answerControlChecklistAction, runControlChecklistDiagnosticsAction } from "./actions";
+import { controlChecklistCatalog } from "@/lib/c7/checklist-catalog";
+import { ChecklistGroupsEditor } from "./ChecklistGroupsEditor";
 
 type Edition = { id: string; planId: string; title: string; category: string; groups: ControlChecklistGroup[] };
 export function ControlChecklistsClient({ plans, editions }: { plans: Array<{ id: string; title: string; status: string }>; editions: Edition[] }) {
@@ -11,6 +13,11 @@ export function ControlChecklistsClient({ plans, editions }: { plans: Array<{ id
   const [category, setCategory] = useState("");
   const [draft, setDraft] = useState({ planId: "", title: "", category: "", lines: "" });
   const [answer, setAnswer] = useState({ checklistId: "", number: 0, response: "", reason: "" });
+  const [selectedItems, setSelectedItems] = useState<number[]>([]);
+  const [copyId, setCopyId] = useState("");
+  const [groups, setGroups] = useState<ControlChecklistGroup[]>([]);
+  const [provenance, setProvenance] = useState<{ copiedFromId?: string; selectedSourceNumbers?: number[] }>({});
+  const copy = editions.find(edition => edition.id === copyId);
   const selected = editions.find(edition => edition.id === answer.checklistId);
   const group = selected?.groups.find(group => group.items.some(item => item.number === answer.number));
   const run = async (operation: () => Promise<{ error?: string }>) => {
@@ -22,14 +29,20 @@ export function ControlChecklistsClient({ plans, editions }: { plans: Array<{ id
   return <section className="space-y-4 p-8">
     <h2 className="text-xl font-semibold">Checklists de auditoria por categoria</h2>
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-    <form className="grid gap-3 rounded border p-5" onSubmit={event => { event.preventDefault(); void run(() => publishControlChecklistAction(draft)); }}>
+    <form className="grid gap-3 rounded border p-5" onSubmit={event => { event.preventDefault(); void run(() => publishControlChecklistAction({ ...draft, groups, ...provenance })); }}>
       <h3 className="font-semibold">Publicar edição numerada</h3>
+      <select aria-label="Checklist padrão" className="rounded border p-2" defaultValue="" onChange={event => { const template = controlChecklistCatalog.find(item => item.code === event.target.value); if (template) { setDraft({ ...draft, title: template.title, category: template.category, lines: "" }); setGroups(structuredClone(template.groups)); setProvenance({}); } }}><option value="">Carregar checklist padrão editável</option>{controlChecklistCatalog.map(template => <option key={template.code} value={template.code}>{template.title}</option>)}</select>
+      <div className="grid gap-2 rounded border p-3">
+        <h4 className="font-medium">Duplicar edição / selecionar itens para nova auditoria</h4>
+        <select aria-label="Edição original" className="rounded border p-2" value={copyId} onChange={event => { setCopyId(event.target.value); setSelectedItems(editions.find(edition => edition.id === event.target.value)?.groups.flatMap(group => group.items.map(item => item.number)) ?? []); }}><option value="">Edição original autorizada</option>{editions.map(edition => <option key={edition.id} value={edition.id}>{edition.title} — {edition.category}</option>)}</select>
+        {copy?.groups.flatMap(group => group.items.map(item => <label key={item.number} className="flex gap-2 text-sm"><input type="checkbox" checked={selectedItems.includes(item.number)} onChange={event => setSelectedItems(event.target.checked ? [...selectedItems, item.number] : selectedItems.filter(number => number !== item.number))} />{group.name} · {item.number}. {item.question}</label>))}
+        <button type="button" disabled={!copy || !selectedItems.length || pending} className="rounded border p-2" onClick={() => { if (copy) { setDraft({ ...draft, title: `${copy.title} — nova edição`, category: copy.category, lines: "" }); setGroups(structuredClone(copy.groups.map(group => ({ ...group, items: group.items.filter(item => selectedItems.includes(item.number)) })).filter(group => group.items.length))); setProvenance({ copiedFromId: copy.id, selectedSourceNumbers: [...selectedItems] }); } }}>Copiar itens selecionados para edição</button>
+      </div>
       <select required className="rounded border p-2" value={draft.planId} onChange={event => setDraft({ ...draft, planId: event.target.value })}><option value="">Plano aberto</option>{plans.filter(plan => plan.status === "ABERTO").map(plan => <option key={plan.id} value={plan.id}>{plan.title}</option>)}</select>
       <input required className="rounded border p-2" placeholder="Título" value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} />
       <input required className="rounded border p-2" placeholder="Categoria" value={draft.category} onChange={event => setDraft({ ...draft, category: event.target.value })} />
-      <label className="text-sm">Um item por linha: grupo | número | pergunta | respostas separadas por ; | resposta irregular</label>
-      <p className="text-sm text-muted-foreground">Para conferir automaticamente a fonte das contas bancárias, acrescente | BANK_ACCOUNT_SOURCE ao fim da linha. A primeira resposta será a regular; a resposta irregular deve ser distinta.</p>
-      <textarea required rows={5} className="rounded border p-2" placeholder="Tesouraria | 1 | A conciliação está regular? | Sim;Não;Não aplicável | Não" value={draft.lines} onChange={event => setDraft({ ...draft, lines: event.target.value })} />
+      <ChecklistGroupsEditor groups={groups} onChange={setGroups} />
+      {provenance.copiedFromId && <p className="text-sm">Origem da cópia: {provenance.copiedFromId}; itens selecionados: {provenance.selectedSourceNumbers?.join(", ")}.</p>}
       <p className="text-sm text-muted-foreground">As edições e respostas são preservadas. Uma resposta irregular abre um apontamento para parecer e regularização.</p>
       <button disabled={pending} className="rounded bg-emerald-700 p-2 text-white">Publicar checklist</button>
     </form>

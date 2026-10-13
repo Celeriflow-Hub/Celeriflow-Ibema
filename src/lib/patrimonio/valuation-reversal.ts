@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { FinanceError, postAccountingTransactionInTransaction } from "@/lib/financeiro";
 import { assertAssetValuationOrigin, resolveAssetValuationScope, type AssetValuationContext } from "./valuation-accounting";
+import { cancelMunicipalCostSource } from "@/lib/financeiro/cost-ledger";
 
 export async function reverseAssetValuation(db: PrismaClient, context: AssetValuationContext, input: { kind: "DEPRECIATION" | "ADJUSTMENT"; recordId: string; date: Date; reason: string; idempotencyKey: string }) {
   if (!["DEPRECIATION", "ADJUSTMENT"].includes(input.kind)) throw new FinanceError("Tipo de fato patrimonial inválido.");
@@ -27,6 +28,7 @@ export async function reverseAssetValuation(db: PrismaClient, context: AssetValu
     const laterReversal = await tx.accountingTransaction.findFirst({ where: { sourceModule: "PATRIMONIO", sourceType: "ASSET_VALUATION_REVERSAL", sourceId: record.assetId, date: { gt: input.date }, status: "POSTADO" }, select: { id: true } });
     if (laterReversal) throw new FinanceError("A data deve preservar a sequência dos estornos patrimoniais anteriores.");
     if (!original.entries.length || original.entries.some(entry => !entry.valueDecimal)) throw new FinanceError("Partida original sem linhas Decimal conciliadas.");
+    if (input.kind === "DEPRECIATION") await cancelMunicipalCostSource(tx, context.actor, "DEPRECIATION", record.id);
     const reversal = await postAccountingTransactionInTransaction(tx, context.actor, {
       financialYearId: scope.financialYearId, governmentEntityId: scope.governmentEntityId, budgetUnitId: context.budgetUnitId,
       date: input.date, history: input.reason.trim(), sourceModule: "PATRIMONIO", sourceType: "ASSET_VALUATION_REVERSAL", sourceId: record.assetId,

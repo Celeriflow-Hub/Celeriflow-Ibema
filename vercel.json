@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/sst/restricoes/expiracao", "schedule": "0 9 * * *" },
-    { "path": "/api/portal-servidor/manutencao/anexos", "schedule": "15 9 * * *" }
+    { "path": "/api/portal-servidor/manutencao/anexos", "schedule": "15 9 * * *" },
+    { "path": "/api/controle-interno/agenda/alertas-periodicos", "schedule": "30 9 * * *" }
   ]
 }

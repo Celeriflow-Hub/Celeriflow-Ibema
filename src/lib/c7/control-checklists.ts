@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { C7OperationError } from "./operations-service";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
+import { createHash } from "node:crypto";
 
 type Actor = { usuarioId: string; allowedBudgetUnitIds?: string[] };
 export type ControlChecklistGroup = { name: string; responses: string[]; irregularResponse: string; items: Array<{ number: number; question: string; diagnosticRule?: "BANK_ACCOUNT_SOURCE" }> };
@@ -14,19 +15,21 @@ async function openPlan(tx: Prisma.TransactionClient, actor: Actor, planId: stri
   return plan;
 }
 
-export async function publishControlChecklist(db: PrismaClient, actor: Actor, input: { planId: string; title: string; category: string; groups: ControlChecklistGroup[] }) {
+export async function publishControlChecklist(db: PrismaClient, actor: Actor, input: { planId: string; title: string; category: string; groups: ControlChecklistGroup[]; copiedFromId?: string; selectedSourceNumbers?: number[] }) {
   const title = input.title.trim();
   const category = input.category.trim();
   if (!title || !category || !Array.isArray(input.groups) || !input.groups.length) throw new C7OperationError("Informe título, categoria e grupos do checklist.");
   const numbers = new Set<number>();
   const names = new Set<string>();
   const groups = input.groups.map(group => {
+    if (!group || typeof group.name !== "string" || !Array.isArray(group.responses) || group.responses.some(response => typeof response !== "string") || typeof group.irregularResponse !== "string" || !Array.isArray(group.items)) throw new C7OperationError("Estrutura do grupo inválida.");
     const name = group.name.trim();
     const responses = group.responses.map(response => response.trim());
     const irregularResponse = group.irregularResponse.trim();
     if (!name || names.has(name) || responses.length < 2 || responses.some(response => !response) || new Set(responses).size !== responses.length || !responses.includes(irregularResponse) || !group.items.length) throw new C7OperationError("Grupos exigem nome único, respostas distintas, resposta irregular e itens.");
     names.add(name);
     const items = group.items.map(item => {
+      if (!item || typeof item.question !== "string") throw new C7OperationError("Estrutura do item inválida.");
       const question = item.question.trim();
       if (!Number.isSafeInteger(item.number) || item.number < 1 || numbers.has(item.number) || !question) throw new C7OperationError("Itens exigem número inteiro positivo único e pergunta.");
       if (item.diagnosticRule && (item.diagnosticRule !== "BANK_ACCOUNT_SOURCE" || responses[0] === irregularResponse)) throw new C7OperationError("Diagnóstico exige regra válida e primeira resposta regular distinta da irregular.");
@@ -36,8 +39,19 @@ export async function publishControlChecklist(db: PrismaClient, actor: Actor, in
     return { name, responses, irregularResponse, items };
   });
   return db.$transaction(async tx => {
-    await openPlan(tx, actor, input.planId);
-    const event = await tx.internalControlEvent.create({ data: { planId: input.planId, eventType: "CHECKLIST_PUBLISHED", actorId: actor.usuarioId, reason: title, snapshot: { title, category, groups } } });
+    const target = await openPlan(tx, actor, input.planId);
+    let provenance: Prisma.InputJsonObject | undefined;
+    if (input.copiedFromId) {
+      const source = await tx.internalControlEvent.findUnique({ where: { id: input.copiedFromId }, include: { plan: true } });
+      const original = source?.eventType === "CHECKLIST_PUBLISHED" ? readControlChecklist(source.snapshot) : null;
+      if (!source?.plan.budgetUnitId || !target.budgetUnitId || !original || (actor.allowedBudgetUnitIds && !actor.allowedBudgetUnitIds.includes(source.plan.budgetUnitId))) throw new C7OperationError("Edição de origem não está disponível no escopo autorizado.");
+      const units = await tx.planningEntityUnit.findMany({ where: { budgetUnitId: { in: [source.plan.budgetUnitId, target.budgetUnitId] } } });
+      if (!units.length || !units.some(unit => unit.budgetUnitId === source.plan.budgetUnitId) || !units.some(unit => unit.budgetUnitId === target.budgetUnitId) || new Set(units.map(unit => unit.governmentEntityId)).size !== 1) throw new C7OperationError("A cópia deve permanecer na mesma entidade.");
+      const selected = input.selectedSourceNumbers;
+      if (!selected?.length || new Set(selected).size !== selected.length || selected.some(number => !original.groups.some(group => group.items.some(item => item.number === number)))) throw new C7OperationError("Seleção de itens de origem inválida.");
+      provenance = { sourceEditionId: source.id, sourcePlanId: source.planId, sourceSnapshotHash: createHash("sha256").update(JSON.stringify(source.snapshot)).digest("hex"), selectedSourceNumbers: [...selected].sort((a, b) => a - b) };
+    } else if (input.selectedSourceNumbers?.length) throw new C7OperationError("Itens de origem exigem edição de origem.");
+    const event = await tx.internalControlEvent.create({ data: { planId: input.planId, eventType: "CHECKLIST_PUBLISHED", actorId: actor.usuarioId, reason: title, snapshot: { title, category, groups, ...(provenance ? { provenance } : {}) } } });
     await writeAuditEvent(tx, { actorUsuarioId: actor.usuarioId, eventType: auditEventTypes.administrativeMutation, targetType: "INTERNAL_CONTROL_CHECKLIST", targetId: event.id });
     return event;
   });

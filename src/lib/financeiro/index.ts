@@ -8,6 +8,8 @@ import { releasePayrollProvisionsAtSettlement, reversePayrollProvisionSettlement
 import { reverseAdvancePaymentControl, reverseAdvanceCommitmentControl, assertAdvanceRefundReversalAllowed, recordAdvanceRefundReversal } from "@/lib/rh/municipal-advances";
 import { assertCurrentRefundPaymentMutationAllowed, settledCurrentRefundCorrections } from "./allowance-expense-refunds";
 import { taxCollectionReceivableAccount } from "@/lib/tributacao/accrual-accounting";
+import { recordSettlementMunicipalCosts, cancelSettlementMunicipalCosts } from "./cost-settlement-bridge";
+import { recordAccountingMunicipalCosts } from "./cost-accounting-bridge";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -1088,6 +1090,7 @@ export async function createSettlementInTransaction(tx: Prisma.TransactionClient
       idempotencyKey: `FINANCEIRO:SETTLEMENT:${settlement.id}:LIQUIDACAO_REGISTRADA`,
     });
     await releasePayrollProvisionsAtSettlement(tx, actor, settlement.id);
+    await recordSettlementMunicipalCosts(tx, actor, settlement.id);
     await audit(tx, actor, "CREATE", "Settlement", settlement.id, { value: jsonMoney(value), retentionValue: jsonMoney(retentionTotal), commitmentId: commitment.id, documentId: document.id, authorId: input.authorId }, year.id);
     return settlement;
 }
@@ -1110,6 +1113,7 @@ export async function cancelSettlementInTransaction(tx: Prisma.TransactionClient
      await assertAccountingPeriodOpen(tx, year.id, date);
     if (settlement.status !== ACTIVE_SETTLEMENT_STATUS) throw new FinanceError("Somente liquidações ativas podem ser canceladas.");
     if ((await activePaymentTotal(tx, { settlementId })).greaterThan(0)) throw new FinanceError("Não é possível cancelar uma liquidação com pagamentos ativos.");
+    await cancelSettlementMunicipalCosts(tx, actor, settlementId);
     await reverseAccountingForSource(tx, actor, {
       financialYearId: year.id,
        date,
@@ -2308,24 +2312,32 @@ function assertActorCanAccessBankAccount(actor: FinanceActor, budgetUnitId: stri
 export async function importBankStatementCsv(
   db: PrismaClient,
   actor: FinanceActor,
-  input: { bankAccountId: string; content: string; fileName?: string; separator?: "," | ";" },
+  input: { bankAccountId: string; content: string; fileName?: string; separator?: "," | ";"; originalBytes?: Uint8Array },
 ) {
+  if (input.originalBytes) {
+    let decoded: string;
+    try { decoded = new TextDecoder("utf-8", { fatal: true }).decode(input.originalBytes); }
+    catch { throw new FinanceError("O CSV deve estar codificado em UTF-8."); }
+    if (decoded !== input.content) throw new FinanceError("O conteúdo CSV não corresponde aos bytes originais.");
+  }
   const separator = input.separator ?? (input.content.split("\n")[0]?.includes(";") ? ";" : ",");
   const rows = input.content.split(/\r?\n/).filter((row) => row.trim());
   if (rows.length < 2) throw new FinanceError("O CSV deve ter cabeçalho e ao menos um lançamento.");
   const headers = parseCsvLine(rows[0], separator).map((header) => header.toLowerCase().trim());
   const required = ["date", "description", "amount"];
   if (!required.every((header) => headers.includes(header))) throw new FinanceError("O CSV deve conter as colunas date, description e amount.");
-  const checksum = createHash("sha256").update(input.content).digest("hex");
+  const bytes = input.originalBytes ?? Buffer.from(input.content, "utf8");
+  const checksum = createHash("sha256").update(bytes).digest("hex");
   try {
     return await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "BankAccount" WHERE id = ${input.bankAccountId} FOR UPDATE`;
       const account = await tx.bankAccount.findUnique({ where: { id: input.bankAccountId }, select: { id: true, budgetUnitId: true, isActive: true } });
       if (!account) throw new FinanceError("Conta bancária não encontrada.");
       if (!account.isActive) throw new FinanceError("A importação exige uma conta bancária ativa.");
       assertActorCanAccessBankAccount(actor, account.budgetUnitId);
       const existing = await tx.bankStatementImport.findUnique({ where: { bankAccountId_checksum: { bankAccountId: input.bankAccountId, checksum } } });
       if (existing) return existing;
-      const importRecord = await tx.bankStatementImport.create({ data: { bankAccountId: account.id, format: "CSV", fileName: input.fileName?.trim() || undefined, checksum } });
+      const importRecord = await tx.bankStatementImport.create({ data: { bankAccountId: account.id, format: "CSV", fileName: input.fileName?.trim() || undefined, checksum, originalBytes: Buffer.from(bytes), originalEncoding: "utf-8" } });
       for (const row of rows.slice(1)) {
         const values = parseCsvLine(row, separator);
         const item = Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""]));
@@ -2608,6 +2620,7 @@ export async function postAccountingTransactionInTransaction(
     },
   });
   await audit(tx, actor, "POST", "AccountingTransaction", transaction.id, { debit: jsonMoney(totals.debit), credit: jsonMoney(totals.credit), lineCount: input.lines.length, eventType: transaction.eventType }, input.financialYearId);
+  await recordAccountingMunicipalCosts(tx, actor, transaction, input.lines, accounts);
   return transaction;
 }
 

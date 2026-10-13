@@ -27,7 +27,7 @@ const environment = {
 const commands = {
   prisma: join(process.cwd(), "node_modules", "prisma", "build", "index.js"),
   next: join(process.cwd(), "node_modules", "next", "dist", "bin", "next"),
-  tsc: join(process.cwd(), "node_modules", "typescript", "bin", "tsc"),
+  typecheck: join(process.cwd(), "scripts", "typecheck-build.mjs"),
 };
 
 function run(command, args) {
@@ -50,7 +50,7 @@ if (!typecheckOnly && process.env.VERCEL_ENV === "production") run("prisma", ["m
 run("prisma", ["generate"]);
 run("next", ["typegen"]);
 // Each command exits before the next one starts, releasing its memory.
-run("tsc", ["--project", "tsconfig.build.json", "--noEmit", "--extendedDiagnostics"]);
+run("typecheck", []);
 if (!typecheckOnly) {
   // Skip only the duplicate Next.js check, after tsc has succeeded above.
   environment.CELERIFLOW_TYPES_CHECKED = "1";

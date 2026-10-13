@@ -11,8 +11,9 @@ import { planningAccountingEvents } from "../../src/lib/planejamento/accounting-
 import { createPlanningPostgresBackend } from "./planning-postgres-backend";
 
 /** Same isolated PostgreSQL adapter as the domain suite, with real accounting tables/constraints. */
-export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" | "LEGISLATIVE" = "EXECUTIVE", options: { year?: number } = {}) {
+export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" | "LEGISLATIVE" = "EXECUTIVE", options: { year?: number; expenseLineAmount?: string } = {}) {
   const year = options.year ?? 2026;
+  const expenseLineAmount = options.expenseLineAmount ?? "50.00";
   const external = process.env.CELERIFLOW_PLANNING_TEST_POSTGRES_URL ? await createPlanningPostgresBackend(process.env.CELERIFLOW_PLANNING_TEST_POSTGRES_URL) : null;
   const pg = external ?? new PGlite();
   const server = external ? null : new PGLiteSocketServer({ db: pg as PGlite, port: 0, host: "127.0.0.1" });
@@ -109,10 +110,10 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
     const action = await addPlanningAction(context, { instrumentId: ppa, programId: program, code: "2001", name: "Manutenção dos serviços", type: "Atividade" });
     const ldo = await createPlanningInstrument(context, { ...common, kind: "LDO", code: String(year), title: "Diretrizes Orçamentárias", startYear: year, endYear: year, parentId: ppa });
     const loa = await createPlanningInstrument(context, { ...common, kind: "LOA", code: String(year), title: "Orçamento Municipal", startYear: year, endYear: year, parentId: ldo });
-    const revenue = await addPlanningLine(context, { instrumentId: loa, kind: "REVENUE", code: "R", description: "Receitas ordinárias", year, budgetUnitId: "ug", resourceSourceId: "livre", revenueNatureId: "receita", originalValue: "100.00" });
+    const revenue = await addPlanningLine(context, { instrumentId: loa, kind: "REVENUE", code: "R", description: "Receitas ordinárias", year, budgetUnitId: "ug", resourceSourceId: "livre", revenueNatureId: "receita", originalValue: new Prisma.Decimal(expenseLineAmount).mul(2).toFixed(2) });
     const expenseInput = { instrumentId: loa, kind: "EXPENSE", year, budgetUnitId: "ug", resourceSourceId: "livre", expenseNatureId: "despesa", programId: program, actionId: action, functionCode: "04", subfunctionCode: "122", product: "Serviços prestados", productUnit: "serviços", physicalTarget: "100" };
-    const e1 = await addPlanningLine(context, { ...expenseInput, code: "E1", description: "Serviços administrativos", originalValue: "50.00" });
-    const e2 = await addPlanningLine(context, { ...expenseInput, code: "E2", description: "Serviços complementares", originalValue: "50.00" });
+    const e1 = await addPlanningLine(context, { ...expenseInput, code: "E1", description: "Serviços administrativos", originalValue: expenseLineAmount });
+    const e2 = await addPlanningLine(context, { ...expenseInput, code: "E2", description: "Serviços complementares", originalValue: expenseLineAmount });
     const legalYear = Math.min(year, new Date().getUTCFullYear());
     const workflow = { instrumentId: loa, date: `${legalYear}-01-01`, legalActNumber: `Lei 1/${legalYear}`, legalText: "Orçamento aprovado", publicationReference: "Diário Municipal, edição 1" };
     for (const stage of ["SUBMIT", "APPROVE", "SANCTION", "PUBLISH"]) await transitionPlanningPiece(stage === "APPROVE" ? reviewer : context, { ...workflow, stage });

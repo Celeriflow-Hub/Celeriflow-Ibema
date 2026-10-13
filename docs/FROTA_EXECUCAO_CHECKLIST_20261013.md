@@ -1,5 +1,7 @@
 # Frota — execução e evidências do checklist 66–70
 
+> **Atualização após revisão da main:** integrado `a4de0df`, preservando Frota. Conferência posterior do banco compartilhado encontrou 104 migrations aplicadas, incluindo Frota, com checksums coincidentes e sem pendências; o deploy de Frota ocorreu externamente durante a sessão. O build e a tipagem fria agora passam com quatro processos no limite de 6 GB. Os bloqueios de histórico/memória descritos abaixo são o registro anterior, superado pela revisão documentada em `REVISAO_MIGRATIONS_MAIN_VERCEL_20261013.md`. As pendências funcionais/aceite da matriz continuam válidas.
+
 Registro de continuação em 13/10/2026. Referência: os 50 itens do PDF indicado em `ANALISE_FROTA_DUDU_CHECKLIST_IBEMA_20261013.md`. A matriz da análise descreve a main **antes** deste pacote; não representa seu estado posterior.
 
 ## Situação

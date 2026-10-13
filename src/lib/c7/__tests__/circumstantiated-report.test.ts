@@ -27,7 +27,7 @@ test("relatório circunstanciado: revisões concorrentes, final imutável e publ
     assert.equal((await finalizeControlFinalReport(f.db, actor, finalInput)).id, final.id);
     const bytes = await readFrozenControlReportBytes(f.db, final.id);
     assert.equal(bytes.bytes.subarray(0, 5).toString(), "%PDF-");
-    await assert.rejects(f.db.internalControlEvent.update({ where: { id: final.id }, data: { reason: "Reescrever relatório final" } }), /imutáveis/);
+    await assert.rejects(f.pg.query('UPDATE "InternalControlEvent" SET reason=$1 WHERE id=$2', ["Reescrever relatório final", final.id]), /imutáveis/);
     await assert.rejects(saveControlFinalReport(f.db, actor, { ...input, reportId: "report-initial", expectedRevision: 2, idempotencyKey: "after-final" }), /finalizado/);
     const publication = await publishControlFinalReport(f.db, actor, final.id);
     assert.equal(publication.sha256, bytes.sha256);

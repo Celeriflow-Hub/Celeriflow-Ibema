@@ -57,7 +57,7 @@ test("Redistribuição: memória de fontes distintas por linha, decisão publica
   try {
     await f.rules();
     await f.db.financialYear.update({ where: { id: "ano" }, data: { status: "Aberto" } });
-    await f.db.planningCatalogVersion.create({ data: { id: "line-reference", year: 2026, label: "Referência de linhas", sourceHash: "a".repeat(64), createdById: "ana", entries: { create: [
+    await f.db.planningCatalogVersion.create({ data: { id: "line-reference", year: 2026, label: "Referência de linhas", normativeReference: "Referência sintética documentada para teste isolado", sourceHash: "a".repeat(64), createdById: "ana", entries: { create: [
       { id: "line-debit", kind: "ACCOUNT", code: "1.1.1", name: "Débito documentado", canonicalId: "UNMAPPED:D", degree: 3, attributes: { postingAllowed: true, balanceNature: "D" } },
       { id: "line-credit", kind: "ACCOUNT", code: "2.1.1", name: "Crédito documentado", canonicalId: "UNMAPPED:C", degree: 3, attributes: { postingAllowed: true, balanceNature: "C" } },
       { id: "line-source", kind: "SOURCE", code: "000", name: "Origem", canonicalId: "UNMAPPED:S", degree: 1, attributes: {} },

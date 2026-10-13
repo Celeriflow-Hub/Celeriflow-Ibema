@@ -33,8 +33,8 @@ test("P6: consulta jurídica usa registro documentado, ente/UG e ACL de processo
     assert.equal(closed.version, 2);
     assert.equal(await f.db.processJudicialCase.count({ where: judicialCaseWhere(context, "ente", filter) }), 0);
     assert.equal(await f.db.processJudicialCase.count({ where: judicialCaseWhere(context, "ente", judicialCaseFilters.parse({ status: "CLOSED" })) }), 1);
-    await assert.rejects(f.db.processJudicialCaseEvent.update({ where: { id: closed.id }, data: { reason: "Sobrescrever decisão" } }), /imutável/);
-    await assert.rejects(f.db.processJudicialCase.update({ where: { id: closed.caseId }, data: { status: "OPEN", version: { increment: 1 } } }), /mesma transação/);
+    await assert.rejects(f.pg.query('UPDATE "ProcessJudicialCaseEvent" SET reason=$1 WHERE id=$2', ["Sobrescrever decisão", closed.id]), /imutável/);
+    await assert.rejects(f.pg.query('UPDATE "ProcessJudicialCase" SET status=$1, version=version+1 WHERE id=$2', ["OPEN", closed.caseId]), /mesma transação/);
     assert.equal((await f.db.processJudicialCase.findUniqueOrThrow({ where: { id: closed.caseId } })).status, "CLOSED");
     assert.equal(await f.db.processJudicialCaseEvent.count(), 2);
   } finally {

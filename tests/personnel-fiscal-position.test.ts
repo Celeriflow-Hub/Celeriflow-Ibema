@@ -40,7 +40,7 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) {
       assert.equal((await generateRGF(f.db, { financialYearId: "ano", endDate: cut, budgetUnitIds: actor.allowedBudgetUnitIds })).percentualAtingido, 10);
       assert.equal((await readPersonnelFiscalPosition(f.db, { ...positionInput, through: new Date("2026-01-15T23:59:59.999Z") })).status, "NOT_EVALUATED");
       await assert.rejects(readPersonnelFiscalPosition(f.db, { ...positionInput, budgetUnitIds: ["ug"] }), /todas as UGs/);
-      await assert.rejects(f.db.municipalPersonnelFiscalDefinition.update({ where: { id: first.id }, data: { legalLimit: "1" } }), /aditiva/);
+      await assert.rejects(f.pg.query('UPDATE "MunicipalPersonnelFiscalDefinition" SET "legalLimit"=1 WHERE id=$1', [first.id]), /aditiva/);
       const duplicated = await definePersonnelFiscalComposition(f.db, actor, { ...config, definition: { ...definition, personnel: [...definition.personnel, { ...definition.personnel[0], label: "Seleção duplicada" }] } });
       assert.equal(duplicated.revision, 2);
       const invalid = await readPersonnelFiscalPosition(f.db, positionInput);

@@ -18,7 +18,7 @@ test("P6: cargos têm posição legal temporal por ente, extinção comprovada e
     await f.db.documentVersion.create({ data: { id: "legal-act-doc-v1", documentId: "legal-act-doc", versionNumber: 1, fileUrl: "/documento-legal", hashSha256: "a".repeat(64), status: "FINAL" } });
     await f.db.legalText.create({ data: { id: "legal-act", type: "ATO", number: "fixture", summary: "Ato da fixture isolada", governmentLevel: "MUNICIPAL", issuingBody: "Ente da fixture", governmentEntityId: "ente" } });
     await f.db.legalTextVersion.create({ data: { id: "legal-act-v1", legalTextId: "legal-act", versionNumber: 1, content: "Posição legal documentada", documentId: "legal-act-doc" } });
-    const actor = { usuarioId: "ana", allowedBudgetUnitIds: ["ug"] };
+    const actor = { usuarioId: "ana", allowedBudgetUnitIds: ["ug", "ug-restrita"] };
     const base = { financialYearId: "ano", roleId: "legal-role", effectiveFrom: "2020-01-01", expectedVersion: 0, state: "EXISTING" as const, designation: "Denominação original", authorizedSeats: 2, legalReference: "Ato municipal vinculado", legalTextVersionId: "legal-act-v1", documentVersionId: "legal-act-doc-v1", reason: "Posição inicial documentada", idempotencyKey: "legal-create" };
     const created = await Promise.all([recordRoleLegalHistory(f.db, actor, base), recordRoleLegalHistory(f.db, actor, base)]);
     assert.equal(created[0].id, created[1].id);
@@ -42,8 +42,8 @@ test("P6: cargos têm posição legal temporal por ente, extinção comprovada e
     assert.equal(final.groups[0].legalEventId, corrected.id);
     assert.ok(controlWorkforceStatisticsReport(final).rows.every(row => row.length === 25));
     await assert.rejects(recordRoleLegalHistory(f.db, actor, { ...base, effectiveFrom: "2026-07-02", expectedVersion: 1, idempotencyKey: "stale-legal" }), /última versão/);
-    await assert.rejects(f.db.hrRoleLegalHistory.update({ where: { id: extinct.id }, data: { designation: "Sobrescrita" } }), /imutável/);
-    await assert.rejects(f.db.hrRoleLegalHistory.delete({ where: { id: extinct.id } }), /imutável/);
+    await assert.rejects(f.pg.query('UPDATE "HrRoleLegalHistory" SET designation=$1 WHERE id=$2', ["Sobrescrita", extinct.id]), /imutável/);
+    await assert.rejects(f.pg.query('DELETE FROM "HrRoleLegalHistory" WHERE id=$1', [extinct.id]), /imutável/);
   } finally {
     await f.close();
     if (mode === undefined) delete process.env.CELERIFLOW_ACCOUNTING_MODE; else process.env.CELERIFLOW_ACCOUNTING_MODE = mode;

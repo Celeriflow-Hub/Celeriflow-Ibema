@@ -8,10 +8,18 @@ import { createCommitment, createSettlement } from "../src/lib/financeiro";
 import { issueMaterialRequestInFull } from "../src/lib/compras/procurement-lifecycle";
 
 async function fixture() {
-  const f = await createPlanningExecutionFixture();
+  const mode = process.env.CELERIFLOW_ACCOUNTING_MODE;
+  process.env.CELERIFLOW_ACCOUNTING_MODE = "POC";
+  let f: Awaited<ReturnType<typeof createPlanningExecutionFixture>>;
+  try { f = await createPlanningExecutionFixture(2026, 2, "EXECUTIVE", { expenseLineAmount: "600.00" }); }
+  finally { if (mode === undefined) delete process.env.CELERIFLOW_ACCOUNTING_MODE; else process.env.CELERIFLOW_ACCOUNTING_MODE = mode; }
   try {
+    await f.db.usuario.update({ where: { id: "ana" }, data: { ativo: true } });
     await f.pg.exec('ALTER TABLE "MaterialStock" DROP COLUMN "valuationEnabled"');
     await f.pg.exec(await readFile("prisma/migrations-ibema/20261014160000_stock_valuation/migration.sql", "utf8"));
+    // Match the production stock identity: the schema fixture's generic indexes
+    // do not include @@unique constraints declared with a custom map name.
+    await f.pg.exec('CREATE UNIQUE INDEX "valuation_fixture_stock_identity" ON "MaterialStock" ("warehouseId", "materialId", "batchNumber")');
     await f.db.usuarioUnidadeGestora.create({ data: { usuarioId: "ana", budgetUnitId: "ug" } });
     await f.db.costCenter.create({ data: { id: "value-center", code: "VALUE", name: "Centro conciliado", governmentEntityId: "ente", secretariatId: "secretaria" } });
     await f.db.warehouse.create({ data: { id: "value-warehouse", name: "Almoxarifado", costCenterId: "value-center" } });
@@ -46,9 +54,9 @@ test("P6: custo médio conserva centavos no último consumo e nas devoluções p
     assert.equal(position.amount.toFixed(2), "0.10");
     assert.equal(position.quantity.toFixed(6), "3.000000");
     assert.equal(position.version, 4);
-    await assert.rejects(f.db.materialStockValuation.update({ where: { id: position.id }, data: { amount: "1000.00" } }), /additive event/);
-    await assert.rejects(f.db.materialMovement.update({ where: { id: issue.movement.id }, data: { unitValue: 999 } }), /immutable/);
-    await assert.rejects(f.db.materialStock.update({ where: { id: "value-stock" }, data: { valuationEnabled: false } }), /cannot discard/);
+    await assert.rejects(f.pg.query('UPDATE "MaterialStockValuation" SET amount=1000 WHERE id=$1', [position.id]), /additive event/);
+    await assert.rejects(f.pg.query('UPDATE "MaterialMovement" SET "unitValue"=999 WHERE id=$1', [issue.movement.id]), /immutable/);
+    await assert.rejects(f.pg.query('UPDATE "MaterialStock" SET "valuationEnabled"=false WHERE id=$1', ["value-stock"]), /cannot discard/);
   } finally { await f.close(); }
 });
 

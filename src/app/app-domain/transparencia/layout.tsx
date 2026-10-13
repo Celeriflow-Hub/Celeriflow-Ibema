@@ -3,7 +3,8 @@ import { ModuleShell, type ModuleNavGroup } from "@/components/app-ui/erp/Module
 const navigation: ModuleNavGroup[] = [{
   title: "Gestão do portal",
   items: [
-    { title: "Visão geral", href: "/transparencia", icon: "layoutDashboard", exact: true },
+     { title: "Visão geral", href: "/transparencia", icon: "layoutDashboard", exact: true },
+     { title: "Configurações e documentos públicos", href: "/transparencia/publicacoes", icon: "fileText" },
     { title: "Banners", href: "/transparencia/banners", icon: "imageIcon" },
     { title: "Contratos", href: "/transparencia/contratos", icon: "fileSignature" },
     { title: "Diário Oficial", href: "/transparencia/diario-oficial", icon: "fileText" },

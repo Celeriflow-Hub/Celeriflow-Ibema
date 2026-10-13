@@ -1,0 +1,34 @@
+import Link from "next/link";
+import { getTenantContextForModule, canPerformModuleOperation } from "@/lib/platform/tenant-context";
+import { getTransparencySettings } from "@/lib/transparencia/presentation-settings";
+import { transparencyCatalog } from "@/lib/transparencia/consultation-catalog";
+import { PublicationUpload } from "@/components/transparencia/PublicationUpload";
+import { saveTransparencySettings, changePublicationStatus } from "./actions";
+import { publicTransparencyPath } from "@/lib/transparencia/publication-policy";
+
+export const dynamic = "force-dynamic";
+export default async function TransparencyManagementPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const context = await getTenantContextForModule("TRANSPARENCIA"), db = context.prisma;
+  const settings = await getTransparencySettings(db), raw = await searchParams;
+  const requestedPage = Number(raw.page);
+  const page = Number.isInteger(requestedPage) && requestedPage > 0 && requestedPage <= 1000000 ? requestedPage : 1, search = typeof raw.search === "string" ? raw.search.slice(0, 200) : "";
+  const where = search ? { title: { contains: search, mode: "insensitive" as const } } : {};
+  const [entries, total] = await Promise.all([db.transparencyPublication.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: (page - 1) * 30, take: 30 }), db.transparencyPublication.count({ where })]);
+  const canCreate = canPerformModuleOperation(context.user, "TRANSPARENCIA", "create"), canUpdate = canPerformModuleOperation(context.user, "TRANSPARENCIA", "update");
+  return <main className="mx-auto max-w-7xl space-y-5 p-5 text-sm">
+    <header><Link href="/transparencia" className="underline">← Portal e Transparência</Link><h1 className="mt-2 text-2xl font-bold">Gestão do Portal da Transparência</h1><p>Configure as consultas, envie documentos, publique e confira o acesso externo.</p><Link href={publicTransparencyPath} target="_blank" className="mt-2 inline-block rounded border px-4 py-2 font-semibold">Abrir portal público ↗</Link></header>
+    <details className="rounded border bg-white p-4"><summary className="cursor-pointer font-bold">Configurações do portal e das consultas</summary>
+      <form action={saveTransparencySettings} className="mt-4 space-y-4"><fieldset disabled={!canUpdate} className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-4"><label>Ano inicial<input name="initialYear" type="number" defaultValue={settings.initialYear} className="block w-full rounded border p-2" /></label><label>Exercícios (separados por vírgula)<input name="availableYears" defaultValue={settings.availableYears.join(", ")} className="block w-full rounded border p-2" /></label><label>Fonte inicial<select name="defaultSource" defaultValue={settings.defaultSource} className="block w-full rounded border p-2"><option value="DOCUMENTOS">Documentos publicados</option><option value="NATIVO">Celeriflow nativo</option><option value="API_IBEMA">API pública de Ibema</option><option value="EXEMPLO">Exemplos fictícios</option></select></label><label>Horário de atendimento<input name="openingHours" defaultValue={settings.openingHours} className="block w-full rounded border p-2" /></label></div>
+        {settings.entities.map(entity => <fieldset key={entity.key} className="grid gap-3 rounded border p-3 md:grid-cols-4"><legend className="font-bold">{entity.key === "prefeitura" ? "Prefeitura" : "Câmara"}</legend><label>Nome público<input required name={`${entity.key}.name`} defaultValue={entity.name} className="block w-full rounded border p-2" /></label><label>IDs nativos (vírgula)<input name={`${entity.key}.nativeIds`} defaultValue={entity.nativeIds.join(",")} className="block w-full rounded border p-2" /></label><label>Código externo confirmado<input type="number" min={1} name={`${entity.key}.externalCode`} defaultValue={entity.externalCode ?? ""} className="block w-full rounded border p-2" /></label><label><input type="checkbox" name={`${entity.key}.enabled`} defaultChecked={entity.enabled} /> Entidade disponível</label></fieldset>)}
+        <fieldset className="grid gap-2 md:grid-cols-3"><legend className="mb-2 font-bold">Consultas disponíveis</legend>{transparencyCatalog.map(collection => <label key={collection.slug}><input type="checkbox" name={`query.${collection.slug}`} defaultChecked={settings.queries[collection.slug]?.enabled !== false} /> {collection.title}</label>)}</fieldset>
+        <button className="rounded bg-sky-900 px-4 py-2 text-white">Salvar configurações</button>
+      </fieldset></form>
+    </details>
+    {canCreate && <PublicationUpload years={settings.availableYears} />}
+    <section className="rounded border bg-white p-4"><h2 className="text-lg font-bold">Documentos enviados · {total}</h2><form className="my-3 flex gap-2"><input aria-label="Pesquisar documentos" name="search" defaultValue={search} className="w-full rounded border p-2" placeholder="Pesquisar por título" /><button className="rounded border px-4">Pesquisar</button></form>
+      <div className="overflow-x-auto"><table className="w-full text-left"><caption className="sr-only">Acervo e estado da publicação externa</caption><thead><tr>{["Documento", "Entidade / exercício", "Assunto / competência", "Situação", "Ações"].map(title => <th key={title} scope="col" className="p-2">{title}</th>)}</tr></thead><tbody>{entries.map(entry => <tr key={entry.id} className="border-t"><td className="p-2">{entry.title}<p className="text-xs text-slate-500">{entry.filename}</p></td><td className="p-2">{entry.entity} · {entry.year}</td><td className="p-2">{entry.group} · {entry.referencePeriod}</td><td className="p-2">{{ DRAFT: "Rascunho", PUBLISHED: "Publicado", WITHDRAWN: "Retirado" }[entry.status] || entry.status}</td><td className="p-2">{entry.status === "PUBLISHED" && <a href={`/api/transparencia/publicacoes/${entry.publicKey}`} className="mr-3 underline">Baixar</a>}{canUpdate && entry.status !== "WITHDRAWN" && <form action={changePublicationStatus} className="inline"><input type="hidden" name="id" value={entry.id} /><input type="hidden" name="status" value={entry.status === "DRAFT" ? "PUBLISHED" : "WITHDRAWN"} /><button className="rounded border px-3 py-1">{entry.status === "DRAFT" ? "Publicar externamente" : "Retirar do portal"}</button></form>}</td></tr>)}{!entries.length && <tr><td colSpan={5} className="p-4">Nenhum documento enviado para estes filtros.</td></tr>}</tbody></table></div>
+      <nav aria-label="Paginação dos documentos" className="mt-4 flex gap-4">{page > 1 && <Link href={`?page=${page - 1}&search=${encodeURIComponent(search)}`}>Anterior</Link>}<span>Página {page} · {total} documentos</span>{page * 30 < total && <Link href={`?page=${page + 1}&search=${encodeURIComponent(search)}`}>Próxima</Link>}</nav>
+    </section>
+  </main>;
+}

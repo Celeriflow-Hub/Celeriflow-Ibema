@@ -5,7 +5,7 @@ import proxy from "../src/proxy";
 
 test("navegação, prefetch e ações do portal não consomem o limite de validação pública", () => {
   const ip = "192.0.2.180";
-  const routes = ["/portal", "/portal/historia", "/portal/contato", "/portal/minha-area", "/portal-protocolos", "/portal-transparencia"];
+   const routes = ["/portal", "/portal/historia", "/portal/contato", "/portal/minha-area", "/portal-protocolos", "/portal/portaldatransparencia"];
   for (let attempt = 0; attempt < 30; attempt++) {
     for (const route of routes) {
       const response = proxy(new NextRequest(`https://app.localhost${route}`, {
@@ -53,7 +53,7 @@ test("entradas institucionais encaminham aos portais existentes e preservam filt
   for (const hostname of ["www.ibema.celeriflow.com.br", "app.localhost", "celeriflow.vercel.app"]) {
     for (const [entry, target] of [
       ["/portal/portaldoservidor", "/portal-servidor"],
-      ["/portal/portaldatransparencia", "/portal-transparencia"],
+       ["/portal-transparencia", "/portal/portaldatransparencia"],
     ]) {
       const response = proxy(new NextRequest(`https://${hostname}${entry}?view=receitas&year=2026`, {
         headers: { host: hostname },
@@ -63,7 +63,7 @@ test("entradas institucionais encaminham aos portais existentes e preservam filt
       assert.equal(destination.hostname, hostname);
       assert.equal(destination.pathname, target);
       assert.equal(destination.search, "?view=receitas&year=2026");
-      if (target === "/portal-transparencia") {
+       if (target === "/portal/portaldatransparencia") {
         const publicResponse = proxy(new NextRequest(destination, { headers: { host: hostname } }));
         assert.equal(publicResponse.headers.get("x-middleware-next"), "1");
       }

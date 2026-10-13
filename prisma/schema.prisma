@@ -14018,6 +14018,34 @@ model ConfiguracaoInstancia {
   updatedAt DateTime @updatedAt
 }
 
+model TransparencyPublication {
+  id              String   @id @default(cuid())
+  publicKey       String   @unique @default(uuid())
+  collectionSlug  String
+  entity          String
+  year            Int
+  title           String
+  group           String
+  referencePeriod String
+  source          String   @default("DOCUMENTOS")
+  status          String   @default("DRAFT")
+  values          Json
+  version         Int      @default(1)
+  order           Int      @default(0)
+  fileUrl         String?
+  filePathname    String?
+  filename        String?
+  contentType     String?
+  sha256          String?
+  linkUrl         String?
+  publishedAt     DateTime?
+  withdrawnAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([collectionSlug, entity, year, status])
+}
+
 model ConfiguracaoParametroInstancia {
   id                      String                @id @default(cuid())
   configuracaoInstanciaId String

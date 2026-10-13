@@ -16,7 +16,15 @@ export default async function TransparenciaPage() {
 
   return (
     <PageFrame className="max-w-7xl space-y-2">
-      <PageHeader title="Portal e Transparência" />
+       <PageHeader title="Portal e Transparência" />
+       <section className="rounded border border-sky-200 bg-white p-4">
+         <h2 className="font-bold text-slate-900">Portal da Transparência — acesso público e gestão</h2>
+         <p className="mt-1 text-sm text-slate-600">Configure as consultas e publique documentos municipais para consulta e download pelo cidadão.</p>
+         <div className="mt-3 flex flex-wrap gap-3">
+           <Link href="/transparencia/publicacoes" className="rounded bg-sky-900 px-4 py-2 text-sm font-semibold text-white">Configurações e upload de documentos</Link>
+           <Link href="/portal/portaldatransparencia" target="_blank" className="rounded border px-4 py-2 text-sm font-semibold">Abrir portal público ↗</Link>
+         </div>
+       </section>
       
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-5">
         <Link href="/transparencia/noticias" className="block group">

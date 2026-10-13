@@ -34,13 +34,16 @@ export const config = {
 export default function proxy(req: NextRequest) {
   const url = req.nextUrl;
   // Entradas institucionais reutilizam os portais existentes e seus filtros.
-  if (url.pathname === "/portal/portaldoservidor" || url.pathname === "/portal/portaldatransparencia") {
+   if (url.pathname === "/portal/portaldoservidor") {
     const destination = url.clone();
-    destination.pathname = url.pathname === "/portal/portaldoservidor"
-      ? "/portal-servidor"
-      : "/portal-transparencia";
-    return NextResponse.redirect(destination);
-  }
+     destination.pathname = "/portal-servidor";
+     return NextResponse.redirect(destination);
+   }
+   if (url.pathname === "/portal-transparencia") {
+     const destination = url.clone();
+     destination.pathname = "/portal/portaldatransparencia";
+     return NextResponse.redirect(destination);
+   }
 
   // O autosserviço funcional também funciona no domínio institucional.
   // A página e as actions verificam a sessão e o vínculo funcional no servidor.

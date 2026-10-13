@@ -80,7 +80,8 @@ const MAIN_MENU: MenuItem[] = [
     label: "Transparência",
     href: "/portal/portaldatransparencia",
     children: [
-      { label: "Portal da Transparência", href: "/portal/portaldatransparencia" },
+       { label: "Portal da Transparência", href: "/portal/portaldatransparencia" },
+       { label: "Documentos e publicações", href: "/portal/portaldatransparencia?view=publicacoes&source=DOCUMENTOS" },
       { label: "Despesas", href: "/portal/portaldatransparencia?view=despesas" },
       { label: "Receitas", href: "/portal/portaldatransparencia?view=receitas" },
       { label: "Licitações e Contratos", href: "/portal/licitacoes-e-contratos" },

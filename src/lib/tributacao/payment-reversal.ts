@@ -5,6 +5,7 @@ import { resolveTaxAssessmentScope, taxAssessmentCompensatedValue, taxScopeSnaps
 import { assertTaxCreditScope } from "./credit-finance";
 import { reclassifyRestoredTaxReceivable } from "./accrual-accounting";
 import { reversePaidItbiInTransaction } from "./itbi-ownership";
+import { getBankResourceSourceSpendableBalance } from "../financeiro/bank-resource-sources";
 
 /** Reverses a collection and its unused excess without erasing any origin record. */
 export async function reverseTaxPayment(db: PrismaClient, actor: TaxActor, input: {
@@ -53,6 +54,7 @@ export async function reverseTaxPayment(db: PrismaClient, actor: TaxActor, input
       const data = taxScopeSnapshot(credit.data);
       const original = await tx.accountingTransaction.findUniqueOrThrow({ where: { id: String(data.ingressTransactionId) }, include: { entries: true } });
       const ingress = await tx.treasuryMovement.findUniqueOrThrow({ where: { id: String(data.ingressMovementId) } });
+      if (!ingress.resourceSourceId || (await getBankResourceSourceSpendableBalance(tx, ingress.bankAccountId, ingress.resourceSourceId, input.date)).lt(ingress.valueDecimal)) throw new TaxError("Saldo por fonte insuficiente ou não conciliado para estornar o excedente.");
       if (original.budgetUnitId !== scope.budgetUnitId || original.financialYearId !== reversal.financialYearId || ingress.bankAccountId !== payment.bankAccountId || ingress.direction !== "Entrada" || !ingress.valueDecimal.eq(String(data.amount))) throw new TaxError("Partida ou caixa do excedente divergente da origem.");
       const transaction = await postAccountingTransactionInTransaction(tx, actor, {
         financialYearId: original.financialYearId, governmentEntityId: original.governmentEntityId ?? undefined, budgetUnitId: original.budgetUnitId ?? undefined,
@@ -60,7 +62,7 @@ export async function reverseTaxPayment(db: PrismaClient, actor: TaxActor, input
         eventType: "TAX_COLLECTION_EXCESS_REVERSED", idempotencyKey: `${key}:CREDIT:${credit.id}:ACCOUNTING`, reversalOfId: original.id,
         lines: original.entries.map((entry) => { if (!entry.valueDecimal) throw new TaxError("Partida original do excedente sem Decimal conciliado."); return { originalEntryId: entry.id, accountId: entry.accountId, type: entry.type === "Débito" ? "Crédito" as const : "Débito" as const, value: entry.valueDecimal }; }),
       });
-      const movement = await tx.treasuryMovement.create({ data: { date: input.date, type: "ExtraBudgetReceiptReversal", direction: "Saída", valueDecimal: ingress.valueDecimal, bankAccountId: ingress.bankAccountId, financialYearId: original.financialYearId, history: transaction.history, sourceModule: "TRIBUTACAO", sourceType: "TAX_CREDIT_REVERSAL", sourceId: credit.id, eventType: "TAX_COLLECTION_EXCESS_REVERSED", idempotencyKey: `${key}:CREDIT:${credit.id}:TREASURY` } });
+      const movement = await tx.treasuryMovement.create({ data: { date: input.date, type: "ExtraBudgetReceiptReversal", resourceSourceId: ingress.resourceSourceId, direction: "Saída", valueDecimal: ingress.valueDecimal, bankAccountId: ingress.bankAccountId, financialYearId: original.financialYearId, history: transaction.history, sourceModule: "TRIBUTACAO", sourceType: "TAX_CREDIT_REVERSAL", sourceId: credit.id, eventType: "TAX_COLLECTION_EXCESS_REVERSED", idempotencyKey: `${key}:CREDIT:${credit.id}:TREASURY` } });
       await tx.taxRegistryEntry.update({ where: { id: credit.id }, data: { status: "ESTORNADO", data: { ...data, available: "0.00", reversalTransactionId: transaction.id, reversalMovementId: movement.id, reversedAt: input.date.toISOString() } } });
     }
     await tx.taxPayment.update({ where: { id: payment.id }, data: { status: "Estornado" } });

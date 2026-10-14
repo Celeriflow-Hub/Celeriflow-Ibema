@@ -6,7 +6,10 @@ const nextConfig: NextConfig = {
   // PDFKit resolves its bundled font metrics through Node filesystem paths.
   serverExternalPackages: ["pdfkit"],
   experimental: {
-    serverActions: { bodySizeLimit: "3mb" },
+    serverActions: { bodySizeLimit: "4mb" },
+    // Page-data workers each load the server graph; keep builds within 8 GB.
+    cpus: 1,
+    staticGenerationMaxConcurrency: 4,
   },
   typescript: {
     // The production build only needs application sources. Test fixtures and

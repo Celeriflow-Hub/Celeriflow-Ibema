@@ -4128,6 +4128,9 @@ model FinancialYear {
   annualAccountingCloses         AnnualAccountingClose[]
   payableCarryForwards           PayableCarryForward[]           @relation("PayableCarryForwardRegistration")
   originatedPayableCarryForwards PayableCarryForward[]           @relation("PayableCarryForwardOrigin")
+  executedPayments              Payment[] @relation("PaymentExecutionYear")
+  executedSettlements           Settlement[] @relation("SettlementExecutionYear")
+  carryForwardSettlementLinks   PayableCarryForwardSettlementLink[]
   annualBudgetLaws               AnnualBudgetLaw[]
   budgetGuidelines               BudgetGuideline[]
   creditRequests                 CreditRequest[]
@@ -4519,6 +4522,8 @@ model ResourceSource {
 
   appropriations             BudgetAppropriation[]
   bankAccounts               BankAccount[]
+  bankAccountPermissions     BankAccountResourceSource[]
+  treasuryMovements          TreasuryMovement[]
   revenues                   Revenue[]
   revenueRedistributionsFrom RevenueResourceRedistribution[] @relation("RevenueRedistributionSource")
   revenueRedistributionsTo   RevenueResourceRedistribution[] @relation("RevenueRedistributionDestination")
@@ -4825,6 +4830,12 @@ model Settlement {
   document                Document?  @relation("SettlementDocument", fields: [documentId], references: [id])
   commitmentId            String
   commitment              Commitment @relation(fields: [commitmentId], references: [id])
+  executionFinancialYearId String?
+  executionFinancialYear FinancialYear? @relation("SettlementExecutionYear", fields: [executionFinancialYearId], references: [id], onDelete: Restrict)
+  payableCarryForwardId String?
+  payableCarryForward PayableCarryForward? @relation("NativeCarryForwardSettlements", fields: [payableCarryForwardId], references: [id], onDelete: Restrict)
+  carryForwardEvents PayableCarryForwardEvent[]
+  carryForwardLinks PayableCarryForwardSettlementLink[]
   authorId                String
   author                  Employee   @relation("SettlementAuthor", fields: [authorId], references: [id])
   status                  String     @default("Liquidado") // Liquidado, Cancelado
@@ -4839,6 +4850,8 @@ model Settlement {
 
   @@index([documentId])
   @@index([fiscalDocumentNumber, fiscalDocumentSeries])
+  @@index([payableCarryForwardId, status])
+  @@index([executionFinancialYearId])
 }
 
 model Payment {
@@ -4851,6 +4864,10 @@ model Payment {
   commitment                  Commitment  @relation(fields: [commitmentId], references: [id])
   settlementId                String?
   settlement                  Settlement? @relation(fields: [settlementId], references: [id])
+  executionFinancialYearId    String?
+  executionFinancialYear      FinancialYear? @relation("PaymentExecutionYear", fields: [executionFinancialYearId], references: [id], onDelete: Restrict)
+  payableCarryForwardId       String?
+  payableCarryForward         PayableCarryForward? @relation("NativeCarryForwardPayments", fields: [payableCarryForwardId], references: [id], onDelete: Restrict)
   bankAccountId               String
   bankAccount                 BankAccount @relation(fields: [bankAccountId], references: [id])
   supplierId                  String
@@ -4882,6 +4899,7 @@ model Payment {
   instrumentInstallments    InstrumentInstallment[]    @relation("InstrumentInstallmentPayment")
 
   @@index([bankAccountExternalId, bankStatus])
+  @@index([payableCarryForwardId, status])
 }
 
 // Registros internos emitidos pelo sistema; nÃ£o dependem de arquivo GED ou assinatura externa.
@@ -5015,6 +5033,7 @@ model BankAccount {
   currentBalanceDecimal     Decimal?        @db.Decimal(18, 2)
   resourceSourceId          String?
   resourceSource            ResourceSource? @relation(fields: [resourceSourceId], references: [id])
+  permittedSources          BankAccountResourceSource[]
   budgetUnitId              String?
   budgetUnit                BudgetUnit?     @relation(fields: [budgetUnitId], references: [id])
   accountingPlanId          String?         @unique
@@ -5050,6 +5069,18 @@ model BankAccount {
   @@index([bankBranchId])
 }
 
+model BankAccountResourceSource {
+  bankAccountId String
+  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  resourceSourceId String
+  resourceSource ResourceSource @relation(fields: [resourceSourceId], references: [id], onDelete: Restrict)
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([bankAccountId, resourceSourceId])
+}
+
 model TreasuryMovement {
   id                  String              @id @default(cuid())
   date                DateTime            @default(now())
@@ -5060,6 +5091,8 @@ model TreasuryMovement {
   status              String              @default("Confirmado")
   bankAccountId       String
   bankAccount         BankAccount         @relation(fields: [bankAccountId], references: [id])
+  resourceSourceId     String?
+  resourceSource       ResourceSource? @relation(fields: [resourceSourceId], references: [id], onDelete: Restrict)
   financialYearId     String
   financialYear       FinancialYear       @relation(fields: [financialYearId], references: [id])
   revenueId           String?             @unique
@@ -5077,6 +5110,7 @@ model TreasuryMovement {
   reconciliationAllocations BankReconciliationAllocation[]
 
   @@index([bankAccountId, date])
+  @@index([bankAccountId, resourceSourceId, date])
   @@index([financialYearId, date])
 }
 
@@ -5274,6 +5308,8 @@ model AccountingPlan {
   entries            AccountingEntry[]
   bankAccount        BankAccount?            @relation("BankAccountAccountingPlan")
   debitPostingRules  AccountingPostingRule[] @relation("PostingRuleDebitAccount")
+  debitPostingComponents AccountingPostingComponent[] @relation("PostingComponentDebitAccount")
+  creditPostingComponents AccountingPostingComponent[] @relation("PostingComponentCreditAccount")
   creditPostingRules AccountingPostingRule[] @relation("PostingRuleCreditAccount")
 }
 
@@ -5356,10 +5392,26 @@ model AccountingPostingRule {
   description     String?
   isActive        Boolean                @default(true)
   isReference     Boolean                @default(false)
+  components      AccountingPostingComponent[]
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
 
   @@unique([eventId, debitAccountId, creditAccountId])
+}
+
+model AccountingPostingComponent {
+  id                  String @id @default(cuid())
+  ruleId              String
+  rule                AccountingPostingRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  sequence            Int
+  debitAccountId      String
+  debitAccount        AccountingPlan @relation("PostingComponentDebitAccount", fields: [debitAccountId], references: [id])
+  creditAccountId     String
+  creditAccount       AccountingPlan @relation("PostingComponentCreditAccount", fields: [creditAccountId], references: [id])
+  valueBasis          String @default("EVENT_VALUE")
+  creditFromOriginBank Boolean @default(false)
+
+  @@unique([ruleId, sequence])
 }
 
 model MonthlyAccountingClose {
@@ -5438,6 +5490,10 @@ model PayableCarryForward {
   integrationEventId            String?
   paymentOrderExternalId        String?
   events                        PayableCarryForwardEvent[]
+  nativePayments                Payment[] @relation("NativeCarryForwardPayments")
+  nativeSettlements             Settlement[] @relation("NativeCarryForwardSettlements")
+  inheritedSettlements          PayableCarryForwardSettlementLink[] @relation("InheritedCarryForwardSettlement")
+  transportedSettlements        PayableCarryForwardSettlementLink[] @relation("TransportedCarryForwardSettlement")
   createdAt                     DateTime                   @default(now())
   updatedAt                     DateTime                   @updatedAt
 
@@ -5447,7 +5503,27 @@ model PayableCarryForward {
   @@index([bankTransactionId])
 }
 
-// HistÃ³rico interno de acompanhamento. NÃ£o cria nem altera pagamentos, tesouraria ou lanÃ§amentos contÃ¡beis.
+// Histórico da inscrição: acompanhamento legado e confirmação/estorno dos pagamentos nativos.
+model PayableCarryForwardSettlementLink {
+  id                          String @id @default(cuid())
+  payableCarryForwardId       String
+  payableCarryForward         PayableCarryForward @relation("InheritedCarryForwardSettlement", fields: [payableCarryForwardId], references: [id], onDelete: Restrict)
+  sourcePayableCarryForwardId String
+  sourcePayableCarryForward   PayableCarryForward @relation("TransportedCarryForwardSettlement", fields: [sourcePayableCarryForwardId], references: [id], onDelete: Restrict)
+  settlementId                String
+  settlement                  Settlement @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+  sourceFinancialYearId       String
+  sourceFinancialYear         FinancialYear @relation(fields: [sourceFinancialYearId], references: [id], onDelete: Restrict)
+  transportAuditId            String
+  transportAudit              FinancialAuditLog @relation(fields: [transportAuditId], references: [id], onDelete: Restrict)
+  valueDecimal                Decimal @db.Decimal(18, 2)
+  status                      String @default("ACTIVE")
+  createdAt                   DateTime @default(now())
+
+  @@unique([payableCarryForwardId, settlementId])
+  @@index([sourcePayableCarryForwardId])
+}
+
 model PayableCarryForwardEvent {
   id                    String              @id @default(cuid())
   payableCarryForwardId String
@@ -5455,14 +5531,19 @@ model PayableCarryForwardEvent {
   action                String
   justification         String?
   valueDecimal          Decimal?            @db.Decimal(18, 2)
-  paymentId             String?             @unique
+  paymentId             String?
   payment               Payment?            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  settlementId          String?
+  settlement            Settlement? @relation(fields: [settlementId], references: [id], onDelete: Restrict)
   actorUsuarioId        String
   actorUsuario          Usuario             @relation("PayableCarryForwardEventActor", fields: [actorUsuarioId], references: [id])
   createdAt             DateTime            @default(now())
 
   @@index([payableCarryForwardId, createdAt])
   @@index([actorUsuarioId])
+  @@index([paymentId])
+  @@unique([payableCarryForwardId, paymentId, action])
+  @@unique([payableCarryForwardId, settlementId, action])
 }
 
 // --- MÃ³dulo 9: Compras e Contratos ---
@@ -14893,6 +14974,7 @@ model FinancialAuditLog {
   authorUsuario    Usuario   @relation("FinancialAuditUsuario", fields: [authorUsuarioId], references: [id])
   authorEmployeeId String?
   authorEmployee   Employee? @relation("FinancialAuditEmployee", fields: [authorEmployeeId], references: [id])
+  carryForwardSettlementLinks PayableCarryForwardSettlementLink[]
   createdAt        DateTime  @default(now())
 
   @@index([entityType, entityId])

@@ -31,6 +31,7 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
     models.push("MaterialMovement");
     models.push("RevenueResourceRedistribution");
     models.push("Company", "Taxpayer", "Supplier", "Creditor");
+    models.push("TaxAssessment", "TaxGuide", "TaxPayment", "TaxRevenueIntegrationEvent", "TaxRegistryEntry", "TaxIntegrationEvent");
     omitted.MaterialMovement = ["quantityDecimal", "unitValueDecimal", "totalValueDecimal"];
     omitted.InternalControlPlan = ["budgetUnitId"];
     const enums = new Set<string>();
@@ -65,6 +66,12 @@ export async function createPlanningAccountingFixture(jurisdiction: "EXECUTIVE" 
     await pg.exec(readFileSync("prisma/migrations-ibema/20261014100000_control_final_reports/migration.sql", "utf8"));
     await pg.exec(readFileSync("prisma/migrations-ibema/20261014150000_personnel_fiscal_definitions/migration.sql", "utf8"));
     await pg.exec(readFileSync("prisma/migrations-ibema/20261014170000_account_classification_snapshot/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261014220000_msc_versioned_references/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261015010000_composite_accounting_postings/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261015020000_native_processed_carry_forward_payments/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261015030000_bank_resource_source_permissions/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261015040000_native_unprocessed_carry_forward_settlements/migration.sql", "utf8"));
+    await pg.exec(readFileSync("prisma/migrations-ibema/20261015050000_carry_forward_settlement_transport/migration.sql", "utf8"));
     await pg.exec(`
       CREATE UNIQUE INDEX ON "AccountingEventCatalog" (code);
       CREATE UNIQUE INDEX ON "AccountingPlan" (code);

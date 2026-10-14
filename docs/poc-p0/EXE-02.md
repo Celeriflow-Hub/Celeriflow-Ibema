@@ -1732,6 +1732,7 @@ seguinte na rotina de encerramento do exercício. O
 sistema deverá fazer a baixa das programações no
 exercício atual e copiá-las para o próximo exercício;
 
+- **Evidência técnica atual:** `annual-payment-program-transport.ts`, `payment-bank-return.ts` e tela `/financeiro/contabilidade/etapas-anuais`. Executivo validou preparação documental antes dos fechamentos mensais, encerramento com autorizador distinto, baixa da ordem original e cópia nativa no destino/RAP, com líquido/retenções preservados, correlação bancária única, replay e uma única saída de caixa. Ordens abertas e aguardando banco passaram; lote incompleto reverte todas as baixas. Parcelas contratuais vinculadas ainda exigem tratamento próprio. Aceite autenticado municipal não executado; evidências em `PREPARACAO_JORNADAS_GLOBAIS_2026_10_14.md`.
 - **Diagnóstico da faixa:** PARCIAL na inscrição RP; demais NÃO VERIFICADOS
 - **Gap a conferir:** Transportes únicos sem pagamento duplicado; opção de anular estimativos; postar encerramento; reversões independentes com guardas de fatos posteriores
 - **Fases:** P3, P4. **Responsável funcional:** Contabilidade/Tesouraria (pessoa a designar).
@@ -1750,6 +1751,7 @@ inscritos   em   restos   a   pagar;   Caso   os   empenhos
 estimativos   não   sejam   anulados   o   sistema   deve
 inscreve-los em restos a pagar;
 
+- **Evidência técnica atual:** `annual-estimative-balances.ts`, tela `/financeiro/contabilidade/etapas-anuais` e `tests/annual-estimative-balances.test.ts`. Executivo validou manutenção para inscrição e anulação automática do saldo não liquidado, com composição nativa, concorrência/replay e rollback do lote. Etapa exige exercício e dezembro abertos; após fechamento mensal, inscrição preserva a parcela processada. Aceite autenticado municipal ainda pendente; detalhes em `PREPARACAO_JORNADAS_GLOBAIS_2026_10_14.md`.
 - **Diagnóstico da faixa:** PARCIAL na inscrição RP; demais NÃO VERIFICADOS
 - **Gap a conferir:** Transportes únicos sem pagamento duplicado; opção de anular estimativos; postar encerramento; reversões independentes com guardas de fatos posteriores
 - **Fases:** P3, P4. **Responsável funcional:** Contabilidade/Tesouraria (pessoa a designar).
@@ -1767,6 +1769,7 @@ encerramento   do   exercício,   os   empenhos   a   pagar,
 demonstrando quais os valores processados e não
 processados;
 
+- **Evidência técnica atual:** inscrição/reapuração individual por empenho e tipo em `annual-payable-registration.ts`, com memória de valores/status e desmovimentação independente; `tests/annual-payable-registration.test.ts` e `tests/annual-rap-postings.test.ts` aprovados para Executivo. Publicação específica das partidas passou a ser obrigatória na validação final. Adoção municipal das duas matrizes orçamentárias realizada apenas na UG `-1`, sem inscrições/fatos artificiais. Aceite autenticado não executado.
 - **Diagnóstico da faixa:** PARCIAL na inscrição RP; demais NÃO VERIFICADOS
 - **Gap a conferir:** Transportes únicos sem pagamento duplicado; opção de anular estimativos; postar encerramento; reversões independentes com guardas de fatos posteriores
 - **Fases:** P3, P4. **Responsável funcional:** Contabilidade/Tesouraria (pessoa a designar).
@@ -1782,6 +1785,7 @@ processados;
 Efetuar lançamentos contábeis de encerramento do
 exercício automaticamente;
 
+- **Evidência técnica atual:** edições anuais de resultado (classes 3/4), orçamento (classes 5/6) e partidas específicas de inscrição RAP, com partidas originais/MSC, composição complementar, desmovimentação independente e bloqueio final por saldos/inscrição divergente. Suítes `annual-budget-close` e `annual-rap-postings` aprovadas para Executivo. Matriz de inscrição orçamentária adotada apenas na UG `-1`; implantação patrimonial/DDR por origem e abertura RAP seguinte ainda pendentes. Detalhes em `PREPARACAO_JORNADAS_GLOBAIS_2026_10_14.md`. Sem aceite integral.
 - **Diagnóstico da faixa:** PARCIAL na inscrição RP; demais NÃO VERIFICADOS
 - **Gap a conferir:** Transportes únicos sem pagamento duplicado; opção de anular estimativos; postar encerramento; reversões independentes com guardas de fatos posteriores
 - **Fases:** P3, P4. **Responsável funcional:** Contabilidade/Tesouraria (pessoa a designar).
@@ -1797,6 +1801,7 @@ exercício automaticamente;
 Permitir cópia das notas extraorçamentárias a pagar
 para o exercício seguinte;
 
+- **Evidência técnica atual:** `annual-extra-note-transport.ts` e tela anual copiam para o exercício sequencial documentos de retenções e créditos tributários extraorçamentários existentes, com ID documental próprio, banco/fonte/UG e vínculo à dívida canônica. Executivo validou R$ 1,30 sem duplicação de caixa/obrigação; recolhimento nativo posterior reduziu o saldo para R$ 0,70 e impediu repetição. Replay e desmovimentação/reedição aprovados. Cadastro genérico de novas dívidas e aceite autenticado permanecem pendentes.
 - **Diagnóstico da faixa:** PARCIAL na inscrição RP; demais NÃO VERIFICADOS
 - **Gap a conferir:** Transportes únicos sem pagamento duplicado; opção de anular estimativos; postar encerramento; reversões independentes com guardas de fatos posteriores
 - **Fases:** P3, P4. **Responsável funcional:** Contabilidade/Tesouraria (pessoa a designar).
@@ -1813,6 +1818,7 @@ Permitir   desmovimentação   do   encerramento   do
 exercício, da inscrição dos restos a pagar e das notas
 extraorçamentárias separadamente;
 
+- **Evidência técnica atual:** desmovimentações próprias de resultado, orçamento, partidas RAP, inscrições RAP, transporte RAP, cópias extras e programações. Executivo aprovou preservação das edições/matrizes anteriores, replay e guardas por pagamento, abertura, transporte posterior e encerramento definitivo. Programações desmovimentadas preservam a etapa RAP até a sua própria desmovimentação. Reversão após encerramento definitivo e aceite municipal ainda exigem conferência específica; não se declarou atendimento integral.
 - **Diagnóstico da faixa:** PARCIAL na inscrição RP; demais NÃO VERIFICADOS
 - **Gap a conferir:** Transportes únicos sem pagamento duplicado; opção de anular estimativos; postar encerramento; reversões independentes com guardas de fatos posteriores
 - **Fases:** P3, P4. **Responsável funcional:** Contabilidade/Tesouraria (pessoa a designar).

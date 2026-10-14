@@ -1,5 +1,7 @@
 import { getTenantContextForModule, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import PagamentosClient from "./PagamentosClient"
+import { getBankAccountBalances } from "@/lib/financeiro";
+import { getBankResourceSourceBalance } from "@/lib/financeiro/bank-resource-sources";
 
 export default async function PagamentosPage() {
   const context = await getTenantContextForModule("FINANCEIRO");
@@ -56,6 +58,7 @@ export default async function PagamentosPage() {
         ? {}
         : { budgetUnitId: { in: context.user.allowedBudgetUnitIds } }),
     },
+    include: { resourceSource: { select: { id: true, code: true } }, permittedSources: { where: { isActive: true }, include: { resourceSource: { select: { id: true, code: true } } } } },
   });
 
   const suppliers = await prisma.supplier.findMany({
@@ -99,10 +102,12 @@ export default async function PagamentosPage() {
     return { ...settlement, value, paidValue, availableToPay: value - paidValue };
   });
 
-  const displayBankAccounts = bankAccounts.map(({ currentBalanceDecimal, ...account }) => ({
-    ...account,
-    currentBalance: Number(currentBalanceDecimal ?? account.currentBalance),
-  }))
+  const bankBalances = await getBankAccountBalances(prisma, bankAccounts.map(account => account.id));
+  const displayBankAccounts = await Promise.all(bankAccounts.map(async account => {
+    const sources = [...new Map([...(account.resourceSource ? [account.resourceSource] : []), ...account.permittedSources.map(permission => permission.resourceSource)].map(source => [source.id, source])).values()];
+    const undocumented = Boolean(await prisma.treasuryMovement.count({ where: { bankAccountId: account.id, status: "Confirmado", resourceSourceId: null } }));
+    return { id: account.id, bankName: account.bankName, agency: account.agency, accountNumber: account.accountNumber, cashBalance: (bankBalances[account.id] ?? 0).toString(), sourceBalances: await Promise.all(sources.map(async source => ({ sourceCode: source.code, balance: undocumented ? null : (await getBankResourceSourceBalance(prisma, account.id, source.id)).toFixed(2) }))) };
+  }));
 
   const pendingWithholdings = await prisma.withholdingPayable.findMany({
     where: {

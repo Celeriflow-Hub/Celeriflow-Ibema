@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { Prisma } from "@prisma/client";
+import { configureBankResourceSources } from "../src/lib/financeiro/bank-resource-sources";
 import { createPlanningExecutionFixture } from "./helpers/planning-execution-fixture";
 import { approveExpenseRequest, cancelBudgetReservation, cancelCommitment, cancelSettlement, createBudgetReservation, createCommitment, createCommitmentMovement, createPayment, createRevenue, createSettlement, getBudgetAvailability, launchRevenue, collectLaunchedRevenue, redistributeRevenueResourceSource, reversePayment, reverseRevenue, updatePaymentStatus } from "../src/lib/financeiro";
 import { createCommitmentFromExpenseAuthorization, deriveExpenseAuthorizationsForContract } from "../src/lib/compras/procurement-finance-bridge";
@@ -125,7 +126,24 @@ test("S2: serviços reais de empenho/reforço/anulação, liquidação, pagament
   assert.equal(evaluation.rows.find((row) => row.lineId === ppaLine)?.paidNet, "1.80");
   assert.equal(evaluation.rows.find((row) => row.lineId === unmapped)?.status, "UNMAPPED");
   assert.equal(evaluation.rows.find((row) => row.lineId === unmapped)?.committed, null);
+  const originalPosting = await f.db.accountingTransaction.findFirstOrThrow({ where: { sourceType: "PAYMENT", sourceId: payment.id, eventType: "PAGAMENTO_EFETIVADO" }, include: { entries: true } });
+  // A revisão da matriz depois do pagamento não pode mudar seu estorno histórico.
+  await f.db.accountingPostingRule.update({ where: { id: "rule:PAGAMENTO_ESTORNADO" }, data: { isActive: false } });
+  await f.db.accountingPostingRule.update({ where: { id: "rule:PAGAMENTO_EFETIVADO" }, data: { debitAccountId: "credito", creditAccountId: "debito" } });
   await reversePayment(f.db, f.actor, payment.id, "Estorno autorizado");
+  const reversedPosting = await f.db.accountingTransaction.findUniqueOrThrow({ where: { reversalOfId: originalPosting.id }, include: { entries: true } });
+  assert.equal(reversedPosting.eventType, "PAGAMENTO_ESTORNADO");
+  assert.equal(reversedPosting.governmentEntityId, originalPosting.governmentEntityId);
+  assert.equal(reversedPosting.budgetUnitId, originalPosting.budgetUnitId);
+  for (const original of originalPosting.entries) {
+    const reversed = reversedPosting.entries.find(row => row.accountId === original.accountId && row.type !== original.type);
+    assert.ok(reversed);
+    assert.equal(reversed.valueDecimal!.toFixed(2), original.valueDecimal!.toFixed(2));
+  }
+  const treasuryReversal = await f.db.treasuryMovement.findFirstOrThrow({ where: { sourceType: "PAYMENT", sourceId: payment.id, eventType: "PAYMENT_REVERSED" } });
+  assert.equal(treasuryReversal.valueDecimal!.toFixed(2), "1.80");
+  assert.equal(await f.db.withholdingPayable.count({ where: { retention: { paymentId: payment.id }, status: "Cancelada" } }), 1);
+  await assert.rejects(reversePayment(f.db, f.actor, payment.id, "Estorno duplicado"), /Somente pagamentos efetivados/);
   await cancelSettlement(f.db, f.actor, settlement.id);
   await cancelCommitment(f.db, f.actor, commitment.id);
   assert.equal((await getBudgetAvailability(f.db, f.appropriationId)).committed.toFixed(2), "0.00");
@@ -136,7 +154,7 @@ test("S2: serviços reais de empenho/reforço/anulação, liquidação, pagament
 
 test("S2: arrecadação direta/lançada, replay e estorno alimentam metas uma única vez e falha contábil reverte tudo", async () => scenario(async (f) => {
   await f.db.financialYear.update({ where: { id: "ano" }, data: { status: "Aberto" } });
-  const input = { date: new Date("2026-03-01"), value: "12.00", revenueNatureId: "receita", resourceSourceId: "livre", bankAccountId: "banco", sourceModule: "TRIBUTARIO", sourceType: "TAX_PAYMENT", sourceId: "pagamento-origem", eventType: "TAX_PAYMENT_CONFIRMED", idempotencyKey: "tax:receipt" };
+  const input = { date: new Date("2026-03-01"), value: "12.00", revenueNatureId: "receita", resourceSourceId: "livre", bankAccountId: "banco", sourceModule: "FINANCEIRO", sourceType: "REVENUE", sourceId: "pagamento-origem", eventType: "RECEIPT", idempotencyKey: "direct:receipt" };
   const first = await createRevenue(f.db, f.actor, input);
   assert.equal(first.budgetUnitId, "ug");
   assert.equal((await createRevenue(f.db, f.actor, input)).id, first.id);
@@ -161,6 +179,7 @@ test("S2: arrecadação direta/lançada, replay e estorno alimentam metas uma ú
   await f.db.accountingPostingRule.update({ where: { id: "rule:RECEITA_ARRECADADA" }, data: { isActive: true } });
   const destination = await addApprovedPlanningLine(f.context, { instrumentId: f.loa, kind: "REVENUE", code: "R.VINC", description: "Receita de fonte vinculada", year: 2026, budgetUnitId: "ug", resourceSourceId: "vinculada", revenueNatureId: "receita", originalValue: "0.00", effectiveAt: "2026-04-01", legalActNumber: "Lei 4/2026", legalText: "Nova fonte autorizada", reason: "Classificação da fonte", submissionKey: randomUUID() });
   await generatePlanningSchedule(f.context, { instrumentId: f.loa, lineId: destination, method: "TWELFTHS", periodMonths: 2, reason: "Metas da nova fonte" });
+  await configureBankResourceSources(f.db, f.actor, "banco", ["livre", "vinculada"]);
   const redistribution = { revenueId: first.id, date: new Date("2026-04-02"), value: "3.00", destinationResourceSourceId: "vinculada", history: "Reclassificação por fonte", idempotencyKey: "redistribution:1" };
   const adjustment = await redistributeRevenueResourceSource(f.db, f.actor, redistribution);
   assert.equal((await redistributeRevenueResourceSource(f.db, f.actor, redistribution)).id, adjustment.id);
@@ -232,6 +251,7 @@ test("S2: confirmação tributária gera um único realizado; falta de mapeament
   const revenue = await f.db.revenue.findFirstOrThrow();
   await assert.rejects(reverseRevenue(f.db, f.actor, { revenueId: revenue.id, date: new Date("2026-03-02"), justification: "Tentativa pelo fluxo financeiro" }), /fluxo tributario proprio/);
   await f.db.taxFinancialMapping.update({ where: { id: "mapa-tributario" }, data: { resourceSourceId: "vinculada" } });
+  await configureBankResourceSources(f.db, f.actor, "banco", ["livre", "vinculada"]);
   const before = await financeState(f);
   await assert.rejects(confirmTaxPayment(f.db, f.actor, { ...input, guideId: "guia-2", amountPaid: "3.00", idempotencyKey: "tax:missing-source" }), /Mapeie uma única previsão/);
   assert.deepEqual(await financeState(f), before);

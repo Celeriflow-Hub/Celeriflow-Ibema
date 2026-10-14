@@ -28,7 +28,7 @@ export async function recordSettlementMunicipalCosts(tx: Prisma.TransactionClien
     return;
   }
   const sourceType = "SETTLEMENT";
-  await recordMunicipalCostSource(tx, actor, { financialYearId: appropriation.financialYearId, budgetUnitId: appropriation.budgetUnitId, sourceType, sourceId: settlement.id, expenseDate: settlement.date, amount, dimensions: { appropriationId: appropriation.id, ...(settlement.commitment.contractId ? { contractId: settlement.commitment.contractId } : {}) }, evidence: { settlementId: settlement.id, commitmentId: settlement.commitmentId, documentId: settlement.documentId, expenseId: expense?.id ?? null, originType: expense?.sourceType ?? null, originId: expense?.sourceId ?? null, settledAmount: settlement.valueDecimal.toFixed(2), provisionReleaseAmount: released.toFixed(2), provisionReleaseEventId: release?.id ?? null } });
+  await recordMunicipalCostSource(tx, actor, { financialYearId: settlement.executionFinancialYearId ?? appropriation.financialYearId, budgetUnitId: appropriation.budgetUnitId, sourceType, sourceId: settlement.id, expenseDate: settlement.date, amount, dimensions: { appropriationId: appropriation.id, ...(settlement.commitment.contractId ? { contractId: settlement.commitment.contractId } : {}) }, evidence: { settlementId: settlement.id, commitmentId: settlement.commitmentId, documentId: settlement.documentId, expenseId: expense?.id ?? null, originType: expense?.sourceType ?? null, originId: expense?.sourceId ?? null, settledAmount: settlement.valueDecimal.toFixed(2), provisionReleaseAmount: released.toFixed(2), provisionReleaseEventId: release?.id ?? null } });
 }
 
 export async function cancelSettlementMunicipalCosts(tx: Prisma.TransactionClient, actor: CostActor, settlementId: string) {

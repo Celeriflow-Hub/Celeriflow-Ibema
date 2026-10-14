@@ -4,6 +4,7 @@ import { assertBudgetUnitAccess, getTenantContextForModuleOperation, isSystemAdm
 import { createBankAccountWithOpeningBalance, createTreasuryTransfer, FinanceError, updateBankAccountDetails } from "@/lib/financeiro";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { configureBankResourceSources } from "@/lib/financeiro/bank-resource-sources";
 
 type ActionResult = { error?: string };
 
@@ -12,6 +13,7 @@ const transferSchema = z.object({
   value: z.number().finite().positive("Informe um valor maior que zero."),
   sourceBankAccountId: z.string().trim().min(1, "Selecione a conta de origem."),
   destinationBankAccountId: z.string().trim().min(1, "Selecione a conta de destino."),
+  resourceSourceId: z.string().trim().min(1).optional(),
   history: z.string().trim().max(500, "O histórico deve ter no máximo 500 caracteres.").optional(),
 });
 
@@ -102,6 +104,7 @@ export async function createTreasuryTransferAction(data: {
   value: number;
   sourceBankAccountId: string;
   destinationBankAccountId: string;
+  resourceSourceId?: string;
   history?: string;
 }): Promise<ActionResult> {
   const parsed = transferSchema.safeParse(data);
@@ -118,12 +121,7 @@ export async function createTreasuryTransferAction(data: {
       getTransferAccount(context, parsed.data.sourceBankAccountId),
       getTransferAccount(context, parsed.data.destinationBankAccountId),
     ]);
-    if (!source.resourceSourceId || !destination.resourceSourceId) {
-      throw new FinanceError("As contas da transferência devem possuir fonte de recursos configurada.");
-    }
-    if (source.resourceSourceId !== destination.resourceSourceId) {
-      throw new FinanceError("As contas da transferência devem possuir a mesma fonte de recursos.");
-    }
+    if (!parsed.data.resourceSourceId && (!source.resourceSourceId || source.resourceSourceId !== destination.resourceSourceId)) throw new FinanceError("Selecione a fonte comum às contas da transferência.");
 
     await createTreasuryTransfer(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, {
       ...parsed.data,
@@ -134,4 +132,15 @@ export async function createTreasuryTransferAction(data: {
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Não foi possível concluir a transferência." };
   }
+}
+
+export async function saveBankResourceSources(bankAccountId: string, resourceSourceIds: string[]): Promise<ActionResult> {
+  try {
+    const context = await getTenantPrisma("update");
+    await assertAccountAccess(context, bankAccountId);
+    await configureBankResourceSources(context.prisma, bankActor(context), bankAccountId, resourceSourceIds);
+    revalidatePath("/financeiro/contas-bancarias");
+    revalidatePath("/financeiro/pagamentos");
+    return {};
+  } catch (error) { return { error: error instanceof Error ? error.message : "Não foi possível configurar as fontes da conta." }; }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { BookOpenCheck, LockKeyhole, Send, TriangleAlert } from "lucide-react";
 import { authorizeMonthClose, authorizeMonthReopen, finalizeAnnualClose, postManualAccountingTransaction, prepareAnnualClose, requestMonthClose, requestMonthReopen, savePostingRule } from "./actions";
 
@@ -56,6 +57,12 @@ export default function ContabilidadeClient({ units, years, accounts, transactio
   return <div className="h-full min-h-0 overflow-y-auto px-1 py-1 sm:px-2 [&>*+*]:mt-2">
     <header className="flex gap-2 border-b border-slate-300 bg-white px-3 py-2 shadow-sm"><BookOpenCheck className="mt-0.5 size-4 text-emerald-700" /><div><h1 className="text-sm font-bold tracking-tight text-slate-900">Contabilidade e Fechamento</h1><p className="text-xs text-slate-500">Postagem interna balanceada. Nenhum demonstrativo oficial e gerado nesta tela.</p></div></header>
     {notice && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 flex gap-2"><TriangleAlert className="w-4 h-4 mt-0.5" />{notice}</div>}
+    <Link href="/financeiro/contabilidade/lancamentos" className="inline-block rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-800">Consulta unificada: eventos, origens, usuários e dimensões por linha</Link>
+    <Link href="/financeiro/contabilidade/saldos-fontes" className="inline-block rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-800">Saldos mensais por conta e vínculo de recursos</Link>
+    <Link href="/financeiro/contabilidade/msc" className="inline-block rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-800">MSC: referências e de-para por ente/UG</Link>
+    <Link href="/financeiro/contabilidade/eventos" className="inline-block rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-800">Eventos: matriz contábil e pares complementares</Link>
+    <Link href="/financeiro/contabilidade/disponibilidade" className="inline-block rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-800">Disponibilidade por fonte: caixa, empenhos, RAP e extras</Link>
+    <Link href="/financeiro/contabilidade/etapas-anuais" className="inline-block rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-800">Etapas anuais: abertura, reedição e apuração do resultado</Link>
     <div className="grid gap-2 lg:grid-cols-2">
       <form onSubmit={submitPosting} className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
         <h2 className="font-bold text-slate-800">Nova partida manual</h2>

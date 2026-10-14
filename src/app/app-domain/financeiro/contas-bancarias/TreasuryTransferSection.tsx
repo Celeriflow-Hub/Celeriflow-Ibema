@@ -17,6 +17,7 @@ type BankAccountOption = {
   agency: string;
   accountNumber: string;
   isActive: boolean;
+  sourceIds?: string[];
 };
 
 type TreasuryTransfer = {
@@ -31,16 +32,20 @@ type TreasuryTransfer = {
 const formatMoney = (value: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 const accountLabel = (account: BankAccountOption) => `${account.bankName} - Ag. ${account.agency} / ${account.accountNumber}`;
 
-export default function TreasuryTransferSection({ accounts, transfers }: { accounts: BankAccountOption[]; transfers: TreasuryTransfer[] }) {
+export default function TreasuryTransferSection({ accounts, transfers, sources }: { accounts: BankAccountOption[]; transfers: TreasuryTransfer[]; sources: { id: string; code: string; name: string }[] }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     date: new Date().toISOString().slice(0, 10),
     value: 0,
     sourceBankAccountId: "",
     destinationBankAccountId: "",
+    resourceSourceId: "",
     history: "",
   });
   const activeAccounts = accounts.filter((account) => account.isActive);
+  const sourceAccount = accounts.find(account => account.id === formData.sourceBankAccountId);
+  const destinationAccount = accounts.find(account => account.id === formData.destinationBankAccountId);
+  const commonSources = sources.filter(source => sourceAccount?.sourceIds?.includes(source.id) && destinationAccount?.sourceIds?.includes(source.id));
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -56,6 +61,7 @@ export default function TreasuryTransferSection({ accounts, transfers }: { accou
       value: 0,
       sourceBankAccountId: "",
       destinationBankAccountId: "",
+      resourceSourceId: "",
       history: "",
     });
   }
@@ -78,17 +84,21 @@ export default function TreasuryTransferSection({ accounts, transfers }: { accou
           </div>
           <div className="space-y-2">
             <Label htmlFor="source-bank-account">Conta de origem</Label>
-            <Select value={formData.sourceBankAccountId} onValueChange={(value) => setFormData({ ...formData, sourceBankAccountId: value as string })}>
+            <Select value={formData.sourceBankAccountId} onValueChange={(value) => setFormData({ ...formData, sourceBankAccountId: value as string, resourceSourceId: "" })}>
               <SelectTrigger id="source-bank-account"><SelectValue placeholder="Selecione a conta" /></SelectTrigger>
               <SelectContent>{activeAccounts.map((account) => <SelectItem key={account.id} value={account.id}>{accountLabel(account)}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
             <Label htmlFor="destination-bank-account">Conta de destino</Label>
-            <Select value={formData.destinationBankAccountId} onValueChange={(value) => setFormData({ ...formData, destinationBankAccountId: value as string })}>
+            <Select value={formData.destinationBankAccountId} onValueChange={(value) => setFormData({ ...formData, destinationBankAccountId: value as string, resourceSourceId: "" })}>
               <SelectTrigger id="destination-bank-account"><SelectValue placeholder="Selecione a conta" /></SelectTrigger>
               <SelectContent>{activeAccounts.map((account) => <SelectItem key={account.id} value={account.id}>{accountLabel(account)}</SelectItem>)}</SelectContent>
             </Select>
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="transfer-source">Fonte de recursos</Label>
+            <select id="transfer-source" required value={formData.resourceSourceId} onChange={event => setFormData({ ...formData, resourceSourceId: event.target.value })} className="w-full rounded border p-2 text-sm"><option value="">Selecione uma fonte permitida nas duas contas</option>{commonSources.map(source => <option key={source.id} value={source.id}>{source.code} · {source.name}</option>)}</select>
           </div>
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="transfer-history">Histórico</Label>

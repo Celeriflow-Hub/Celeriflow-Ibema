@@ -1,6 +1,7 @@
 "use server";
 
-import { FinanceError, createPayment as createOfficialPayment, updatePaymentStatus as updateOfficialPaymentStatus } from "@/lib/financeiro";
+import { FinanceError, assertFinancialYearOpen, createPayment as createOfficialPayment, updatePaymentStatus as updateOfficialPaymentStatus } from "@/lib/financeiro";
+import { lockPaymentBankCorrelation } from "@/lib/financeiro/annual-payment-program-transport";
 import { assertBudgetUnitAccess, getTenantContextForModuleOperation, isSystemAdministrator, type AppContext, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 
@@ -36,7 +37,7 @@ async function assertBankAccountAccess(context: AppContext, bankAccountId: strin
 export async function createPayment(data: {
   orderNumber: string;
   date: Date;
-  value: number;
+  value: number | string;
   commitmentId: string;
   settlementId: string;
   bankAccountId: string;
@@ -45,55 +46,55 @@ export async function createPayment(data: {
   // Kept for direct callers; the domain validates it against the settlement calculation.
   serviceCode?: string;
   retentionRuleIds?: string[];
+  payableCarryForwardId?: string;
 }): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("FINANCEIRO", "create");
     const commitment = await assertCommitmentAccess(context, data.commitmentId);
     await assertBankAccountAccess(context, data.bankAccountId);
     const payment = await createOfficialPayment(context.prisma, paymentActor(context), data);
-    const bankOrder = await context.prisma.payment.findUnique({
-      where: { id: payment.id },
-      select: {
-        paymentOrderExternalId: true,
-        integrationEventId: true,
-        bankAccountExternalId: true,
-        netValueDecimal: true,
-        date: true,
-        paymentMethod: true,
-        orderNumber: true,
-        supplier: { include: { company: true, person: true } },
-      },
-    });
-    if (bankOrder?.paymentOrderExternalId && bankOrder.integrationEventId && bankOrder.bankAccountExternalId && bankOrder.netValueDecimal) {
-      try {
-        const { bankIntegrationClient } = await import("@/lib/financeiro/bank-integration-client");
-        const beneficiaryName = bankOrder.supplier.company?.corporateName ?? bankOrder.supplier.person?.fullName ?? "FAVORECIDO DEMO";
-        const beneficiaryDocument = bankOrder.supplier.company?.cnpj ?? bankOrder.supplier.person?.cpf ?? undefined;
-        await bankIntegrationClient.submitPaymentOrder({
-          paymentOrderExternalId: bankOrder.paymentOrderExternalId,
-          integrationEventId: bankOrder.integrationEventId,
-          bankAccountExternalId: bankOrder.bankAccountExternalId,
-          clientReference: bankOrder.orderNumber,
-          beneficiary: { name: beneficiaryName, document: beneficiaryDocument ?? undefined },
-          amount: Number(bankOrder.netValueDecimal),
-          scheduledDate: bankOrder.date,
-          paymentMethod: bankOrder.paymentMethod,
-          purposeText: `Pagamento líquido da ${bankOrder.paymentOrderExternalId}`,
-          idempotencyKey: `celeriflow:payment:${bankOrder.paymentOrderExternalId}:v1`,
-        });
-        await context.prisma.payment.update({ where: { id: payment.id }, data: { bankStatus: "RECEIVED", bankSubmittedAt: new Date() } });
-      } catch (bankError) {
-        console.error("Ordem criada, mas não foi possível enviá-la ao Banco Virtual:", bankError);
-      }
-    }
+    try { await submitIssuedPayment(context, payment.id); }
+    catch (bankError) { console.error("Ordem criada, mas não foi possível enviá-la ao banco:", bankError); }
     revalidatePath("/financeiro/pagamentos");
     revalidatePath("/financeiro/liquidacoes");
     revalidatePath("/financeiro/empenhos");
+    revalidatePath("/financeiro/restos-a-pagar");
     revalidateContractExecution(commitment.contractId);
     return {};
   } catch (error) {
     return { error: message(error) };
   }
+}
+
+async function submitIssuedPayment(context: AppContext, paymentId: string) {
+  return context.prisma.$transaction(async tx => {
+    const initial = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
+    if (!initial.bankAccountExternalId) return;
+    if (!initial.paymentOrderExternalId) throw new FinanceError("Ordem sem correlação bancária ativa.");
+    await lockPaymentBankCorrelation(tx, initial.paymentOrderExternalId);
+    await tx.$queryRaw`SELECT id FROM "Payment" WHERE id = ${paymentId} FOR UPDATE`;
+    const bankOrder = await tx.payment.findUniqueOrThrow({ where: { id: paymentId }, include: { commitment: { include: { appropriation: true } }, supplier: { include: { company: true, person: true } } } });
+    assertBudgetUnitAccess(context.user, bankOrder.commitment.appropriation.budgetUnitId);
+    if (bankOrder.status !== "Emitida" || bankOrder.paymentOrderExternalId !== initial.paymentOrderExternalId || !bankOrder.integrationEventId || !bankOrder.netValueDecimal?.isFinite()) throw new FinanceError("Somente a ordem emitida vigente pode ser remetida ao banco.");
+    if (["RECEIVED", "PENDING"].includes(bankOrder.bankStatus ?? "")) return;
+    if (bankOrder.bankStatus !== "PENDING_SUBMISSION") throw new FinanceError("A ordem não está disponível para envio bancário.");
+    await assertFinancialYearOpen(tx, bankOrder.executionFinancialYearId ?? bankOrder.commitment.appropriation.financialYearId, bankOrder.date);
+    const { bankIntegrationClient } = await import("@/lib/financeiro/bank-integration-client");
+    const beneficiaryName = bankOrder.supplier.company?.corporateName ?? bankOrder.supplier.person?.fullName;
+    if (!beneficiaryName) throw new FinanceError("Favorecido sem nome documental para a remessa.");
+    await bankIntegrationClient.submitPaymentOrder({ paymentOrderExternalId: bankOrder.paymentOrderExternalId!, integrationEventId: bankOrder.integrationEventId, bankAccountExternalId: bankOrder.bankAccountExternalId!, clientReference: bankOrder.orderNumber, beneficiary: { name: beneficiaryName, document: bankOrder.supplier.company?.cnpj ?? bankOrder.supplier.person?.cpf ?? undefined }, amount: Number(bankOrder.netValueDecimal), scheduledDate: bankOrder.date, paymentMethod: bankOrder.paymentMethod, purposeText: `Pagamento líquido da ${bankOrder.paymentOrderExternalId}`, idempotencyKey: `celeriflow:payment:${bankOrder.paymentOrderExternalId}:v1` });
+    await tx.payment.update({ where: { id: paymentId }, data: { bankStatus: "RECEIVED", bankSubmittedAt: new Date() } });
+  }, { timeout: 120000 });
+}
+
+export async function submitPaymentToBank(paymentId: string): Promise<ActionResult> {
+  try {
+    const context = await getTenantContextForModuleOperation("FINANCEIRO", "update");
+    await submitIssuedPayment(context, paymentId);
+    revalidatePath("/financeiro/pagamentos");
+    revalidatePath("/financeiro/contabilidade/etapas-anuais");
+    return {};
+  } catch (error) { return { error: message(error) }; }
 }
 
 export async function cancelPayment(id: string): Promise<ActionResult> {
@@ -109,6 +110,7 @@ export async function updatePaymentStatus(id: string, status: string): Promise<A
     if (!payment) throw new FinanceError("Pagamento não encontrado.");
     const commitment = await assertCommitmentAccess(context, payment.commitmentId);
     await updateOfficialPaymentStatus(context.prisma, paymentActor(context), id, status);
+    revalidatePath("/financeiro/restos-a-pagar");
     revalidatePath("/financeiro/pagamentos");
     revalidatePath("/financeiro/liquidacoes");
     revalidatePath("/financeiro/empenhos");
@@ -127,6 +129,7 @@ export async function reversePaymentAction(paymentId: string, justification: str
     const commitment = await assertCommitmentAccess(context, payment.commitmentId);
     const { reversePayment: reverseOfficialPayment } = await import("@/lib/financeiro");
     await reverseOfficialPayment(context.prisma, paymentActor(context), paymentId, justification);
+    revalidatePath("/financeiro/restos-a-pagar");
     revalidatePath("/financeiro/pagamentos");
     revalidatePath("/financeiro/liquidacoes");
     revalidatePath("/financeiro/empenhos");

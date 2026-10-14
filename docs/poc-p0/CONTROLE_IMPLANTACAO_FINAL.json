@@ -17899,14 +17899,14 @@
         "src/lib/financeiro/classification-engine.ts"
       ],
       "review": {
-        "producer": null,
-        "consumers": [],
+        "producer": "postAccountingTransactionInTransaction em src/lib/financeiro/index.ts",
+        "consumers": ["src/app/app-domain/financeiro/contabilidade/lancamentos/page.tsx"],
         "commands": [],
-        "interface": [],
-        "persistence": [],
-        "reversal": [],
-        "scope": [],
-        "exactGap": null
+        "interface": ["/financeiro/contabilidade/lancamentos: filtros, paginação, eventos, origens, usuário e memória de cada linha"],
+        "persistence": ["AccountingTransaction", "AccountingEntry.classificationSnapshot"],
+        "reversal": ["reversalOfId e originalEntryId exibidos sem reescrever a memória original"],
+        "scope": ["Prefeitura selecionada explicitamente; exercício do ente e interseção de UGs autorizadas; consultas em RepeatableRead"],
+        "exactGap": "Consulta e composição MSC congelada implementadas localmente; regressões EXECUTIVE de vigência/sucessão/estorno e exportação agregada passaram em PostgreSQL descartável. Evidências em EVIDENCIAS_CONSULTAS_MSC_TRIBUTACAO_2026_10_13.md. Faltam produtores/dimensões completos, conta corrente estadual documental quando aplicável, validação integral e jornada autenticada. Não atende por este registro."
       },
       "externalDependencies": [],
       "verification": [],
@@ -27583,14 +27583,14 @@
         "src/lib/financeiro/classification-engine.ts"
       ],
       "review": {
-        "producer": null,
-        "consumers": [],
+        "producer": "postAccountingTransactionInTransaction em src/lib/financeiro/index.ts",
+        "consumers": ["src/app/app-domain/financeiro/contabilidade/lancamentos/page.tsx"],
         "commands": [],
-        "interface": [],
-        "persistence": [],
-        "reversal": [],
-        "scope": [],
-        "exactGap": null
+        "interface": ["/financeiro/contabilidade/lancamentos: filtros, paginação, eventos, origens, usuário e memória de cada linha"],
+        "persistence": ["AccountingTransaction", "AccountingEntry.classificationSnapshot"],
+        "reversal": ["reversalOfId e originalEntryId exibidos sem reescrever a memória original"],
+        "scope": ["Câmara selecionada explicitamente; exercício independente e interseção de UGs autorizadas; consultas em RepeatableRead"],
+        "exactGap": "Consulta e composição MSC congelada implementadas localmente; regressões LEGISLATIVE de PO/vigência/sucessão/estorno e exportação agregada passaram em PostgreSQL descartável. Evidências em EVIDENCIAS_CONSULTAS_MSC_TRIBUTACAO_2026_10_13.md. Faltam produtores/dimensões completos, conta corrente estadual documental quando aplicável, validação integral e jornada autenticada. Exportação pelo Executivo preserva dimensões/autoria da Câmara. Não atende por este registro."
       },
       "externalDependencies": [],
       "verification": [],
@@ -42143,14 +42143,14 @@
         "src/app/app-domain/tributacao/motor-fiscal/MotorFiscalClient.tsx"
       ],
       "review": {
-        "producer": null,
-        "consumers": [],
+        "producer": "Partidas canônicas TRIBUTACAO/TRIBUTARIO e referências ACCOUNTING/ARRECADACAO pendentes com retorno/guia conciliados",
+        "consumers": ["src/lib/tributacao/accounting-movements.ts", "src/app/app-domain/tributacao/movimentacoes-contabeis/page.tsx"],
         "commands": [],
-        "interface": [],
-        "persistence": [],
-        "reversal": [],
-        "scope": [],
-        "exactGap": null
+        "interface": ["/tributacao/movimentacoes-contabeis: filtros de data/tributo/evento/conta/valor, paginação e impressão da página"],
+        "persistence": ["Leitura RepeatableRead de AccountingTransaction/Entry e TaxIntegrationEvent; sem reclassificar ou modificar origens"],
+        "reversal": ["Origem por ID canônico, referência reversalOf e movimentos de crédito/restituição; sem atribuir tributo pelo histórico textual"],
+        "scope": ["Prefeitura, exercício e UGs autorizadas; referência pendente exige escopo fiscal/documental consistente"],
+        "exactGap": "Implementação local e testes EXECUTIVE aprovados em tests/tax-accounting-movements.test.ts, incluindo disponibilidade de arrecadação sem partida e referência divergente. Evidências em EVIDENCIAS_CONSULTAS_MSC_TRIBUTACAO_2026_10_13.md. Faltam os demais fatos disponíveis sem partida, todas as variantes fiscais, impressão integral, validação técnica integral e jornada autenticada. Requisito permanece aberto."
       },
       "externalDependencies": [],
       "verification": [],

@@ -3,7 +3,7 @@ import test from "node:test";
 import { Prisma } from "@prisma/client";
 import { createPlanningExecutionFixture } from "./helpers/planning-execution-fixture";
 import { createTaxAssessment, configureTaxFinancialMapping, generateTaxGuide, confirmTaxPayment, enrollAssessmentInActiveDebt } from "../src/lib/tributacao";
-import { reclassifyActiveDebtInTransaction } from "../src/lib/tributacao/accrual-accounting";
+import { reclassifyActiveDebtInTransaction, recognizeTaxAssessmentInTransaction } from "../src/lib/tributacao/accrual-accounting";
 import { issueCda, returnDebtToOrigin, writeOffDebt } from "../src/lib/tributacao/s9-service";
 import { createParametrizedAssessment, reviseTaxAssessment, registerCreditEvent, getAssessmentAccount, processCollectionReturn, applyTaxCredit, generatePartialTaxGuide } from "../src/lib/tributacao/s2-service";
 import { reverseTaxCreditMovement } from "../src/lib/tributacao/credit-reversal";
@@ -52,12 +52,24 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) {
       assert.equal(await sum("right"), "0.00");
       await f.pg.exec('DROP TRIGGER fail_recognition ON "TaxRegistryEntry"; DROP FUNCTION fail_recognition();');
       const assessment = await createTaxAssessment(f.db, f.actor, base);
+      await Promise.all([
+        f.db.$transaction(tx => recognizeTaxAssessmentInTransaction(tx, f.actor, assessment.id)),
+        f.db.$transaction(tx => recognizeTaxAssessmentInTransaction(tx, f.actor, assessment.id)),
+      ]);
+      assert.equal(await f.db.taxRegistryEntry.count({ where: { entityType: "TAX_ASSESSMENT", entityId: assessment.id, category: "ACCOUNTING_POSITION" } }), 1);
+      await assert.rejects(f.db.$transaction(tx => recognizeTaxAssessmentInTransaction(tx, { ...f.actor, allowedBudgetUnitIds: [] }, assessment.id)), /autorizadas/);
+      const legacy = await f.db.taxAssessment.create({ data: { year: 2026, originalValue: 10, originalValueDecimal: "10.00", finalValueDecimal: "10.00", taxId: "tax-accrual", taxpayerId: "payer-accrual", calculationSnapshot: { governmentEntityId: "ente", budgetUnitId: "ug", recognitionPolicy: "PRESERVE_LEGACY_NO_RETROACTIVE_RECOGNITION" } } });
+      await f.db.$transaction(tx => recognizeTaxAssessmentInTransaction(tx, f.actor, legacy.id));
+      assert.equal(await f.db.taxRegistryEntry.count({ where: { entityId: legacy.id, category: "ACCOUNTING_POSITION" } }), 0);
+      assert.equal(await f.db.accountingTransaction.count({ where: { sourceId: legacy.id, sourceType: "TAX_ASSESSMENT" } }), 0);
       assert.equal(await sum("right"), "10.00");
       assert.equal(await sum("vpa"), "-10.00");
       const revision = { assessmentId: assessment.id, imposedValue: "12", reason: "Revisão fundamentada", idempotencyKey: "increase" };
       await reviseTaxAssessment(f.db, f.actor, revision);
       await reviseTaxAssessment(f.db, f.actor, revision);
+      await f.db.$transaction(tx => recognizeTaxAssessmentInTransaction(tx, f.actor, assessment.id));
       await reviseTaxAssessment(f.db, f.actor, { ...revision, imposedValue: "10", idempotencyKey: "decrease" });
+      await f.db.$transaction(tx => recognizeTaxAssessmentInTransaction(tx, f.actor, assessment.id));
       assert.equal(await sum("right"), "10.00");
       assert.equal(await sum("vpa"), "-12.00");
       assert.equal(await sum("deduction"), "2.00");
@@ -77,11 +89,17 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) {
       assert.equal(await sum("loss"), "1.00");
       const guide = await generateTaxGuide(f.db, f.actor, { assessmentId: assessment.id, dueDate: new Date("2026-12-31") });
       const paymentInput = { guideId: guide.id, amountPaid: "7", paymentDate: new Date(), paymentMethod: "Manual", idempotencyKey: "accrual-payment" };
+      // Frozen recognition governs collection, even without a generic revenue default.
+      await f.db.accountingEventCatalog.update({ where: { code: "RECEITA_ARRECADADA" }, data: { isActive: false } });
       await confirmTaxPayment(f.db, f.actor, paymentInput);
       await confirmTaxPayment(f.db, f.actor, paymentInput);
       assert.equal(await sum("right"), "0.00");
       assert.equal(await sum("vpa"), "-12.00");
       assert.equal(await f.db.revenue.count(), 1);
+      const legacyGuide = await generateTaxGuide(f.db, f.actor, { assessmentId: legacy.id, dueDate: new Date("2026-12-31") });
+      await assert.rejects(confirmTaxPayment(f.db, f.actor, { ...paymentInput, guideId: legacyGuide.id, amountPaid: "10", idempotencyKey: "legacy-without-rule" }), /exatamente uma regra ativa/);
+      assert.equal(await f.db.revenue.count(), 1, "Unrecognized legacy revenue still requires its configured posting rule.");
+      assert.equal(await f.db.taxPayment.count({ where: { guideId: legacyGuide.id } }), 0, "Missing legacy rule rolls back payment and treasury together.");
       const payment = await f.db.taxPayment.findUniqueOrThrow({ where: { idempotencyKey: paymentInput.idempotencyKey } });
       await reverseTaxPayment(f.db, f.actor, { paymentId: payment.id, date: new Date(), reason: "Estorno documentado", idempotencyKey: "accrual-reversal" });
       assert.equal(await sum("right"), "7.00");
@@ -135,6 +153,7 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) {
       await f.pg.exec('DROP TRIGGER fail_debt_position ON "TaxRegistryEntry"; DROP FUNCTION fail_debt_position();');
       const reclassified = await reclassify();
       assert.equal((await reclassify())!.id, reclassified!.id);
+      await f.db.$transaction(tx => recognizeTaxAssessmentInTransaction(tx, f.actor, currentAssessment.id));
       assert.equal(await sum("right"), rightBefore.minus(1).toFixed(2));
       assert.equal(await sum("debt-right"), "1.00");
       assert.equal(await sum("vpa"), vpaBefore);

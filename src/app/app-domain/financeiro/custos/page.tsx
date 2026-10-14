@@ -13,7 +13,11 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
   const years = await prisma.financialYear.findMany({ where: { governmentEntityId: { not: null }, ...(actor.allowedBudgetUnitIds ? { governmentEntity: { planningUnits: { some: { budgetUnitId: { in: actor.allowedBudgetUnitIds } } } } } : {}) }, include: { governmentEntity: { select: { name: true } } }, orderBy: [{ year: "desc" }, { id: "asc" }] });
   const query = await searchParams;
   const yearId = typeof query.yearId === "string" ? query.yearId : undefined;
-  const selected = years.find(year => year.id === yearId) ?? years[0];
+  const selected = yearId
+    ? years.find(year => year.id === yearId)
+    : years.find(year => year.year === new Date().getUTCFullYear() && year.status === "Aberto")
+      ?? years.find(year => year.status === "Aberto") ?? years[0];
+  if (yearId && !selected) return <p className="p-5">Exercício de Custos indisponível no acesso autorizado.</p>;
   if (!selected) return <p className="p-5">Nenhum exercício com entidade conciliada disponível para Custos.</p>;
   const filters = costReportQuery.safeParse({ ...query, yearId: selected.id });
   if (!filters.success) return <p className="p-5">{filters.error.issues[0]?.message ?? "Filtros inválidos."}</p>;

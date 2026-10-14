@@ -13,11 +13,11 @@ export async function PlanningReferencePage({ jurisdiction, filters }: { jurisdi
   const context = await getPlanningContext(jurisdiction);
   const base = `${planningBasePath(jurisdiction)}/cadastros/versions`;
   const requested = Math.max(1, Number(filters.page) || 1);
-  const where = filters.q ? { OR: [{ label: { contains: filters.q.slice(0, 200), mode: "insensitive" as const } }, { normativeReference: { contains: filters.q.slice(0, 200), mode: "insensitive" as const } }] } : {};
+  const where = { entries: { none: { kind: { startsWith: "MSC_" } } }, ...(filters.q ? { OR: [{ label: { contains: filters.q.slice(0, 200), mode: "insensitive" as const } }, { normativeReference: { contains: filters.q.slice(0, 200), mode: "insensitive" as const } }] } : {}) };
   const total = await context.prisma.planningCatalogVersion.count({ where });
   const page = Math.min(requested, Math.max(1, Math.ceil(total / 20)));
   const versions = await context.prisma.planningCatalogVersion.findMany({ where, orderBy: [{ year: "desc" }, { id: "asc" }], take: 20, skip: (page - 1) * 20 });
-  const selected = filters.versionId ? await context.prisma.planningCatalogVersion.findUnique({ where: { id: filters.versionId } }) : null;
+  const selected = filters.versionId ? await context.prisma.planningCatalogVersion.findFirst({ where: { id: filters.versionId, entries: { none: { kind: { startsWith: "MSC_" } } } } }) : null;
   const entriesTotal = selected ? await context.prisma.planningCatalogEntry.count({ where: { versionId: selected.id } }) : 0;
   const entries = selected ? await context.prisma.planningCatalogEntry.findMany({ where: { versionId: selected.id }, orderBy: [{ kind: "asc" }, { code: "asc" }], take: 20, skip: (Math.min(requested, Math.max(1, Math.ceil(entriesTotal / 20))) - 1) * 20 }) : [];
   const entities = await context.prisma.governmentEntity.findMany({ where: planningEntityWhere(context), select: { id: true } });

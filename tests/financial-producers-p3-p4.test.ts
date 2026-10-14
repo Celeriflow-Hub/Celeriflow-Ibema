@@ -48,7 +48,8 @@ test("P3: transferência valida saldo, competência, autorização e replay sem 
 
 test("P4: alienação usa a cadeia canônica e mês fechado reverte baixa, receita e tesouraria", async () => scenario(async (f) => {
   await f.db.assetCategory.create({ data: { id: "category-p4", name: "Equipamentos de ensaio", code: "P4", lifeSpan: 60 } });
-  for (const id of ["asset-p4", "asset-closed-p4"]) await f.db.asset.create({ data: { id, patrimonyNumber: id, name: id, acquisitionDate: new Date("2026-01-01"), acquisitionValue: 4, currentValue: 4, categoryId: "category-p4", status: "Ativo" } });
+  await f.db.department.create({ data: { id: "asset-department-p4", name: "Patrimônio municipal", secretariatId: "secretaria", isActive: true } });
+  for (const id of ["asset-p4", "asset-closed-p4"]) await f.db.asset.create({ data: { id, patrimonyNumber: id, name: id, acquisitionDate: new Date("2026-01-01"), acquisitionValue: 4, currentValue: 4, acquisitionValueDecimal: "4.00", currentValueDecimal: "4.00", budgetUnitId: "ug", departmentId: "asset-department-p4", categoryId: "category-p4", status: "Ativo" } });
   const financial = { budgetUnitId: "ug", bankAccountId: "banco", revenueNatureId: "receita", resourceSourceId: "livre" };
   const input = { assetId: "asset-p4", date: new Date("2026-03-01"), type: "Alienação" as const, reason: "Leilão", justification: "Processo de ensaio", disposalValue: 4, actor: f.actor, financial };
   await assert.rejects(recordAssetDisposal(f.db, { ...input, actor: { ...f.actor, allowedBudgetUnitIds: [] } }), /autorizad/i);

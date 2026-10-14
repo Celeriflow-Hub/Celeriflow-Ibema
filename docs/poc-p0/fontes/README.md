@@ -37,6 +37,18 @@ URLs dos bytes originais:
 
 ## Referência federal — STN
 
+### MSC 2026 — captura para composição analítica
+
+- Página oficial: https://siconfi.tesouro.gov.br/siconfi/pages/public/conteudo/conteudo.jsf?id=12503
+- Bytes do Anexo II: https://thot-arquivos.tesouro.gov.br/publicacao-anexo/28661
+- Original preservado: `MSC_STN_2026_20260708.xlsx`; revisão publicada em 08/07/2026.
+- SHA-256: `a260f4fafb40d8d19c91113237c8249a619eed815d5fcc0fb6bd2c6cf0482c37`.
+- Derivação rastreável: `MSC_STN_2026_20260708.json`, com 6.119 contas analíticas ativas, linha no leiaute e no PCASP Estendido, natureza de saldo e conjunto de IC por conta; dicionários PO, FR, CO, NR, ND, função/subfunção. SHA-256 da derivação normalizada em LF: `8919bc6ffe4448aa0775da66f0e3af98c965f5d9792a9b47e4a77dfa467286cd`.
+- Ferramenta: `node scripts/prepare-msc-2026-layout.mjs --source=<original.xlsx> --write`. Reconcilia todas as linhas das duas abas e não executa fórmulas; usa resultados preservados. Recusa divergência de cabeçalho/ano, duplicidade, dimensões desconhecidas e captura anterior com bytes diferentes. Não escreve no banco nem publica classificações.
+- Regras Gerais lidas: https://siconfi.tesouro.gov.br/siconfi/pages/public/arquivo/conteudo/2026_Anexo_I_Portaria_STN_642_Regras_Gerais_MSC.pdf
+- 2026 usa seis pares IC/TIPO, valores Decimal não negativos e saldos inicial/movimento/final. MSC de encerramento usa período `YYYY-13`. Envio é agregado pelo Executivo, com poderes distinguidos por PO, sem eliminação de saldos recíprocos.
+- A captura não constitui de-para municipal nem homologação. Composição, configuração, congelamento por linha, saldos e exportação foram implementados localmente e exercitados em PostgreSQL descartável; adoção/operação municipal e validação integral permanecem pendentes. Evidências individuais em `../EVIDENCIAS_CONSULTAS_MSC_TRIBUTACAO_2026_10_13.md`.
+
 Página conferida: https://www.gov.br/tesouronacional/pt-br/contabilidade-e-custos/federacao/plano-de-contas-aplicado-ao-setor-publico-pcasp-1
 
 Ela apresenta PCASP Federação/Estendido 2026 e 2027, com acesso ao SIGECONF e portarias específicas. Desde 2025, Federação/Estendido compartilham um arquivo Excel e a página orienta separação pela coluna L. A página inclui um link malformado para a Portaria 3.133/2025: localizar a publicação normativa original antes de usar esse link como evidência.

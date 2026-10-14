@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient, type BudgetReservation, type Commitment, typ
 import { createHash } from "node:crypto";
 import { resolveAccountClassificationSnapshots } from "./account-catalog";
 import { resolveAccountingSourceDimensions, resolveAccountingLineSourceDimensions, resolveAccountingReversalLineDimensions } from "./accounting-source-dimensions";
+import { composeMscLineDimensions } from "./msc-line-dimensions";
 import { calculateRetentionDueDate, calculateRetentions, getActiveRetentionRules } from "./retencoes";
 import { assertPlanningPeriodAvailability, assertPlanningReservationYear, getPlanningBudgetRestrictions, lockPlanningBudgetForAppropriation, recordPlanningFinanceExecution } from "@/lib/planejamento/execution-bridge";
 import { lockPlanningRevenueBudget, recordPlanningRevenueCollection, recordPlanningRevenueReversal, recordPlanningRevenueRedistribution } from "@/lib/planejamento/revenue-execution-bridge";
@@ -11,6 +12,13 @@ import { assertCurrentRefundPaymentMutationAllowed, settledCurrentRefundCorrecti
 import { taxCollectionReceivableAccount } from "@/lib/tributacao/accrual-accounting";
 import { recordSettlementMunicipalCosts, cancelSettlementMunicipalCosts } from "./cost-settlement-bridge";
 import { recordAccountingMunicipalCosts } from "./cost-accounting-bridge";
+import { assertBankResourceSource, getBankResourceSourceBalance, getBankResourceSourceSpendableBalance } from "./bank-resource-sources";
+import { assertAnnualBudgetCleared, assertAnnualResultCleared, isAnnualResultReversal, resolveAnnualPostingOrigins } from "./annual-posting-origin";
+import { inspectAnnualConsistency } from "./annual-consistency";
+import { assertAnnualPayableRegistrations, reconcileAnnualPayableRegistrations } from "./annual-payable-registration";
+import { getInheritedCarryForwardSettlement } from "./carry-forward-transport";
+import { assertAnnualRapPostings } from "./annual-rap-postings";
+import { preparedAnnualPaymentProgramIds } from "./annual-payment-program-transport";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -886,10 +894,13 @@ export async function cancelCommitmentInTransaction(tx: Prisma.TransactionClient
 }
 
 export async function createCommitmentMovement(db: PrismaClient, actor: FinanceActor, input: { commitmentId: string; date: Date; type: "Reforço" | "Anulação"; value: Prisma.Decimal | string | number; justification: string }) {
+  return db.$transaction((tx) => createCommitmentMovementInTransaction(tx, actor, input));
+}
+
+export async function createCommitmentMovementInTransaction(tx: Prisma.TransactionClient, actor: FinanceActor, input: Parameters<typeof createCommitmentMovement>[2]) {
   const value = money(input.value);
   if (!["Reforço", "Anulação"].includes(input.type)) throw new FinanceError("Tipo de movimento de empenho inválido.");
   if (!input.justification.trim()) throw new FinanceError("Informe a justificativa do movimento de empenho.");
-  return db.$transaction(async (tx) => {
     await lockCommitment(tx, input.commitmentId);
     const commitment = await tx.commitment.findUnique({ include: { appropriation: true, movements: true, settlements: { where: { status: ACTIVE_SETTLEMENT_STATUS }, select: { valueDecimal: true } } }, where: { id: input.commitmentId } });
     if (!commitment) throw new FinanceError("Empenho não encontrado.");
@@ -913,13 +924,12 @@ export async function createCommitmentMovement(db: PrismaClient, actor: FinanceA
     await recordPlanningFinanceExecution(tx, actor, { appropriationId: commitment.appropriationId, operation: input.type === "Reforço" ? "CONSUME" : "REVERSE", date: input.date, value, key: input.type === "Reforço" ? `finance:commit:${commitment.id}:movement:${movement.id}` : `finance:reversal:${movement.id}`, originPrefix: `finance:commit:${commitment.id}:` });
     await audit(tx, actor, "CREATE", "CommitmentMovement", movement.id, { type: movement.type, value: jsonMoney(value), commitmentId: commitment.id, resultingEffectiveValue: jsonMoney(input.type === "Reforço" ? effectiveValue.plus(value) : effectiveValue.minus(value)) }, year.id);
     return movement;
-  });
 }
 
 async function postCommitmentBalanceChange(tx: Prisma.TransactionClient, actor: FinanceActor, commitment: { id: string; number: string; valueDecimal: Prisma.Decimal | null }, financialYearId: string, input: { date: Date; value: Prisma.Decimal; reverse: boolean; sourceType: string; sourceId: string; eventType: string; key: string }) {
   const originals = await tx.accountingTransaction.findMany({ where: { financialYearId, sourceType: "COMMITMENT", sourceId: commitment.id, eventType: "EMPENHO_EMITIDO", status: "POSTADO" }, include: { entries: true }, take: 2 });
   const original = originals.length === 1 ? originals[0] : undefined;
-  if (!original || original.entries.length !== 2 || original.entries.some((entry) => !entry.valueDecimal?.equals(requiredDecimal(commitment.valueDecimal, "Commitment.valueDecimal")) || !["Débito", "Crédito"].includes(entry.type)) || new Set(original.entries.map((entry) => entry.type)).size !== 2) throw new FinanceError("Reconcilie a postagem original do empenho antes de reforçar ou anular seu saldo.");
+  if (!original || original.entries.length < 2 || original.entries.length % 2 !== 0 || original.entries.some((entry) => !entry.valueDecimal?.equals(requiredDecimal(commitment.valueDecimal, "Commitment.valueDecimal")) || !["Débito", "Crédito"].includes(entry.type)) || original.entries.filter(entry => entry.type === "Débito").length !== original.entries.filter(entry => entry.type === "Crédito").length) throw new FinanceError("Reconcilie a postagem original do empenho antes de reforçar ou anular seu saldo.");
   return postAccountingTransactionInTransaction(tx, actor, { financialYearId, date: input.date, history: `${input.eventType} · empenho ${commitment.number}`, sourceModule: "FINANCEIRO", sourceType: input.sourceType, sourceId: input.sourceId, eventType: input.eventType, idempotencyKey: input.key, reversalOfId: input.sourceType === "COMMITMENT_REVERSAL" ? original.id : undefined, lines: original.entries.map((entry) => ({ ...(input.sourceType === "COMMITMENT_REVERSAL" ? { originalEntryId: entry.id } : {}), accountId: entry.accountId, type: input.reverse ? entry.type === "Débito" ? "Crédito" : "Débito" : entry.type as "Débito" | "Crédito", value: input.value })) });
 }
 
@@ -966,6 +976,7 @@ export async function createSettlement(db: PrismaClient, actor: FinanceActor, in
   notes?: string;
   serviceCode?: string;
   retentionRuleIds?: string[];
+  payableCarryForwardId?: string;
 }) {
   return db.$transaction((tx) => createSettlementInTransaction(tx, actor, input));
 }
@@ -988,7 +999,9 @@ export async function createSettlementInTransaction(tx: Prisma.TransactionClient
   if (fiscalDocumentAccessKey && !/^\d{44}$/.test(fiscalDocumentAccessKey)) {
     throw new FinanceError("A chave de acesso do documento fiscal deve conter 44 dígitos.");
   }
-    const { commitment, year } = await commitmentForPosting(tx, input.commitmentId, input.date);
+    const { commitment, year } = input.payableCarryForwardId
+      ? await carryForwardForPosting(tx, actor, input.payableCarryForwardId, input.commitmentId, input.date, "NAO_PROCESSADO")
+      : await commitmentForPosting(tx, input.commitmentId, input.date);
     assertActorBudgetUnit(actor, commitment.appropriation.budgetUnitId);
     if (!input.documentId) throw new FinanceError("Vincule o documento fiscal ou comprobatório já cadastrado no GED.");
     const [document, author, settled] = await Promise.all([
@@ -1014,6 +1027,14 @@ export async function createSettlementInTransaction(tx: Prisma.TransactionClient
     if (retentionTotal.greaterThan(value)) throw new FinanceError("As retenções não podem exceder o valor bruto da liquidação.");
     const effectiveValue = commitmentValue(commitment.valueDecimal, commitment.movements);
     if (settled.plus(value).greaterThan(effectiveValue)) throw new FinanceError("A liquidação acumulada excede o valor vigente do empenho.");
+    if (input.payableCarryForwardId) {
+      const payable = await tx.payableCarryForward.findUniqueOrThrow({ where: { id: input.payableCarryForwardId } });
+      const allocated = await tx.settlement.findMany({ where: { payableCarryForwardId: payable.id, status: ACTIVE_SETTLEMENT_STATUS }, select: { valueDecimal: true } });
+      const total = allocated.reduce((sum, row) => sum.plus(requiredDecimal(row.valueDecimal, "Settlement.valueDecimal")), new Prisma.Decimal(0));
+      const inherited = await tx.payableCarryForwardSettlementLink.findMany({ where: { payableCarryForwardId: payable.id, status: "ACTIVE" }, select: { valueDecimal: true } });
+      const inheritedTotal = inherited.reduce((sum, link) => sum.plus(link.valueDecimal), new Prisma.Decimal(0));
+      if (total.plus(inheritedTotal).plus(value).gt(payable.valueDecimal)) throw new FinanceError("A liquidação excede o saldo inscrito do RAP não processado, incluindo liquidações herdadas.");
+    }
     const settlement = await tx.settlement.create({
       data: {
         date: input.date,
@@ -1027,6 +1048,8 @@ export async function createSettlementInTransaction(tx: Prisma.TransactionClient
         documentId: document.id,
         commitmentId: commitment.id,
         authorId: input.authorId,
+        executionFinancialYearId: input.payableCarryForwardId ? year.id : undefined,
+        payableCarryForwardId: input.payableCarryForwardId,
         notes: input.notes?.trim() || undefined,
         status: ACTIVE_SETTLEMENT_STATUS,
         retentions: {
@@ -1062,6 +1085,8 @@ export async function createSettlementInTransaction(tx: Prisma.TransactionClient
           documentId: settlement.documentId,
           commitmentId: settlement.commitmentId,
           authorId: settlement.authorId,
+          executionFinancialYearId: settlement.executionFinancialYearId,
+          payableCarryForwardId: settlement.payableCarryForwardId,
           notes: settlement.notes,
         },
         commitment: { id: commitment.id, number: commitment.number },
@@ -1082,7 +1107,7 @@ export async function createSettlementInTransaction(tx: Prisma.TransactionClient
     await postAccountingEventInTransaction(tx, actor, {
       financialYearId: year.id,
       date: settlement.date,
-      eventCode: "LIQUIDACAO_REGISTRADA",
+      eventCode: input.payableCarryForwardId ? "RAP_NAO_PROCESSADO_LIQUIDACAO" : "LIQUIDACAO_REGISTRADA",
       value,
       history: `Liquidação do empenho ${commitment.number}`,
       sourceModule: "FINANCEIRO",
@@ -1092,6 +1117,7 @@ export async function createSettlementInTransaction(tx: Prisma.TransactionClient
     });
     await releasePayrollProvisionsAtSettlement(tx, actor, settlement.id);
     await recordSettlementMunicipalCosts(tx, actor, settlement.id);
+    if (input.payableCarryForwardId) await tx.payableCarryForwardEvent.create({ data: { payableCarryForwardId: input.payableCarryForwardId, settlementId: settlement.id, action: "LIQUIDACAO_REGISTRADA", valueDecimal: value, actorUsuarioId: actor.usuarioId } });
     await audit(tx, actor, "CREATE", "Settlement", settlement.id, { value: jsonMoney(value), retentionValue: jsonMoney(retentionTotal), commitmentId: commitment.id, documentId: document.id, authorId: input.authorId }, year.id);
     return settlement;
 }
@@ -1108,9 +1134,10 @@ export async function cancelSettlementInTransaction(tx: Prisma.TransactionClient
      const settlement = await tx.settlement.findUnique({ include: { commitment: { include: { appropriation: true } } }, where: { id: settlementId } });
     if (!settlement) throw new FinanceError("Liquidação não encontrada.");
     await lockCommitment(tx, settlement.commitmentId);
+    if (settlement.payableCarryForwardId) await lockPayableCarryForward(tx, settlement.payableCarryForwardId);
     assertActorBudgetUnit(actor, settlement.commitment.appropriation.budgetUnitId);
      const date = new Date();
-     const year = await assertFinancialYearOpen(tx, settlement.commitment.appropriation.financialYearId, date);
+     const year = await assertFinancialYearOpen(tx, settlement.executionFinancialYearId ?? settlement.commitment.appropriation.financialYearId, date);
      await assertAccountingPeriodOpen(tx, year.id, date);
     if (settlement.status !== ACTIVE_SETTLEMENT_STATUS) throw new FinanceError("Somente liquidações ativas podem ser canceladas.");
     if ((await activePaymentTotal(tx, { settlementId })).greaterThan(0)) throw new FinanceError("Não é possível cancelar uma liquidação com pagamentos ativos.");
@@ -1126,9 +1153,44 @@ export async function cancelSettlementInTransaction(tx: Prisma.TransactionClient
     });
     await reversePayrollProvisionSettlement(tx, actor, settlement.id, date);
     const canceled = await tx.settlement.update({ where: { id: settlementId }, data: { status: "Cancelado" } });
+    if (settlement.payableCarryForwardId) await tx.payableCarryForwardEvent.create({ data: { payableCarryForwardId: settlement.payableCarryForwardId, settlementId: settlement.id, action: "LIQUIDACAO_CANCELADA", valueDecimal: settlement.valueDecimal, actorUsuarioId: actor.usuarioId } });
     await refreshCommitmentExecutionStatus(tx, settlement.commitmentId);
     await audit(tx, actor, "CANCEL", "Settlement", settlementId, { previousStatus: settlement.status }, year.id);
      return canceled;
+}
+
+async function carryForwardAllocatedValue(tx: Prisma.TransactionClient, payableId: string, includeIssued = false) {
+  const nativePayments = await tx.payment.findMany({ where: { payableCarryForwardId: payableId, status: { in: includeIssued ? ACTIVE_PAYMENT_STATUSES : ["Paga"] } }, select: { valueDecimal: true } });
+  const legacyEvents = await tx.payableCarryForwardEvent.findMany({ where: { payableCarryForwardId: payableId, action: "PAGAMENTO_RASTREADO", payment: { is: { payableCarryForwardId: null, status: "Paga" } } }, select: { valueDecimal: true } });
+  return [...nativePayments, ...legacyEvents].reduce((sum, row) => sum.plus(requiredDecimal(row.valueDecimal, "RAP.paymentValueDecimal")), new Prisma.Decimal(0));
+}
+
+async function carryForwardForPosting(tx: Prisma.TransactionClient, actor: FinanceActor, payableId: string, commitmentId: string, date: Date, requiredType?: "NAO_PROCESSADO") {
+  await lockCommitment(tx, commitmentId);
+  await lockPayableCarryForward(tx, payableId);
+  const commitment = await tx.commitment.findUniqueOrThrow({ where: { id: commitmentId }, include: { appropriation: true, movements: true } });
+  assertActorBudgetUnit(actor, commitment.appropriation.budgetUnitId);
+  const payable = await tx.payableCarryForward.findUniqueOrThrow({ where: { id: payableId }, include: { financialYear: true, originFinancialYear: true } });
+  if (payable.commitmentId !== commitment.id || payable.originFinancialYearId !== commitment.appropriation.financialYearId || !["PROCESSADO", "NAO_PROCESSADO"].includes(payable.type) || requiredType && payable.type !== requiredType || !["PENDENTE", "PAGAMENTO_PARCIAL_RASTREADO"].includes(payable.status)) throw new FinanceError("Selecione um resto a pagar pendente do tipo e empenho informados.");
+  if (payable.originFinancialYear.status !== "Encerrado" || date <= payable.originFinancialYear.endDate || !ACTIVE_COMMITMENT_STATUSES.includes(commitment.status)) throw new FinanceError("Pagamento de RAP exige origem encerrada, data posterior e empenho ativo.");
+  const binding = await tx.planningEntityUnit.findUniqueOrThrow({ where: { budgetUnitId: commitment.appropriation.budgetUnitId } });
+  if (payable.financialYear.governmentEntityId !== binding.governmentEntityId || payable.originFinancialYear.governmentEntityId !== binding.governmentEntityId) throw new FinanceError("Inscrição e origem do RAP devem pertencer ao ente da UG.");
+  const years = await tx.financialYear.findMany({ where: { governmentEntityId: binding.governmentEntityId, startDate: { lte: date }, endDate: { gte: date }, status: "Aberto" } });
+  if (years.length !== 1) throw new FinanceError("Pagamento de RAP exige exercício corrente aberto e único do mesmo ente.");
+  const year = await assertFinancialYearOpen(tx, years[0].id, date);
+  if (year.year < payable.financialYear.year) throw new FinanceError("A execução não pode anteceder o exercício de inscrição do RAP.");
+  await assertAccountingPeriodOpen(tx, year.id, date);
+  return { commitment, year };
+}
+
+async function recordNativeCarryForwardPaymentEvent(tx: Prisma.TransactionClient, actor: FinanceActor, payment: Pick<Payment, "id" | "valueDecimal" | "payableCarryForwardId">, action: "PAGAMENTO_RASTREADO" | "PAGAMENTO_ESTORNADO", justification?: string) {
+  if (!payment.payableCarryForwardId) return;
+  await lockPayableCarryForward(tx, payment.payableCarryForwardId);
+  const payable = await tx.payableCarryForward.findUniqueOrThrow({ where: { id: payment.payableCarryForwardId } });
+  const paid = await carryForwardAllocatedValue(tx, payable.id);
+  if (paid.gt(payable.valueDecimal)) throw new FinanceError("Pagamentos efetivados excedem a inscrição do RAP.");
+  await tx.payableCarryForwardEvent.create({ data: { payableCarryForwardId: payable.id, paymentId: payment.id, action, valueDecimal: requiredDecimal(payment.valueDecimal, "Payment.valueDecimal"), actorUsuarioId: actor.usuarioId, justification } });
+  await tx.payableCarryForward.update({ where: { id: payable.id }, data: { status: paid.isZero() ? "PENDENTE" : paid.eq(payable.valueDecimal) ? "PAGO_RASTREADO" : "PAGAMENTO_PARCIAL_RASTREADO" } });
 }
 
 export async function createPayment(
@@ -1145,6 +1207,7 @@ export async function createPayment(
     paymentMethod: string;
     serviceCode?: string;
     retentionRuleIds?: string[];
+    payableCarryForwardId?: string;
   },
 ) {
   return db.$transaction((tx) => createPaymentInTransaction(tx, actor, input));
@@ -1156,7 +1219,9 @@ export async function createPaymentInTransaction(tx: Prisma.TransactionClient, a
     throw new FinanceError("O fluxo obrigatório exige liquidação prévia regular antes de qualquer emissão de pagamento.");
   }
 
-    const { commitment, year } = await commitmentForPosting(tx, input.commitmentId, input.date);
+    const { commitment, year } = input.payableCarryForwardId
+      ? await carryForwardForPosting(tx, actor, input.payableCarryForwardId, input.commitmentId, input.date)
+      : await commitmentForPosting(tx, input.commitmentId, input.date);
     assertActorBudgetUnit(actor, commitment.appropriation.budgetUnitId);
     const bankAccount = await tx.bankAccount.findUnique({
       where: { id: input.bankAccountId },
@@ -1169,12 +1234,8 @@ export async function createPaymentInTransaction(tx: Prisma.TransactionClient, a
       where: { id: commitment.appropriationId },
       select: { resourceSourceId: true, budgetUnitId: true },
     });
-    if (!bankAccount.resourceSourceId) {
-      throw new FinanceError("A conta bancária para pagamento deve possuir fonte de recursos configurada.");
-    }
-    if (appropriation?.resourceSourceId && bankAccount.resourceSourceId !== appropriation.resourceSourceId) {
-      throw new FinanceError("A fonte de recursos da conta bancária é incompatível com a fonte de recursos da dotação orçamentária.");
-    }
+    await lockBankAccount(tx, input.bankAccountId);
+    await assertBankResourceSource(tx, input.bankAccountId, appropriation?.resourceSourceId);
     if (!bankAccount.budgetUnitId || bankAccount.budgetUnitId !== appropriation?.budgetUnitId) {
       throw new FinanceError("A conta bancária deve estar vinculada à mesma Unidade Gestora da dotação.");
     }
@@ -1198,6 +1259,19 @@ export async function createPaymentInTransaction(tx: Prisma.TransactionClient, a
     });
     if (!settlement || settlement.status !== ACTIVE_SETTLEMENT_STATUS || settlement.commitmentId !== commitment.id) {
       throw new FinanceError("A liquidação selecionada não pertence ao empenho ou não está ativa.");
+    }
+    if (input.date < settlement.date) throw new FinanceError("O pagamento não pode anteceder a liquidação.");
+    if (input.payableCarryForwardId) {
+      const payable = await tx.payableCarryForward.findUniqueOrThrow({ where: { id: input.payableCarryForwardId }, include: { originFinancialYear: true, events: { where: { action: "TRANSPORTE_ANUAL_RECEBIDO" }, select: { id: true } } } });
+      const inherited = await getInheritedCarryForwardSettlement(tx, payable.id, settlement.id);
+      if (payable.type === "PROCESSADO" && (settlement.date > payable.originFinancialYear.endDate || settlement.payableCarryForwardId)) throw new FinanceError("RAP processado exige liquidação no exercício de origem.");
+      if (payable.type === "NAO_PROCESSADO" && !inherited && (settlement.payableCarryForwardId !== payable.id || settlement.executionFinancialYearId !== year.id || settlement.date <= payable.originFinancialYear.endDate)) throw new FinanceError("RAP não processado exige liquidação nativa da mesma inscrição no exercício corrente ou transporte documental da liquidação anterior.");
+      if (payable.type === "PROCESSADO" && payable.events.length && !inherited) throw new FinanceError("RAP processado transportado exige vínculo documental da parcela liquidada herdada.");
+      if (inherited) {
+        const linkedAllocated = await activePaymentTotal(tx, { settlementId: settlement.id, payableCarryForwardId: payable.id });
+        if (linkedAllocated.plus(value).gt(inherited.valueDecimal)) throw new FinanceError("A ordem excede a parcela liquidada herdada no transporte.");
+      }
+      if ((await carryForwardAllocatedValue(tx, payable.id, true)).plus(value).gt(payable.valueDecimal)) throw new FinanceError("A ordem de pagamento excede o saldo inscrito do resto a pagar.");
     }
     const paid = await activePaymentTotal(tx, { settlementId: settlement.id });
     if (paid.plus(value).greaterThan(requiredDecimal(settlement.valueDecimal, "Settlement.valueDecimal"))) {
@@ -1229,6 +1303,8 @@ export async function createPaymentInTransaction(tx: Prisma.TransactionClient, a
 
     // Validação de saldo financeiro na conta bancária para o valor LÍQUIDO que efetivamente sairá
     const currentBankBalance = await getBankAccountBalance(tx, input.bankAccountId, input.date);
+    const sourceBalance = await getBankResourceSourceSpendableBalance(tx, input.bankAccountId, appropriation!.resourceSourceId!, input.date);
+    if (sourceBalance.lt(netValue)) throw new FinanceError("Saldo por fonte insuficiente para emitir a ordem de pagamento.");
     if (currentBankBalance.lessThan(netValue)) {
       throw new FinanceError(`Saldo financeiro insuficiente na conta bancária. Saldo disponível: R$ ${currentBankBalance.toFixed(2)}.`);
     }
@@ -1242,6 +1318,8 @@ export async function createPaymentInTransaction(tx: Prisma.TransactionClient, a
         netValueDecimal: netValue,
         commitmentId: commitment.id,
         settlementId: input.settlementId,
+        executionFinancialYearId: input.payableCarryForwardId ? year.id : undefined,
+        payableCarryForwardId: input.payableCarryForwardId,
         bankAccountId: input.bankAccountId,
         supplierId: input.supplierId,
         creditorId: creditor.id,
@@ -1270,8 +1348,11 @@ export async function createPaymentInTransaction(tx: Prisma.TransactionClient, a
           commitmentId: payment.commitmentId,
           settlementId: payment.settlementId,
           bankAccountId: payment.bankAccountId,
+          resourceSourceId: commitment.appropriation.resourceSourceId,
           supplierId: payment.supplierId,
           creditorId: payment.creditorId,
+          payableCarryForwardId: payment.payableCarryForwardId,
+          executionFinancialYearId: payment.executionFinancialYearId,
         },
         commitment: { id: commitment.id, number: commitment.number },
         settlement: { id: settlement.id },
@@ -1329,7 +1410,7 @@ export async function reversePayment(
     await lockCommitment(tx, payment.commitmentId);
     assertActorBudgetUnit(actor, payment.commitment.appropriation.budgetUnitId);
     const reversalDate = new Date();
-    const year = await assertFinancialYearOpen(tx, payment.commitment.appropriation.financialYearId, reversalDate);
+    const year = await assertFinancialYearOpen(tx, payment.executionFinancialYearId ?? payment.commitment.appropriation.financialYearId, reversalDate);
     if (payment.status !== "Paga") throw new FinanceError("Somente pagamentos efetivados (Paga) podem ser estornados.");
 
     // Verifica se alguma retenção associada já foi recolhida
@@ -1340,7 +1421,7 @@ export async function reversePayment(
 
     // O valor que saiu da conta bancária na confirmação foi o valor LÍQUIDO
     const netValue = requiredDecimal(payment.netValueDecimal ?? payment.valueDecimal, "Payment.netValueDecimal");
-    await recordPlanningFinanceExecution(tx, actor, { appropriationId: payment.commitment.appropriation.id, operation: "REVERSE_PAYMENT", date: reversalDate, value: requiredDecimal(payment.valueDecimal, "Payment.valueDecimal"), key: `finance:paymentReversal:${payment.id}`, originPrefix: `finance:payment:${payment.id}:` });
+    if (!payment.payableCarryForwardId) await recordPlanningFinanceExecution(tx, actor, { appropriationId: payment.commitment.appropriation.id, operation: "REVERSE_PAYMENT", date: reversalDate, value: requiredDecimal(payment.valueDecimal, "Payment.valueDecimal"), key: `finance:paymentReversal:${payment.id}`, originPrefix: `finance:payment:${payment.id}:` });
     const updated = await tx.payment.update({ where: { id: paymentId }, data: { status: "Estornada" } });
 
     // Registra entrada do valor LÍQUIDO de volta na tesouraria
@@ -1348,6 +1429,7 @@ export async function reversePayment(
       data: {
         date: reversalDate,
         type: "PaymentReversal",
+        resourceSourceId: payment.commitment.appropriation.resourceSourceId,
         direction: "Entrada",
         valueDecimal: netValue,
         history: `Estorno da ordem de pagamento ${payment.orderNumber}: ${justification.trim()}`,
@@ -1367,19 +1449,18 @@ export async function reversePayment(
     });
 
     await refreshCommitmentExecutionStatus(tx, payment.commitmentId);
-    await postAccountingEventInTransaction(tx, actor, {
+    await reverseAccountingForSource(tx, actor, {
       financialYearId: year.id,
       date: reversalDate,
-      eventCode: "PAGAMENTO_ESTORNADO",
-      value: requiredDecimal(payment.valueDecimal, "Payment.valueDecimal"),
+      eventType: "PAGAMENTO_ESTORNADO",
       history: `Estorno da ordem de pagamento ${payment.orderNumber}: ${justification.trim()}`,
-      sourceModule: "FINANCEIRO",
       sourceType: "PAYMENT",
       sourceId: payment.id,
       idempotencyKey: `FINANCEIRO:PAYMENT:${payment.id}:PAGAMENTO_ESTORNADO`,
     });
     await reversePayrollProvisionPayment(tx, actor, paymentId, justification.trim());
     await reverseAdvancePaymentControl(tx, actor, paymentId, justification.trim());
+    if (payment.payableCarryForwardId) await recordNativeCarryForwardPaymentEvent(tx, actor, payment, "PAGAMENTO_ESTORNADO", justification.trim());
     await audit(tx, actor, "REVERSE", "Payment", paymentId, { previousStatus: payment.status, status: "Estornada", justification: justification.trim() }, year.id);
     return updated;
   });
@@ -1454,18 +1535,15 @@ export async function settleWithholdingPayable(
     // Validação de compatibilidade de Fonte de Recursos e Unidade Gestora para recolhimento da retenção
     const origSourceId = payable.retention.payment.commitment.appropriation.resourceSourceId;
     const origBudgetUnitId = payable.retention.payment.commitment.appropriation.budgetUnitId;
-    if (!bankAccount.resourceSourceId) {
-      throw new FinanceError("A conta bancária para recolhimento da retenção deve possuir fonte de recursos configurada.");
-    }
-    if (origSourceId && bankAccount.resourceSourceId !== origSourceId) {
-      throw new FinanceError("A fonte de recursos da conta bancária para recolhimento é incompatível com a fonte de recursos da retenção.");
-    }
+    await assertBankResourceSource(tx, input.bankAccountId, origSourceId);
+    assertActorBudgetUnit(actor, origBudgetUnitId);
     if (!bankAccount.budgetUnitId || bankAccount.budgetUnitId !== origBudgetUnitId) {
       throw new FinanceError("A conta bancária selecionada pertence a outra Unidade Gestora e não pode debitar o recolhimento desta retenção.");
     }
 
     const value = requiredDecimal(payable.valueDecimal, "WithholdingPayable.valueDecimal");
     const currentBalance = await getBankAccountBalance(tx, input.bankAccountId, input.paymentDate);
+    if ((await getBankResourceSourceSpendableBalance(tx, input.bankAccountId, origSourceId!, input.paymentDate)).lt(value)) throw new FinanceError("Saldo por fonte insuficiente para recolhimento da retenção.");
     if (currentBalance.lessThan(value)) {
       throw new FinanceError("Saldo financeiro insuficiente para recolhimento da retenção.");
     }
@@ -1480,6 +1558,7 @@ export async function settleWithholdingPayable(
       data: {
         date: input.paymentDate,
         type: "WithholdingPayout",
+        resourceSourceId: origSourceId,
         direction: "Saída",
         valueDecimal: value,
         history: `Recolhimento de retenção/consignação ${payable.retention.type}: ${payable.retention.description ?? ""}`,
@@ -1557,7 +1636,8 @@ export async function updatePaymentStatusInTransaction(tx: Prisma.TransactionCli
     }
 
     await lockCommitment(tx, payment.commitmentId);
-    const year = await assertFinancialYearOpen(tx, payment.commitment.appropriation.financialYearId, payment.date);
+    const year = await assertFinancialYearOpen(tx, payment.executionFinancialYearId ?? payment.commitment.appropriation.financialYearId, payment.date);
+    if (status === "Paga" && payment.payableCarryForwardId) await carryForwardForPosting(tx, actor, payment.payableCarryForwardId, payment.commitmentId, payment.date);
     if (status === "Paga" && payment.status !== "Emitida") throw new FinanceError("Somente ordens emitidas podem ser marcadas como pagas.");
     if (status === "Cancelada" && payment.status !== "Emitida") throw new FinanceError("Somente ordens emitidas podem ser canceladas. Pagamentos efetivados exigem estorno.");
     if (status === "Cancelada") {
@@ -1568,7 +1648,7 @@ export async function updatePaymentStatusInTransaction(tx: Prisma.TransactionCli
     if (!["Paga", "Cancelada"].includes(status)) throw new FinanceError("Transição de pagamento inválida.");
 
     if (status === "Paga") {
-      await recordPlanningFinanceExecution(tx, actor, { appropriationId: payment.commitment.appropriation.id, operation: "PAY", date: payment.date, value: requiredDecimal(payment.valueDecimal, "Payment.valueDecimal"), key: `finance:payment:${payment.id}:confirmed` });
+      if (!payment.payableCarryForwardId) await recordPlanningFinanceExecution(tx, actor, { appropriationId: payment.commitment.appropriation.id, operation: "PAY", date: payment.date, value: requiredDecimal(payment.valueDecimal, "Payment.valueDecimal"), key: `finance:payment:${payment.id}:confirmed` });
       const bankAccount = await tx.bankAccount.findUnique({
         where: { id: payment.bankAccountId },
         select: { isActive: true, resourceSourceId: true, budgetUnitId: true },
@@ -1577,20 +1657,21 @@ export async function updatePaymentStatusInTransaction(tx: Prisma.TransactionCli
       if (
         !bankAccount.budgetUnitId ||
         bankAccount.budgetUnitId !== payment.commitment.appropriation.budgetUnitId ||
-        !bankAccount.resourceSourceId ||
-        bankAccount.resourceSourceId !== payment.commitment.appropriation.resourceSourceId
+        !payment.commitment.appropriation.resourceSourceId
       ) {
         throw new FinanceError("A conta bancária do pagamento não é compatível com a Unidade Gestora ou fonte da dotação.");
       }
 
       // Bloqueia a conta bancária para evitar race condition entre pagamentos simultâneos
       await lockBankAccount(tx, payment.bankAccountId);
+      await assertBankResourceSource(tx, payment.bankAccountId, payment.commitment.appropriation.resourceSourceId);
 
       // O valor que efetivamente sai da conta bancária para o fornecedor é o LÍQUIDO
       const netValue = requiredDecimal(payment.netValueDecimal ?? payment.valueDecimal, "Payment.netValueDecimal");
 
       // Validação de saldo bancário no momento da efetivação "Paga"
       const currentBalance = await getBankAccountBalance(tx, payment.bankAccountId, payment.date);
+      if ((await getBankResourceSourceSpendableBalance(tx, payment.bankAccountId, payment.commitment.appropriation.resourceSourceId!, payment.date)).lt(netValue)) throw new FinanceError("Saldo por fonte insuficiente para efetivar a ordem de pagamento.");
       if (currentBalance.lessThan(netValue)) {
         throw new FinanceError(`Saldo bancário insuficiente para efetivar a ordem de pagamento. Saldo disponível: R$ ${currentBalance.toFixed(2)}.`);
       }
@@ -1599,6 +1680,7 @@ export async function updatePaymentStatusInTransaction(tx: Prisma.TransactionCli
         data: {
           date: payment.date,
           type: "Payment",
+          resourceSourceId: payment.commitment.appropriation.resourceSourceId,
           direction: "Saída",
           valueDecimal: netValue,
           history: `Ordem de pagamento ${payment.orderNumber}`,
@@ -1620,7 +1702,7 @@ export async function updatePaymentStatusInTransaction(tx: Prisma.TransactionCli
       await postAccountingEventInTransaction(tx, actor, {
         financialYearId: year.id,
         date: payment.date,
-        eventCode: "PAGAMENTO_EFETIVADO",
+        eventCode: payment.payableCarryForwardId ? (await tx.payableCarryForward.findUniqueOrThrow({ where: { id: payment.payableCarryForwardId }, select: { type: true } })).type === "NAO_PROCESSADO" ? "RAP_NAO_PROCESSADO_PAGAMENTO" : "RAP_PROCESSADO_PAGAMENTO" : "PAGAMENTO_EFETIVADO",
         value: requiredDecimal(payment.valueDecimal, "Payment.valueDecimal"),
         history: `Pagamento efetivado da ordem ${payment.orderNumber}`,
         sourceModule: "FINANCEIRO",
@@ -1629,6 +1711,7 @@ export async function updatePaymentStatusInTransaction(tx: Prisma.TransactionCli
         idempotencyKey: `FINANCEIRO:PAYMENT:${payment.id}:PAGAMENTO_EFETIVADO`,
       });
       await recordPayrollProvisionPayment(tx, actor, payment.id);
+      if (payment.payableCarryForwardId) await recordNativeCarryForwardPaymentEvent(tx, actor, payment, "PAGAMENTO_RASTREADO");
     }
     await audit(tx, actor, "STATUS_CHANGE", "Payment", paymentId, { previousStatus: payment.status, status }, year.id);
     return updated;
@@ -1660,8 +1743,8 @@ async function financialYearForPosting(tx: Db, date: Date, budgetUnitId?: string
 }
 
 function signedValue(direction: string, value: Prisma.Decimal) {
-  if (direction === "Entrada" || direction === "CREDIT") return value;
-  if (direction === "Saída" || direction === "DEBIT") return value.negated();
+  if (["Entrada", "ENTRADA", "CREDIT"].includes(direction)) return value;
+  if (["Saída", "SAIDA", "DEBIT"].includes(direction)) return value.negated();
   throw new FinanceError("Direção de tesouraria inválida.");
 }
 
@@ -1760,6 +1843,7 @@ export async function createBankAccountWithOpeningBalance(
         data: {
           date: openingDate,
           type: "OpeningBalance",
+          resourceSourceId: input.resourceSourceId.trim(),
           direction: "Entrada",
           valueDecimal: openingBalance,
           history: "Saldo de abertura auditado na inclusão da conta.",
@@ -1860,6 +1944,7 @@ type TreasuryTransferInput = {
   value: Prisma.Decimal | string | number;
   sourceBankAccountId: string;
   destinationBankAccountId: string;
+  resourceSourceId?: string;
   history?: string;
   idempotencyKey?: string;
   sourceModule?: string;
@@ -1886,11 +1971,13 @@ export async function createTreasuryTransferInTransaction(
   assertActorBudgetUnit(actor, source.budgetUnitId);
   assertActorBudgetUnit(actor, destination.budgetUnitId);
   if (!source.accountingPlanId || !destination.accountingPlanId) throw new FinanceError("As contas da transferência exigem conta contábil analítica configurada.");
-  if (!source.resourceSourceId || source.resourceSourceId !== destination.resourceSourceId) throw new FinanceError("As contas da transferência devem possuir a mesma fonte de recursos.");
+  const resourceSourceId = input.resourceSourceId ?? source.resourceSourceId;
+  await assertBankResourceSource(tx, input.sourceBankAccountId, resourceSourceId);
+  await assertBankResourceSource(tx, input.destinationBankAccountId, resourceSourceId);
   if (key) {
     const existing = await tx.treasuryTransfer.findUnique({ where: { idempotencyKey: key }, include: { sourceMovement: true } });
     if (existing) {
-      if (existing.date.getTime() !== input.date.getTime() || !existing.valueDecimal.equals(value) || existing.sourceBankAccountId !== input.sourceBankAccountId || existing.destinationBankAccountId !== input.destinationBankAccountId || existing.history !== (input.history?.trim() || null) || existing.sourceMovement.sourceModule !== (input.sourceModule?.trim() || "FINANCEIRO") || existing.sourceMovement.sourceType !== (input.sourceType?.trim() || "TREASURY_TRANSFER") || existing.sourceMovement.sourceId !== (input.sourceId?.trim() || key) || existing.sourceMovement.eventType !== (input.eventType?.trim() || "TRANSFER")) throw new FinanceError("Transferência já registrada com outros dados.");
+      if (existing.sourceMovement.resourceSourceId !== resourceSourceId || existing.date.getTime() !== input.date.getTime() || !existing.valueDecimal.equals(value) || existing.sourceBankAccountId !== input.sourceBankAccountId || existing.destinationBankAccountId !== input.destinationBankAccountId || existing.history !== (input.history?.trim() || null) || existing.sourceMovement.sourceModule !== (input.sourceModule?.trim() || "FINANCEIRO") || existing.sourceMovement.sourceType !== (input.sourceType?.trim() || "TREASURY_TRANSFER") || existing.sourceMovement.sourceId !== (input.sourceId?.trim() || key) || existing.sourceMovement.eventType !== (input.eventType?.trim() || "TRANSFER")) throw new FinanceError("Transferência já registrada com outros dados.");
       return existing;
     }
   }
@@ -1902,11 +1989,15 @@ export async function createTreasuryTransferInTransaction(
   const year = await financialYearForPosting(tx, input.date, source.budgetUnitId);
   await assertAccountingPeriodOpen(tx, year.id, input.date);
   for (const id of [input.sourceBankAccountId, input.destinationBankAccountId].sort()) await lockBankAccount(tx, id);
+  await assertBankResourceSource(tx, input.sourceBankAccountId, resourceSourceId);
+  await assertBankResourceSource(tx, input.destinationBankAccountId, resourceSourceId);
   const balance = await getBankAccountBalance(tx, input.sourceBankAccountId, input.date);
+  if ((await getBankResourceSourceSpendableBalance(tx, input.sourceBankAccountId, resourceSourceId!, input.date)).lt(value)) throw new FinanceError("Saldo por fonte insuficiente para a transferência.");
   if (balance.lessThan(value)) throw new FinanceError("Saldo financeiro insuficiente para a transferência.");
   const common = {
     date: input.date,
     type: "Transfer",
+    resourceSourceId,
     valueDecimal: value,
     history: input.history?.trim() || "Transferência entre contas bancárias.",
     financialYearId: year.id,
@@ -1978,20 +2069,21 @@ export async function recordConfirmedRevenue(
   if (!bankAccount?.isActive) throw new FinanceError("A receita exige uma conta bancária ativa.");
   if (bankAccount.budgetUnitId) assertActorBudgetUnit(actor, bankAccount.budgetUnitId);
   const year = await financialYearForPosting(tx, input.date, bankAccount.budgetUnitId);
-  // A conta arrecadadora pode receber recursos de mais de uma fonte; its source is only a default routing hint.
+  await assertBankResourceSource(tx, input.bankAccountId, input.resourceSourceId);
   if (!nature || !source) throw new FinanceError("Natureza e fonte da receita devem estar configuradas.");
   const revenue = await tx.revenue.create({
     // Persist the originating UG independently of the collecting bank account.
     data: { date: input.date, valueDecimal: value, value: legacyMoney(value), financialYearId: year.id, budgetUnitId: bankAccount.budgetUnitId, revenueNatureId: input.revenueNatureId, resourceSourceId: input.resourceSourceId, bankAccountId: input.bankAccountId, classification: input.classification ?? "ORCAMENTARIA", collectionDate: input.date, history: input.history?.trim() || undefined, sourceModule: input.sourceModule.trim(), sourceType: input.sourceType.trim(), sourceId: input.sourceId?.trim() || undefined, eventType: input.eventType.trim(), idempotencyKey: input.idempotencyKey, integrationEventId: input.integrationEventId, bankTransactionId: input.bankTransactionId, bankAccountExternalId: input.bankAccountExternalId, collectionReference: input.collectionReference, status: "Arrecadada", stage: "ARRECADADA" },
   });
   const movement = await tx.treasuryMovement.create({
-    data: { date: input.date, type: "Revenue", direction: "Entrada", valueDecimal: value, history: revenue.history, bankAccountId: input.bankAccountId, financialYearId: year.id, revenueId: revenue.id, sourceModule: input.sourceModule.trim(), sourceType: input.sourceType.trim(), sourceId: input.sourceId?.trim() || undefined, eventType: input.eventType.trim(), idempotencyKey: `${input.idempotencyKey}:TREASURY` },
+    data: { date: input.date, type: "Revenue", resourceSourceId: input.resourceSourceId, direction: "Entrada", valueDecimal: value, history: revenue.history, bankAccountId: input.bankAccountId, financialYearId: year.id, revenueId: revenue.id, sourceModule: input.sourceModule.trim(), sourceType: input.sourceType.trim(), sourceId: input.sourceId?.trim() || undefined, eventType: input.eventType.trim(), idempotencyKey: `${input.idempotencyKey}:TREASURY` },
   });
-  await postAccountingEventInTransaction(tx, actor, {
-    financialYearId: year.id,
-    budgetUnitId: bankAccount.budgetUnitId ?? undefined,
-    date: input.date,
-    eventCode: "RECEITA_ARRECADADA",
+   const recognizedReceivable = await taxCollectionReceivableAccount(tx, actor, input);
+   const collectionPosting = {
+     financialYearId: year.id,
+     budgetUnitId: bankAccount.budgetUnitId ?? undefined,
+     date: input.date,
+     eventCode: "RECEITA_ARRECADADA",
     value,
     history: `Receita arrecadada: ${revenue.history ?? revenue.id}`,
     sourceModule: revenue.sourceModule,
@@ -1999,8 +2091,25 @@ export async function recordConfirmedRevenue(
       sourceId: revenue.id,
       idempotencyKey: `${input.idempotencyKey}:RECEITA_ARRECADADA`,
       debitAccountId: bankAccount.accountingPlanId ?? undefined,
-      creditAccountId: await taxCollectionReceivableAccount(tx, actor, input),
-  });
+      creditAccountId: recognizedReceivable,
+   };
+   if (recognizedReceivable) {
+     if (!bankAccount.accountingPlanId) throw new FinanceError("O recebimento do direito tributário exige conta bancária com razão analítico vinculado.");
+     // The immutable recognition profile is the posting matrix for this origin.
+     // No generic revenue/VPA default may replace the recognized receivable.
+     await postAccountingTransactionInTransaction(tx, actor, {
+       financialYearId: collectionPosting.financialYearId,
+       budgetUnitId: collectionPosting.budgetUnitId,
+       date: collectionPosting.date,
+       history: collectionPosting.history,
+       sourceModule: collectionPosting.sourceModule,
+       sourceType: collectionPosting.sourceType,
+       sourceId: collectionPosting.sourceId,
+       eventType: collectionPosting.eventCode,
+       idempotencyKey: collectionPosting.idempotencyKey,
+       lines: [{ accountId: bankAccount.accountingPlanId, type: "Débito", value }, { accountId: recognizedReceivable, type: "Crédito", value }],
+     });
+   } else await postAccountingEventInTransaction(tx, actor, collectionPosting);
   await recordPlanningRevenueCollection(tx, actor, revenue);
   await audit(tx, actor, "CREATE", "Revenue", revenue.id, { stage: revenue.stage, classification: revenue.classification, value: jsonMoney(value), treasuryMovementId: movement.id, sourceModule: revenue.sourceModule, sourceType: revenue.sourceType, sourceId: revenue.sourceId }, year.id);
   return { ...revenue, treasuryMovement: movement };
@@ -2093,13 +2202,15 @@ export async function collectLaunchedRevenue(
     if (!account?.isActive) throw new FinanceError("A arrecadação exige uma conta bancária ativa.");
     if (account.budgetUnitId) assertActorBudgetUnit(actor, account.budgetUnitId);
     if (revenue.budgetUnitId && revenue.budgetUnitId !== account.budgetUnitId) throw new FinanceError("A conta arrecadadora deve pertencer à unidade gestora do lançamento da receita.");
+    await lockBankAccount(tx, input.bankAccountId);
+    await assertBankResourceSource(tx, input.bankAccountId, revenue.resourceSourceId);
     const value = requiredDecimal(revenue.valueDecimal, "Revenue.valueDecimal");
     const collected = await tx.revenue.update({
       where: { id: revenue.id },
       data: { date: input.date, collectionDate: input.date, bankAccountId: input.bankAccountId, budgetUnitId: revenue.budgetUnitId ?? account.budgetUnitId, status: "Arrecadada", stage: "ARRECADADA" },
     });
     const movement = await tx.treasuryMovement.create({
-      data: { date: input.date, type: "Revenue", direction: "Entrada", valueDecimal: value, history: collected.history, bankAccountId: input.bankAccountId, financialYearId: year.id, revenueId: collected.id, sourceModule: collected.sourceModule, sourceType: collected.sourceType, sourceId: collected.sourceId ?? collected.id, eventType: "REVENUE_COLLECTED", idempotencyKey: `${input.idempotencyKey}:TREASURY` },
+      data: { date: input.date, type: "Revenue", resourceSourceId: revenue.resourceSourceId, direction: "Entrada", valueDecimal: value, history: collected.history, bankAccountId: input.bankAccountId, financialYearId: year.id, revenueId: collected.id, sourceModule: collected.sourceModule, sourceType: collected.sourceType, sourceId: collected.sourceId ?? collected.id, eventType: "REVENUE_COLLECTED", idempotencyKey: `${input.idempotencyKey}:TREASURY` },
     });
     await postAccountingEventInTransaction(tx, actor, {
       financialYearId: year.id,
@@ -2158,9 +2269,10 @@ export async function reverseRevenueInTransaction(
     if (revenue.collectionDate && input.date < revenue.collectionDate) throw new FinanceError("O estorno não pode anteceder a arrecadação.");
     await lockBankAccount(tx, revenue.treasuryMovement.bankAccountId);
     const balance = await getBankAccountBalance(tx, revenue.treasuryMovement.bankAccountId, input.date);
+    if ((await getBankResourceSourceSpendableBalance(tx, revenue.treasuryMovement.bankAccountId, revenue.resourceSourceId, input.date)).lt(value)) throw new FinanceError("Saldo por fonte insuficiente para estornar a receita.");
     if (balance.lessThan(value)) throw new FinanceError("Saldo financeiro insuficiente para estornar a receita.");
     const movement = await tx.treasuryMovement.create({
-      data: { date: input.date, type: "RevenueReversal", direction: "Saída", valueDecimal: value, history: `Estorno de receita ${revenue.id}: ${input.justification.trim()}`, bankAccountId: revenue.treasuryMovement.bankAccountId, financialYearId: year.id, sourceModule: "FINANCEIRO", sourceType: "REVENUE_REVERSAL", sourceId: revenue.id, eventType: "REVENUE_REVERSED", idempotencyKey: `FINANCEIRO:REVENUE:${revenue.id}:REVERSED` },
+      data: { date: input.date, type: "RevenueReversal", resourceSourceId: revenue.resourceSourceId, direction: "Saída", valueDecimal: value, history: `Estorno de receita ${revenue.id}: ${input.justification.trim()}`, bankAccountId: revenue.treasuryMovement.bankAccountId, financialYearId: year.id, sourceModule: "FINANCEIRO", sourceType: "REVENUE_REVERSAL", sourceId: revenue.id, eventType: "REVENUE_REVERSED", idempotencyKey: `FINANCEIRO:REVENUE:${revenue.id}:REVERSED` },
     });
     const reversal = await tx.revenueReversal.create({
       data: { revenueId: revenue.id, date: input.date, valueDecimal: value, justification: input.justification.trim(), financialYearId: year.id, treasuryMovementId: movement.id },
@@ -2226,6 +2338,10 @@ export async function redistributeRevenueResourceSource(
     if (!destination) throw new FinanceError("Fonte de destino nao encontrada.");
     const available = requiredDecimal(revenue.valueDecimal, "Revenue.valueDecimal").minus(redistributed._sum.valueDecimal ?? new Prisma.Decimal(0));
     if (available.lessThan(value)) throw new FinanceError("A redistribuicao excede o valor ainda disponivel na fonte de origem.");
+    if (!revenue.bankAccountId) throw new FinanceError("Receita sem conta bancária documental para redistribuição.");
+    await lockBankAccount(tx, revenue.bankAccountId);
+    await assertBankResourceSource(tx, revenue.bankAccountId, destination.id);
+    if ((await getBankResourceSourceSpendableBalance(tx, revenue.bankAccountId, revenue.resourceSourceId, input.date)).lt(value)) throw new FinanceError("Redistribuição excede o saldo bancário disponível na fonte de origem.");
     const redistribution = await tx.revenueResourceRedistribution.create({
       data: { revenueId: revenue.id, date: input.date, valueDecimal: value, sourceResourceSourceId: revenue.resourceSourceId, destinationResourceSourceId: destination.id, financialYearId: year.id, history: input.history.trim(), idempotencyKey: input.idempotencyKey?.trim() || undefined },
     });
@@ -2478,6 +2594,7 @@ export type AccountingLine = {
   type: "Débito" | "Crédito";
   value: Prisma.Decimal | string | number;
   originalEntryId?: string;
+  annualBalanceOriginEntryId?: string;
 };
 
 type AccountingPostingInput = {
@@ -2509,6 +2626,13 @@ type AccountingEventInput = {
   idempotencyKey?: string;
   debitAccountId?: string;
   creditAccountId?: string;
+};
+
+type AccountingComponentInput = {
+  debitAccountId: string;
+  creditAccountId: string;
+  valueBasis: "EVENT_VALUE" | "PAYMENT_NET" | "PAYMENT_RETENTION";
+  creditFromOriginBank?: boolean;
 };
 
 function accountingTotals(lines: AccountingLine[]) {
@@ -2597,8 +2721,14 @@ export async function postAccountingTransactionInTransaction(
   if (!actor.employeeId) throw new FinanceError("A postagem contabil exige usuario vinculado a servidor responsavel.");
   if ((input.sourceModule ?? "MANUAL") === "MANUAL" && (!input.governmentEntityId || !input.budgetUnitId)) throw new FinanceError("Selecione a entidade e a unidade gestora do lançamento manual.");
   const accountingScope = await resolveAccountingScope(tx, actor, input);
+  const annualOrigin = await resolveAnnualPostingOrigins(tx, { ...input, ...accountingScope });
+  const annualResultReversal = await isAnnualResultReversal(tx, { ...input, ...accountingScope });
+  const originalClassifications = new Map<string, Prisma.InputJsonObject>();
   for (const line of input.lines.filter(line => line.originalEntryId)) {
-    if (!await tx.accountingEntry.count({ where: { id: line.originalEntryId, transactionId: input.reversalOfId, accountId: line.accountId, type: line.type === "Débito" ? "Crédito" : "Débito" } })) throw new FinanceError("Linha original não pertence à contraparte da transação estornada.");
+    const original = await tx.accountingEntry.findFirst({ where: { id: line.originalEntryId, transactionId: input.reversalOfId, accountId: line.accountId, type: line.type === "Débito" ? "Crédito" : "Débito" }, select: { classificationSnapshot: true, transaction: { select: { governmentEntityId: true, budgetUnitId: true, status: true } } } });
+    if (!original) throw new FinanceError("Linha original não pertence à contraparte da transação estornada.");
+    if (!original.transaction || original.transaction.status !== "POSTADO" || original.transaction.governmentEntityId !== (accountingScope?.governmentEntityId ?? null) || original.transaction.budgetUnitId !== (accountingScope?.budgetUnitId ?? null)) throw new FinanceError("Estorno deve preservar o ente e a unidade gestora da transação original.");
+    if (original.classificationSnapshot && typeof original.classificationSnapshot === "object" && !Array.isArray(original.classificationSnapshot)) originalClassifications.set(line.originalEntryId!, original.classificationSnapshot as Prisma.InputJsonObject);
   }
   const yearScope = await tx.financialYear.findUnique({ where: { id: input.financialYearId }, select: { governmentEntityId: true } });
   if (accountingScope && yearScope?.governmentEntityId !== accountingScope.governmentEntityId) throw new FinanceError("A entidade do lançamento contábil deve corresponder à entidade do exercício financeiro.");
@@ -2622,21 +2752,28 @@ export async function postAccountingTransactionInTransaction(
   if (input.sourceModule === "PLANEJAMENTO" && input.sourceType === "PLANNING_BUDGET" && /^PLANNING_(BUDGET_OPENING_(REVENUE|EXPENSE)|(REVENUE|EXPENSE)_(INCREASE|DECREASE))$/.test(input.eventType ?? "")) {
     const year = await tx.financialYear.findUniqueOrThrow({ where: { id: input.financialYearId } });
     if (!["Preparação", "Aberto"].includes(year.status) || input.date < year.startDate || input.date > year.endDate || input.date.getUTCFullYear() !== year.year) throw new FinanceError("Exercício indisponível para contabilização orçamentária de Planejamento.");
-  } else await assertFinancialYearOpen(tx, input.financialYearId, input.date);
-  await assertAccountingPeriodOpen(tx, input.financialYearId, input.date);
+   } else if (annualOrigin && annualOrigin.edition.stage !== "OPENING" || annualResultReversal) {
+     const year = await tx.financialYear.findUniqueOrThrow({ where: { id: input.financialYearId } });
+     if (year.status !== "Em Encerramento" || input.date.getTime() !== year.endDate.getTime() || await tx.monthlyAccountingClose.count({ where: { financialYearId: year.id, status: "FECHADO" } }) !== 12) throw new FinanceError("Partidas de encerramento exigem exercício em encerramento com doze competências fechadas.");
+   } else await assertFinancialYearOpen(tx, input.financialYearId, input.date);
+   if ((!annualOrigin || annualOrigin.edition.stage === "OPENING") && !annualResultReversal) await assertAccountingPeriodOpen(tx, input.financialYearId, input.date);
   const accounts = await tx.accountingPlan.findMany({ where: { id: { in: input.lines.map((line) => line.accountId) } }, select: { id: true, code: true } });
   if (accounts.length !== new Set(input.lines.map((line) => line.accountId)).size) throw new FinanceError("Uma ou mais contas contabeis nao foram encontradas.");
   let classifications: Map<string, Prisma.InputJsonObject>;
-  try { classifications = await resolveAccountClassificationSnapshots(tx, accounts, input.date, accountingScope ?? undefined); }
+   try { classifications = await resolveAccountClassificationSnapshots(tx, accounts.filter(account => input.lines.some((line, index) => line.accountId === account.id && !line.originalEntryId && !annualOrigin?.memories[index].classification)), input.date, accountingScope ?? undefined); }
   catch (error) { throw new FinanceError(error instanceof Error ? error.message : "Classificação contábil inválida."); }
-  const dimensions = accountingScope && classifications.size ? await resolveAccountingSourceDimensions(tx, { ...input, ...accountingScope }) : null;
+  const dimensions = accountingScope ? await resolveAccountingSourceDimensions(tx, { ...input, ...accountingScope }) : null;
   const lineDimensions: Array<Prisma.InputJsonObject | null> = [];
-  for (const line of input.lines) {
-    const classification = classifications.get(line.accountId);
-    lineDimensions.push(accountingScope && input.reversalOfId ? await resolveAccountingReversalLineDimensions(tx, { ...input, ...accountingScope }, input.reversalOfId, line.accountId, line.type, line.originalEntryId) : accountingScope && classification && input.sourceType === "REVENUE_RESOURCE_REDISTRIBUTION" ? await resolveAccountingLineSourceDimensions(tx, { ...input, ...accountingScope }, line.type, classification) : dimensions);
+   for (const [index, line] of input.lines.entries()) {
+     const classification = line.originalEntryId ? originalClassifications.get(line.originalEntryId) : annualOrigin?.memories[index].classification ?? classifications.get(line.accountId);
+     const resolved = annualOrigin ? annualOrigin.memories[index].dimensions : accountingScope && input.reversalOfId ? await resolveAccountingReversalLineDimensions(tx, { ...input, ...accountingScope }, input.reversalOfId, line.accountId, line.type, line.originalEntryId) : accountingScope && classification && input.sourceType === "REVENUE_RESOURCE_REDISTRIBUTION" ? await resolveAccountingLineSourceDimensions(tx, { ...input, ...accountingScope }, line.type, classification) : dimensions;
+     if (annualOrigin?.memories[index].classification) { lineDimensions.push(resolved); continue; }
+     const msc = accountingScope ? await composeMscLineDimensions(tx, { ...accountingScope, date: input.date }, line.accountId, resolved) : null;
+    lineDimensions.push(msc ? { ...resolved, msc, mscReadiness: msc.status === "DOCUMENTED" ? "MSC_DOCUMENTED" : "MSC_NOT_RECONCILED" } : resolved);
   }
   if (accountingScope && classifications.size && input.sourceType === "REVENUE_RESOURCE_REDISTRIBUTION" && new Set(lineDimensions.map(dimension => dimension?.resourceSourceId)).size !== 2) throw new FinanceError("Redistribuição deve identificar fonte de origem e destino em linhas distintas.");
-  const childAccount = await tx.accountingPlan.findFirst({ where: { OR: accounts.map((account) => ({ code: { startsWith: `${account.code}.` } })) }, select: { id: true } });
+   const currentAccounts = accounts.filter(account => input.lines.some((line, index) => line.accountId === account.id && !line.originalEntryId && !annualOrigin?.memories[index].classification));
+  const childAccount = currentAccounts.length ? await tx.accountingPlan.findFirst({ where: { OR: currentAccounts.map((account) => ({ code: { startsWith: `${account.code}.` } })) }, select: { id: true } }) : null;
   if (childAccount) throw new FinanceError("A postagem exige conta analítica de último nível; conta sintética com desdobramentos não aceita partidas.");
   const transaction = await tx.accountingTransaction.create({
     data: {
@@ -2657,8 +2794,8 @@ export async function postAccountingTransactionInTransaction(
       entries: {
         create: input.lines.map((line, index) => {
           const value = money(line.value);
-          const classification = classifications.get(line.accountId);
-          const classificationSnapshot = classification ? { ...classification, ...(line.originalEntryId ? { originalEntryId: line.originalEntryId } : {}), dimensions: lineDimensions[index] } : line.originalEntryId ? { originalEntryId: line.originalEntryId, classificationResolution: "NOT_RECONCILED" } : undefined;
+          const classification = line.originalEntryId ? originalClassifications.get(line.originalEntryId) : annualOrigin?.memories[index].classification ?? classifications.get(line.accountId);
+          const classificationSnapshot = classification ? { ...classification, ...(line.originalEntryId ? { originalEntryId: line.originalEntryId } : {}), ...(line.annualBalanceOriginEntryId ? { annualBalanceOriginEntryId: line.annualBalanceOriginEntryId } : {}), dimensions: lineDimensions[index] } : line.originalEntryId || line.annualBalanceOriginEntryId || lineDimensions[index]?.msc ? { ...(line.originalEntryId ? { originalEntryId: line.originalEntryId } : {}), ...(line.annualBalanceOriginEntryId ? { annualBalanceOriginEntryId: line.annualBalanceOriginEntryId } : {}), dimensions: lineDimensions[index], classificationResolution: "NOT_RECONCILED" } : undefined;
           return { date: input.date, value: legacyMoney(value), valueDecimal: value, classificationSnapshot, type: line.type, history: input.history.trim(), accountId: line.accountId, authorId: actor.employeeId! };
         }),
       },
@@ -2716,11 +2853,42 @@ export async function postAccountingEventInTransaction(
   input: AccountingEventInput,
 ) {
   const value = money(input.value);
-  const event = await tx.accountingEventCatalog.findUnique({ where: { code: input.eventCode }, include: { rules: { where: { isActive: true } } } });
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`ACCOUNTING_RULE:${input.eventCode}`}, 0))::text`;
+  const event = await tx.accountingEventCatalog.findUnique({ where: { code: input.eventCode }, include: { rules: { where: { isActive: true }, include: { components: { orderBy: { sequence: "asc" } } } } } });
   if (!event?.isActive || event.rules.length !== 1) throw new FinanceError("O evento contabil deve possuir exatamente uma regra ativa antes da postagem.");
   const rule = event.rules[0];
   if (rule.isReference && process.env.CELERIFLOW_ACCOUNTING_MODE !== "POC") {
     throw new FinanceError("A regra contabil de referencia so pode ser usada no modo POC. Configure a matriz PCASP homologada para este ambiente.");
+  }
+  const lines: AccountingLine[] = [
+    { accountId: input.debitAccountId ?? rule.debitAccountId, type: "Débito", value },
+    { accountId: input.creditAccountId ?? rule.creditAccountId, type: "Crédito", value },
+  ];
+  let payment: Awaited<ReturnType<typeof tx.payment.findUniqueOrThrow>> | null = null;
+  let bankAccountId: string | null = null;
+  if (rule.components.some(component => component.valueBasis !== "EVENT_VALUE" || component.creditFromOriginBank)) {
+    if (input.sourceModule !== "FINANCEIRO" || input.sourceType !== "PAYMENT" || !input.sourceId || !["PAGAMENTO_EFETIVADO", "RAP_PROCESSADO_PAGAMENTO", "RAP_NAO_PROCESSADO_PAGAMENTO"].includes(input.eventCode)) throw new FinanceError("Bases de pagamento e banco de origem exigem pagamento financeiro canônico.");
+    payment = await tx.payment.findUniqueOrThrow({ where: { id: input.sourceId } });
+    const origin = await tx.commitment.findUniqueOrThrow({ where: { id: payment.commitmentId }, select: { appropriation: { select: { financialYearId: true } } } });
+    const payable = payment.payableCarryForwardId ? await tx.payableCarryForward.findUniqueOrThrow({ where: { id: payment.payableCarryForwardId }, select: { type: true } }) : null;
+    const expectedEvent = payable ? payable.type === "NAO_PROCESSADO" ? "RAP_NAO_PROCESSADO_PAGAMENTO" : "RAP_PROCESSADO_PAGAMENTO" : "PAGAMENTO_EFETIVADO";
+    if (input.financialYearId !== (payment.executionFinancialYearId ?? origin.appropriation.financialYearId) || input.eventCode !== expectedEvent) throw new FinanceError("Evento e exercício contábil devem corresponder à execução do pagamento.");
+    const gross = requiredDecimal(payment.valueDecimal, "Payment.valueDecimal");
+    const net = requiredDecimal(payment.netValueDecimal, "Payment.netValueDecimal");
+    if (payment.status !== "Paga" || payment.date.getTime() !== input.date.getTime() || !gross.eq(value) || net.lt(0) || net.gt(gross)) throw new FinanceError("A composição contábil diverge do pagamento confirmado.");
+    const bank = await tx.bankAccount.findUniqueOrThrow({ where: { id: payment.bankAccountId } });
+    bankAccountId = bank.accountingPlanId;
+    if (rule.components.some(component => component.creditFromOriginBank) && !bankAccountId) throw new FinanceError("Banco de origem sem conta contábil conciliada.");
+  }
+  for (const component of rule.components) {
+    if (!["EVENT_VALUE", "PAYMENT_NET", "PAYMENT_RETENTION"].includes(component.valueBasis)) throw new FinanceError("Base de composição contábil inválida.");
+    const componentValue = component.valueBasis === "EVENT_VALUE" ? value
+      : component.valueBasis === "PAYMENT_NET" ? requiredDecimal(payment!.netValueDecimal, "Payment.netValueDecimal")
+      : value.minus(requiredDecimal(payment!.netValueDecimal, "Payment.netValueDecimal"));
+    if (componentValue.isZero()) continue;
+    const creditAccountId = component.creditFromOriginBank ? bankAccountId! : component.creditAccountId;
+    if (component.debitAccountId === creditAccountId) throw new FinanceError("A composição contábil exige contas de débito e crédito distintas.");
+    lines.push({ accountId: component.debitAccountId, type: "Débito", value: componentValue }, { accountId: creditAccountId, type: "Crédito", value: componentValue });
   }
   return postAccountingTransactionInTransaction(tx, actor, {
     financialYearId: input.financialYearId,
@@ -2728,10 +2896,7 @@ export async function postAccountingEventInTransaction(
     budgetUnitId: input.budgetUnitId,
     date: input.date,
     history: input.history,
-    lines: [
-      { accountId: input.debitAccountId ?? rule.debitAccountId, type: "Débito", value },
-      { accountId: input.creditAccountId ?? rule.creditAccountId, type: "Crédito", value },
-    ],
+    lines,
     sourceModule: input.sourceModule,
     sourceType: input.sourceType,
     sourceId: input.sourceId,
@@ -2743,19 +2908,30 @@ export async function postAccountingEventInTransaction(
 export async function configureAccountingPostingRule(
   db: PrismaClient,
   actor: FinanceActor,
-  input: { eventCode: string; eventName: string; debitAccountId: string; creditAccountId: string; description?: string; isReference?: boolean },
+  input: { eventCode: string; eventName: string; debitAccountId: string; creditAccountId: string; description?: string; isReference?: boolean; components?: AccountingComponentInput[] },
 ) {
   if (!input.eventCode.trim() || !input.eventName.trim()) throw new FinanceError("Codigo e nome do evento contabil sao obrigatorios.");
   if (input.debitAccountId === input.creditAccountId) throw new FinanceError("A regra contabil exige contas de debito e credito diferentes.");
+  if (input.components && (input.components.length > 20 || input.components.some(component => !component.debitAccountId || !component.creditAccountId || component.debitAccountId === component.creditAccountId || !["EVENT_VALUE", "PAYMENT_NET", "PAYMENT_RETENTION"].includes(component.valueBasis)))) throw new FinanceError("Composição contábil inválida; informe até vinte pares distintos com bases válidas.");
+  const componentKeys = (input.components ?? []).map(component => JSON.stringify([component.debitAccountId, component.creditAccountId, component.valueBasis, component.creditFromOriginBank ?? false]));
+  if (new Set(componentKeys).size !== componentKeys.length) throw new FinanceError("A composição contábil não pode repetir o mesmo par e base de valor.");
+  if (input.components?.some(component => component.debitAccountId === input.debitAccountId && component.creditAccountId === input.creditAccountId && component.valueBasis === "EVENT_VALUE" && !component.creditFromOriginBank)) throw new FinanceError("O par complementar não pode duplicar a partida principal.");
+  if (input.components?.some(component => component.valueBasis !== "EVENT_VALUE" || component.creditFromOriginBank) && !["PAGAMENTO_EFETIVADO", "RAP_PROCESSADO_PAGAMENTO", "RAP_NAO_PROCESSADO_PAGAMENTO"].includes(input.eventCode.trim())) throw new FinanceError("Bases de pagamento são exclusivas do evento de pagamento efetivado.");
   return db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`ACCOUNTING_RULE:${input.eventCode.trim()}`}, 0))::text`;
-    const accounts = await tx.accountingPlan.count({ where: { id: { in: [input.debitAccountId, input.creditAccountId] } } });
-    if (accounts !== 2) throw new FinanceError("As contas da regra contabil nao foram encontradas.");
+    const accountIds = [...new Set([input.debitAccountId, input.creditAccountId, ...(input.components ?? []).flatMap(component => [component.debitAccountId, component.creditAccountId])])];
+    const accounts = await tx.accountingPlan.count({ where: { id: { in: accountIds } } });
+    if (accounts !== accountIds.length) throw new FinanceError("As contas da regra contabil nao foram encontradas.");
     const event = await tx.accountingEventCatalog.upsert({ where: { code: input.eventCode.trim() }, create: { code: input.eventCode.trim(), name: input.eventName.trim(), description: input.description?.trim() || undefined }, update: { name: input.eventName.trim(), description: input.description?.trim() || undefined, isActive: true } });
     const replaced = await tx.accountingPostingRule.findMany({ where: { eventId: event.id, isActive: true, NOT: { debitAccountId: input.debitAccountId, creditAccountId: input.creditAccountId } }, select: { id: true } });
     if (replaced.length) await tx.accountingPostingRule.updateMany({ where: { id: { in: replaced.map(rule => rule.id) } }, data: { isActive: false } });
     const rule = await tx.accountingPostingRule.upsert({ where: { eventId_debitAccountId_creditAccountId: { eventId: event.id, debitAccountId: input.debitAccountId, creditAccountId: input.creditAccountId } }, create: { eventId: event.id, debitAccountId: input.debitAccountId, creditAccountId: input.creditAccountId, description: input.description?.trim() || undefined, isReference: input.isReference ?? false }, update: { isActive: true, description: input.description?.trim() || undefined, isReference: input.isReference ?? false } });
-    await audit(tx, actor, "UPSERT", "AccountingPostingRule", rule.id, { eventCode: event.code, debitAccountId: rule.debitAccountId, creditAccountId: rule.creditAccountId, isReference: rule.isReference, replacedRuleIds: replaced.map(previous => previous.id) });
+    const previousComponents = await tx.accountingPostingComponent.findMany({ where: { ruleId: rule.id }, orderBy: { sequence: "asc" } });
+    if (input.components !== undefined) {
+      await tx.accountingPostingComponent.deleteMany({ where: { ruleId: rule.id } });
+      if (input.components.length) await tx.accountingPostingComponent.createMany({ data: input.components.map((component, index) => ({ ...component, ruleId: rule.id, sequence: index + 1 })) });
+    }
+    await audit(tx, actor, "UPSERT", "AccountingPostingRule", rule.id, { eventCode: event.code, debitAccountId: rule.debitAccountId, creditAccountId: rule.creditAccountId, isReference: rule.isReference, replacedRuleIds: replaced.map(previous => previous.id), previousComponents, components: input.components ?? previousComponents });
     return rule;
   });
 }
@@ -2783,9 +2959,10 @@ export async function accountingPendingChecks(tx: Db, financialYearId: string, c
   nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
   const year = await tx.financialYear.findUnique({ where: { id: financialYearId }, select: { startDate: true, governmentEntityId: true } });
   if (!year) throw new FinanceError("Exercicio financeiro nao encontrado.");
+  const preparedPrograms = await preparedAnnualPaymentProgramIds(tx, financialYearId);
   const [draftTransactions, emittedPayments, openReconciliations] = await Promise.all([
     tx.accountingTransaction.count({ where: { financialYearId, status: "RASCUNHO", date: { lt: nextMonth } } }),
-    tx.payment.count({ where: { status: "Emitida", date: { lt: nextMonth }, commitment: { appropriation: { financialYearId } } } }),
+    tx.payment.count({ where: { status: "Emitida", ...(preparedPrograms.length ? { id: { notIn: preparedPrograms } } : {}), date: { gte: year.startDate, lt: nextMonth }, OR: [{ executionFinancialYearId: financialYearId }, { executionFinancialYearId: null, commitment: { appropriation: { financialYearId } } }] } }),
     tx.bankStatementItem.count({ where: { status: { in: ["Pendente", "Parcial"] }, date: { gte: year.startDate, lt: nextMonth }, ...(year.governmentEntityId ? { OR: [
       { bankAccount: { is: { budgetUnit: { is: { planningEntityUnit: { is: { governmentEntityId: year.governmentEntityId } } } } } } },
       { bankAccountId: null, statementImport: { bankAccount: { budgetUnit: { planningEntityUnit: { governmentEntityId: year.governmentEntityId } } } } },
@@ -2920,54 +3097,17 @@ export async function prepareAnnualAccountingClose(db: PrismaClient, actor: Fina
     if (closes < 12) throw new FinanceError("O encerramento anual exige os doze fechamentos mensais.");
     const pending = await accountingPendingChecks(tx, financialYearId, year.endDate);
     if (pending.total) throw new FinanceError("O encerramento anual possui pendencias operacionais.");
-    const commitments = await tx.commitment.findMany({
-      where: { appropriation: { financialYearId }, status: { in: ACTIVE_COMMITMENT_STATUSES }, date: { lte: year.endDate } },
-      include: {
-        movements: { where: { date: { lte: year.endDate } } },
-        settlements: { where: { status: ACTIVE_SETTLEMENT_STATUS, date: { lte: year.endDate } }, select: { valueDecimal: true } },
-        payments: { where: { status: "Paga", date: { lte: year.endDate } }, select: { valueDecimal: true } },
-      },
-    });
-    for (const commitment of commitments) {
-      const effective = commitmentValue(commitment.valueDecimal, commitment.movements);
-      const paid = commitment.payments.reduce((total, payment) => total.plus(requiredDecimal(payment.valueDecimal, "Payment.valueDecimal")), new Prisma.Decimal(0));
-      const settled = commitment.settlements.reduce((total, settlement) => total.plus(requiredDecimal(settlement.valueDecimal, "Settlement.valueDecimal")), new Prisma.Decimal(0));
-      const candidates = [
-        { type: "PROCESSADO", value: settled.minus(paid) },
-        { type: "NAO_PROCESSADO", value: effective.minus(settled) },
-      ];
-      for (const candidate of candidates) {
-        if (!candidate.value.greaterThan(0)) continue;
-        const existingPayable = await tx.payableCarryForward.findUnique({
-          where: { financialYearId_commitmentId_type: { financialYearId, commitmentId: commitment.id, type: candidate.type } },
-        });
-        if (existingPayable) {
-          // Acompanhamentos posteriores são imutáveis; apenas uma inscrição ainda pendente pode ser recalculada.
-          if (existingPayable.status === "PENDENTE") {
-            await tx.payableCarryForward.update({ where: { id: existingPayable.id }, data: { valueDecimal: candidate.value } });
-          }
-          continue;
-        }
-        const payable = await tx.payableCarryForward.create({
-          data: {
-            financialYearId,
-            originFinancialYearId: financialYearId,
-            commitmentId: commitment.id,
-            valueDecimal: candidate.value,
-            type: candidate.type,
-            events: { create: { action: "INSCRICAO_APURADA", actorUsuarioId: actor.usuarioId, valueDecimal: candidate.value } },
-          },
-        });
-        await audit(tx, actor, "REGISTER", "PayableCarryForward", payable.id, { type: candidate.type, value: jsonMoney(candidate.value), commitmentId: commitment.id, originFinancialYearId: financialYearId }, financialYearId);
-      }
-    }
+    const consistency = await inspectAnnualConsistency(tx, actor, financialYearId);
+    if (consistency.counts.errors) throw new FinanceError(`O encerramento anual possui ${consistency.counts.errors} inconsistências. Emita o relatório de conferência pré-encerramento.`);
+    const registrationSummary = await reconcileAnnualPayableRegistrations(tx, actor, financialYearId, "Apuração individual de RAP na preparação do encerramento anual.");
+    const payableCandidates = await tx.commitment.count({ where: { appropriation: { financialYearId }, status: { in: ACTIVE_COMMITMENT_STATUSES }, date: { lte: year.endDate } } });
     const existing = await tx.annualAccountingClose.findUnique({ where: { financialYearId } });
     if (existing?.status === "ENCERRADO") throw new FinanceError("O encerramento anual final ja foi concluido.");
     const annual = existing
       ? await tx.annualAccountingClose.update({ where: { id: existing.id }, data: { status: "PRONTO_PARA_VALIDACAO", pendingSummary: pending, preparedByUsuarioId: actor.usuarioId, preparedAt: new Date() } })
       : await tx.annualAccountingClose.create({ data: { financialYearId, status: "PRONTO_PARA_VALIDACAO", pendingSummary: pending, preparedByUsuarioId: actor.usuarioId, preparedAt: new Date() } });
     if (year.status === "Aberto") await tx.financialYear.update({ where: { id: financialYearId }, data: { status: "Em Encerramento" } });
-    await audit(tx, actor, "PREPARE_CLOSE", "AnnualAccountingClose", annual.id, { ...pending, payableCandidates: commitments.length }, financialYearId);
+    await audit(tx, actor, "PREPARE_CLOSE", "AnnualAccountingClose", annual.id, { ...pending, payableCandidates, registrationSummary, consistencyCounts: consistency.counts }, financialYearId);
     return annual;
   }, { timeout: 60000 });
 }
@@ -2979,6 +3119,9 @@ export async function trackPayableCarryForwardPayment(
 ) {
   const value = money(input.value);
   return db.$transaction(async (tx) => {
+    await lockPayment(tx, input.paymentId);
+    const paymentOrigin = await tx.payment.findUniqueOrThrow({ where: { id: input.paymentId }, select: { commitmentId: true } });
+    await lockCommitment(tx, paymentOrigin.commitmentId);
     await lockPayableCarryForward(tx, input.payableCarryForwardId);
     const payable = await tx.payableCarryForward.findUnique({
       where: { id: input.payableCarryForwardId },
@@ -2987,9 +3130,10 @@ export async function trackPayableCarryForwardPayment(
     if (!payable) throw new FinanceError("Resto a pagar não encontrado.");
     assertActorBudgetUnit(actor, payable.commitment.appropriation.budgetUnitId);
     await lockPayment(tx, input.paymentId);
-    const payment = await tx.payment.findUnique({ where: { id: input.paymentId }, select: { id: true, commitmentId: true, status: true, date: true, valueDecimal: true } });
+    const payment = await tx.payment.findUnique({ where: { id: input.paymentId }, select: { id: true, commitmentId: true, status: true, date: true, valueDecimal: true, payableCarryForwardId: true } });
     if (!payment || payment.status !== "Paga") throw new FinanceError("Selecione um pagamento interno já efetivado.");
     if (payment.commitmentId !== payable.commitmentId) throw new FinanceError("O pagamento selecionado não pertence ao empenho do resto a pagar.");
+    if (payment.payableCarryForwardId && payment.payableCarryForwardId !== payable.id) throw new FinanceError("Pagamento nativo pertence a outra inscrição de RAP.");
     const paymentTracking = await tx.payableCarryForwardEvent.findMany({ where: { paymentId: payment.id, action: "PAGAMENTO_RASTREADO" }, select: { payableCarryForwardId: true, valueDecimal: true } });
     const replay = paymentTracking.find((event) => event.payableCarryForwardId === payable.id);
     if (replay) {
@@ -3002,7 +3146,7 @@ export async function trackPayableCarryForwardPayment(
     const paymentValue = requiredDecimal(payment.valueDecimal, "Payment.valueDecimal");
     const alreadyAllocated = paymentTracking.reduce((sum, event) => sum.plus(requiredDecimal(event.valueDecimal, "PayableCarryForwardEvent.valueDecimal")), new Prisma.Decimal(0));
     if (alreadyAllocated.plus(value).greaterThan(paymentValue)) throw new FinanceError("Os acompanhamentos acumulados não podem exceder o valor bruto do pagamento.");
-    const tracked = payable.events.reduce((total, event) => total.plus(requiredDecimal(event.valueDecimal, "PayableCarryForwardEvent.valueDecimal")), new Prisma.Decimal(0));
+    const tracked = await carryForwardAllocatedValue(tx, payable.id);
     if (tracked.plus(value).greaterThan(payable.valueDecimal)) throw new FinanceError("O valor acompanhado excede o saldo inscrito do resto a pagar.");
     const status = tracked.plus(value).equals(payable.valueDecimal) ? "PAGO_RASTREADO" : "PAGAMENTO_PARCIAL_RASTREADO";
     await tx.payableCarryForwardEvent.create({ data: { payableCarryForwardId: payable.id, action: "PAGAMENTO_RASTREADO", paymentId: payment.id, valueDecimal: value, actorUsuarioId: actor.usuarioId } });
@@ -3024,6 +3168,9 @@ export async function cancelPayableCarryForward(
     if (!payable) throw new FinanceError("Resto a pagar não encontrado.");
     assertActorBudgetUnit(actor, payable.commitment.appropriation.budgetUnitId);
     if (!["PENDENTE", "PAGAMENTO_PARCIAL_RASTREADO"].includes(payable.status)) throw new FinanceError("Somente restos a pagar pendentes podem ser cancelados neste acompanhamento interno.");
+    if (await tx.payment.count({ where: { payableCarryForwardId: payable.id, status: { in: ACTIVE_PAYMENT_STATUSES } } })) throw new FinanceError("Cancele ou estorne as ordens nativas antes de cancelar a inscrição de RAP.");
+    if (await tx.settlement.count({ where: { payableCarryForwardId: payable.id, status: ACTIVE_SETTLEMENT_STATUS } })) throw new FinanceError("Cancele as liquidações nativas antes de cancelar a inscrição de RAP.");
+    if (await tx.payableCarryForwardSettlementLink.count({ where: { payableCarryForwardId: payable.id, status: "ACTIVE" } })) throw new FinanceError("Desmovimente o transporte antes de cancelar uma inscrição com liquidações herdadas.");
     const justification = input.justification.trim();
     await tx.payableCarryForwardEvent.create({ data: { payableCarryForwardId: payable.id, action: "CANCELAMENTO_REGISTRADO", justification, actorUsuarioId: actor.usuarioId } });
     const updated = await tx.payableCarryForward.update({ where: { id: payable.id }, data: { status: "CANCELADO" } });
@@ -3052,6 +3199,9 @@ export async function reregisterPayableCarryForward(
     if (!payable) throw new FinanceError("Resto a pagar não encontrado.");
     assertActorBudgetUnit(actor, payable.commitment.appropriation.budgetUnitId);
     if (payable.status !== "PENDENTE") throw new FinanceError("A reinscrição exige um resto a pagar ainda pendente e sem acompanhamento de pagamento.");
+    if (await tx.payment.count({ where: { payableCarryForwardId: payable.id, status: { in: ACTIVE_PAYMENT_STATUSES } } })) throw new FinanceError("Cancele ou estorne as ordens nativas antes de reinscrever o RAP.");
+    if (await tx.settlement.count({ where: { payableCarryForwardId: payable.id, status: ACTIVE_SETTLEMENT_STATUS } })) throw new FinanceError("Cancele as liquidações nativas antes de reinscrever o RAP.");
+    if (await tx.payableCarryForwardSettlementLink.count({ where: { payableCarryForwardId: payable.id, status: "ACTIVE" } })) throw new FinanceError("Use o transporte anual nativo para reinscrever RAP com liquidações herdadas.");
     if (payable.events.length) throw new FinanceError("Não é possível reinscrever um resto a pagar que já possui pagamento acompanhado.");
     if (payable.successorPayableCarryForward) throw new FinanceError("Este resto a pagar já possui reinscrição registrada.");
     const targetYear = await tx.financialYear.findUnique({ where: { id: input.targetFinancialYearId } });
@@ -3097,6 +3247,16 @@ export async function finalizeAnnualAccountingClose(db: PrismaClient, actor: Fin
     const annual = await tx.annualAccountingClose.findUnique({ where: { financialYearId } });
     if (!annual || annual.status !== "PRONTO_PARA_VALIDACAO") throw new FinanceError("Prepare o encerramento anual antes da validacao final.");
     if (annual.preparedByUsuarioId === actor.usuarioId) throw new FinanceError("Segregacao de funcoes: quem preparou o encerramento anual nao pode conclui-lo.");
+    const consistency = await inspectAnnualConsistency(tx, actor, financialYearId);
+    if (consistency.counts.errors) throw new FinanceError(`A validação anual possui ${consistency.counts.errors} inconsistências. Emita o relatório de conferência pré-encerramento.`);
+     try { await assertAnnualPayableRegistrations(tx, financialYearId); }
+     catch (error) { throw new FinanceError(error instanceof Error ? error.message : "Inscrições anuais de RAP não conciliadas."); }
+     try { await assertAnnualRapPostings(tx, financialYearId); }
+     catch (error) { throw new FinanceError(error instanceof Error ? error.message : "Partidas de inscrição RAP não conciliadas."); }
+     try { await assertAnnualResultCleared(tx, financialYearId); }
+     catch (error) { throw new FinanceError(error instanceof Error ? error.message : "Resultado anual não conciliado."); }
+     try { await assertAnnualBudgetCleared(tx, financialYearId); }
+     catch (error) { throw new FinanceError(error instanceof Error ? error.message : "Encerramento orçamentário não conciliado."); }
     const closedAt = new Date();
     const updated = await tx.annualAccountingClose.update({ where: { id: annual.id }, data: { status: "ENCERRADO", pendingSummary: pending, closedByUsuarioId: actor.usuarioId, closedByEmployeeId: actor.employeeId, closedAt } });
     await tx.financialYear.update({ where: { id: financialYearId }, data: { status: "Encerrado" } });
@@ -3126,56 +3286,50 @@ export async function closeDailyTreasuryByAccountAndSource(
   const endOfDay = new Date(Date.UTC(dateObj.getUTCFullYear(), dateObj.getUTCMonth(), dateObj.getUTCDate(), 23, 59, 59, 999));
 
   return db.$transaction(async (tx) => {
+    await lockBankAccount(tx, input.bankAccountId);
     const account = await tx.bankAccount.findUnique({ where: { id: input.bankAccountId } });
     if (!account) throw new FinanceError("Conta bancária não encontrada.");
     assertActorCanAccessBankAccount(actor, account.budgetUnitId);
+
+    const resourceSourceId = await assertBankResourceSource(tx, account.id, input.resourceSourceId ?? account.resourceSourceId);
+    const openingBalance = await getBankResourceSourceBalance(tx, account.id, resourceSourceId, new Date(startOfDay.getTime() - 1));
+    const closingBalance = await getBankResourceSourceBalance(tx, account.id, resourceSourceId, endOfDay);
 
     // Movimentos de tesouraria do dia
     const movements = await tx.treasuryMovement.findMany({
       where: {
         bankAccountId: account.id,
+        resourceSourceId,
         date: { gte: startOfDay, lte: endOfDay },
         status: "Confirmado",
       },
     });
 
     const totalEntries = movements
-      .filter((m) => m.direction === "ENTRADA" || m.direction === "Entrada")
+      .filter((m) => signedValue(m.direction, m.valueDecimal).isPositive())
       .reduce((sum, m) => sum.plus(m.valueDecimal), new Prisma.Decimal(0));
 
     const totalExits = movements
-      .filter((m) => m.direction === "SAIDA" || m.direction === "Saída")
+      .filter((m) => signedValue(m.direction, m.valueDecimal).isNegative())
       .reduce((sum, m) => sum.plus(m.valueDecimal), new Prisma.Decimal(0));
 
-    // Saldo anterior
-    const priorMovements = await tx.treasuryMovement.findMany({
-      where: {
-        bankAccountId: account.id,
-        date: { lt: startOfDay },
-        status: "Confirmado",
-      },
-    });
-
-    const priorEntries = priorMovements
-      .filter((m) => m.direction === "ENTRADA" || m.direction === "Entrada")
-      .reduce((sum, m) => sum.plus(m.valueDecimal), new Prisma.Decimal(0));
-    const priorExits = priorMovements
-      .filter((m) => m.direction === "SAIDA" || m.direction === "Saída")
-      .reduce((sum, m) => sum.plus(m.valueDecimal), new Prisma.Decimal(0));
-
-    const openingBalance = priorEntries.minus(priorExits);
-    const closingBalance = openingBalance.plus(totalEntries).minus(totalExits);
+    const redistributions = await tx.revenueResourceRedistribution.findMany({ where: { revenue: { bankAccountId: account.id }, date: { gte: startOfDay, lte: endOfDay }, OR: [{ sourceResourceSourceId: resourceSourceId }, { destinationResourceSourceId: resourceSourceId }] }, select: { sourceResourceSourceId: true, valueDecimal: true } });
+    const redistributionIn = redistributions.filter(row => row.sourceResourceSourceId !== resourceSourceId).reduce((sum, row) => sum.plus(row.valueDecimal), new Prisma.Decimal(0));
+    const redistributionOut = redistributions.filter(row => row.sourceResourceSourceId === resourceSourceId).reduce((sum, row) => sum.plus(row.valueDecimal), new Prisma.Decimal(0));
 
     const accountName = `${account.bankName} (${account.accountType}) - Ag ${account.agency} C/C ${account.accountNumber}`;
 
     const payload = {
       bankAccountId: account.id,
+      resourceSourceId,
       bankAccountName: accountName,
       date: startOfDay.toISOString(),
       openingBalance: jsonMoney(openingBalance),
       totalEntries: jsonMoney(totalEntries),
       totalExits: jsonMoney(totalExits),
       closingBalance: jsonMoney(closingBalance),
+      redistributionIn: jsonMoney(redistributionIn),
+      redistributionOut: jsonMoney(redistributionOut),
       justification: input.justification?.trim() || "Fechamento tesouraria diário ok",
     };
 
@@ -3205,6 +3359,7 @@ export async function generateTreasuryBankStatement(
     endDate: Date;
   },
 ) {
+  if (Number.isNaN(input.startDate.getTime()) || Number.isNaN(input.endDate.getTime()) || input.startDate > input.endDate) throw new FinanceError("Informe um período válido para o extrato bancário.");
   const account = await db.bankAccount.findUnique({ where: { id: input.bankAccountId } });
   if (!account) throw new FinanceError("Conta bancária não encontrada.");
 
@@ -3216,7 +3371,7 @@ export async function generateTreasuryBankStatement(
       date: { gte: input.startDate, lte: input.endDate },
       status: "Confirmado",
     },
-    orderBy: { date: "asc" },
+    orderBy: [{ date: "asc" }, { id: "asc" }],
   });
 
   const priorMovements = await db.treasuryMovement.findMany({
@@ -3227,17 +3382,14 @@ export async function generateTreasuryBankStatement(
     },
   });
 
-  const openingBalance = priorMovements.reduce((sum, m) => {
-    const isEntry = m.direction === "ENTRADA" || m.direction === "Entrada";
-    return isEntry ? sum + Number(m.valueDecimal) : sum - Number(m.valueDecimal);
-  }, 0);
+  const openingBalance = priorMovements.reduce((sum, m) => sum.plus(signedValue(m.direction, m.valueDecimal)), new Prisma.Decimal(0));
 
   let runningBalance = openingBalance;
 
   const statementItems = movements.map((m) => {
-    const isEntry = m.direction === "ENTRADA" || m.direction === "Entrada";
-    const value = Number(m.valueDecimal);
-    runningBalance = isEntry ? runningBalance + value : runningBalance - value;
+    const isEntry = ["Entrada", "ENTRADA", "CREDIT"].includes(m.direction);
+    const value = requiredDecimal(m.valueDecimal, "TreasuryMovement.valueDecimal");
+    runningBalance = runningBalance.plus(signedValue(m.direction, value));
 
     return {
       id: m.id,
@@ -3245,8 +3397,8 @@ export async function generateTreasuryBankStatement(
       type: m.type,
       history: m.history || "Movimento de Tesouraria",
       direction: isEntry ? ("ENTRADA" as const) : ("SAIDA" as const),
-      value,
-      runningBalance,
+      value: value.toNumber(),
+      runningBalance: runningBalance.toNumber(),
     };
   });
 
@@ -3256,8 +3408,8 @@ export async function generateTreasuryBankStatement(
     bankAgencyAccount: `${account.agency}/${account.accountNumber}`,
     startDate: input.startDate.toISOString().substring(0, 10),
     endDate: input.endDate.toISOString().substring(0, 10),
-    openingBalance,
-    closingBalance: runningBalance,
+    openingBalance: openingBalance.toNumber(),
+    closingBalance: runningBalance.toNumber(),
     statementItems,
   };
 }

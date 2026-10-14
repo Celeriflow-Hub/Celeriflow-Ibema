@@ -65,7 +65,7 @@ export default function RestosAPagarClient({ payables, years, payments }: { paya
   }
 
   return <div className="space-y-2 px-1 py-1 sm:px-2">
-    <header className="flex gap-2 border-b border-slate-300 bg-white px-3 py-2 shadow-sm"><ClipboardList className="mt-0.5 size-4 text-emerald-700" /><div><h1 className="text-sm font-bold tracking-tight text-slate-900">Restos a Pagar</h1><p className="text-xs text-slate-500">Acompanhamento interno de RAP por tipo e exercício de origem. Não executa pagamento nem gera lançamento contábil.</p></div></header>
+    <header className="flex gap-2 border-b border-slate-300 bg-white px-3 py-2 shadow-sm"><ClipboardList className="mt-0.5 size-4 text-emerald-700" /><div><h1 className="text-sm font-bold tracking-tight text-slate-900">Restos a Pagar</h1><p className="text-xs text-slate-500">Inscrições, ordens nativas de RAP processado e histórico por tipo e exercício de origem.</p></div></header>
     {notice && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{notice}</div>}
     <div className="grid gap-2 lg:grid-cols-[1fr_1.35fr]">
       <section className="space-y-3 rounded-md border border-slate-200 bg-white p-3">

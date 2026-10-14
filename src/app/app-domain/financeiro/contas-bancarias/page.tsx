@@ -2,6 +2,8 @@ import { getTenantContextForModule, isSystemAdministrator } from "@/lib/platform
 import { getBankAccountBalances } from "@/lib/financeiro";
 import ContasBancariasClient from "./ContasBancariasClient"
 import TreasuryTransferSection from "./TreasuryTransferSection";
+import BankResourceSourcesClient from "./BankResourceSourcesClient";
+import { getBankResourceSourceBalance } from "@/lib/financeiro/bank-resource-sources";
 
 export default async function ContasBancariasPage() {
   const context = await getTenantContextForModule("FINANCEIRO");
@@ -15,6 +17,7 @@ export default async function ContasBancariasPage() {
       budgetUnit: true,
       bank: true,
       bankBranch: true,
+      permittedSources: { where: { isActive: true } },
     },
     orderBy: {
       bankName: 'asc'
@@ -26,8 +29,26 @@ export default async function ContasBancariasPage() {
   })
 
   const balances = await getBankAccountBalances(prisma, accounts.map((account) => account.id));
+  const sourceAccounts = await Promise.all(accounts.map(async account => {
+    const sourceIds = [...new Set([...(account.resourceSourceId ? [account.resourceSourceId] : []), ...account.permittedSources.map(source => source.resourceSourceId)])];
+    const undocumented = Boolean(await prisma.treasuryMovement.count({ where: { bankAccountId: account.id, status: "Confirmado", resourceSourceId: null } }));
+    return { id: account.id, label: `${account.bankName} · ${account.agency} · ${account.accountNumber}`, sourceIds, undocumented, balances: undocumented ? [] : await Promise.all(sourceIds.map(async sourceId => ({ sourceId, balance: (await getBankResourceSourceBalance(prisma, account.id, sourceId)).toFixed(2) }))) };
+  }));
   const displayAccounts = accounts.map((account) => ({
-    ...account,
+    id: account.id,
+    bankName: account.bankName,
+    agency: account.agency,
+    bankId: account.bankId,
+    bankBranchId: account.bankBranchId,
+    accountNumber: account.accountNumber,
+    accountType: account.accountType,
+    resourceSourceId: account.resourceSourceId,
+    budgetUnitId: account.budgetUnitId,
+    accountingPlanId: account.accountingPlanId,
+    purpose: account.purpose,
+    isActive: account.isActive,
+    resourceSource: account.resourceSource ? { id: account.resourceSource.id, name: account.resourceSource.name } : null,
+    budgetUnit: account.budgetUnit ? { id: account.budgetUnit.id, code: account.budgetUnit.code, name: account.budgetUnit.name } : null,
     currentBalance: Number(balances[account.id] ?? 0),
   }))
 
@@ -64,11 +85,13 @@ export default async function ContasBancariasPage() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
       <div className="min-h-0 flex-1"><ContasBancariasClient accounts={displayAccounts} resourceSources={resourceSources} budgetUnits={budgetUnits} accountingPlans={accountingPlans} banks={banks} /></div>
+      <details className="shrink-0 rounded-md border border-slate-200 bg-white px-2 py-1"><summary className="cursor-pointer text-xs font-semibold text-slate-700">Fontes permitidas e disponibilidade por fonte</summary><div className="max-h-[55vh] overflow-y-auto"><BankResourceSourcesClient accounts={sourceAccounts} sources={resourceSources.map(source => ({ id: source.id, code: source.code, name: source.name }))} /></div></details>
       <details className="shrink-0 rounded-md border border-slate-200 bg-white px-2 py-1">
         <summary className="cursor-pointer text-xs font-semibold text-slate-700">Transferências entre contas</summary>
       <div className="max-h-[55vh] overflow-y-auto px-1 pb-2 sm:px-2">
         <TreasuryTransferSection
-          accounts={displayAccounts.map(({ id, bankName, agency, accountNumber, isActive }) => ({ id, bankName, agency, accountNumber, isActive }))}
+          accounts={displayAccounts.map(({ id, bankName, agency, accountNumber, isActive }) => ({ id, bankName, agency, accountNumber, isActive, sourceIds: sourceAccounts.find(account => account.id === id)?.sourceIds ?? [] }))}
+          sources={resourceSources.map(source => ({ id: source.id, code: source.code, name: source.name }))}
           transfers={transfers.map((transfer) => ({
             id: transfer.id,
             date: transfer.date.toISOString(),

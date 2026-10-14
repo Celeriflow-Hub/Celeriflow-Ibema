@@ -51,14 +51,14 @@ export async function reverseTaxCreditMovement(db: PrismaClient, actor: TaxActor
       if (original.sourceModule !== "TRIBUTACAO" || original.sourceType !== "TAX_REFUND" || original.sourceId !== movement.id || original.budgetUnitId !== scope.budgetUnitId || original.governmentEntityId !== scope.governmentEntityId || outgoing.sourceModule !== "TRIBUTACAO" || outgoing.sourceType !== "TAX_REFUND" || outgoing.sourceId !== movement.id || outgoing.direction !== "Saída" || outgoing.status !== "Confirmado" || !outgoing.valueDecimal.eq(amount) || input.date < original.date || input.date < outgoing.date) throw new TaxError("Origem, valor ou data incompatível com o estorno da restituição paga.");
       await tx.$queryRaw`SELECT id FROM "BankAccount" WHERE id = ${outgoing.bankAccountId} FOR UPDATE`;
       const account = await tx.bankAccount.findUniqueOrThrow({ where: { id: outgoing.bankAccountId } });
-      if (account.budgetUnitId !== scope.budgetUnitId || account.resourceSourceId !== origin.resourceSourceId) throw new TaxError("Conta original da restituição diverge da UG/fonte do crédito.");
+      if (account.budgetUnitId !== scope.budgetUnitId || outgoing.resourceSourceId !== origin.resourceSourceId) throw new TaxError("Conta original da restituição diverge da UG/fonte do crédito.");
       const transaction = await postAccountingTransactionInTransaction(tx, actor, {
         financialYearId: year.id, ...scope, date: input.date, history: `Estorno de restituição paga ${movement.id}: ${input.reason.trim()}`,
         sourceModule: "TRIBUTACAO", sourceType: "TAX_REFUND_REVERSAL", sourceId: movement.id, eventType: "TAX_REFUND_REVERSED", idempotencyKey: `${key}:ACCOUNTING`, reversalOfId: original.id,
         lines: original.entries.map((entry) => { if (!entry.valueDecimal) throw new TaxError("Partida original sem Decimal conciliado."); return { originalEntryId: entry.id, accountId: entry.accountId, type: entry.type === "Débito" ? "Crédito" as const : "Débito" as const, value: entry.valueDecimal }; }),
       });
       transactionId = transaction.id;
-      const incoming = await tx.treasuryMovement.create({ data: { date: input.date, type: "ExtraBudgetRefundReversal", direction: "Entrada", valueDecimal: amount, bankAccountId: account.id, financialYearId: year.id, history: transaction.history, sourceModule: "TRIBUTACAO", sourceType: "TAX_REFUND_REVERSAL", sourceId: movement.id, eventType: "TAX_REFUND_REVERSED", idempotencyKey: `${key}:TREASURY` } });
+      const incoming = await tx.treasuryMovement.create({ data: { date: input.date, type: "ExtraBudgetRefundReversal", resourceSourceId: outgoing.resourceSourceId, direction: "Entrada", valueDecimal: amount, bankAccountId: account.id, financialYearId: year.id, history: transaction.history, sourceModule: "TRIBUTACAO", sourceType: "TAX_REFUND_REVERSAL", sourceId: movement.id, eventType: "TAX_REFUND_REVERSED", idempotencyKey: `${key}:TREASURY` } });
       treasuryMovementId = incoming.id;
     }
     if (data.operation === "COMPENSAR") {

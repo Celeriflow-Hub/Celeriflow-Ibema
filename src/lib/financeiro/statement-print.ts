@@ -2,10 +2,11 @@ import type { BankStatementImport, BankStatementItem, BankAccount } from "@prism
 import { Prisma } from "@prisma/client";
 import PDFDocument from "pdfkit";
 import { parseOfxStatement } from "./ofx-parser";
+import { parseOfcStatement } from "./ofc-parser";
 
 export async function renderBankStatementPdf(record: BankStatementImport, account: Pick<BankAccount, "bankName" | "agency" | "accountNumber">, items: BankStatementItem[]) {
-  const rows = record.format === "OFX" && record.originalBytes
-    ? parseOfxStatement(record.originalBytes).transactions.map(item => ({ date: item.date, description: item.description, reference: item.reference ?? item.id, amount: item.amount }))
+  const rows = ["OFX", "OFC"].includes(record.format) && record.originalBytes
+    ? (record.format === "OFC" ? parseOfcStatement(record.originalBytes) : parseOfxStatement(record.originalBytes)).transactions.map(item => ({ date: item.date, description: item.description, reference: item.reference ?? item.id, amount: item.amount }))
     : items.map(item => ({ date: item.date, description: item.description ?? "", reference: item.reference ?? "", amount: item.valueDecimal.abs().mul(["Saída", "DEBIT"].includes(item.direction) ? -1 : 1) }));
   const credits = rows.filter(row => row.amount.isPositive()).reduce((sum, row) => sum.plus(row.amount), new Prisma.Decimal(0));
   const debits = rows.filter(row => row.amount.isNegative()).reduce((sum, row) => sum.plus(row.amount.abs()), new Prisma.Decimal(0));

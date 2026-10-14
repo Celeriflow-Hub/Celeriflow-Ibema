@@ -14,7 +14,8 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
     models.push("Address");
     models.push("ActiveDebt", "DebtInstallment", "DebtInstallmentSchedule");
     models.push("TaxActiveDebtEvent", "TaxProtestItem", "TaxProtestBatch", "TaxCdaVersion");
-    models.push("PurchaseReceipt", "PurchaseReceiptItem", "InstrumentMeasurement");
+    models.push("PurchaseReceipt", "PurchaseReceiptItem", "InstrumentMeasurement", "InstrumentInstallment");
+    models.push("PurchaseProcessRequestOrigin");
     models.push("BankStatementImport", "BankStatementItem", "BankReconciliationSession", "BankReconciliationMatch", "BankReconciliationAllocationGroup", "BankReconciliationAllocation", "BankReconciliation");
     models.push("Bank", "BankBranch");
     models.push("Payroll", "HrPayrollRun", "HrIntegrationEvent", "SstBenefitPayrollScope");

@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertAccountingPeriodOpen, getBankAccountBalance, postAccountingEventInTransaction } from "@/lib/financeiro";
 import { TaxError, type TaxActor } from "./index";
 import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxScopeSnapshot } from "./scope";
+import { assertBankResourceSource, getBankResourceSourceSpendableBalance } from "../financeiro/bank-resource-sources";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -23,6 +24,13 @@ export async function recordTaxExcessInTransaction(tx: Prisma.TransactionClient,
   await tx.$queryRaw`SELECT id FROM "BankAccount" WHERE id = ${input.bankAccountId} FOR UPDATE`;
   const account = await tx.bankAccount.findUniqueOrThrow({ where: { id: input.bankAccountId } });
   if (!account.isActive || account.budgetUnitId !== scope.budgetUnitId || !account.accountingPlanId) throw new TaxError("Conta do excedente sem vínculo contábil compatível com a UG.");
+  const data = taxScopeSnapshot(credit.data);
+  if (typeof data.originEventKey !== "string") throw new TaxError("Excedente sem pagamento canônico de origem.");
+  const payment = await tx.taxPayment.findUniqueOrThrow({ where: { idempotencyKey: data.originEventKey }, include: { revenueIntegration: { include: { revenue: { select: { resourceSourceId: true } } } } } });
+  const resourceSourceId = payment.revenueIntegration?.revenue.resourceSourceId;
+  if (!resourceSourceId || payment.bankAccountId !== account.id || payment.guideId !== data.originGuideId) throw new TaxError("Fonte e banco do excedente devem corresponder à arrecadação original.");
+  await assertBankResourceSource(tx, account.id, resourceSourceId);
+  await tx.taxRegistryEntry.update({ where: { id: credit.id }, data: { data: { ...data, resourceSourceId } } });
   const year = await resolveTaxFinancialYear(tx, input.date.getUTCFullYear(), scope);
   const transaction = await postAccountingEventInTransaction(tx, actor, {
     financialYearId: year.id, ...scope, date: input.date, value: input.amount,
@@ -32,13 +40,13 @@ export async function recordTaxExcessInTransaction(tx: Prisma.TransactionClient,
   });
   const movement = await tx.treasuryMovement.create({ data: {
     date: input.date, type: "ExtraBudgetReceipt", direction: "Entrada", valueDecimal: input.amount,
+    resourceSourceId,
     bankAccountId: account.id, financialYearId: year.id, history: transaction.history,
     sourceModule: "TRIBUTACAO", sourceType: "TAX_CREDIT", sourceId: credit.id,
     eventType: "TAX_COLLECTION_EXCESS", idempotencyKey: `TAX_CREDIT:${credit.id}:TREASURY_INGRESS`,
   } });
-  const data = taxScopeSnapshot(credit.data);
   await tx.taxRegistryEntry.update({ where: { id: credit.id }, data: { data: {
-    ...data, bankAccountId: account.id, resourceSourceId: account.resourceSourceId,
+    ...data, bankAccountId: account.id, resourceSourceId,
     ingressTransactionId: transaction.id, ingressMovementId: movement.id, financialYearId: year.id,
   } } });
   return { transactionId: transaction.id, movementId: movement.id };
@@ -82,10 +90,12 @@ export async function executeTaxRefund(db: PrismaClient, actor: TaxActor, input:
     const account = await tx.bankAccount.findUniqueOrThrow({ where: { id: input.bankAccountId } });
     const document = await tx.document.findUnique({ where: { id: input.proofDocumentId } });
     if (!document || document.status !== "Válido") throw new TaxError("Vincule comprovante GED válido à restituição.");
-    if (!account.isActive || account.budgetUnitId !== scope.budgetUnitId || account.resourceSourceId !== origin.resourceSourceId || !account.accountingPlanId) throw new TaxError("Conta de restituição incompatível com UG/fonte do crédito.");
+    if (!account.isActive || account.budgetUnitId !== scope.budgetUnitId || typeof origin.resourceSourceId !== "string" || !account.accountingPlanId) throw new TaxError("Conta de restituição incompatível com UG/fonte do crédito.");
+    await assertBankResourceSource(tx, account.id, origin.resourceSourceId);
     const amount = new Prisma.Decimal(String(data.amount));
     if (!amount.isFinite() || amount.lte(0)) throw new TaxError("Valor de restituição inválido.");
     if ((await getBankAccountBalance(tx, account.id, input.date)).lt(amount)) throw new TaxError("Saldo insuficiente para restituição.");
+    if ((await getBankResourceSourceSpendableBalance(tx, account.id, origin.resourceSourceId, input.date)).lt(amount)) throw new TaxError("Saldo por fonte insuficiente para restituição.");
     const transaction = await postAccountingEventInTransaction(tx, actor, {
       financialYearId: year.id, ...scope, date: input.date, value: amount, eventCode: "TAX_CREDIT_REFUNDED",
       history: `Restituição tributária ${request.id}`, sourceModule: "TRIBUTACAO", sourceType: "TAX_REFUND",
@@ -93,6 +103,7 @@ export async function executeTaxRefund(db: PrismaClient, actor: TaxActor, input:
     });
     const movement = await tx.treasuryMovement.create({ data: {
       date: input.date, type: "ExtraBudgetRefund", direction: "Saída", valueDecimal: amount,
+      resourceSourceId: origin.resourceSourceId,
       bankAccountId: account.id, financialYearId: year.id, sourceModule: "TRIBUTACAO", sourceType: "TAX_REFUND",
       sourceId: request.id, eventType: "TAX_CREDIT_REFUNDED", idempotencyKey: `${key}:TREASURY`, history: transaction.history,
     } });

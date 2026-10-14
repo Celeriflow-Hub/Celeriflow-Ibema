@@ -13,10 +13,21 @@ function profile(value: Prisma.JsonValue): Profile {
 
 /** Recognition is opt-in by immutable municipal profile; historical assessments are never backfilled implicitly. */
 export async function recognizeTaxAssessmentInTransaction(tx: Prisma.TransactionClient, actor: FinanceActor, assessmentId: string) {
+  await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${assessmentId} FOR UPDATE`;
   const assessment = await tx.taxAssessment.findUniqueOrThrow({ where: { id: assessmentId } });
   const origin = await resolveTaxAssessmentScope(tx, actor, assessment.taxId, assessment.calculationSnapshot);
   if (!origin.budgetUnitId || !origin.governmentEntityId) return;
   const scope = { budgetUnitId: origin.budgetUnitId, governmentEntityId: origin.governmentEntityId };
+  if (taxScopeSnapshot(assessment.calculationSnapshot).recognitionPolicy === "PRESERVE_LEGACY_NO_RETROACTIVE_RECOGNITION") return;
+  const positions = await tx.taxRegistryEntry.findMany({ where: { entityType: "TAX_ASSESSMENT", entityId: assessment.id, category: "ACCOUNTING_POSITION", status: "ATIVO" } });
+  if (positions.length) {
+    if (positions.length !== 1) throw new Error("Reconhecimento patrimonial tributário ambíguo.");
+    const data = taxScopeSnapshot(positions[0].data), selected = profile(positions[0].data);
+    const originalValue = typeof data.originalValue === "string" && /^\d+(?:\.\d{1,2})?$/.test(data.originalValue) ? new Prisma.Decimal(data.originalValue) : null;
+    const transaction = typeof data.recognitionTransactionId === "string" ? await tx.accountingTransaction.findUnique({ where: { id: data.recognitionTransactionId }, include: { entries: true, reversedBy: { select: { id: true } }, financialYear: { select: { governmentEntityId: true } } } }) : null;
+    if (!originalValue?.isFinite() || originalValue.lte(0) || selected.budgetUnitId !== scope.budgetUnitId || selected.governmentEntityId !== scope.governmentEntityId || !transaction || transaction.status !== "POSTADO" || transaction.reversedBy || transaction.sourceModule !== "TRIBUTACAO" || transaction.sourceType !== "TAX_ASSESSMENT" || transaction.sourceId !== assessment.id || transaction.eventType !== "TAX_ASSESSMENT_RECOGNIZED" || transaction.budgetUnitId !== scope.budgetUnitId || transaction.governmentEntityId !== scope.governmentEntityId || transaction.financialYear.governmentEntityId !== scope.governmentEntityId || transaction.entries.length !== 2 || !transaction.entries.some(entry => entry.accountId === selected.receivableAccountId && entry.type === "Débito" && entry.valueDecimal?.eq(originalValue)) || !transaction.entries.some(entry => entry.accountId === selected.revenueAccountId && entry.type === "Crédito" && entry.valueDecimal?.eq(originalValue))) throw new Error("Reconhecimento original sem posição patrimonial conciliada para reexecução.");
+    return;
+  }
   const date = assessment.competence ?? (assessment.year === new Date().getUTCFullYear() ? new Date() : new Date(Date.UTC(assessment.year, 0, 1, 12)));
   const profiles = await tx.taxRegistryEntry.findMany({ where: { entityType: "TAX", entityId: assessment.taxId, category: "ACCOUNTING_PROFILE", status: "ATIVO", effectiveFrom: { lte: date }, OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: date } }], data: { path: ["budgetUnitId"], equals: scope.budgetUnitId } } });
   const superseded = new Set(profiles.map(entry => taxScopeSnapshot(entry.data).supersedesEntryId).filter((id): id is string => typeof id === "string"));

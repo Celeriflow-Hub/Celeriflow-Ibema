@@ -39,7 +39,21 @@ export async function resolveAccountingSourceDimensions(tx: Prisma.TransactionCl
       }
     }
     else if (["BANK_ACCOUNT", "BANK_ACCOUNT_OPENING_BALANCE"].includes(type)) resourceSourceId = (await tx.bankAccount.findUnique({ where: { id }, select: { resourceSourceId: true } }))?.resourceSourceId ?? null;
-    else if (["BANK_STATEMENT_CLASSIFICATION", "BANK_STATEMENT_INVESTMENT_TRANSFER"].includes(type)) resourceSourceId = (await tx.bankStatementItem.findUnique({ where: { id }, select: { bankAccount: { select: { resourceSourceId: true } } } }))?.bankAccount?.resourceSourceId ?? null;
+    else if (["TREASURY_TRANSFER", "BANK_STATEMENT_INVESTMENT_TRANSFER"].includes(type)) {
+      const transfers = await tx.treasuryTransfer.findMany({ where: { OR: [{ id }, { sourceMovement: { sourceId: id, sourceType: type } }] }, select: { sourceMovement: { select: { resourceSourceId: true } } }, take: 2 });
+      if (transfers.length === 1) resourceSourceId = transfers[0].sourceMovement.resourceSourceId;
+    }
+    else if (type === "BANK_STATEMENT_CLASSIFICATION") resourceSourceId = (await tx.bankStatementItem.findUnique({ where: { id }, select: { bankAccount: { select: { resourceSourceId: true } } } }))?.bankAccount?.resourceSourceId ?? null;
+    else if (["TAX_CREDIT", "TAX_REFUND", "TAX_CREDIT_REVERSAL", "TAX_REFUND_REVERSAL"].includes(type)) {
+      const registry = await tx.taxRegistryEntry.findUnique({ where: { id }, select: { data: true } });
+      const data = registry?.data && typeof registry.data === "object" && !Array.isArray(registry.data) ? registry.data as Prisma.JsonObject : null;
+      if (typeof data?.resourceSourceId === "string") resourceSourceId = data.resourceSourceId;
+      else if (typeof data?.sourceCreditId === "string") {
+        const credit = await tx.taxRegistryEntry.findUniqueOrThrow({ where: { id: data.sourceCreditId }, select: { data: true } });
+        const creditData = credit.data && typeof credit.data === "object" && !Array.isArray(credit.data) ? credit.data as Prisma.JsonObject : null;
+        if (typeof creditData?.resourceSourceId === "string") resourceSourceId = creditData.resourceSourceId;
+      }
+    }
     else if (type === "PLANNING_BUDGET") {
       const movement = await tx.planningLineMovement.findUnique({ where: { id }, select: { line: { select: planningLineSelection } } });
       planningLine = movement?.line ?? await tx.planningBudgetLine.findUnique({ where: { id }, select: planningLineSelection });
@@ -134,10 +148,15 @@ export async function resolveAccountingReversalLineDimensions(tx: Prisma.Transac
     const dimensions = snapshot?.dimensions as Prisma.JsonObject | null;
     return { entry, dimensions, resourceSourceId: typeof dimensions?.resourceSourceId === "string" ? dimensions.resourceSourceId : null };
   });
-  if (new Set(memories.map(memory => JSON.stringify([memory.resourceSourceId, memory.dimensions?.sourceRole ?? null]))).size > 1) throw new Error("Estorno possui múltiplas fontes na mesma conta; exige identificação documental de cada linha original.");
+  if (new Set(memories.map(memory => JSON.stringify([memory.resourceSourceId, memory.dimensions?.sourceRole ?? null, memory.dimensions?.sourceClassification ?? null, memory.dimensions?.budgetDimensions ?? null]))).size > 1) throw new Error("Estorno possui múltiplas fontes/classificações na mesma conta; exige identificação documental de cada linha original.");
   const memory = memories[0];
   return {
-    ...await classifiedSourceDimensions(tx, origin, memory.resourceSourceId),
+    governmentEntityId: origin.governmentEntityId,
+    budgetUnitId: origin.budgetUnitId,
+    resourceSourceId: memory.resourceSourceId,
+    sourceResolution: memory.resourceSourceId ? "ORIGINAL_LINE" : "NOT_RECONCILED",
+    sourceClassification: memory.dimensions?.sourceClassification as Prisma.InputJsonValue | null ?? null,
+    mscReadiness: memory.dimensions?.mscReadiness as Prisma.InputJsonValue | null ?? "NOT_RECONCILED",
     originalTransactionId: reversalOfId,
     originalEntryIds: entries.map(entry => entry.id),
     sourceRole: memory.dimensions?.sourceRole ?? null,

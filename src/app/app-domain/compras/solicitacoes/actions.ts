@@ -227,7 +227,7 @@ export async function savePurchaseRequest(payload: PurchaseRequestInput) {
 export async function approvePurchaseRequest(id: string) {
   try {
     const context = await getTenantContextForModuleOperation("COMPRAS", "update");
-    await approveOfficialPurchaseRequest(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, id);
+    await approveOfficialPurchaseRequest(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, id);
     revalidatePath("/compras/solicitacoes");
     revalidatePath(`/compras/solicitacoes/${id}`);
     return { success: true };

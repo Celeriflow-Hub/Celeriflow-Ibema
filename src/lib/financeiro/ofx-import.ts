@@ -1,13 +1,21 @@
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { FinanceActor } from "./index";
-import { OfxImportError, parseOfxStatement } from "./ofx-parser";
+import { OfxImportError, parseOfxStatement, type OfxStatement } from "./ofx-parser";
+import { parseOfcStatement } from "./ofc-parser";
 import { writeAuditEvent, auditEventTypes } from "@/lib/platform/audit-evidence";
 
 const normalize = (value: string) => value.replace(/[\s.\-/]/g, "").toUpperCase();
 
 export async function importBankStatementOfx(db: PrismaClient, actor: FinanceActor, input: { bankAccountId: string; bytes: Uint8Array; fileName: string }) {
-  const statement = parseOfxStatement(input.bytes);
+  return importParsedStatement(db, actor, input, parseOfxStatement(input.bytes), "OFX");
+}
+
+export async function importBankStatementOfc(db: PrismaClient, actor: FinanceActor, input: { bankAccountId: string; bytes: Uint8Array; fileName: string }) {
+  return importParsedStatement(db, actor, input, parseOfcStatement(input.bytes), "OFC");
+}
+
+async function importParsedStatement(db: PrismaClient, actor: FinanceActor, input: { bankAccountId: string; bytes: Uint8Array; fileName: string }, statement: OfxStatement & { currencyBasis?: string }, format: "OFX" | "OFC") {
   const checksum = createHash("sha256").update(input.bytes).digest("hex");
   return db.$transaction(async tx => {
     await tx.$queryRaw`SELECT id FROM "BankAccount" WHERE id = ${input.bankAccountId} FOR UPDATE`;
@@ -29,9 +37,9 @@ export async function importBankStatementOfx(db: PrismaClient, actor: FinanceAct
       return false;
     });
     const record = await tx.bankStatementImport.create({ data: {
-      bankAccountId: account.id, format: "OFX", fileName: input.fileName.replace(/[\\/:]/g, "_"), checksum,
+      bankAccountId: account.id, format, fileName: input.fileName.replace(/[\\/:]/g, "_"), checksum,
       originalBytes: Buffer.from(input.bytes), originalEncoding: statement.encoding,
-      processingSnapshot: { bankId: statement.bankId, agency: statement.agency ?? null, accountNumber: statement.accountNumber, currency: statement.currency, start: statement.start.toISOString(), end: statement.end.toISOString(), read: statement.transactions.length, imported: fresh.length, repeated: statement.transactions.length - fresh.length, repeatedItemIds: previous.map(item => item.id), totalCredits: statement.transactions.filter(item => item.amount.isPositive()).reduce((total, item) => total.plus(item.amount), new Prisma.Decimal(0)).toFixed(2), totalDebits: statement.transactions.filter(item => item.amount.isNegative()).reduce((total, item) => total.plus(item.amount.abs()), new Prisma.Decimal(0)).toFixed(2) },
+      processingSnapshot: { bankId: statement.bankId, agency: statement.agency ?? null, accountNumber: statement.accountNumber, currency: statement.currency, currencyBasis: statement.currencyBasis ?? "FILE_CURDEF", start: statement.start.toISOString(), end: statement.end.toISOString(), read: statement.transactions.length, imported: fresh.length, repeated: statement.transactions.length - fresh.length, repeatedItemIds: previous.map(item => item.id), totalCredits: statement.transactions.filter(item => item.amount.isPositive()).reduce((total, item) => total.plus(item.amount), new Prisma.Decimal(0)).toFixed(2), totalDebits: statement.transactions.filter(item => item.amount.isNegative()).reduce((total, item) => total.plus(item.amount.abs()), new Prisma.Decimal(0)).toFixed(2) },
     } });
     if (fresh.length) await tx.bankStatementItem.createMany({ data: fresh.map(item => ({ bankAccountId: account.id, statementImportId: record.id, date: item.date, description: item.description, reference: item.reference, direction: item.amount.isNegative() ? "Saída" : "Entrada", sinal: item.amount.isNegative() ? "DEBITO" : "CREDITO", valueDecimal: item.amount.abs(), bankTransactionId: item.id, transactionType: item.type })) });
     await writeAuditEvent(tx, { actorUsuarioId: actor.usuarioId, eventType: auditEventTypes.administrativeMutation, targetType: "BANK_STATEMENT_IMPORT", targetId: record.id });

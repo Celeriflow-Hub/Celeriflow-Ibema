@@ -60,6 +60,31 @@ async function writeLifecycleEvent(
   await tx.procurementLifecycleEvent.create({ data: input });
 }
 
+async function assertRequestBudgetScope(tx: Tx, actor: ProcurementActor, requestIds: string[]) {
+  if (actor.allowedBudgetUnitIds === undefined) return;
+  const ids = [...new Set(requestIds)];
+  const requests = await tx.purchaseRequest.findMany({ where: { id: { in: ids } }, select: {
+    secretariatId: true,
+    items: { select: { budgetAllocations: { select: { budgetAppropriation: { select: {
+      budgetUnitId: true, budgetUnit: { select: { secretariatId: true, planningEntityUnit: { select: { governmentEntityId: true } } } },
+      financialYear: { select: { governmentEntityId: true } },
+    } } } } } },
+  } });
+  if (!ids.length || requests.length !== ids.length || requests.some(request => !request.items.length || request.items.some(item => !item.budgetAllocations.length || item.budgetAllocations.some(({ budgetAppropriation: appropriation }) =>
+    !actor.allowedBudgetUnitIds!.includes(appropriation.budgetUnitId)
+    || appropriation.budgetUnit.secretariatId !== request.secretariatId
+    || !appropriation.financialYear.governmentEntityId
+    || appropriation.budgetUnit.planningEntityUnit?.governmentEntityId !== appropriation.financialYear.governmentEntityId,
+  )))) throw new ProcurementLifecycleError("Solicitação sem UG/ente conciliados ou fora das unidades gestoras autorizadas.");
+}
+
+async function assertProcessBudgetScope(tx: Tx, actor: ProcurementActor, processId: string) {
+  if (actor.allowedBudgetUnitIds === undefined) return;
+  const process = await tx.purchaseProcess.findUnique({ where: { id: processId }, select: { purchaseRequestId: true, requestOrigins: { select: { purchaseRequestId: true } } } });
+  if (!process) throw new ProcurementLifecycleError("Processo de compra não encontrado no acesso autorizado.");
+  await assertRequestBudgetScope(tx, actor, [...(process.purchaseRequestId ? [process.purchaseRequestId] : []), ...process.requestOrigins.map(origin => origin.purchaseRequestId)]);
+}
+
 export async function createMaterialRequest(db: Db, actor: ProcurementActor, input: CreateMaterialRequestInput) {
   const requesterId = required(actor.employeeId, "Servidor solicitante");
   const sourceWarehouseId = required(input.sourceWarehouseId, "Almoxarifado de origem");
@@ -129,6 +154,7 @@ export async function approvePurchaseRequest(db: Db, actor: ProcurementActor, pu
   const requestId = required(purchaseRequestId, "Solicitação de compra");
   const eventKey = `C5:PURCHASE_REQUEST:${requestId}:APPROVE`;
   return db.$transaction(async (tx) => {
+    await assertRequestBudgetScope(tx, actor, [requestId]);
     const existingEvent = await tx.procurementLifecycleEvent.findUnique({ where: { idempotencyKey: eventKey }, select: { id: true } });
     if (existingEvent) return tx.purchaseRequest.findUniqueOrThrow({ where: { id: requestId } });
 
@@ -193,7 +219,11 @@ export async function createPurchaseProcessFromApprovedRequests(
 
   return db.$transaction(async (tx) => {
     const existingEvent = await tx.procurementLifecycleEvent.findUnique({ where: { idempotencyKey: eventKey }, select: { entityId: true } });
-    if (existingEvent) return tx.purchaseProcess.findUniqueOrThrow({ where: { id: existingEvent.entityId } });
+    if (existingEvent) {
+      await assertProcessBudgetScope(tx, actor, existingEvent.entityId);
+      return tx.purchaseProcess.findUniqueOrThrow({ where: { id: existingEvent.entityId } });
+    }
+    await assertRequestBudgetScope(tx, actor, purchaseRequestIds);
 
     const requests = await tx.purchaseRequest.findMany({
       where: { id: { in: purchaseRequestIds } },
@@ -362,7 +392,10 @@ export async function approvePurchaseReceipt(db: Db, actor: ProcurementActor, ra
 
   return db.$transaction(async (tx) => {
     const existing = await tx.purchaseReceipt.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
-    if (existing) return existing;
+    if (existing) {
+      await assertProcessBudgetScope(tx, actor, existing.purchaseProcessId);
+      return existing;
+    }
 
     const [contract, document, receiver, attester] = await Promise.all([
       tx.contract.findUnique({
@@ -376,6 +409,7 @@ export async function approvePurchaseReceipt(db: Db, actor: ProcurementActor, ra
     if (!contract || contract.status !== "Vigente" || input.receivedAt < contract.startDate || input.receivedAt > contract.endDate) {
       throw new ProcurementLifecycleError("O recebimento exige contrato vigente na data informada.");
     }
+    await assertProcessBudgetScope(tx, actor, contract.processId);
     if (!contract.process.purchaseRequest || contract.process.purchaseRequest.status !== "Aprovada") {
       throw new ProcurementLifecycleError("O contrato deve decorrer de uma solicitação de compra aprovada.");
     }

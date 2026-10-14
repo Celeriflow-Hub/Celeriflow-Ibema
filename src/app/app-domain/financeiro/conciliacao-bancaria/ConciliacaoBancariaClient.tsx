@@ -56,7 +56,7 @@ export default function ConciliacaoBancariaClient({ initialSessions = [], accoun
     setLoading(true); setErrorMsg(null); setImportReceipt(null);
     try {
       if (file.size > 2 * 1024 * 1024) throw new Error("O arquivo deve ter no máximo 2 MB.");
-      if (!/\.(csv|ofx)$/i.test(file.name)) throw new Error("Envie um arquivo CSV ou OFX.");
+      if (!/\.(csv|ofx|ofc)$/i.test(file.name)) throw new Error("Envie um arquivo CSV, OFX ou OFC.");
       const bytes = new Uint8Array(await file.arrayBuffer());
       let binary = "";
       for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -154,8 +154,8 @@ export default function ConciliacaoBancariaClient({ initialSessions = [], accoun
 
       {/* Grid: Abertura & Painel de Saldos */}
       <form onSubmit={handleImport} className="flex flex-wrap items-center gap-3 rounded border bg-white p-3 text-xs">
-        <label htmlFor="statement-file" className="font-semibold">Extrato da conta selecionada (CSV/OFX)</label>
-        <input id="statement-file" type="file" accept=".csv,.ofx" required onChange={event => setFile(event.target.files?.[0] ?? null)} />
+        <label htmlFor="statement-file" className="font-semibold">Extrato da conta selecionada (CSV/OFX/OFC)</label>
+        <input id="statement-file" type="file" accept=".csv,.ofx,.ofc" required onChange={event => setFile(event.target.files?.[0] ?? null)} />
         <button disabled={loading || !accountId || !file} className="rounded border px-3 py-2 font-semibold">Importar extrato</button>
         {importReceipt && <span role="status">Extrato importado · SHA-256 {importReceipt.checksum} · <a className="underline" href={`/api/financeiro/extratos-importados/${importReceipt.id}`}>Baixar original</a> · <a className="underline" href={`/api/financeiro/extratos-importados/${importReceipt.id}?format=PDF`}>Imprimir extrato</a></span>}
       </form>

@@ -65,7 +65,8 @@ test("S1 PostgreSQL: abertura e seis eventos reais, replay e autorização nas d
         await assert.rejects(registerPlanningMovement({ ...f.context, user: { ...f.context.user, employeeId: null } }, movement(f, f.revenue)), /servidor responsável/);
         assert.deepEqual(await position(f), before, "recusa de autorização reverte o efeito orçamentário");
         const collision = movement(f, f.revenue);
-        await postAccountingTransaction(f.db, { usuarioId: "ana", employeeId: "servidora-ana" }, { financialYearId: "ano", governmentEntityId: "ente", budgetUnitId: "ug", date: new Date("2026-03-01"), history: "Origem incompatível da fixture isolada", lines: [{ accountId: "debito", type: "Débito", value: "0.01" }, { accountId: "credito", type: "Crédito", value: "0.01" }], sourceModule: "PLANEJAMENTO", sourceType: "PLANNING_BUDGET", sourceId: "origem-incompativel", eventType: "PLANNING_REVENUE_INCREASE", idempotencyKey: `accounting:${collision.submissionKey}` });
+        await f.db.financialYear.update({ where: { id: "ano" }, data: { status: "Aberto" } });
+        await postAccountingTransaction(f.db, { usuarioId: "ana", employeeId: "servidora-ana" }, { financialYearId: "ano", governmentEntityId: "ente", budgetUnitId: "ug", date: new Date("2026-03-01"), history: "Origem incompatível da fixture isolada", lines: [{ accountId: "debito", type: "Débito", value: "0.01" }, { accountId: "credito", type: "Crédito", value: "0.01" }], sourceModule: "TEST", sourceType: "FIXTURE_COLLISION", sourceId: "origem-incompativel", eventType: "PLANNING_REVENUE_INCREASE", idempotencyKey: `accounting:${collision.submissionKey}` });
         const beforeCollision = await position(f);
         await assert.rejects(registerPlanningMovement(f.context, collision), /Chave contábil/);
         assert.deepEqual(await position(f), beforeCollision);

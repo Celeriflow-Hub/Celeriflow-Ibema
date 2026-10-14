@@ -1,6 +1,6 @@
 "use server";
 
-import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, isSystemAdministrator, type ModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { nextYearlyCode } from "@/lib/sequence";
 import { Prisma } from "@prisma/client";
@@ -85,7 +85,7 @@ export async function savePurchaseProcess(payload: PurchaseProcessInput) {
         ? purchaseRequestIds.map((requestId) => requestId.trim()).filter(Boolean)
         : purchaseRequestId?.trim() ? [purchaseRequestId.trim()] : [];
       if (!selectedPurchaseRequestIds.length) return { success: false, error: "Selecione ao menos uma solicitação de compra aprovada." };
-      await createPurchaseProcessFromApprovedRequests(prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, {
+      await createPurchaseProcessFromApprovedRequests(prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, {
         purchaseRequestIds: selectedPurchaseRequestIds,
         number: finalNumber,
         object,

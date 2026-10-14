@@ -17,8 +17,9 @@ async function setup() {
   const previousMode = process.env.CELERIFLOW_ACCOUNTING_MODE;
   process.env.CELERIFLOW_ACCOUNTING_MODE = "POC";
   const restoreMode = () => { if (previousMode === undefined) delete process.env.CELERIFLOW_ACCOUNTING_MODE; else process.env.CELERIFLOW_ACCOUNTING_MODE = previousMode; };
-  const f = await createPlanningExecutionFixture().catch(error => { restoreMode(); throw error; });
+  const f = await createPlanningExecutionFixture(2026, 2, "EXECUTIVE", { expenseLineAmount: "300.00" }).catch(error => { restoreMode(); throw error; });
   try {
+    await f.db.financialYear.update({ where: { id: "ano" }, data: { status: "Aberto" } });
     const actor = { ...f.actor, allowedBudgetUnitIds: ["ug", "ug-restrita"] };
     await f.db.costCenter.create({ data: { id: "centro-folha", code: "FOLHA", name: "Centro da folha", governmentEntityId: "ente", secretariatId: "secretaria" } });
     for (const id of ["vinculo-1", "vinculo-2"]) await f.db.hrEmploymentContract.create({ data: { id, employeeId: "servidora-ana", registration: id, regimeId: "regime", roleId: "cargo", costCenterId: "centro-folha", workLocation: "LOCAL_FECHADO", admittedAt: new Date("2020-01-01"), salary: "15.00", details: {} } });

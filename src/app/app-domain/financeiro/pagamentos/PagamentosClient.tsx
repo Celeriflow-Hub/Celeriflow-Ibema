@@ -63,7 +63,7 @@ type Payment = {
 
 type CommitmentOption = { id: string; number: string; value: number; supplierId: string; purchaseReceipt: { number: string } | null };
 type SettlementOption = { id: string; commitmentId: string; documentRef: string | null; availableToPay: number };
-type BankAccountOption = { id: string; bankName: string; agency: string; accountNumber: string };
+type BankAccountOption = { id: string; bankName: string; agency: string; accountNumber: string; cashBalance: string; sourceBalances: { sourceCode: string; balance: string | null }[] };
 type SupplierOption = { id: string; company?: { corporateName: string } | null; person?: { fullName: string } | null };
 
 export default function PagamentosClient({
@@ -451,6 +451,7 @@ export default function PagamentosClient({
 
             <div className="space-y-2">
               <Label htmlFor="bankAccountId">Conta Bancária Pagadora</Label>
+              {formData.bankAccountId && <div className="rounded border bg-slate-50 p-2 text-xs"><p>Saldo bancário: R$ {bankAccounts.find(account => account.id === formData.bankAccountId)?.cashBalance}</p>{bankAccounts.find(account => account.id === formData.bankAccountId)?.sourceBalances.map(source => <p key={source.sourceCode}>Fonte {source.sourceCode}: {source.balance === null ? "Conciliação documental pendente" : `R$ ${source.balance}`}</p>)}</div>}
               <Select value={formData.bankAccountId} onValueChange={v => setFormData({...formData, bankAccountId: v as string})}>
                 <SelectTrigger><SelectValue placeholder="Selecione a conta" /></SelectTrigger>
                 <SelectContent>

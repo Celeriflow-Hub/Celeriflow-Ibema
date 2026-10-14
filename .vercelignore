@@ -5,6 +5,7 @@
 # Development references stay in GitHub for both notebooks.
 # Only the root archive is excluded; public/docs remains available to the app.
 /docs/
+/docs/*
 /image/
 /AGENTS.md
 /CLAUDE.md

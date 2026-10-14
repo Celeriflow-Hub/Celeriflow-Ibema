@@ -6,6 +6,7 @@ import { requireValidCnpj } from "@/lib/identifiers/brazilian-identifiers";
 import type { FleetScope } from "./service";
 import { controlSchemas, newFleetCapability, validFleetCapability } from "./control-policy";
 import { eligibleFleetDriver, FleetControlError, fleetControlReading, lockFleetResources, nextFleetCode, scopedFleetEvidence, scopedFleetUnit, type FleetControlTx } from "./control-access";
+import { dateOnly, todayInBrazil } from "./contract";
 
 export async function fleetProvider(tx: FleetControlTx, id: string, kind: string) {
   const provider = await tx.fleetProvider.findFirst({ where: { id, kind, active: true } });
@@ -144,7 +145,7 @@ export async function confirmFleetFuel(tx: FleetControlTx, scope: FleetScope, ra
     await tx.fleetFuelAgreement.update({ where: { id: agreement.id }, data: { reserved: { decrement: authorization.authorizedQuantity! }, consumed: { increment: quantity } } });
   }
   if (input.evidenceVersionId && !externalActor) await scopedFleetEvidence(tx, scope, input.evidenceVersionId, unit.id);
-  const consumption = await tx.fleetConsumption.create({ data: { unitId: unit.id, type: "COMBUSTIVEL", origin: authorization.origin, occurredAt: new Date(), material: authorization.materialName!, quantity, measurementUnit: "L", cost, stockMovementId: movementId, supplierId, supplierName, reference: authorization.code, createdById: creator } });
+  const consumption = await tx.fleetConsumption.create({ data: { unitId: unit.id, type: "COMBUSTIVEL", origin: authorization.origin, occurredAt: dateOnly(todayInBrazil()), material: authorization.materialName!, quantity, measurementUnit: "L", cost, stockMovementId: movementId, supplierId, supplierName, reference: authorization.code, createdById: creator } });
   const expense = await tx.fleetExpense.create({ data: { unitId: unit.id, nature: "COMBUSTIVEL", occurredAt: consumption.occurredAt, amount: cost, description: authorization.materialName!, sourceType: "CONSUMO", sourceId: consumption.id, sourceKey: `consumption:${consumption.id}`, reference: authorization.code, supplierId, supplierName, contractId: authorization.contractId, createdById: creator } });
   await tx.fleetAuthorization.update({ where: { id: authorization.id }, data: { status: "EXECUTADA", actualQuantity: quantity, actualAmount: cost, consumptionId: consumption.id, expenseId: expense.id, reading, executedAt: new Date(), tokenHash: null, evidenceVersionId: input.evidenceVersionId || null } });
   if (reading) await tx.fleetUnitControl.update({ where: { unitId: unit.id }, data: { currentReading: reading } });

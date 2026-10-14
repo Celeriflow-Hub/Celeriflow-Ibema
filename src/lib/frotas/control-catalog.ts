@@ -61,7 +61,7 @@ export async function importFleetCatalog(tx: FleetControlTx, scope: FleetScope, 
   const input = controlSchemas.catalog.parse(raw);
   for (const entry of input.entries) {
     if (input.kind === "FIPE") z.object({ brand: z.string().min(1), model: z.string().min(1), yearLabel: z.string().min(1), referenceMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }).passthrough().parse(entry.details);
-    else z.object({ nature: z.string().min(1), points: z.number().int().min(0).max(20), amount: z.string().regex(/^\d+(\.\d{1,2})?$/), article: z.string().min(1), validFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), validUntil: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable() }).passthrough().parse(entry.details);
+    else z.object({ nature: z.string().min(1), points: z.number().int().min(0).max(20), amount: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable(), article: z.string().min(1), validFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), validUntil: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable() }).passthrough().parse(entry.details);
   }
   const hash = stableFleetHash(input.entries);
   const previous = await tx.fleetCatalogVersion.findUnique({ where: { kind_reference_sha256: { kind: input.kind, reference: input.reference, sha256: hash } } });

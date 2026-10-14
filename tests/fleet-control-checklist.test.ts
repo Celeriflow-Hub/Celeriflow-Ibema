@@ -16,9 +16,13 @@ import { eligibleFleetDriver } from "../src/lib/frotas/control-access";
 import { fleetScope, mutateFleet } from "../src/lib/frotas/service";
 import { queryFleet } from "../src/lib/frotas/queries";
 import { syntheticCpf, syntheticCnpj } from "../src/lib/poc/fixture-catalog";
-import { dateOnly } from "../src/lib/frotas/contract";
+import { dateOnly, todayInBrazil } from "../src/lib/frotas/contract";
 import { ingestGedDocument } from "../src/lib/documents/document-flow-service";
 import { submitFleetExternal } from "../src/lib/frotas/control-external";
+import { populateFleetPoc } from "../scripts/fleet-poc-dataset";
+import { renderFleetPdf } from "../src/lib/frotas/report";
+import { createDefaultReportTemplate } from "../src/lib/reports/report-template";
+import { PDFDocument as ReadablePdf } from "pdf-lib";
 
 test("marcador zero, máquina e ausência de marcador têm semântica distinta", () => {
   assert.equal(consumptionAverage("HODOMETRO", [{ reading: 0, quantity: 10, date: new Date(0) }, { reading: 100, quantity: 10, date: new Date(1) }]), 10);
@@ -27,6 +31,50 @@ test("marcador zero, máquina e ausência de marcador têm semântica distinta",
   assert.equal(readingError("SEM_MARCADOR", null, null), null);
   assert.ok(readingError("HODOMETRO", "100", "99"));
   const capability = newFleetCapability(); assert.ok(validFleetCapability(capability.hash, capability.token)); assert.ok(!validFleetCapability(capability.hash, newFleetCapability().token));
+});
+
+test("POC 03/07/20/43: carga plausível, repetição, débitos, CTB integral, agenda setorial e dossiê multiveículo", { timeout: 240000 }, async () => {
+  const memory = new PGlite(), socket = new PGLiteSocketServer({ db: memory, host: "127.0.0.1", port: 0 });
+  let db: PrismaClient | undefined;
+  try {
+    for (const directory of readdirSync("prisma/migrations-ibema", { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name).sort()) await memory.exec(readFileSync(`prisma/migrations-ibema/${directory}/migration.sql`, "utf8"));
+    await socket.start(); db = new PrismaClient({ adapter: new PrismaPg({ connectionString: `postgresql://postgres:postgres@${socket.getServerConn()}/postgres`, max: 1 }), transactionOptions: { maxWait: 60000, timeout: 60000 } });
+    const profile = await db.configuracaoPerfil.findFirstOrThrow();
+    const actor = await db.usuario.create({ data: { nome: "Marina Azevedo", email: "fleet-seed@fixture.invalid", perfilId: profile.id } });
+    const context = { prisma: db, user: { id: actor.id, name: actor.nome, profileCode: "SYSTEM_ADMINISTRATOR", departmentId: null, secretariatId: null, employeeId: null, modulePermissions: [], allowedBudgetUnitIds: [] } } as unknown as AppContext;
+    const source = JSON.parse(readFileSync("data/frotas/ctb-mbft.json", "utf8"));
+    const ctb = controlSchemas.catalog.parse({ kind: source.kind, reference: source.reference, sourceReference: source.sourceReference, complete: source.complete, entries: source.entries });
+    const fipe = controlSchemas.catalog.parse(JSON.parse(readFileSync("data/frotas/fipe-hb20s.json", "utf8")));
+    const options = { ctb, fipe, storeFile: async (name: string) => ({ url: `https://fixture.invalid/${name}`, pathname: `fixture/${name}` }) };
+    const first = await populateFleetPoc(context, options);
+    assert.equal(await db.fleetUnit.count(), 9); assert.equal(await db.fleetCatalogEntry.count({ where: { version: { kind: "CTB" } } }), 416);
+    const countBefore = { expenses: await db.fleetExpense.count(), attachments: await db.fleetAttachment.count(), trips: await db.fleetTrip.count(), events: await db.fleetControlEvent.count() };
+    const second = await populateFleetPoc(context, options);
+    assert.deepEqual(second.units, first.units);
+    assert.deepEqual({ expenses: await db.fleetExpense.count(), attachments: await db.fleetAttachment.count(), trips: await db.fleetTrip.count(), events: await db.fleetControlEvent.count() }, countBefore);
+    const debts = await queryFleetControl(context, { area: "debitos", unitId: first.units.hb20s });
+    assert.equal(debts.rows.find(row => row.type === "DEBT_FINE")?.detail["Saldo da multa"], "100.00");
+    assert.equal(debts.debtSummary?.outstandingKnown, "3168.73");
+    assert.ok(debts.rows.some(row => row.status === "VENCIDO"));
+    const office = await queryFleetControl(context, { area: "agenda", departmentId: first.departments[0] });
+    assert.equal(office.total, 1); assert.equal(office.rows[0].detail.Motorista, "Marcos André Ribeiro"); assert.match(office.rows[0].detail.Departamento, /Administração/);
+    const restricted = { ...context, user: { ...context.user, profileCode: "POC_FROTA_OPERADOR", departmentId: first.departments[0], permissions: JSON.stringify({ modules: { FROTAS: { blocked: false, create: true, update: true, issueReports: true } } }) } };
+    assert.equal((await queryFleetControl(restricted, { area: "agenda", departmentId: first.departments[1] })).total, 0);
+    const table = await queryFleetControl(context, { area: "infracoes" }); assert.equal(table.total, 416); assert.equal(table.rows.length, 20); assert.equal(table.catalog?.complete, true);
+    assert.equal((await queryFleetControl(context, { area: "infracoes", q: "518-51" })).total, 1);
+    const fullTable = await queryFleetControl(context, { area: "infracoes" }, true); assert.equal(fullTable.rows.length, 416);
+    assert.equal(fullTable.rows.find(row => row.label.startsWith("779-00"))?.detail["Valor de referência"], "1467.35");
+    assert.equal(fullTable.rows.find(row => row.label.startsWith("751-01"))?.detail["Valor de referência"], "Variável / conforme enquadramento");
+    const dossier = await buildFleetControlReport(context, { query: { area: "relatorios", unitIds: `${first.units.hb20s},${first.units.retro}` } });
+    const text = JSON.stringify(dossier); assert.match(text, /011000111/); assert.match(text, /BRA2E19/); assert.match(text, /Marcos André Ribeiro/); assert.match(text, /JCB/); assert.ok(!text.includes("Chevrolet Onix"));
+    const pdf = await renderFleetPdf(dossier, { institution: null, template: createDefaultReportTemplate(), emission: null });
+    assert.ok((await ReadablePdf.load(pdf)).getPageCount() > 1, "Dossiê multiveículo gera PDF legível de várias páginas");
+    await assert.rejects(buildFleetControlReport(restricted, { query: { area: "relatorios", unitIds: first.units.retro } }), /repartição/);
+    const classification = await queryFleetControl(context, { area: "cadastro" });
+    assert.equal(classification.rows.find(row => row.id === first.units.hb20s)?.status, "NORMAL"); assert.equal(classification.rows.find(row => row.id === first.units.onix)?.status, "ALTO"); assert.equal(classification.rows.find(row => row.id === first.units.cronos)?.status, "BAIXO");
+    await assert.rejects(db.$transaction(tx => eligibleFleetDriver(tx, fleetScope(context), first.drivers.pontos, { departmentId: first.departments[0], control: { allowedLicenseCategories: ["B"] } })), /Pontuação/);
+    assert.equal((await db.materialStock.findUniqueOrThrow({ where: { id: "poc-frota-v1-estoque-diesel" } })).quantity, 1975);
+  } finally { await db?.$disconnect(); await socket.stop(); await memory.close(); }
 });
 
 test("50 itens: banco aditivo, RH/CNH, agenda, guarita única, componentes, CTB/multas, sinistro e relatórios", { timeout: 240000 }, async () => {
@@ -67,7 +115,7 @@ test("50 itens: banco aditivo, RH/CNH, agenda, guarita única, componentes, CTB/
     assert.equal(await db.fleetExpense.count({ where: { sourceKey: `component:${install.id}` } }), 1);
     const ctb = await mutate("catalog", { kind: "CTB", reference: "FIXTURE-2026", sourceReference: "Documento sintético explicitamente isolado", complete: false, entries: [{ code: "TEST-CTB", name: "Infração sintética", details: { nature: "TESTE", points: 7, amount: "100.00", article: "Fixture", validFrom: "2026-01-01", validUntil: null } }] });
     const entry = await db.fleetCatalogEntry.findFirstOrThrow({ where: { versionId: ctb.id } });
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayInBrazil();
     for (let index = 0; index < 3; index++) await mutate("fine", { unitId: unit.id, driverId: driver.id, ctbEntryId: entry.id, aitNumber: `TEST-AIT-${index}`, city: "Cidade de teste", occurredAt: today, dueAt: today, amount: "100.00" });
     await assert.rejects(db.$transaction((tx) => eligibleFleetDriver(tx, fleetScope(context), driver.id, { departmentId: department.id, control: { allowedLicenseCategories: ["B"] } })), /Pontuação/);
     const firstFine = await db.fleetFine.findFirstOrThrow(); await mutate("fineStatus", { fineId: firstFine.id, status: "CANCELADA", reason: "Cancelamento fundamentado na fixture" });

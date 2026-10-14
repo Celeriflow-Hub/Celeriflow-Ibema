@@ -51,6 +51,7 @@ test("C5 requires separate receiver and attester before any database operation",
 test("C5 rejects a receipt line when its material differs from the approved process item", async () => {
   let receiptCreated = false;
   const transaction = {
+    $queryRaw: async () => [],
     purchaseReceipt: {
       findUnique: async () => null,
       create: async () => {

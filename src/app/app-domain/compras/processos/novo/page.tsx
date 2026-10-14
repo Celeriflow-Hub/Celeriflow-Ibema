@@ -19,6 +19,7 @@ export default async function NovoProcessoPage() {
         secretariatId: true,
         secretariat: { select: { acronym: true, name: true } },
         _count: { select: { items: true } },
+        items: { select: { customName: true, quantity: true, catalogItem: { select: { code: true, name: true, unit: true } } } },
       },
       orderBy: { approvedAt: 'desc' },
     }),
@@ -34,6 +35,7 @@ export default async function NovoProcessoPage() {
       secretariatId: request.secretariatId,
       secretariatName: request.secretariat.acronym || request.secretariat.name,
       itemCount: request._count.items,
+      itemLabels: request.items.map(item => item.catalogItem ? `${item.catalogItem.code} · ${item.catalogItem.name} · ${item.quantity} ${item.catalogItem.unit}` : item.customName || "Item livre"),
     }))}
   />;
 }

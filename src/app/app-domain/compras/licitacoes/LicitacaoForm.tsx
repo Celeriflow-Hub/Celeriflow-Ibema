@@ -30,12 +30,15 @@ type ProcessOption = {
   number: string;
   object: string;
   estimatedValue: number | null;
+  itemLabels?: string[];
 };
 
 export function LicitacaoForm({ data, processos = [] }: { data?: BiddingData; processos?: ProcessOption[] }) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const [selectedProcessId, setSelectedProcessId] = useState<string>(data?.processId || "");
+  const [itemSearch, setItemSearch] = useState("");
+  const matchingProcesses = processos.filter(process => process.id === selectedProcessId || `${process.number} ${process.object} ${(process.itemLabels || []).join(" ")}`.toLocaleLowerCase("pt-BR").includes(itemSearch.toLocaleLowerCase("pt-BR")));
 
   const selectedProcess = processos.find(p => p.id === selectedProcessId);
   const calculatedTotal = selectedProcess?.estimatedValue ?? 0;
@@ -103,12 +106,13 @@ export function LicitacaoForm({ data, processos = [] }: { data?: BiddingData; pr
               </div>
               <div className="space-y-2">
                 <Label htmlFor="processId">Processo Vinculado</Label>
+                <Input aria-label="Buscar materiais, equipamentos ou serviços para a licitação" placeholder="Buscar processo por código, material, equipamento ou serviço" value={itemSearch} onChange={event => setItemSearch(event.target.value)} />
                 <Select name="processId" value={selectedProcessId} onValueChange={(val) => setSelectedProcessId(val || "")} required>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o processo" />
                   </SelectTrigger>
                   <SelectContent>
-                    {processos.map(proc => (
+                    {matchingProcesses.map(proc => (
                       <SelectItem key={proc.id} value={proc.id}>{proc.number} - {proc.object.substring(0, 30)}...</SelectItem>
                     ))}
                   </SelectContent>
@@ -118,6 +122,7 @@ export function LicitacaoForm({ data, processos = [] }: { data?: BiddingData; pr
 
             <div className="space-y-2">
               <Label>Valor Total Estimado (R$)</Label>
+              {selectedProcess?.itemLabels?.length ? <ul className="rounded border bg-slate-50 p-2 text-xs">{selectedProcess.itemLabels.map((label, index) => <li key={index}>{label}</li>)}</ul> : null}
               <div className="text-2xl font-bold text-slate-700 h-10 flex items-center">
                 {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(calculatedTotal)}
               </div>

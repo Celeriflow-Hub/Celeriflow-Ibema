@@ -15,7 +15,7 @@ const navigation: ModuleNavGroup[] = [
     title: "Serviços & Atendimento",
     items: [
       { title: "Catálogo de Serviços", href: "/protocolos/servicos", icon: "clipboardList" },
-      { title: "Pedidos e-SIC & Ouvidoria", href: "/transparencia/solicitacoes", icon: "messageSquare" },
+      { title: "Pedidos e-SIC & Ouvidoria", href: "/transparencia/solicitacoes", icon: "headphones" },
       { title: "Diário Oficial", href: "/transparencia/diario-oficial", icon: "fileText" },
     ],
   },

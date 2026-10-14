@@ -5,11 +5,6 @@ import { ModuleShell, type ModuleNavGroup } from "@/components/app-ui/erp/Module
 
 const navigation: ModuleNavGroup[] = [
   { title: "Visão Geral", items: [{ title: "Painel Financeiro", href: "/financeiro", icon: "layoutDashboard", exact: true }] },
-  { title: "Planejamento e Orçamento", items: [
-    { title: "Planejamento Orçamentário", href: "/financeiro/orcamento/planejamento", icon: "bookOpenCheck" },
-    { title: "Cadastros Orçamentários", href: "/financeiro/orcamento/cadastros", icon: "fileText" },
-    { title: "Dotações e Reservas", href: "/financeiro/orcamento", icon: "scale", exact: true },
-  ] },
   { title: "Execução da Despesa", items: [
     { title: "Empenhos", href: "/financeiro/empenhos", icon: "fileText" },
     { title: "Liquidações", href: "/financeiro/liquidacoes", icon: "receipt" },

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MoneyInput } from "@/components/ui/MoneyInput";
+import type { ProcurementItemKind } from "@/lib/compras/shared-catalog";
 import {
   Dialog,
   DialogContent,
@@ -30,19 +31,23 @@ type CatalogItem = {
   unit: string;
   estimatedValue: number | null;
   isActive: boolean;
+  productKind: string;
+  externalCode?: string | null;
 };
 
 const pageSize = 20;
 
-export default function CatalogoClient({ items }: { items: CatalogItem[] }) {
+export default function CatalogoClient({ items, initialKind = "MATERIAL", openNew = false }: { items: CatalogItem[]; initialKind?: ProcurementItemKind; openNew?: boolean }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [page, setPage] = useState(1);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(openNew);
+  const [kindFilter, setKindFilter] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
+    productKind: initialKind,
     code: "",
     name: "",
     description: "",
@@ -56,9 +61,11 @@ export default function CatalogoClient({ items }: { items: CatalogItem[] }) {
   const filteredItems = items.filter(item => {
     const matchesSearch = !normalizedSearch || item.name.toLowerCase().includes(normalizedSearch) ||
       (item.code && item.code.toLowerCase().includes(normalizedSearch)) ||
-      (item.category && item.category.toLowerCase().includes(normalizedSearch));
+      (item.category && item.category.toLowerCase().includes(normalizedSearch)) ||
+      (item.description && item.description.toLowerCase().includes(normalizedSearch)) ||
+      (item.externalCode && item.externalCode.toLowerCase().includes(normalizedSearch));
     const matchesStatus = statusFilter === "ALL" || (statusFilter === "ACTIVE" ? item.isActive : !item.isActive);
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesStatus && (!kindFilter || item.productKind === kindFilter);
   });
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -67,6 +74,7 @@ export default function CatalogoClient({ items }: { items: CatalogItem[] }) {
   const handleOpenNew = () => {
     setEditingId(null);
     setFormData({
+      productKind: initialKind,
       code: "",
       name: "",
       description: "",
@@ -81,6 +89,7 @@ export default function CatalogoClient({ items }: { items: CatalogItem[] }) {
   const handleOpenEdit = (item: CatalogItem) => {
     setEditingId(item.id);
     setFormData({
+      productKind: (item.productKind === "SERVICO" || item.productKind === "PATRIMONIO" ? item.productKind : "MATERIAL") as ProcurementItemKind,
       code: item.code || "",
       name: item.name,
       description: item.description || "",
@@ -123,6 +132,7 @@ export default function CatalogoClient({ items }: { items: CatalogItem[] }) {
   return (
     <PageFrame className="flex min-h-0 flex-1 flex-col gap-2 space-y-0">
       <ErpPageTitle title="Catálogo de Itens" icon={<FileText className="size-4 shrink-0 text-emerald-600" />} action={<Button size="sm" onClick={handleOpenNew}><Plus className="size-3.5" /><span className="hidden sm:inline">Novo item</span></Button>} />
+      <div className="flex flex-wrap items-center gap-2 text-xs"><label>Tipo <select aria-label="Filtrar catálogo por tipo" value={kindFilter} onChange={event => { setKindFilter(event.target.value); setPage(1); }} className="h-8 rounded border bg-white px-2"><option value="">Todos</option><option value="MATERIAL">Materiais</option><option value="PATRIMONIO">Equipamentos</option><option value="SERVICO">Serviços a contratar</option></select></label><span>Materiais e equipamentos compartilham código e cadastro com o Almoxarifado. Serviços não geram estoque.</span></div>
 
       <ErpListFrame
         toolbar={<div className="flex flex-wrap items-center gap-2"><label className="relative min-w-0 flex-1 sm:max-w-md"><span className="sr-only">Buscar item</span><Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" /><input value={searchTerm} onChange={(event) => { setSearchTerm(event.target.value); setPage(1); }} placeholder="Buscar por código, nome ou categoria" className="h-8 w-full rounded-md border border-slate-200 bg-white pl-8 pr-2.5 text-xs outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600/20" /></label><label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">Situação<select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }} className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700"><option value="ALL">Todas</option><option value="ACTIVE">Ativos</option><option value="INACTIVE">Inativos</option></select></label></div>}
@@ -142,7 +152,7 @@ export default function CatalogoClient({ items }: { items: CatalogItem[] }) {
                   {visibleItems.map((item) => (
                     <ErpTableTr key={item.id}>
                       <ErpTableTd className="font-mono font-semibold">{item.code || '-'}</ErpTableTd>
-                      <ErpTableTd className="font-semibold" title={item.name}>{item.name}</ErpTableTd>
+                       <ErpTableTd className="font-semibold" title={item.name}>{item.name}<span className="block text-[10px] font-normal text-slate-500">{item.productKind === "SERVICO" ? "Serviço" : item.productKind === "PATRIMONIO" ? "Equipamento" : "Material"}</span></ErpTableTd>
                       <ErpTableTd className="hidden lg:table-cell" title={item.description || "Sem descrição"}>{item.description || 'Sem descrição'}</ErpTableTd>
                       <ErpTableTd>{item.category || '-'}</ErpTableTd>
                       <ErpTableTd>{item.unit}</ErpTableTd>
@@ -174,10 +184,11 @@ export default function CatalogoClient({ items }: { items: CatalogItem[] }) {
             <DialogDescription>Preencha as informações do produto, material ou serviço.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <label className="grid gap-1 text-sm font-medium">Tipo do item<select aria-label="Tipo do cadastro" disabled={Boolean(editingId)} value={formData.productKind} onChange={event => setFormData({ ...formData, productKind: event.target.value as ProcurementItemKind, unit: "UN" })} className="h-9 rounded border bg-white px-2"><option value="MATERIAL">Material</option><option value="PATRIMONIO">Equipamento</option><option value="SERVICO">Serviço a contratar</option></select></label>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="code">Código (Opcional)</Label>
-                <Input id="code" value={formData.code} onChange={e => setFormData({...formData, code: e.target.value})} placeholder="Ex: MAT-001" />
+                 <Label htmlFor="code">Código compartilhado</Label>
+                 <Input id="code" readOnly value={formData.code} placeholder={formData.productKind === "SERVICO" ? "SRV000001 — automático" : formData.productKind === "PATRIMONIO" ? "EQP000001 — automático" : "MAT000001 — automático"} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="category">Categoria (Opcional)</Label>
@@ -198,7 +209,7 @@ export default function CatalogoClient({ items }: { items: CatalogItem[] }) {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="unit">Unidade de Medida *</Label>
-                <Input id="unit" required value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} placeholder="Ex: UN, CX, PCT, L" />
+                 <Input id="unit" required value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} placeholder={formData.productKind === "SERVICO" ? "Ex.: H, DIA, MES ou UN" : "UN, KG, m ou KT"} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="estimatedValue">Valor Estimado (R$)</Label>

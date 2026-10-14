@@ -391,9 +391,11 @@ export async function approvePurchaseReceipt(db: Db, actor: ProcurementActor, ra
   });
 
   return db.$transaction(async (tx) => {
-    const existing = await tx.purchaseReceipt.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM "PurchaseProcessItem" WHERE id IN (${Prisma.join(input.items.map(item => item.purchaseProcessItemId).sort())}) ORDER BY id FOR UPDATE`);
+    const existing = await tx.purchaseReceipt.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { items: true } });
     if (existing) {
       await assertProcessBudgetScope(tx, actor, existing.purchaseProcessId);
+      if (existing.contractId !== input.contractId || existing.documentId !== input.documentId || existing.number !== input.number || existing.receiverId !== input.receiverId || existing.attesterId !== input.attesterId || existing.receivedAt.valueOf() !== input.receivedAt.valueOf() || existing.items.length !== input.items.length || input.items.some(item => !existing.items.some(prior => prior.purchaseProcessItemId === item.purchaseProcessItemId && prior.materialId === item.materialId && prior.warehouseId === item.warehouseId && prior.quantity === item.quantity && prior.unitCost === item.unitCost && prior.batchNumber === (item.batchNumber?.trim() || "") && (prior.expirationDate?.valueOf() ?? null) === (item.expirationDate?.valueOf() ?? null) && prior.brand === item.brand && prior.model === item.model && prior.serialNumber === item.serialNumber))) throw new ProcurementLifecycleError("Recebimento já registrado com outros dados. Preserve o registro confirmado.");
       return existing;
     }
 

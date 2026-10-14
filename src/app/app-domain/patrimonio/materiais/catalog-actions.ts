@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { nextMaterialCode } from "@/lib/patrimonio/identifiers";
 import { materialUnitValues } from "@/lib/patrimonio/material-units";
+import { syncMaterialCatalog } from "@/lib/compras/shared-catalog";
 
 const materialEditInput = z.object({
   description: z.string().trim().max(4000).optional(),
@@ -19,6 +20,8 @@ type MaterialActionResult = { error?: string };
 
 function revalidateMaterials() {
   revalidatePath("/patrimonio/materiais");
+  revalidatePath("/patrimonio/bens/estoque");
+  revalidatePath("/compras/catalogo");
   revalidatePath("/patrimonio/requisicoes/nova");
   revalidatePath("/compras/solicitacoes");
   revalidatePath("/compras/solicitacoes/nova");
@@ -67,10 +70,13 @@ export async function updateMaterialAction(id: string, input: MaterialEditInput)
     if (typeChanged && linkedRecords > 0 && !hasPendingAssetReceipt) {
       throw new Error("O tipo não pode ser alterado após o material possuir estoque ou documentos vinculados.");
     }
-    const code = typeChanged ? await nextMaterialCode(context.prisma, parsed.type) : undefined;
-    await context.prisma.material.update({
+    await context.prisma.$transaction(async tx => {
+    const code = typeChanged ? await nextMaterialCode(tx, parsed.type) : undefined;
+    await tx.material.update({
       where: { id: material.id },
       data: { description: parsed.description || null, categoryId: category.id, subcategoryId: parsed.subcategoryId || null, type: parsed.type, unitOfMeasure, ...(code ? { code } : {}) },
+    });
+    await syncMaterialCatalog(tx, material.id);
     });
     revalidateMaterials();
     return {};
@@ -84,7 +90,10 @@ export async function setMaterialActiveAction(id: string, active: boolean): Prom
     const context = await getTenantContextForModuleOperation("PATRIMONIO", "update");
     const material = await context.prisma.material.findUnique({ where: { id }, select: { id: true } });
     if (!material) throw new Error("Material não encontrado.");
-    await context.prisma.material.update({ where: { id: material.id }, data: { isActive: active } });
+    await context.prisma.$transaction(async tx => {
+      await tx.material.update({ where: { id: material.id }, data: { isActive: active } });
+      await syncMaterialCatalog(tx, material.id);
+    });
     revalidateMaterials();
     return {};
   } catch (error) {

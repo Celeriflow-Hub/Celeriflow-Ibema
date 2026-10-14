@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
+import { CatalogItemPicker } from "../_components/CatalogItemPicker";
 
 type RequestItem = {
   id?: string;
@@ -270,20 +271,7 @@ export function SolicitacaoForm({ data, catalogItems = [], secretarias = [], dep
                        <div className="grid flex-1 grid-cols-12 gap-3">
                         <div className="col-span-12 md:col-span-6 space-y-2">
                           <Label>Produto ou Serviço *</Label>
-                          <Select 
-                            value={item.catalogItemId || (item.customName ? "custom" : "")} 
-                            onValueChange={(val) => updateItem(index, 'catalogItemId', val ?? "")}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione do Catálogo ou Serviço Customizado..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="custom">-- Serviço / Item Fora do Catálogo --</SelectItem>
-                              {catalogItems.map(c => (
-                                <SelectItem key={c.id} value={c.id}>{c.code ? `[${c.code}] ` : ''}{c.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                           <CatalogItemPicker items={catalogItems} value={item.catalogItemId || (item.customName ? "custom" : "")} onChange={id => updateItem(index, "catalogItemId", id)} />
                           
                           {item.catalogItemId === "custom" && (
                             <Input 

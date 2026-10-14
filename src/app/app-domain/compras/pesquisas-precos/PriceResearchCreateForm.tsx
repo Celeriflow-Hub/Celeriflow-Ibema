@@ -10,6 +10,7 @@ type ProcessOption = {
   object: string;
   purchaseRequestNumber: string;
   itemCount: number;
+  itemLabels?: string[];
 };
 
 function defaultDeadline() {
@@ -21,6 +22,8 @@ function defaultDeadline() {
 export function PriceResearchCreateForm({ processes }: { processes: ProcessOption[] }) {
   const router = useRouter();
   const [processId, setProcessId] = useState("");
+  const [itemSearch, setItemSearch] = useState("");
+  const matchingProcesses = processes.filter(process => process.id === processId || `${process.number} ${process.object} ${(process.itemLabels || []).join(" ")}`.toLocaleLowerCase("pt-BR").includes(itemSearch.toLocaleLowerCase("pt-BR")));
   const [deadlineAt, setDeadlineAt] = useState(defaultDeadline);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -47,12 +50,13 @@ export function PriceResearchCreateForm({ processes }: { processes: ProcessOptio
   return (
     <form onSubmit={submit} className="space-y-4">
       {error ? <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p> : null}
+      <input aria-label="Buscar materiais, equipamentos ou serviços para pesquisa de preços" value={itemSearch} onChange={event => setItemSearch(event.target.value)} placeholder="Buscar por código, material, equipamento ou serviço" className="h-9 w-full rounded border bg-white px-3 text-sm" />
       <div className="grid gap-4 md:grid-cols-2">
         <label className="space-y-1.5 text-sm font-medium text-slate-800 md:col-span-2">
           Processo e solicitação de origem
           <select value={processId} onChange={(event) => setProcessId(event.target.value)} required className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base font-normal outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/15">
             <option value="">Selecione um processo</option>
-            {processes.map((process) => <option key={process.id} value={process.id}>{process.number} · Solicitação {process.purchaseRequestNumber} · {process.itemCount} item(ns)</option>)}
+            {matchingProcesses.map((process) => <option key={process.id} value={process.id}>{process.number} · Solicitação {process.purchaseRequestNumber} · {process.itemCount} item(ns)</option>)}
           </select>
         </label>
         <label className="space-y-1.5 text-sm font-medium text-slate-800">

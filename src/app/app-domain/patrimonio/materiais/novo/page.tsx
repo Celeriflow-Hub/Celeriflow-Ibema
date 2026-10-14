@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { nextMaterialCode } from "@/lib/patrimonio/identifiers";
 import { materialUnits, materialUnitValues } from "@/lib/patrimonio/material-units";
+import { syncMaterialCatalog } from "@/lib/compras/shared-catalog";
 
 const materialInput = z.object({
   name: z.string().trim().min(1, "Informe o nome do material."),
@@ -22,11 +23,13 @@ const materialInput = z.object({
   isPerishable: z.boolean(),
 });
 
-export default async function NovoMaterialPage() {
+export default async function NovoMaterialPage({ searchParams }: { searchParams?: Promise<{ type?: string }> }) {
+  const equipmentOnly = (await searchParams)?.type === "PATRIMONIO";
+  const returnPath = equipmentOnly ? "/patrimonio/bens/estoque" : "/patrimonio/materiais";
   const { prisma } = await getTenantContextForModule("PATRIMONIO");
   const [categories, catalogItems, subcategories] = await Promise.all([
     prisma.materialCategory.findMany({ where: { isActive: true }, select: { id: true, code: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.catalogItem.findMany({ where: { isActive: true }, select: { id: true, code: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.catalogItem.findMany({ where: { isActive: true, productKind: { in: ["MATERIAL", "PATRIMONIO"] }, materials: { none: {} } }, select: { id: true, code: true, name: true }, orderBy: { name: "asc" } }),
     prisma.materialSubcategory.findMany({ where: { isActive: true, category: { isActive: true } }, include: { category: { select: { name: true } } }, orderBy: [{ categoryId: "asc" }, { code: "asc" }] }),
   ]);
 
@@ -62,9 +65,11 @@ export default async function NovoMaterialPage() {
     if (parsed.data.subcategoryId && !await context.prisma.materialSubcategory.count({ where: { id: parsed.data.subcategoryId, categoryId: category.id, isActive: true } })) throw new Error("Selecione subclasse ativa pertencente à categoria do material.");
     if (catalogItemId && !catalogItem) throw new Error("Selecione um item de catálogo ativo.");
     if (catalogItem && catalogItem.materials.length) throw new Error("O item de catálogo já está vinculado a outro material.");
+    if (catalogItem?.productKind === "SERVICO") throw new Error("Serviço não pode ser cadastrado como estoque físico.");
 
-    const code = await nextMaterialCode(context.prisma, parsed.data.type);
-    await context.prisma.material.create({
+    await context.prisma.$transaction(async tx => {
+    const code = await nextMaterialCode(tx, parsed.data.type);
+    const material = await tx.material.create({
       data: {
         code,
         name: parsed.data.name,
@@ -79,18 +84,22 @@ export default async function NovoMaterialPage() {
         isPerishable: parsed.data.isPerishable,
       },
     });
+    await syncMaterialCatalog(tx, material.id);
+    });
     revalidatePath("/patrimonio/materiais");
+    revalidatePath("/patrimonio/bens/estoque");
+    revalidatePath("/compras/catalogo");
     revalidatePath("/compras/solicitacoes/nova");
-    redirect("/patrimonio/materiais");
+    redirect(parsed.data.type === "PATRIMONIO" ? "/patrimonio/bens/estoque" : "/patrimonio/materiais");
   }
 
   return (
     <PageFrame className="min-h-0 max-w-3xl flex-1 space-y-2 overflow-y-auto p-3">
-      <PageHeader title="Novo Material" action={<Link href="/patrimonio/materiais"><Button size="sm" variant="outline">Cancelar</Button></Link>} />
+      <PageHeader title={equipmentOnly ? "Novo equipamento" : "Novo material"} action={<Link href={returnPath}><Button size="sm" variant="outline">Cancelar</Button></Link>} />
       <form action={createMaterial} className="grid gap-3 rounded-md border bg-white p-4 md:grid-cols-2">
         <label className="grid gap-1 text-sm font-medium">
           Tipo de material
-          <select name="type" defaultValue="MATERIAL" className="h-9 rounded-md border bg-background px-3 text-sm"><option value="MATERIAL">Material</option><option value="PATRIMONIO">Equipamento</option></select>
+          <input type="hidden" name="type" value={equipmentOnly ? "PATRIMONIO" : "MATERIAL"} /><span>{equipmentOnly ? "Equipamento" : "Material"}</span>
         </label>
         <label className="grid gap-1 text-sm font-medium">
           Unidade de medida

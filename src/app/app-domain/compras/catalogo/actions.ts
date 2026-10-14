@@ -1,96 +1,43 @@
 "use server";
 
-import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { saveSharedCatalogItem } from "@/lib/compras/shared-catalog";
 
-async function getTenantPrisma(operation: ModuleOperation) {
-  return (await getTenantContextForModuleOperation("COMPRAS", operation)).prisma;
+const catalogInput = z.object({
+  id: z.string().nullable(), code: z.string(), name: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(4000), category: z.string().trim().max(200),
+  unit: z.string().trim().min(1).max(30), estimatedValue: z.number().finite().nonnegative(),
+  isActive: z.boolean(), productKind: z.enum(["MATERIAL", "PATRIMONIO", "SERVICO"]).default("MATERIAL"),
+});
+
+function refreshCatalog() {
+  for (const path of ["/compras/catalogo", "/compras/solicitacoes", "/compras/processos", "/patrimonio/materiais", "/patrimonio/bens/estoque"]) revalidatePath(path);
 }
 
-type CatalogItemFormData = {
-  id: string | null;
-  code: string;
-  name: string;
-  description: string;
-  category: string;
-  unit: string;
-  estimatedValue: number;
-  isActive: boolean;
-};
-
-export async function saveCatalogItem(formData: CatalogItemFormData) {
-  const prisma = await getTenantPrisma(formData.id ? "update" : "create");
+export async function saveCatalogItem(formData: z.input<typeof catalogInput>) {
   try {
-    let finalCode = formData.code;
-
-    // Se não tiver código, gerar automaticamente
-    if (!finalCode || finalCode.trim() === "") {
-      // Pega o último código gerado ou a quantidade total para gerar um próximo
-      const count = await prisma.catalogItem.count();
-      const nextId = count + 1;
-      finalCode = `CAT-${String(nextId).padStart(4, '0')}`;
-      
-      // Validação de segurança, caso a exclusão de itens cause colisões
-      let existing = await prisma.catalogItem.findUnique({ where: { code: finalCode } });
-      let increment = nextId;
-      while (existing) {
-        increment++;
-        finalCode = `CAT-${String(increment).padStart(4, '0')}`;
-        existing = await prisma.catalogItem.findUnique({ where: { code: finalCode } });
-      }
-    } else {
-      // Se tiver código, verificar se já existe em outro item
-      const existing = await prisma.catalogItem.findUnique({ where: { code: finalCode } });
-      if (existing && existing.id !== formData.id) {
-        return { success: false, error: "Este código já está em uso por outro item. Escolha outro código ou deixe em branco para auto-gerar." };
-      }
-    }
-
-    if (formData.id) {
-      await prisma.catalogItem.update({
-        where: { id: formData.id },
-        data: {
-          code: finalCode,
-          name: formData.name,
-          description: formData.description,
-          category: formData.category,
-          unit: formData.unit,
-          estimatedValue: formData.estimatedValue,
-          isActive: formData.isActive
-        }
-      });
-    } else {
-      await prisma.catalogItem.create({
-        data: {
-          code: finalCode,
-          name: formData.name,
-          description: formData.description,
-          category: formData.category,
-          unit: formData.unit,
-          estimatedValue: formData.estimatedValue,
-          isActive: formData.isActive
-        }
-      });
-    }
-    revalidatePath("/compras/catalogo");
+    const input = catalogInput.parse(formData);
+    const { prisma } = await getTenantContextForModuleOperation("COMPRAS", input.id ? "update" : "create");
+    await prisma.$transaction(tx => saveSharedCatalogItem(tx, input));
+    refreshCatalog();
     return { success: true };
   } catch (error) {
-    console.error("Error saving catalog item:", error);
-    return { success: false, error: "Falha ao salvar o item do catálogo." };
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao salvar o catálogo compartilhado." };
   }
 }
 
 export async function toggleCatalogItemStatus(id: string, isActive: boolean) {
-  const prisma = await getTenantPrisma("update");
   try {
-    await prisma.catalogItem.update({
-      where: { id },
-      data: { isActive },
+    const { prisma } = await getTenantContextForModuleOperation("COMPRAS", "update");
+    await prisma.$transaction(async tx => {
+      await tx.material.updateMany({ where: { catalogItemId: id }, data: { isActive } });
+      await tx.catalogItem.update({ where: { id }, data: { isActive } });
     });
-    revalidatePath("/compras/catalogo");
+    refreshCatalog();
     return { success: true };
   } catch (error) {
-    console.error("Error toggling catalog item status:", error);
-    return { success: false, error: "Falha ao alterar o status do item." };
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao alterar a situação do item." };
   }
 }

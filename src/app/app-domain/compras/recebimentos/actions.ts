@@ -15,6 +15,7 @@ export async function approvePurchaseReceiptAction(input: ApprovePurchaseReceipt
     await recordPurchaseReceiptLiquidationAuthorization(context.prisma, actor, receipt.id);
     revalidatePath("/patrimonio/materiais");
     revalidatePath("/patrimonio/bens");
+    revalidatePath("/patrimonio/bens/estoque");
     revalidatePath("/compras/contratos");
     revalidatePath("/compras/recebimentos");
     revalidatePath("/financeiro/orcamento");

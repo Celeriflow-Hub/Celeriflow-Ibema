@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Save, Plus, Trash2 } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CatalogItemPicker } from "../_components/CatalogItemPicker";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
@@ -50,6 +50,7 @@ type PurchaseRequestOption = {
   secretariatId: string;
   secretariatName: string;
   itemCount: number;
+  itemLabels?: string[];
 };
 
 type ProcessoFormProps = {
@@ -65,6 +66,8 @@ export function ProcessoForm({ data, catalogItems = [], purchaseRequests = [] }:
   const [items, setItems] = useState<ProcessItem[]>(data?.items || []);
   const [purchaseRequestIds, setPurchaseRequestIds] = useState<string[]>(data?.purchaseRequestId ? [data.purchaseRequestId] : []);
   const [object, setObject] = useState(data?.object || "");
+  const [requestSearch, setRequestSearch] = useState("");
+  const matchingRequests = purchaseRequests.filter(request => purchaseRequestIds.includes(request.id) || `${request.number} ${request.object} ${(request.itemLabels || []).join(" ")}`.toLocaleLowerCase("pt-BR").includes(requestSearch.toLocaleLowerCase("pt-BR")));
   const selectedPurchaseRequests = purchaseRequests.filter((request) => purchaseRequestIds.includes(request.id));
   const selectedSecretariatId = selectedPurchaseRequests[0]?.secretariatId;
   const estimatedTotal = data
@@ -164,8 +167,9 @@ export function ProcessoForm({ data, catalogItems = [], purchaseRequests = [] }:
             {!data && (
               <div className="space-y-2">
                 <Label>Solicitações aprovadas de origem</Label>
+                <Input aria-label="Buscar materiais, equipamentos ou serviços para o processo" placeholder="Buscar por código, material, equipamento, serviço ou solicitação" value={requestSearch} onChange={event => setRequestSearch(event.target.value)} />
                 <div className="max-h-52 space-y-2 overflow-y-auto rounded-md border p-2">
-                  {purchaseRequests.length === 0 ? <p className="p-2 text-sm text-muted-foreground">Não há solicitações aprovadas disponíveis.</p> : purchaseRequests.map((request) => {
+                  {matchingRequests.length === 0 ? <p className="p-2 text-sm text-muted-foreground">Nenhuma solicitação aprovada encontrada para a busca.</p> : matchingRequests.map((request) => {
                     const checked = purchaseRequestIds.includes(request.id);
                     const incompatibleSecretariat = Boolean(selectedSecretariatId && selectedSecretariatId !== request.secretariatId && !checked);
                     return (
@@ -180,6 +184,7 @@ export function ProcessoForm({ data, catalogItems = [], purchaseRequests = [] }:
                         <span className="min-w-0">
                           <span className="block font-medium">{request.number} · {request.secretariatName}</span>
                           <span className="block truncate text-xs text-muted-foreground">{request.object} · {request.itemCount} item(ns) · {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(request.estimatedValue ?? 0)}</span>
+                          <span className="block text-xs text-slate-600">{request.itemLabels?.join("; ")}</span>
                         </span>
                       </label>
                     );
@@ -230,20 +235,7 @@ export function ProcessoForm({ data, catalogItems = [], purchaseRequests = [] }:
                       <div className="grid flex-1 grid-cols-12 gap-3">
                         <div className="col-span-12 md:col-span-6 space-y-2">
                           <Label>Produto ou Serviço *</Label>
-                           <Select disabled={item.sourceLocked}
-                            value={item.catalogItemId || (item.customName ? "custom" : "")} 
-                            onValueChange={(val) => updateItem(index, 'catalogItemId', val ?? "")}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione do Catálogo ou Serviço Customizado..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="custom">-- Serviço / Item Fora do Catálogo --</SelectItem>
-                              {catalogItems.map(c => (
-                                <SelectItem key={c.id} value={c.id}>{c.code ? `[${c.code}] ` : ''}{c.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                           <CatalogItemPicker disabled={item.sourceLocked} items={catalogItems} value={item.catalogItemId || (item.customName ? "custom" : "")} onChange={id => updateItem(index, "catalogItemId", id)} />
                           
                           {item.catalogItemId === "custom" && (
                             <Input 

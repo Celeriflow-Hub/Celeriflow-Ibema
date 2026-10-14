@@ -18,6 +18,9 @@ export async function saveInstitution(formData: FormData) {
       if (logoFile.size > 2 * 1024 * 1024) { 
         return { error: "O arquivo da logo deve ter no máximo 2MB." };
       }
+      if (!["image/png", "image/jpeg"].includes(logoFile.type)) {
+        return { error: "Selecione uma logo em PNG ou JPG." };
+      }
       
       const buffer = Buffer.from(await logoFile.arrayBuffer());
       const base64 = buffer.toString("base64");

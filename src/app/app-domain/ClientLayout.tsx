@@ -100,7 +100,7 @@ export default function ClientLayout({
     "/configuracoes/auditoria", "/configuracoes/perfis", "/configuracoes/processos",
     "/configuracoes/usuarios", "/documentos/assinaturas", "/documentos/ged", "/documentos/modelos",
   ];
-  const isFixedLote3Workspace = fixedLote3Routes.includes(pathname);
+  const isFixedLote3Workspace = fixedLote3Routes.includes(pathname) || pathname === "/administracao" || pathname.startsWith("/administracao/");
   const isFixedErpWorkspace = [
     "/protocolos",
     "/protocolos/processos",

@@ -10,8 +10,6 @@ const navigation: ModuleNavGroup[] = [
       { title: "Departamentos", href: "/administracao/departamentos", icon: "network" },
       { title: "Unidades", href: "/administracao/unidades", icon: "mapPin" },
       { title: "Cargos e Funções", href: "/administracao/cargos", icon: "briefcase" },
-      { title: "Servidores", href: "/administracao/servidores", icon: "users" },
-      { title: "Demandas Internas", href: "/administracao/demandas", icon: "clipboardList" },
       { title: "Calendário", href: "/administracao/calendario", icon: "calendarDays" },
     ],
   },
@@ -24,5 +22,5 @@ const navigation: ModuleNavGroup[] = [
 ];
 
 export default function AdministracaoLayout({ children }: { children: React.ReactNode }) {
-  return <ModuleShell moduleTitle="Administração Geral" moduleCaption="Gestão institucional" moduleIcon="building2" navigation={navigation}>{children}</ModuleShell>;
+  return <ModuleShell moduleTitle="Administração Geral" moduleCaption="Gestão institucional" moduleIcon="building2" navigation={navigation}><div className="flex min-h-0 flex-1 flex-col overflow-y-auto [&_.page-header]:shrink-0">{children}</div></ModuleShell>;
 }

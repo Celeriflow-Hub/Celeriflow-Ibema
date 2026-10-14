@@ -5,6 +5,9 @@ const isProductionBuild = process.env.NODE_ENV === "production";
 const nextConfig: NextConfig = {
   // PDFKit resolves its bundled font metrics through Node filesystem paths.
   serverExternalPackages: ["pdfkit"],
+  experimental: {
+    serverActions: { bodySizeLimit: "3mb" },
+  },
   typescript: {
     // The production build only needs application sources. Test fixtures and
     // operational scripts are checked by their own commands and can otherwise

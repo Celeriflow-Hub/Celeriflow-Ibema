@@ -14,9 +14,12 @@ export default function NovoCargoPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    const result = await createRole(new FormData(e.currentTarget));
-    if (result?.error) {
-      setError(result.error);
+    try {
+      const result = await createRole(new FormData(e.currentTarget));
+      if (result?.error) setError(result.error);
+    } catch {
+      setError("Não foi possível confirmar o salvamento. Tente novamente.");
+    } finally {
       setLoading(false);
     }
   }
@@ -37,13 +40,8 @@ export default function NovoCargoPage() {
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-700">Nível (Opcional)</label>
-              <select name="level" className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none text-sm bg-white">
-                <option value="">Selecione...</option>
-                <option value="Secretário">Secretário</option>
-                <option value="Diretor">Diretor</option>
-                <option value="Coordenador">Coordenador</option>
-                <option value="Servidor">Servidor Base</option>
-              </select>
+              <input name="level" list="role-levels" placeholder="Informe o nível ou referência do cargo" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm" />
+              <datalist id="role-levels"><option value="Secretário" /><option value="Diretor" /><option value="Coordenador" /><option value="Servidor" /></datalist>
             </div>
             
             <div className="space-y-2">
@@ -51,7 +49,7 @@ export default function NovoCargoPage() {
               <div className="pt-2">
                 <label className="inline-flex items-center cursor-pointer">
                   <input type="checkbox" name="canSign" className="rounded border-slate-300 text-purple-600 focus:ring-purple-500 w-5 h-5" />
-                  <span className="ml-2 text-sm text-slate-700">Sim, possui poder de assinatura (SLA)</span>
+                  <span className="ml-2 text-sm text-slate-700">Previsão de assinatura (informativo)</span>
                 </label>
               </div>
             </div>
@@ -59,7 +57,7 @@ export default function NovoCargoPage() {
 
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-700">Descrição</label>
-            <input type="text" name="description" placeholder="Breve descrição das atribuições" className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none text-sm" />
+            <textarea name="description" rows={3} placeholder="Descreva as atribuições do cargo ou função" className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none text-sm" />
           </div>
         </div>
         <div className="flex h-10 justify-end border-t border-slate-200 bg-slate-50 px-3">

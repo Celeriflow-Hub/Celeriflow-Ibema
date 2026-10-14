@@ -11,6 +11,7 @@ const PAGE_SIZE = 20;
 type Role = {
   id: string;
   name: string;
+  description: string | null;
   level: string | null;
   canSign: boolean;
   isActive: boolean;
@@ -19,12 +20,15 @@ type Role = {
 
 export default function CargosClient({ roles }: { roles: Role[] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", level: "", canSign: false });
+  const [editForm, setEditForm] = useState({ name: "", description: "", level: "", canSign: false });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(1);
 
   const filteredRoles = roles.filter(role => 
     role.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (role.description && role.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (role.level && role.level.toLowerCase().includes(searchTerm.toLowerCase()))
   );
   const activePage = Math.min(page, Math.max(1, Math.ceil(filteredRoles.length / PAGE_SIZE)));
@@ -34,6 +38,7 @@ export default function CargosClient({ roles }: { roles: Role[] }) {
     setEditingId(role.id);
     setEditForm({ 
       name: role.name, 
+      description: role.description || "",
       level: role.level || "",
       canSign: role.canSign
     });
@@ -41,20 +46,34 @@ export default function CargosClient({ roles }: { roles: Role[] }) {
 
   const handleSaveEdit = async () => {
     if (editingId && window.confirm("Tem certeza que deseja salvar estas alterações?")) {
-      await updateRole(editingId, editForm);
-      setEditingId(null);
+      setSaving(true);
+      setError("");
+      try {
+        const result = await updateRole(editingId, editForm);
+        if (result.error) setError(result.error); else setEditingId(null);
+      } catch {
+        setError("Não foi possível salvar o cargo. Tente novamente.");
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
   const handleDeactivate = async (id: string) => {
     if (window.confirm("Tem certeza que deseja INATIVAR este cargo? Ele não será excluído do sistema, apenas desativado.")) {
-      await deactivateRole(id);
+      try {
+        const result = await deactivateRole(id);
+        setError(result.error || "");
+      } catch { setError("Não foi possível inativar o cargo. Tente novamente."); }
     }
   };
 
   const handleActivate = async (id: string) => {
     if (window.confirm("Deseja REATIVAR este cargo?")) {
-      await activateRole(id);
+      try {
+        const result = await activateRole(id);
+        setError(result.error || "");
+      } catch { setError("Não foi possível reativar o cargo. Tente novamente."); }
     }
   };
 
@@ -71,7 +90,7 @@ export default function CargosClient({ roles }: { roles: Role[] }) {
   }
 
   return (
-    <ErpListFrame className="min-h-0" toolbar={<div className="flex min-h-7 items-center justify-between gap-2">
+    <ErpListFrame className="min-h-0" summary={error ? <p role="alert" className="text-xs text-red-700">{error}</p> : <p className="text-[11px] text-slate-500">Previsão de assinatura é informativa e não concede autorização para assinar documentos.</p>} toolbar={<div className="flex min-h-7 items-center justify-between gap-2">
         <h2 className="text-xs font-bold text-slate-800">Cargos cadastrados</h2>
         <input 
           type="text" 
@@ -82,12 +101,13 @@ export default function CargosClient({ roles }: { roles: Role[] }) {
           onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
         />
       </div>} pagination={<ErpPagination page={activePage} total={filteredRoles.length} pageSize={PAGE_SIZE} previousHref="#" nextHref="#" label="cargos" onPageChange={setPage} />}>
-      <table className="w-full table-fixed text-left text-xs">
+      <table className="w-full min-w-[1000px] table-fixed text-left text-xs">
         <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-100 text-[10px] font-bold uppercase tracking-[0.06em] text-slate-600">
           <tr>
             <th className="h-8 px-3">Nome</th>
+            <th className="h-8 w-64 px-3">Atribuições</th>
             <th className="h-8 px-3">Nível</th>
-            <th className="h-8 px-3">Pode Assinar?</th>
+            <th className="h-8 px-3">Previsão de assinatura</th>
             <th className="h-8 px-3 text-center">Servidores Vinculados</th>
             <th className="h-8 px-3 text-center">Status</th>
             <th className="h-8 px-3 text-right">Ações</th>
@@ -100,6 +120,9 @@ export default function CargosClient({ roles }: { roles: Role[] }) {
                 {editingId === role.id ? (
                   <input className="border rounded px-2 py-1 w-full" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
                 ) : role.name}
+              </td>
+              <td className="px-3 py-2 text-slate-600">
+                {editingId === role.id ? <textarea aria-label="Atribuições" className="w-full rounded border px-2 py-1" value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} /> : role.description || "Não informadas"}
               </td>
               <td className="px-3 text-slate-600">
                 {editingId === role.id ? (
@@ -126,8 +149,8 @@ export default function CargosClient({ roles }: { roles: Role[] }) {
               <td className="px-3 text-right">
                 {editingId === role.id ? (
                   <>
-                    <button onClick={handleSaveEdit} className="text-emerald-600 hover:text-emerald-700 font-medium text-xs bg-emerald-50 px-2 py-1 rounded">Salvar</button>
-                    <button onClick={() => setEditingId(null)} className="text-slate-500 hover:text-slate-700 font-medium text-xs bg-slate-100 px-2 py-1 rounded">Cancelar</button>
+                    <button disabled={saving} onClick={handleSaveEdit} className="text-emerald-600 hover:text-emerald-700 font-medium text-xs bg-emerald-50 px-2 py-1 rounded disabled:opacity-50">{saving ? "Salvando..." : "Salvar"}</button>
+                    <button disabled={saving} onClick={() => setEditingId(null)} className="text-slate-500 hover:text-slate-700 font-medium text-xs bg-slate-100 px-2 py-1 rounded">Cancelar</button>
                   </>
                 ) : (
                   <>
@@ -150,7 +173,7 @@ export default function CargosClient({ roles }: { roles: Role[] }) {
           ))}
           {filteredRoles.length === 0 && (
             <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-xs text-slate-500">
+                <td colSpan={7} className="px-3 py-6 text-center text-xs text-slate-500">
                 Nenhum cargo encontrado para &quot;{searchTerm}&quot;.
               </td>
             </tr>

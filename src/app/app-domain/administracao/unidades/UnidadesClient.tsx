@@ -12,6 +12,7 @@ type Unit = {
   id: string;
   name: string;
   type: string;
+  address: string | null;
   managerName: string | null;
   secretariatId: string;
   isActive: boolean;
@@ -26,13 +27,14 @@ export default function UnidadesClient({
   secretariats: { id: string, name: string }[]
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", type: "", managerName: "", secretariatId: "" });
+  const [editForm, setEditForm] = useState({ name: "", type: "", address: "", managerName: "", secretariatId: "" });
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(1);
 
   const filteredUnits = units.filter(unit => 
     unit.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     unit.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (unit.address && unit.address.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (unit.managerName && unit.managerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (unit.secretariat?.name && unit.secretariat.name.toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -44,6 +46,7 @@ export default function UnidadesClient({
     setEditForm({ 
       name: unit.name, 
       type: unit.type,
+      address: unit.address || "",
       managerName: unit.managerName || "",
       secretariatId: unit.secretariatId || secretariats[0]?.id || ""
     });
@@ -86,11 +89,12 @@ export default function UnidadesClient({
           onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
         />
       </div>} pagination={<ErpPagination page={activePage} total={filteredUnits.length} pageSize={PAGE_SIZE} previousHref="#" nextHref="#" label="unidades" onPageChange={setPage} />}>
-      <table className="w-full table-fixed text-left text-xs">
+      <table className="w-full min-w-[1000px] table-fixed text-left text-xs">
           <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-100 text-[10px] font-bold uppercase tracking-[0.06em] text-slate-600">
             <tr>
               <th className="h-8 px-3">Nome</th>
               <th className="h-8 px-3">Tipo</th>
+              <th className="h-8 w-56 px-3">Endereço</th>
               <th className="h-8 px-3">Secretaria Vinculada</th>
               <th className="h-8 px-3">Responsável</th>
               <th className="h-8 px-3 text-center">Status</th>
@@ -112,9 +116,12 @@ export default function UnidadesClient({
                     <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-md text-xs font-medium">{unit.type}</span>
                   )}
                 </td>
-                <td className="px-3 text-slate-600">
-                  {editingId === unit.id ? (
-                    <select 
+                 <td className="px-3 py-2 text-slate-600">
+                   {editingId === unit.id ? <input aria-label="Endereço da unidade" className="w-full rounded border px-2 py-1" value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })} /> : unit.address || "Não informado"}
+                 </td>
+                 <td className="px-3 text-slate-600">
+                   {editingId === unit.id ? (
+                     <select 
                       className="border rounded px-2 py-1 w-full" 
                       value={editForm.secretariatId} 
                       onChange={e => setEditForm({...editForm, secretariatId: e.target.value})}
@@ -155,7 +162,7 @@ export default function UnidadesClient({
             ))}
             {filteredUnits.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-xs text-slate-500">
+                <td colSpan={7} className="px-3 py-6 text-center text-xs text-slate-500">
                   Nenhuma unidade encontrada.
                 </td>
               </tr>

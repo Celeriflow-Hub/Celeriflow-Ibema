@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Institution } from "@prisma/client";
 import Image from "next/image";
 import { saveInstitution } from "./actions";
@@ -11,11 +11,21 @@ const UFS = [
   "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
 ];
 
+function maskCep(value: string) {
+  return value.replace(/\D/g, "").slice(0, 8).replace(/^(\d{5})(\d)/, "$1-$2");
+}
+
 export function InstitutionForm({ institution }: { institution: Institution | null }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
   const [cnpj, setCnpj] = useState(institution?.cnpj || "");
-  const [zipCode, setZipCode] = useState(institution?.zipCode || "");
+  const [zipCode, setZipCode] = useState(maskCep(institution?.zipCode || ""));
+  const [address, setAddress] = useState(institution?.address || "");
+  const [city, setCity] = useState(institution?.city || "");
+  const [state, setState] = useState(institution?.state || "");
+  const [searchingCep, setSearchingCep] = useState(false);
+  const [cepMessage, setCepMessage] = useState("");
+  const cepRequest = useRef<AbortController | null>(null);
   const [phone, setPhone] = useState(institution?.phone || "");
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -45,17 +55,58 @@ export function InstitutionForm({ institution }: { institution: Institution | nu
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (loading) return;
+    const formData = new FormData(event.currentTarget);
+    const logo = formData.get("logoFile");
+    if (logo instanceof File && logo.size > 2 * 1024 * 1024) {
+      setMessage({ type: "error", text: "O arquivo da logo deve ter no máximo 2 MB." });
+      return;
+    }
     setLoading(true);
     setMessage({ type: "", text: "" });
-
-    const result = await saveInstitution(new FormData(event.currentTarget));
-    if (result.error) {
-      setMessage({ type: "error", text: result.error });
-    } else {
-      setMessage({ type: "success", text: "Dados salvos com sucesso!" });
-      window.location.reload();
+    try {
+      const result = await saveInstitution(formData);
+      setMessage(result.error
+        ? { type: "error", text: result.error }
+        : { type: "success", text: "Dados salvos com sucesso!" });
+    } catch {
+      setMessage({ type: "error", text: "Não foi possível confirmar o salvamento. Verifique sua conexão e tente novamente." });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  }
+
+  async function lookupCep() {
+    const digits = zipCode.replace(/\D/g, "");
+    if (digits.length !== 8) {
+      setCepMessage("Informe um CEP com 8 dígitos.");
+      return;
+    }
+    cepRequest.current?.abort();
+    const controller = new AbortController();
+    cepRequest.current = controller;
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    setSearchingCep(true);
+    setCepMessage("");
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`, { signal: controller.signal });
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      if (cepRequest.current !== controller) return;
+      if (data.erro) {
+        setCepMessage("CEP não encontrado. Preencha o endereço manualmente.");
+        return;
+      }
+      if (data.logradouro) setAddress([data.logradouro, data.bairro].filter(Boolean).join(" — "));
+      setCity(data.localidade || "");
+      setState(data.uf || "");
+      setCepMessage("CEP localizado. Confira o endereço e complete o número e complemento.");
+    } catch {
+      if (cepRequest.current === controller) setCepMessage("Não foi possível consultar o CEP. Tente novamente ou preencha manualmente.");
+    } finally {
+      clearTimeout(timeout);
+      if (cepRequest.current === controller) setSearchingCep(false);
+    }
   }
 
   const imageSrc = previewImage ?? institution?.logoUrl;
@@ -122,22 +173,26 @@ export function InstitutionForm({ institution }: { institution: Institution | nu
               </div>
               <div className="space-y-1 md:col-span-2 xl:col-span-3">
                 <label htmlFor="institution-address" className={labelClassName}>Endereço completo</label>
-                <input id="institution-address" type="text" name="address" defaultValue={institution?.address || ""} className={inputClassName} />
+                <input id="institution-address" type="text" name="address" value={address} onChange={(e) => setAddress(e.target.value)} className={inputClassName} />
               </div>
               <div className="space-y-1">
                 <label htmlFor="institution-city" className={labelClassName}>Cidade</label>
-                <input id="institution-city" type="text" name="city" defaultValue={institution?.city || ""} className={inputClassName} />
+                <input id="institution-city" type="text" name="city" value={city} onChange={(e) => setCity(e.target.value)} className={inputClassName} />
               </div>
               <div className="space-y-1">
                 <label htmlFor="institution-state" className={labelClassName}>Estado (UF)</label>
-                <select id="institution-state" name="state" defaultValue={institution?.state || ""} className={inputClassName}>
+                <select id="institution-state" name="state" value={state} onChange={(e) => setState(e.target.value)} className={inputClassName}>
                   <option value="">Selecione</option>
                   {UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
                 </select>
               </div>
               <div className="space-y-1">
                 <label htmlFor="institution-zip-code" className={labelClassName}>CEP</label>
-                <input id="institution-zip-code" type="text" name="zipCode" value={zipCode} onChange={(e) => setZipCode(e.target.value.replace(/\D/g, "").slice(0, 8))} placeholder="00000000" inputMode="numeric" className={inputClassName} />
+                <div className="flex gap-1">
+                  <input id="institution-zip-code" type="text" name="zipCode" value={zipCode} onChange={(e) => { cepRequest.current?.abort(); cepRequest.current = null; setSearchingCep(false); setCepMessage(""); setZipCode(maskCep(e.target.value)); }} onBlur={() => { if (zipCode.replace(/\D/g, "").length === 8) void lookupCep(); }} placeholder="00000-000" inputMode="numeric" maxLength={9} className={inputClassName} />
+                  <button type="button" disabled={searchingCep} onClick={() => void lookupCep()} className="shrink-0 rounded border border-slate-300 px-2 text-xs disabled:opacity-50">{searchingCep ? "Buscando..." : "Buscar CEP"}</button>
+                </div>
+                {cepMessage && <p role="status" className="text-[11px] text-slate-600">{cepMessage}</p>}
               </div>
             </div>
           </section>

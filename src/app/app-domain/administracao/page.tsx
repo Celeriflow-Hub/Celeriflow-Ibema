@@ -1,4 +1,4 @@
-import { Building2, Network, Users, ClipboardList, MapPin, Briefcase } from "lucide-react";
+import { Building2, Network, MapPin, Briefcase } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
@@ -13,18 +13,14 @@ export default async function AdministracaoPage() {
   const institution = await prisma.institution.findFirst();
   const secretariatsCount = await prisma.secretariat.count();
   const departmentsCount = await prisma.department.count();
-  const employeesCount = await prisma.employee.count();
   const rolesCount = await prisma.role.count();
   const unitsCount = await prisma.administrativeUnit.count();
-  // const demandsCount = await prisma.internalDemand.count({ where: { status: "Aberta" } }); // Removed to avoid error if model is not created yet, wait, does internalDemand exist?
 
   const stats = [
     { title: "Secretarias", value: secretariatsCount.toString(), icon: Building2, href: "/administracao/secretarias", color: "text-blue-600", bg: "bg-blue-100" },
     { title: "Departamentos", value: departmentsCount.toString(), icon: Network, href: "/administracao/departamentos", color: "text-amber-600", bg: "bg-amber-100" },
     { title: "Unidades", value: unitsCount.toString(), icon: MapPin, href: "/administracao/unidades", color: "text-indigo-600", bg: "bg-indigo-100" },
     { title: "Cargos", value: rolesCount.toString(), icon: Briefcase, href: "/administracao/cargos", color: "text-purple-600", bg: "bg-purple-100" },
-    { title: "Servidores", value: employeesCount.toString(), icon: Users, href: "/administracao/servidores", color: "text-emerald-600", bg: "bg-emerald-100" },
-    { title: "Demandas Abertas", value: "0", icon: ClipboardList, href: "/administracao/demandas", color: "text-rose-600", bg: "bg-rose-100" },
   ];
 
   return (
@@ -57,7 +53,7 @@ export default async function AdministracaoPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => (
           <Link key={stat.title} href={stat.href} className="block group">
             <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white p-3 shadow-sm transition-colors hover:border-slate-300 hover:shadow-md">

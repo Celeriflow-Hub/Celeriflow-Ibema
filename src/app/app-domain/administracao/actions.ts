@@ -6,6 +6,7 @@ import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence"
 import { getTenantContextForSystemAdministration } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
+import { calendarEventSchema } from "@/lib/administration/calendar-event";
 
 type ActionResult = { error: string | null };
 
@@ -100,8 +101,14 @@ export async function activateRole(id: string) {
   return result;
 }
 
-export async function updateRole(id: string, data: { name: string; level: string; canSign: boolean }) {
-  const result = await runAdministrativeMutation("ROLE", id, (context) => auditMutation(context, "ROLE", id, (tx) => tx.role.update({ where: { id }, data }).then(() => undefined)));
+export async function updateRole(id: string, data: { name: string; description: string; level: string; canSign: boolean }) {
+  const result = await runAdministrativeMutation("ROLE", id, (context) => auditMutation(context, "ROLE", id, async (tx) => {
+    const name = data.name.trim();
+    if (!name) throw new Error("O nome do cargo ou função é obrigatório.");
+    const duplicate = await tx.role.findFirst({ where: { id: { not: id }, name: { equals: name, mode: "insensitive" } }, select: { id: true } });
+    if (duplicate) throw new Error("Já existe um cargo ou função com este nome. Edite ou reative o registro existente.");
+    await tx.role.update({ where: { id }, data: { name, description: data.description.trim() || null, level: data.level.trim() || null, canSign: data.canSign } });
+  }));
   if (!result.error) revalidatePath("/administracao/cargos");
   return result;
 }
@@ -147,7 +154,7 @@ export async function activateAdministrativeUnit(id: string) {
   return result;
 }
 
-export async function updateAdministrativeUnit(id: string, data: { name: string; type: string; managerName: string; secretariatId: string }) {
+export async function updateAdministrativeUnit(id: string, data: { name: string; type: string; address: string; managerName: string; secretariatId: string }) {
   const result = await runAdministrativeMutation("ADMINISTRATIVE_UNIT", id, async (context) => {
     const [unit, secretariat, employeeCount] = await Promise.all([
       context.prisma.administrativeUnit.findUnique({ where: { id }, select: { secretariatId: true } }),
@@ -175,7 +182,9 @@ export async function deleteCalendarEvent(id: string) {
 }
 
 export async function updateCalendarEvent(id: string, data: { title: string; description: string; date: Date; type: string; isHoliday: boolean }) {
-  const result = await runAdministrativeMutation("CALENDAR_EVENT", id, (context) => auditMutation(context, "CALENDAR_EVENT", id, (tx) => tx.calendarEvent.update({ where: { id }, data }).then(() => undefined)));
+  const parsed = calendarEventSchema.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const result = await runAdministrativeMutation("CALENDAR_EVENT", id, (context) => auditMutation(context, "CALENDAR_EVENT", id, (tx) => tx.calendarEvent.update({ where: { id }, data: parsed.data }).then(() => undefined)));
   if (!result.error) revalidatePath("/administracao/calendario");
   return result;
 }

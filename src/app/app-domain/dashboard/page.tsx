@@ -26,7 +26,8 @@ import {
   BadgeCheck,
   Church,
   ClipboardCheck,
-  Headset
+  Headset,
+  Globe
 } from "lucide-react";
 import { canShowDashboardCard, canViewModule, getOptionalTenantContext, isModuleBlockedForUser } from "@/lib/platform/tenant-context";
 import { PageFrame } from "@/components/app-ui/PageFrame";
@@ -48,7 +49,7 @@ type MenuItem = {
 
 const menuItems: MenuItem[] = [
   { code: "ADMINISTRACAO", name: "Administração", description: "Gestão interna e controle", href: "/administracao", icon: Building2, color: "text-[#2563EB]", bg: "bg-[#DBEAFE]", solid: "bg-[#2563EB]" },
-  { code: "CADASTROS", name: "Cadastros", description: "Pessoas, empresas e locais", href: "/cadastros", icon: Database, color: "text-[#64748B]", bg: "bg-[#E2E8F0]", solid: "bg-[#64748B]" },
+  { code: "PORTAL_CIDADAO", accessCode: "ATENDIMENTO", name: "Portal do Cidadão", description: "Gestão de notícias, páginas, banners e portal público", href: "/portal-cidadao", icon: Globe, color: "text-[#0284C7]", bg: "bg-[#E0F2FE]", solid: "bg-[#0284C7]" },
   { code: "PROCESSOS", name: "Processos e Protocolo", description: "Gestão de trâmites", href: "/protocolos", icon: Files, color: "text-[#0EA5E9]", bg: "bg-[#E0F2FE]", solid: "bg-[#0EA5E9]" },
   { code: "ATENDIMENTO", name: "Atendimento ao Cidadão", description: "Ouvidoria e chamados", href: "/atendimento", icon: HeadphonesIcon, color: "text-[#F97316]", bg: "bg-[#FFEDD5]", solid: "bg-[#F97316]" },
   { code: "TRANSPARENCIA", name: "Portal Transparência", description: "Acesso à informação", href: "/transparencia", icon: Eye, color: "text-[#06B6D4]", bg: "bg-[#CFFAFE]", solid: "bg-[#06B6D4]" },

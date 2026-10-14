@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { cadastroPeople, cadastroRoles, executiveUnits, legislativeUnits } from "./plausible-cadastro-data";
 
 config({ path: ".env.local", quiet: true });
 config({ quiet: true });
@@ -68,16 +69,20 @@ async function main() {
         await tx.secretariat.upsert({ where: { id: secretariatId }, update: {}, create: { id: secretariatId, name: `POC P0 — Administração ${suffix}` } });
         for (let i = 1; i <= 21; i++) {
           const id = `${prefix}${suffix}-ug-${i}`;
-          await tx.budgetUnit.upsert({ where: { id }, update: {}, create: { id, code: `POC.P0.${suffix}.${String(i).padStart(3, "0")}`, name: `POC P0 — Unidade ${i} (${suffix})`, secretariatId } });
+          const name = (suffix === "exe" ? executiveUnits : legislativeUnits)[i - 1];
+          await tx.budgetUnit.upsert({ where: { id }, update: {}, create: { id, code: `POC.P0.${suffix}.${String(i).padStart(3, "0")}`, name, secretariatId } });
           await tx.planningEntityUnit.upsert({ where: { budgetUnitId: id }, update: {}, create: { budgetUnitId: id, governmentEntityId } });
-          await tx.costCenter.upsert({ where: { id: `${prefix}${suffix}-cc-${i}` }, update: {}, create: { id: `${prefix}${suffix}-cc-${i}`, code: `POC.P0.${suffix}.CC.${i}`, name: `POC P0 — Centro ${i} (${suffix})`, governmentEntityId, secretariatId } });
+          await tx.costCenter.upsert({ where: { id: `${prefix}${suffix}-cc-${i}` }, update: {}, create: { id: `${prefix}${suffix}-cc-${i}`, code: `POC.P0.${suffix}.CC.${i}`, name: `${name} — Custeio`, governmentEntityId, secretariatId } });
         }
         const roles: Record<string, Record<string, boolean>> = { proponente: { create: true, update: true }, aprovador: { update: true, legalApproval: true }, sancionador: { update: true, legalApproval: true }, consulta: { create: false, update: false, issueReports: true }, financeiro: { create: true, update: true, issueReports: true }, controlador: { create: true, update: true, issueReports: true }, notificado: { create: false, update: false } };
         for (const [role, grants] of Object.entries(roles)) {
           const id = `${prefix}${suffix}-${role}`;
           const permissions = { modules: Object.fromEntries(["PLANEJAMENTO", "FINANCEIRO", "TRIBUTACAO", "AUDITORIA", "CAMARA", "DOCUMENTOS", "TRANSPARENCIA"].map((code) => [code, { blocked: false, ...grants }])) };
-          await tx.configuracaoPerfil.upsert({ where: { id }, update: {}, create: { id, codigo: `POC_P0_${suffix}_${role}`.toUpperCase(), nome: `POC P0 — ${role} ${suffix}`, permissoes: JSON.stringify(permissions) } });
-          await tx.usuario.upsert({ where: { id }, update: {}, create: { id, nome: `POC P0 — ${role} ${suffix}`, email: `${id}@example.test`, perfilId: id } });
+          const roleIndex = cadastroRoles.findIndex(([key]) => key === role);
+          const roleLabel = cadastroRoles[roleIndex][1];
+          const person = cadastroPeople[roleIndex + (suffix === "leg" ? 7 : 0)];
+          await tx.configuracaoPerfil.upsert({ where: { id }, update: {}, create: { id, codigo: `POC_P0_${suffix}_${role}`.toUpperCase(), nome: `${roleLabel} — ${suffix === "exe" ? "Executivo" : "Legislativo"}`, permissoes: JSON.stringify(permissions) } });
+          await tx.usuario.upsert({ where: { id }, update: {}, create: { id, nome: person.name, email: `${id}@example.test`, perfilId: id } });
           await tx.usuarioUnidadeGestora.upsert({ where: { usuarioId_budgetUnitId: { usuarioId: id, budgetUnitId: `${prefix}${suffix}-ug-1` } }, update: {}, create: { id: `${id}-scope`, usuarioId: id, budgetUnitId: `${prefix}${suffix}-ug-1` } });
         }
         const ppaId = `${prefix}${suffix}-ppa`;

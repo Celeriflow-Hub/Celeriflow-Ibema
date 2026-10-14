@@ -5,7 +5,7 @@ import { UserCog, Plus, Search, Shield, Trash2, X } from "lucide-react";
 import { deleteUsuario, upsertUsuario, toggleUsuarioStatus } from "../actions";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
-import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import { ErpCompactListFrame } from "@/components/app-ui/erp/ErpCompactListFrame";
 import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
 
 const PAGE_SIZE = 20;
@@ -131,7 +131,7 @@ export default function UsuariosClient({
         action={<button onClick={openNewModal} disabled={!perfis.length} className="flex h-8 items-center gap-2 rounded-md bg-slate-900 px-3 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900"><Plus className="h-4 w-4" />Novo Usuário</button>}
         className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white"
       />
-      <ErpListFrame toolbar={
+      <ErpCompactListFrame toolbar={
           <div className="relative w-full md:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input 
@@ -146,8 +146,8 @@ export default function UsuariosClient({
           <table className="w-full table-fixed text-left text-xs">
             <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase text-slate-500 dark:bg-slate-800/95">
               <tr>
-                <th className="w-[25%] px-2.5 py-2">Nome</th>
-                <th className="w-[26%] px-2.5 py-2">E-mail</th>
+                <th className="w-[22%] px-2.5 py-2">Nome</th>
+                <th className="w-[24%] px-2.5 py-2">E-mail</th>
                 <th className="w-[18%] px-2.5 py-2">Perfil</th>
                 <th className="hidden w-[18%] px-2.5 py-2 md:table-cell">Unidade/Setor</th>
                 <th className="w-[9%] px-2.5 py-2">Status</th>
@@ -159,17 +159,17 @@ export default function UsuariosClient({
                 <tr key={u.id} className="h-[38px] border-b border-slate-100 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/50">
                   <td className="max-w-0 truncate px-2.5 py-1.5 font-bold text-slate-900 dark:text-white" title={u.nome}>{u.nome}</td>
                   <td className="max-w-0 truncate px-2.5 py-1.5 text-slate-500 dark:text-slate-400" title={u.email}>{u.email}</td>
-                  <td className="px-2.5 py-1.5">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                      <Shield className="h-3 w-3" />
-                      {u.perfil.nome}
+                  <td className="max-w-0 px-2.5 py-1.5">
+                    <span title={u.perfil.nome} className="inline-flex h-[18px] max-w-full items-center gap-1 rounded-full bg-blue-50 px-1.5 text-[10px] font-medium text-blue-700">
+                      <Shield className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{u.perfil.nome}</span>
                     </span>
                   </td>
                   <td className="hidden max-w-0 truncate px-2.5 py-1.5 text-slate-600 md:table-cell" title={u.employee?.secretariat?.name || u.employee?.department?.name || undefined}>{u.employee?.secretariat?.name || u.employee?.department?.name || "-"}</td>
                   <td className="px-2.5 py-1.5">
                     <button
                       onClick={() => handleToggleStatus(u.id, !u.ativo)}
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                      className={`inline-flex items-center px-1.5 rounded-full text-[10px] font-medium transition-colors ${
                         u.ativo ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-red-100 text-red-700 hover:bg-red-200'
                       }`}
                     >
@@ -177,10 +177,10 @@ export default function UsuariosClient({
                     </button>
                   </td>
                   <td className="px-2.5 py-1.5 text-right">
-                    <div className="inline-flex items-center gap-3">
+                    <div className="inline-flex items-center gap-2 whitespace-nowrap">
                       <button title="Editar usuário"
                         onClick={() => openEditModal(u)}
-                        className="text-gray-600 hover:text-gray-900 font-medium text-sm dark:text-gray-300 dark:hover:text-white"
+                         className="text-gray-600 hover:text-gray-900 font-medium text-[11px] dark:text-gray-300 dark:hover:text-white"
                       >
                         Editar
                       </button>
@@ -205,7 +205,7 @@ export default function UsuariosClient({
               )}
             </tbody>
           </table>
-      </ErpListFrame>
+      </ErpCompactListFrame>
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

@@ -1,5 +1,6 @@
 import { config } from "dotenv";
 import { writeFileSync } from "node:fs";
+import { cadastroPeople } from "./plausible-cadastro-data";
 
 config({ path: ".env.local", quiet: true });
 config({ quiet: true });
@@ -28,14 +29,15 @@ async function main() {
       if (apply) await prisma.$transaction(async (tx) => {
         const existingPerson = await tx.person.findUnique({ where: { cpf: syntheticCpf(index) }, select: { id: true } });
         if (existingPerson && existingPerson.id !== ids.personId) throw new Error("Documento sintético já utilizado por outra identidade; nenhuma mesclagem automática executada.");
-        await tx.person.upsert({ where: { id: ids.personId }, update: {}, create: { id: ids.personId, cpf: syntheticCpf(index), fullName: `POC P1 — Pessoa fictícia ${index}`, status: "Ativo" } });
+        const contact = cadastroPeople[index - 1];
+        await tx.person.upsert({ where: { id: ids.personId }, update: {}, create: { id: ids.personId, cpf: syntheticCpf(index), fullName: contact.name, email: contact.email, phonePrimary: contact.phone, status: "Ativo" } });
         await tx.taxpayer.update({ where: { id: ids.taxpayerId }, data: { personId: ids.personId } });
         const supplier = await tx.supplier.findUnique({ where: { personId: ids.personId } });
         if (supplier && supplier.id !== ids.supplierId) throw new Error("Identidade de ensaio vinculada a fornecedor inesperado.");
         await tx.supplier.upsert({ where: { id: ids.supplierId }, update: {}, create: { id: ids.supplierId, personId: ids.personId, status: "Ativo", notes: "POC P1: pessoa e documento fictícios; uso exclusivo em ensaio." } });
         const creditor = await tx.creditor.findUnique({ where: { personId: ids.personId } });
         if (creditor && creditor.id !== ids.creditorId) throw new Error("Identidade de ensaio vinculada a credor inesperado.");
-        await tx.creditor.upsert({ where: { id: ids.creditorId }, update: {}, create: { id: ids.creditorId, personId: ids.personId, supplierId: ids.supplierId, name: `POC P1 — Pessoa fictícia ${index}`, document: syntheticCpf(index), status: "Ativo" } });
+        await tx.creditor.upsert({ where: { id: ids.creditorId }, update: {}, create: { id: ids.creditorId, personId: ids.personId, supplierId: ids.supplierId, name: contact.name, document: syntheticCpf(index), status: "Ativo" } });
         const marker = await tx.financialAuditLog.findFirst({ where: { action: "POC_P1_IDENTITY_LINK", entityId: ids.taxpayerId } });
         if (!marker) await tx.financialAuditLog.create({ data: { action: "POC_P1_IDENTITY_LINK", entityType: "Taxpayer", entityId: ids.taxpayerId, authorUsuarioId: actor.id, payload: { ...ids, synthetic: true, source: "POC_P0_CURRENT_V1", taxpayerIdPreserved: true } } });
       });

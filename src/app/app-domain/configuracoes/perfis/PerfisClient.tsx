@@ -11,7 +11,7 @@ import {
 import { deletePerfil, upsertPerfil, togglePerfilStatus } from "./actions";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
-import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
+import { ErpCompactListFrame } from "@/components/app-ui/erp/ErpCompactListFrame";
 import { ErpPagination } from "@/components/app-ui/erp/ErpPagination";
 
 const PAGE_SIZE = 20;
@@ -297,7 +297,7 @@ export default function PerfisClient({ perfis, capabilities }: { perfis: Perfil[
         action={capabilities.create ? <button onClick={openNew} className="flex h-8 items-center justify-center gap-2 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition-colors hover:bg-indigo-700"><Plus className="h-4 w-4" />Criar perfil</button> : undefined}
         className="dark:border-slate-700 dark:bg-slate-800 dark:[&>h1]:text-white"
       />
-      <ErpListFrame toolbar={
+      <ErpCompactListFrame toolbar={
           <div className="relative w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
@@ -312,11 +312,11 @@ export default function PerfisClient({ perfis, capabilities }: { perfis: Perfil[
           <table className="w-full table-fixed text-left text-xs">
             <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[10px] uppercase text-slate-500 dark:border-slate-800 dark:bg-slate-800/95 dark:text-slate-400">
               <tr>
-                <th className="px-6 py-4 font-semibold">Nome do Perfil</th>
-                <th className="px-6 py-4 font-semibold">Descrição</th>
-                <th className="px-6 py-4 font-semibold">Cobertura de Módulos</th>
-                <th className="px-6 py-4 font-semibold">Status</th>
-                <th className="px-6 py-4 font-semibold text-right">Ações</th>
+                <th className="w-[24%] font-semibold">Nome do Perfil</th>
+                <th className="w-[29%] font-semibold">Descrição</th>
+                <th className="w-[19%] font-semibold">Cobertura de Módulos</th>
+                <th className="w-[8%] font-semibold">Status</th>
+                <th className="w-[20%] font-semibold text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -337,15 +337,14 @@ export default function PerfisClient({ perfis, capabilities }: { perfis: Perfil[
                   return (
                     <tr key={perfil.id} className="h-[38px] transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
                       <td className="max-w-0 truncate px-2.5 py-1.5 font-bold text-slate-900 dark:text-white" title={perfil.nome}>
-                        <Lock className="w-4 h-4 text-indigo-500 shrink-0" />
-                        {perfil.nome}
+                        <span className="flex min-w-0 items-center gap-1.5"><Lock className="size-3 shrink-0 text-indigo-500" /><span className="truncate">{perfil.nome}</span></span>
                       </td>
                       <td className="max-w-0 truncate px-2.5 py-1.5 text-slate-600 dark:text-slate-400" title={perfil.descricao || undefined}>
                         {perfil.descricao || "Perfil de acesso padrão do sistema municipal."}
                       </td>
                       <td className="px-6 py-4">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                          <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-500" />
+                        <span className="inline-flex h-[18px] items-center gap-1 whitespace-nowrap rounded border border-slate-200 bg-slate-100 px-1.5 text-[10px] font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                          <SlidersHorizontal className="size-3 shrink-0 text-indigo-500" />
                            {activeModulesCount === MODULES_LIST.length ? `Todos os ${MODULES_LIST.length} Módulos` : `${activeModulesCount} de ${MODULES_LIST.length} Módulos`}
                         </span>
                       </td>
@@ -353,7 +352,7 @@ export default function PerfisClient({ perfis, capabilities }: { perfis: Perfil[
                         <button
                           onClick={() => handleToggle(perfil.id, perfil.ativo)}
                           disabled={!capabilities.update}
-                          className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
+                            className={`inline-flex h-[18px] items-center rounded-full px-2 text-[10px] font-semibold transition-colors ${
                             perfil.ativo
                               ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
                               : "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
@@ -363,19 +362,20 @@ export default function PerfisClient({ perfis, capabilities }: { perfis: Perfil[
                         </button>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="inline-flex items-center gap-2">
+                        <div className="inline-flex items-center gap-1 whitespace-nowrap">
                           <button
                             onClick={() => openEdit(perfil)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950 dark:text-indigo-300 dark:hover:bg-indigo-900 text-xs font-bold transition-colors"
+                            aria-label={`${capabilities.update ? "Configurar" : "Visualizar"} permissões de ${perfil.nome}`}
+                            className="inline-flex h-5 items-center gap-1 rounded bg-indigo-50 px-2 text-[10px] font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 dark:bg-indigo-950 dark:text-indigo-300 dark:hover:bg-indigo-900"
                           >
                             <Pencil className="h-3.5 w-3.5" />
-                            {capabilities.update ? "Configurar Permissões" : "Visualizar Permissões"}
+                            Permissões
                           </button>
                           {capabilities.delete && perfil.codigo !== "SYSTEM_ADMINISTRATOR" && (
                             <button
                               onClick={() => handleDelete(perfil)}
                               disabled={deletingId === perfil.id}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-rose-950 dark:text-rose-300 dark:hover:bg-rose-900 text-xs font-bold transition-colors"
+                              className="inline-flex h-5 items-center gap-1 rounded bg-rose-50 px-2 text-[10px] font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-rose-950 dark:text-rose-300 dark:hover:bg-rose-900"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                               {deletingId === perfil.id ? "Excluindo..." : "Excluir"}
@@ -389,7 +389,7 @@ export default function PerfisClient({ perfis, capabilities }: { perfis: Perfil[
               )}
             </tbody>
           </table>
-      </ErpListFrame>
+      </ErpCompactListFrame>
 
       {/* Permissions Config Modal */}
       {isModalOpen && (

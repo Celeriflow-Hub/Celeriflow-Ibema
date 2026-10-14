@@ -4,13 +4,14 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { nextMaterialCode } from "@/lib/patrimonio/identifiers";
+import { materialUnitValues } from "@/lib/patrimonio/material-units";
 
 const materialEditInput = z.object({
   description: z.string().trim().max(4000).optional(),
   categoryId: z.string().trim().min(1, "Selecione a categoria."),
   subcategoryId: z.string().trim().optional(),
   type: z.enum(["MATERIAL", "PATRIMONIO"]),
-  unitOfMeasure: z.string().trim().min(1, "Informe a unidade de medida.").max(30),
+  unitOfMeasure: z.string().trim().min(1).max(30),
 });
 
 export type MaterialEditInput = z.input<typeof materialEditInput>;
@@ -54,7 +55,8 @@ export async function updateMaterialAction(id: string, input: MaterialEditInput)
     if (!material) throw new Error("Material não encontrado.");
     if (!category) throw new Error("Categoria de material não encontrada ou inativa.");
     if (parsed.subcategoryId && !await context.prisma.materialSubcategory.count({ where: { id: parsed.subcategoryId, categoryId: category.id, isActive: true } })) throw new Error("Selecione uma subclasse ativa da categoria informada.");
-    const unitOfMeasure = parsed.unitOfMeasure.toUpperCase();
+    const unitOfMeasure = parsed.unitOfMeasure;
+    if (unitOfMeasure !== material.unitOfMeasure && !materialUnitValues.some(unit => unit === unitOfMeasure)) throw new Error("Selecione UN, KG, m ou KT.");
     const typeChanged = material.type !== parsed.type;
     const unitChanged = material.unitOfMeasure !== unitOfMeasure;
     const linkedRecords = Object.values(material._count).reduce((total, value) => total + value, 0);

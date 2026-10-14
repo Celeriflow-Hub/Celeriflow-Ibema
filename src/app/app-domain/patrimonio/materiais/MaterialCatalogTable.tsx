@@ -1,11 +1,22 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { FileText, Pencil, Power, RotateCcw, Trash2 } from "lucide-react";
 import { ConfirmActionDialog } from "@/components/app-ui/ConfirmActionDialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { deleteMaterialAction, setMaterialActiveAction, updateMaterialAction } from "./catalog-actions";
+import { materialUnits, normalizeMaterialUnit } from "@/lib/patrimonio/material-units";
+
+const columns = [
+  { label: "Código", width: 120 }, { label: "Nome", width: 240 },
+  { label: "Det.", width: 55 }, { label: "Categoria", width: 180 },
+  { label: "Status", width: 110 }, { label: "Almoxarifado", width: 190 },
+  { label: "Custo est.", width: 110 }, { label: "Validade/Garantia", width: 140 },
+  { label: "Un.", width: 65 }, { label: "Mínimo", width: 80 },
+  { label: "Saldo", width: 85 }, { label: "Ações", width: 110 },
+];
+const widthsStorageKey = "almoxarifado-material-column-widths-v1";
 
 type Category = { id: string; name: string };
 type Subcategory = { id: string; categoryId: string; name: string };
@@ -38,10 +49,45 @@ export function MaterialCatalogTable({ materials, categories, subcategories, can
   const [editValues, setEditValues] = useState({ description: "", categoryId: "", subcategoryId: "", type: "MATERIAL" as "MATERIAL" | "PATRIMONIO", unitOfMeasure: "" });
   const [editError, setEditError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [widths, setWidths] = useState(columns.map(column => column.width));
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem(widthsStorageKey) || "null");
+        if (Array.isArray(saved) && saved.length === columns.length && saved.every(width => typeof width === "number" && width >= 50 && width <= 800)) setWidths(saved);
+      } catch { /* Usa as larguras padrão quando o armazenamento não estiver disponível. */ }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  function storeWidths(next: number[]) {
+    try { localStorage.setItem(widthsStorageKey, JSON.stringify(next)); } catch { /* O ajuste permanece nesta sessão. */ }
+  }
+
+  function resizeColumn(index: number, event: React.PointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    const startX = event.clientX;
+    const startWidth = widths[index];
+    let next = widths;
+    const move = (pointer: PointerEvent) => {
+      next = widths.map((width, position) => position === index ? Math.min(800, Math.max(50, startWidth + pointer.clientX - startX)) : width);
+      setWidths(next);
+    };
+    const finish = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("lostpointercapture", finish);
+      storeWidths(next);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("lostpointercapture", finish);
+  }
 
   function startEdit(material: MaterialRow) {
     setEditingMaterial(material);
-    setEditValues({ description: material.description || "", categoryId: material.categoryId, subcategoryId: material.subcategoryId ?? "", type: material.type, unitOfMeasure: material.unitOfMeasure });
+    setEditValues({ description: material.description || "", categoryId: material.categoryId, subcategoryId: material.subcategoryId ?? "", type: material.type, unitOfMeasure: normalizeMaterialUnit(material.unitOfMeasure) });
     setEditError(null);
   }
 
@@ -61,21 +107,19 @@ export function MaterialCatalogTable({ materials, categories, subcategories, can
 
   return (
     <>
-      <table className="w-full table-fixed text-left text-[11px] leading-4 text-slate-700">
+      <table style={{ width: widths.reduce((sum, width) => sum + width, 0) }} className="table-fixed text-left text-[11px] leading-4 text-slate-700">
+        <colgroup>{widths.map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
         <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
           <tr className="h-7">
-            <th className="w-[8%] px-3 text-left">Código</th>
-            <th className="w-[17%] px-3 text-left">Nome</th>
-            <th className="w-[4%] px-1 text-center">Det.</th>
-            <th className="hidden w-[10%] px-3 text-left md:table-cell">Categoria</th>
-            <th className="w-[8%] px-3 text-left">Status</th>
-            <th className="hidden w-[13%] px-3 text-left xl:table-cell">Almoxarifado</th>
-            <th className="w-[9%] px-3 text-right">Custo est.</th>
-            <th className="hidden w-[8%] px-2 text-left xl:table-cell">Validade/Garantia</th>
-            <th className="w-[5%] px-2 text-center">Un.</th>
-            <th className="w-[7%] px-2 text-center">Mínimo</th>
-            <th className="w-[8%] px-2 text-center">Saldo</th>
-            <th className="w-[4.5rem] px-2 text-right">Ações</th>
+            {columns.map((column, index) => <th key={column.label} className="relative overflow-hidden px-3 text-left">
+              <span className="block truncate">{column.label}</span>
+              <button type="button" aria-label={`Ajustar largura da coluna ${column.label}`} title="Arraste para ajustar; use as setas para ajuste fino; clique duas vezes para restaurar" onPointerDown={event => resizeColumn(index, event)} onDoubleClick={() => { const next = widths.map((width, position) => position === index ? column.width : width); setWidths(next); storeWidths(next); }} onKeyDown={event => {
+                if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                event.preventDefault();
+                const next = widths.map((width, position) => position === index ? Math.min(800, Math.max(50, width + (event.key === "ArrowRight" ? 10 : -10))) : width);
+                setWidths(next); storeWidths(next);
+              }} className="absolute inset-y-0 right-0 w-2 touch-none cursor-col-resize border-r border-slate-300 hover:bg-emerald-200 focus-visible:bg-emerald-200" />
+            </th>)}
           </tr>
         </thead>
         <tbody>
@@ -92,16 +136,16 @@ export function MaterialCatalogTable({ materials, categories, subcategories, can
             }
 
             return (
-              <tr key={material.id} className="h-[clamp(28px,3.2vh,38px)] border-b border-slate-100 hover:bg-slate-50">
+              <tr key={material.id} className="h-7 border-b border-slate-100 hover:bg-slate-50">
                 <td className="px-3 py-0 font-semibold text-emerald-800"><span className="block truncate">{material.code}</span></td>
                 <td className="px-3 py-0 font-medium"><span className="block truncate">{material.name}</span></td>
                 <td className="px-1 py-0 text-center"><button type="button" aria-label={`Ver descrição de ${material.name}`} title="Ver descrição detalhada" onClick={() => setDescriptionMaterial(material)} className="inline-flex size-6 items-center justify-center rounded text-slate-500 outline-none hover:bg-emerald-50 hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-600"><FileText className="size-3.5" /></button></td>
-                <td className="hidden px-3 py-0 md:table-cell"><span className="block truncate">{material.categoryName}{material.subcategoryName ? ` / ${material.subcategoryName}` : ""}</span></td>
+                <td className="px-3 py-0"><span className="block truncate">{material.categoryName}{material.subcategoryName ? ` / ${material.subcategoryName}` : ""}</span></td>
                 <td className="px-3 py-0"><span className={`font-semibold ${material.status === "Ativo" ? "text-emerald-700" : material.status === "Inativo" ? "text-rose-700" : "text-amber-700"}`}>{material.status}</span></td>
-                <td className="hidden px-3 py-0 xl:table-cell"><span className="block truncate">{material.warehouseLabel}</span></td>
+                <td className="px-3 py-0"><span className="block truncate">{material.warehouseLabel}</span></td>
                 <td className="px-3 py-0 text-right tabular-nums">{currency(material.unitCost)}</td>
-                <td className="hidden px-2 py-0 tabular-nums xl:table-cell"><span className="block truncate">{material.expirationLabel}</span></td>
-                <td className="px-2 py-0 text-center font-semibold text-slate-600">{material.unitOfMeasure}</td>
+                <td className="px-2 py-0 tabular-nums"><span className="block truncate">{material.expirationLabel}</span></td>
+                <td className="px-2 py-0 text-center font-semibold text-slate-600">{normalizeMaterialUnit(material.unitOfMeasure)}</td>
                 <td className="px-2 py-0 text-center tabular-nums text-slate-500">{minStock.toLocaleString("pt-BR")}</td>
                 <td className="px-2 py-0 text-center tabular-nums">
                   <span className={`inline-block rounded border px-2 py-0.5 text-center text-xs tabular-nums ${stockColorClass}`}>
@@ -134,7 +178,7 @@ export function MaterialCatalogTable({ materials, categories, subcategories, can
             </div>
             <div className="grid grid-cols-2 gap-2 rounded border p-2.5 bg-white">
               <div><span className="text-slate-500 block">Categoria:</span> <span className="font-semibold">{descriptionMaterial?.categoryName}</span></div>
-              <div><span className="text-slate-500 block">Unidade de medida:</span> <span className="font-semibold">{descriptionMaterial?.unitOfMeasure}</span></div>
+               <div><span className="text-slate-500 block">Unidade de medida:</span> <span className="font-semibold">{descriptionMaterial ? normalizeMaterialUnit(descriptionMaterial.unitOfMeasure) : ""}</span></div>
               <div><span className="text-slate-500 block">Estoque mínimo:</span> <span className="font-semibold">{descriptionMaterial?.minStock}</span></div>
               <div><span className="text-slate-500 block">Saldo atual:</span> <span className="font-semibold">{descriptionMaterial?.totalStock}</span></div>
               <div><span className="text-slate-500 block">Custo estimado:</span> <span className="font-semibold">{currency(descriptionMaterial?.unitCost ?? null)}</span></div>
@@ -151,7 +195,7 @@ export function MaterialCatalogTable({ materials, categories, subcategories, can
             <label className="grid gap-1 text-sm font-medium">Descrição<textarea rows={4} value={editValues.description} onChange={(event) => setEditValues((current) => ({ ...current, description: event.target.value }))} className="rounded-md border border-input bg-background px-3 py-2 text-sm" /></label>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="grid gap-1 text-sm font-medium">Categoria<select required value={editValues.categoryId} onChange={(event) => setEditValues((current) => ({ ...current, categoryId: event.target.value, subcategoryId: "" }))} className="h-9 rounded-md border border-input bg-background px-3 text-sm"><option value="">Selecione</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
-              <label className="grid gap-1 text-sm font-medium">Unidade de Medida (Tipo)<select required value={editValues.unitOfMeasure} onChange={(event) => setEditValues((current) => ({ ...current, unitOfMeasure: event.target.value }))} className="h-9 rounded-md border border-input bg-background px-3 text-sm"><option value="UN">UN - Unidade</option><option value="KIT">KIT - Kit</option><option value="PÇ">PÇ - Peça</option><option value="KG">KG - Quilograma</option><option value="CX">CX - Caixa</option><option value="LT">LT - Litro</option><option value="ROLO">ROLO - Rolo</option><option value="PAQ">PAQ - Pacote</option><option value="FL">FL - Folha</option></select></label>
+              <label className="grid gap-1 text-sm font-medium">Unidade de medida<select required value={editValues.unitOfMeasure} onChange={(event) => setEditValues((current) => ({ ...current, unitOfMeasure: event.target.value }))} className="h-9 rounded-md border border-input bg-background px-3 text-sm">{!materialUnits.some(unit => unit.value === editValues.unitOfMeasure) && <option value={editValues.unitOfMeasure}>{editValues.unitOfMeasure} — Unidade do registro integrado</option>}{materialUnits.map(unit => <option key={unit.value} value={unit.value}>{unit.label}</option>)}</select></label>
             </div>
             <label className="grid gap-1 text-sm font-medium">Subclasse<select value={editValues.subcategoryId} onChange={event => setEditValues({ ...editValues, subcategoryId: event.target.value })} className="h-9 rounded-md border px-3"><option value="">Sem subclasse</option>{subcategories.filter(row => row.categoryId === editValues.categoryId).map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
             {editError && <p role="alert" className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">{editError}</p>}

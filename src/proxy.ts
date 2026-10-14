@@ -87,8 +87,9 @@ export default function proxy(req: NextRequest) {
 
   // Se o usuário tentar acessar a pasta interna via URL, reescreve ou redireciona
   if (url.pathname.startsWith("/app-domain")) {
-    const newUrl = url.pathname.replace("/app-domain", "") || "/";
-    return NextResponse.redirect(new URL(newUrl, req.url));
+    const destination = url.clone();
+    destination.pathname = url.pathname.replace("/app-domain", "") || "/";
+    return NextResponse.redirect(destination);
   }
 
   // Se for o domínio do sistema ou Vercel app, faz o rewrite (redirecionamento invisível) para /app-domain
@@ -112,7 +113,9 @@ export default function proxy(req: NextRequest) {
     }
 
     // Reescrita invisível: domínio -> /app-domain/...
-    return NextResponse.rewrite(new URL(newPath, req.url));
+    const destination = url.clone();
+    destination.pathname = newPath;
+    return NextResponse.rewrite(destination);
   }
 
   return NextResponse.next();

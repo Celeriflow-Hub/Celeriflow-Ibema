@@ -90,3 +90,18 @@ export async function setAssetActiveAction(assetId: string, active: boolean): Pr
     return { error: error instanceof AssetOperationError ? error.message : "Não foi possível alterar a situação do bem." };
   }
 }
+
+export async function updateEquipmentCustodyAction(id: string, input: { name: string; serialNumber: string; status: string }): Promise<ActionResult> {
+  try {
+    const parsed = z.object({ name: z.string().trim().min(1).max(240), serialNumber: z.string().trim().max(160), status: z.enum(["Em uso", "Ocioso", "Em manutenção"]) }).parse(input);
+    const context = await getTenantContextForModuleOperation("PATRIMONIO", "update");
+    const scope = assetOperationWhere(context);
+    const equipment = await context.prisma.equipmentCustody.findFirst({ where: { id, ...(scope.departmentId ? { departmentId: scope.departmentId as string } : {}) }, select: { id: true } });
+    if (!equipment) return { error: "Equipamento não encontrado no seu setor autorizado." };
+    await context.prisma.equipmentCustody.update({ where: { id }, data: { ...parsed, serialNumber: parsed.serialNumber || null } });
+    revalidateAssetPages();
+    return {};
+  } catch (error) {
+    return { error: error instanceof z.ZodError ? "Revise os dados do equipamento." : "Não foi possível atualizar o equipamento." };
+  }
+}

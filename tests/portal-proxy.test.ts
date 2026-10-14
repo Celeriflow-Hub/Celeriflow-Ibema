@@ -49,6 +49,40 @@ test("rotas internas continuam exigindo sessão e preservando o destino", () => 
   assert.equal(destination.searchParams.get("returnTo"), "/compras?pagina=2");
 });
 
+test("navegação autenticada preserva paginação, filtros e identificação do bem", () => {
+  for (const hostname of ["app.localhost", "celeriflow.vercel.app"]) {
+    for (const path of [
+      "/patrimonio/materiais?page=4&q=Envelope%20pardo&warehouse=central",
+      "/patrimonio/bens/editar?id=review%3Abem%3A01",
+    ]) {
+      const source = new URL(`https://${hostname}${path}`);
+      const response = proxy(new NextRequest(source, {
+        headers: { host: hostname, cookie: "celeriflow_session=session" },
+      }));
+      assert.equal(response.status, 200);
+      const destination = new URL(response.headers.get("x-middleware-rewrite")!);
+      assert.equal(destination.hostname, hostname);
+      assert.equal(destination.pathname, `/app-domain${source.pathname}`);
+      assert.equal(destination.search, source.search);
+    }
+  }
+});
+
+test("URL interna de edição redireciona para a URL pública sem perder o ID", () => {
+  const response = proxy(new NextRequest("https://app.localhost/app-domain/patrimonio/bens/editar?id=review%3Abem%3A01", {
+    headers: { host: "app.localhost", cookie: "celeriflow_session=session" },
+  }));
+  assert.equal(response.status, 307);
+  const destination = new URL(response.headers.get("location")!);
+  assert.equal(destination.pathname, "/patrimonio/bens/editar");
+  assert.equal(destination.searchParams.get("id"), "review:bem:01");
+  const publicResponse = proxy(new NextRequest(destination, {
+    headers: { host: "app.localhost", cookie: "celeriflow_session=session" },
+  }));
+  assert.equal(publicResponse.status, 200);
+  assert.equal(new URL(publicResponse.headers.get("x-middleware-rewrite")!).searchParams.get("id"), "review:bem:01");
+});
+
 test("entradas institucionais encaminham aos portais existentes e preservam filtros", () => {
   for (const hostname of ["www.ibema.celeriflow.com.br", "app.localhost", "celeriflow.vercel.app"]) {
     for (const [entry, target] of [

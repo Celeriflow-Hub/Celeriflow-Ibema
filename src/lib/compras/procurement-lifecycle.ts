@@ -1,6 +1,8 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { applyStockMovement } from "@/lib/patrimonio/stock-service";
 import { nextYearlyCode } from "@/lib/sequence";
+import { recordEquipmentCustody } from "@/lib/patrimonio/equipment-custody";
+import { dateOnly, todayInBrazil } from "@/lib/frotas/contract";
 import { assertPurchaseRequestItemBudgetAllocations, PurchaseRequestBudgetError } from "./purchase-request-budget";
 import { aggregatePurchaseRequestItems, PurchaseProcessOriginError, type AggregatedPurchaseProcessItem } from "./purchase-process-origins";
 
@@ -17,6 +19,8 @@ export type ProcurementActor = {
 
 export type CreateMaterialRequestInput = {
   number?: string;
+  sourceWarehouseId: string;
+  departmentId?: string;
   justification?: string;
   idempotencyKey: string;
   items: Array<{ materialId: string; quantityRequested: number }>;
@@ -58,6 +62,8 @@ async function writeLifecycleEvent(
 
 export async function createMaterialRequest(db: Db, actor: ProcurementActor, input: CreateMaterialRequestInput) {
   const requesterId = required(actor.employeeId, "Servidor solicitante");
+  const sourceWarehouseId = required(input.sourceWarehouseId, "Almoxarifado de origem");
+  if (input.number?.trim()) throw new ProcurementLifecycleError("O código da requisição é gerado automaticamente; não informe letras ou número manual.");
   const idempotencyKey = required(input.idempotencyKey, "Chave de idempotência");
   if (!input.items.length) throw new ProcurementLifecycleError("A requisição deve possuir ao menos um item.");
   if (new Set(input.items.map((item) => item.materialId)).size !== input.items.length) {
@@ -77,21 +83,25 @@ export async function createMaterialRequest(db: Db, actor: ProcurementActor, inp
         where: { id: requesterId, isActive: true, department: { is: { isActive: true } } },
         select: { id: true, departmentId: true },
       }),
-      tx.material.findMany({ where: { id: { in: input.items.map((item) => item.materialId) }, isActive: true }, select: { id: true } }),
+      tx.material.findMany({ where: { id: { in: input.items.map((item) => item.materialId) }, isActive: true }, select: { id: true, type: true } }),
     ]);
     if (!requester?.departmentId) throw new ProcurementLifecycleError("O solicitante deve estar vinculado a um setor ativo.");
+    if (input.departmentId && input.departmentId !== requester.departmentId) throw new ProcurementLifecycleError("O servidor solicitante deve pertencer ao setor de destino.");
+    if (!await tx.warehouse.findFirst({ where: { id: sourceWarehouseId, isActive: true }, select: { id: true } })) throw new ProcurementLifecycleError("Selecione um almoxarifado de origem ativo.");
     if (materials.length !== input.items.length) throw new ProcurementLifecycleError("Selecione apenas materiais existentes.");
+    if (input.items.some(item => materials.find(material => material.id === item.materialId)?.type === "PATRIMONIO" && !Number.isInteger(item.quantityRequested))) throw new ProcurementLifecycleError("Equipamentos devem ser requisitados em unidades inteiras.");
 
-    const suppliedNumber = input.number?.trim();
-    const number = suppliedNumber || await nextYearlyCode({
+    const number = await nextYearlyCode({
       prisma: tx,
       key: "patrimonio-requisicao-material",
-      prefix: "MATREQ",
+      prefix: "REQ",
+      padding: 6,
       existingCodes: (await tx.materialRequest.findMany({ select: { number: true } })).map(({ number }) => ({ code: number })),
     });
     const request = await tx.materialRequest.create({
       data: {
         number,
+        sourceWarehouseId,
         idempotencyKey,
         justification: input.justification?.trim() || null,
         departmentId: requester.departmentId,
@@ -469,6 +479,7 @@ export async function approveMaterialRequest(db: Db, actor: ProcurementActor, in
   const actorEmployeeId = required(actor.employeeId, "Servidor aprovador");
   if (!input.quantities.length) throw new ProcurementLifecycleError("Informe as quantidades aprovadas.");
   return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "MaterialRequest" WHERE id=${requestId} FOR UPDATE`;
     const request = await tx.materialRequest.findUnique({ where: { id: requestId }, include: { items: true } });
     if (!request) throw new ProcurementLifecycleError("Requisição de material não encontrada.");
     if (request.status !== "Pendente") throw new ProcurementLifecycleError("Somente requisições pendentes podem ser aprovadas.");
@@ -483,7 +494,8 @@ export async function approveMaterialRequest(db: Db, actor: ProcurementActor, in
       }
       await tx.materialRequestItem.update({ where: { id: item.id }, data: { quantityApproved: approved.quantityApproved } });
     }
-    const approved = await tx.materialRequest.update({ where: { id: request.id }, data: { status: "Aprovada", approvedByEmployeeId: actorEmployeeId, approvedAt: new Date() } });
+    const hasApprovedItems = input.quantities.some(item => item.quantityApproved > 0);
+    const approved = await tx.materialRequest.update({ where: { id: request.id }, data: { status: hasApprovedItems ? "Aprovada" : "Recusada", approvedByEmployeeId: actorEmployeeId, approvedAt: new Date() } });
     await writeLifecycleEvent(tx, {
       eventType: "MATERIAL_REQUEST_APPROVED",
       entityType: "MATERIAL_REQUEST",
@@ -514,27 +526,40 @@ async function assertMaterialRequestFinancialOrigin(tx: Tx, actor: ProcurementAc
   } else if (!appropriation.expenseNature.code.replace(/\D/g, "").startsWith("339030")) throw new ProcurementLifecycleError("Origem sem recebimento deve identificar material de consumo.");
 }
 
-export async function issueMaterialRequestItem(db: Db, actor: ProcurementActor, input: { requestItemId: string; stockId: string; quantity: number; settlementId?: string }) {
+export async function issueMaterialRequestItem(db: Db, actor: ProcurementActor, input: { requestItemId: string; stockId: string; quantity: number; settlementId?: string; idempotencyKey?: string }) {
   const requestItemId = required(input.requestItemId, "Item da requisição");
   const stockId = required(input.stockId, "Posição de estoque");
   const issuedQuantity = quantity(input.quantity, "Quantidade atendida");
   const issuerId = required(actor.employeeId, "Servidor responsável pela saída");
   return db.$transaction(async (tx) => {
+    // Serializa atendimento parcial e integral no mesmo pedido.
+    await tx.$queryRaw`SELECT r.id FROM "MaterialRequest" r JOIN "MaterialRequestItem" i ON i."requestId"=r.id WHERE i.id=${requestItemId} FOR UPDATE OF r`;
     const [requestItem, stock] = await Promise.all([
       tx.materialRequestItem.findUnique({ where: { id: requestItemId }, include: { request: { include: { items: true } } } }),
-      tx.materialStock.findUnique({ where: { id: stockId }, select: { id: true, warehouseId: true, materialId: true, batchNumber: true, unitCost: true } }),
+      tx.materialStock.findUnique({ where: { id: stockId }, select: { id: true, warehouseId: true, materialId: true, batchNumber: true, unitCost: true, blockedAt: true, expirationDate: true } }),
     ]);
     if (!requestItem || !stock) throw new ProcurementLifecycleError("Item da requisição ou posição de estoque não encontrada.");
+    const deliveryKey = input.idempotencyKey ? `MATERIAL_REQUEST_DELIVERY:${input.idempotencyKey}` : undefined;
+    if (deliveryKey) {
+      const prior = await tx.materialMovement.findUnique({ where: { idempotencyKey: deliveryKey }, select: { materialRequestItemId: true, stockId: true, quantity: true, settlementId: true } });
+      if (prior) {
+        if (prior.materialRequestItemId !== requestItemId || prior.stockId !== stockId || prior.quantity !== issuedQuantity || (prior.settlementId || undefined) !== input.settlementId) throw new ProcurementLifecycleError("Entrega já registrada com outros dados.");
+        return requestItem.request;
+      }
+    }
+    if (stock.blockedAt || (stock.expirationDate && stock.expirationDate < dateOnly(todayInBrazil()))) throw new ProcurementLifecycleError("Não é possível entregar material de lote bloqueado ou vencido.");
     if (requestItem.request.status !== "Aprovada" && requestItem.request.status !== "Atendida Parcialmente") {
       throw new ProcurementLifecycleError("A saída exige uma requisição de material aprovada.");
     }
     if (requestItem.materialId !== stock.materialId) throw new ProcurementLifecycleError("O material da posição de estoque não corresponde ao item requisitado.");
+    if (requestItem.request.sourceWarehouseId && stock.warehouseId !== requestItem.request.sourceWarehouseId) throw new ProcurementLifecycleError("Selecione um lote do almoxarifado de origem da requisição.");
     if (requestItem.quantityDelivered + issuedQuantity > requestItem.quantityApproved) throw new ProcurementLifecycleError("A saída excede a quantidade aprovada.");
     await assertMaterialRequestFinancialOrigin(tx, actor, { settlementId: input.settlementId, stockId: stock.id, departmentId: requestItem.request.departmentId });
 
-    await applyStockMovement(tx, {
+    const { movement } = await applyStockMovement(tx, {
       kind: "EXIT",
       sourceType: "MATERIAL_REQUEST_ISSUE",
+      idempotencyKey: deliveryKey,
       materialRequestItemId: requestItem.id,
       warehouseId: stock.warehouseId,
       materialId: stock.materialId,
@@ -546,6 +571,7 @@ export async function issueMaterialRequestItem(db: Db, actor: ProcurementActor, 
       reason: `${input.settlementId ? "CONSUMO_ORCAMENTARIO:" : ""}Requisição de material ${requestItem.request.number}`,
       actor,
     });
+    await recordEquipmentCustody(tx, { materialId: stock.materialId, quantity: issuedQuantity, departmentId: requestItem.request.departmentId, responsibleId: requestItem.request.requesterId, stockMovementId: movement.id });
     await tx.materialRequestItem.update({ where: { id: requestItem.id }, data: { quantityDelivered: { increment: issuedQuantity } } });
     const updatedItems = await tx.materialRequestItem.findMany({ where: { requestId: requestItem.requestId }, select: { quantityApproved: true, quantityDelivered: true } });
     const status = updatedItems.every((item) => item.quantityDelivered >= item.quantityApproved) ? "Atendida" : "Atendida Parcialmente";
@@ -572,6 +598,7 @@ export async function issueMaterialRequestInFull(db: Db, actor: ProcurementActor
   const eventKey = `C5:MATERIAL_REQUEST:${requestId}:ISSUED_FULL`;
 
   return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "MaterialRequest" WHERE id=${requestId} FOR UPDATE`;
     const [existingEvent, request] = await Promise.all([
       tx.procurementLifecycleEvent.findUnique({ where: { idempotencyKey: eventKey }, select: { id: true } }),
       tx.materialRequest.findUnique({ where: { id: requestId }, include: { items: true } }),
@@ -601,7 +628,7 @@ export async function issueMaterialRequestInFull(db: Db, actor: ProcurementActor
     const stocks = stockIds.length
       ? await tx.materialStock.findMany({
         where: { id: { in: stockIds } },
-        select: { id: true, warehouseId: true, materialId: true, batchNumber: true, unitCost: true },
+        select: { id: true, warehouseId: true, materialId: true, batchNumber: true, unitCost: true, blockedAt: true, expirationDate: true },
       })
       : [];
     const stockById = new Map(stocks.map((stock) => [stock.id, stock]));
@@ -610,6 +637,8 @@ export async function issueMaterialRequestInFull(db: Db, actor: ProcurementActor
       if (!stock || stock.materialId !== item.materialId) {
         throw new ProcurementLifecycleError("A posição de estoque deve corresponder ao material requisitado.");
       }
+      if (request.sourceWarehouseId && stock.warehouseId !== request.sourceWarehouseId) throw new ProcurementLifecycleError("Selecione lotes do almoxarifado de origem da requisição.");
+      if (stock.blockedAt || (stock.expirationDate && stock.expirationDate < dateOnly(todayInBrazil()))) throw new ProcurementLifecycleError("Não é possível entregar material de lote bloqueado ou vencido.");
     }
 
     // Claim the request before changing balances. A competing full delivery will
@@ -626,7 +655,7 @@ export async function issueMaterialRequestInFull(db: Db, actor: ProcurementActor
       const stock = stockById.get(assignmentByItem.get(item.id)!)!;
       const quantityToIssue = item.quantityApproved - item.quantityDelivered;
       await assertMaterialRequestFinancialOrigin(tx, actor, { settlementId: financialOriginByItem.get(item.id), stockId: stock.id, departmentId: request.departmentId });
-      await applyStockMovement(tx, {
+      const { movement } = await applyStockMovement(tx, {
         kind: "EXIT",
         sourceType: "MATERIAL_REQUEST_ISSUE",
         materialRequestItemId: item.id,
@@ -640,6 +669,7 @@ export async function issueMaterialRequestInFull(db: Db, actor: ProcurementActor
         reason: `${financialOriginByItem.get(item.id) ? "CONSUMO_ORCAMENTARIO:" : ""}Entrega integral da requisição ${request.number}`,
         actor,
       });
+      await recordEquipmentCustody(tx, { materialId: stock.materialId, quantity: quantityToIssue, departmentId: request.departmentId, responsibleId: request.requesterId, stockMovementId: movement.id });
       await tx.materialRequestItem.update({ where: { id: item.id }, data: { quantityDelivered: { increment: quantityToIssue } } });
     }
 

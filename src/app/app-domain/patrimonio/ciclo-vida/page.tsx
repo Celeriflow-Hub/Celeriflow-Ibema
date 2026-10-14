@@ -69,8 +69,8 @@ export default async function AssetLifecyclePage({
   const [assetTotal, activeAssetValue, writeOffTotal, adjustmentTotal] = await Promise.all([
     view === "posicao" ? prisma.asset.count({ where: assetAccess }) : Promise.resolve(0),
     view === "posicao" ? prisma.asset.aggregate({ where: { ...activeAssetWhere, ...assetAccess }, _sum: { currentValue: true } }) : Promise.resolve({ _sum: { currentValue: 0 } }),
-    view === "baixas" ? prisma.assetWriteOff.count({ where: { asset: assetAccess } }) : Promise.resolve(0),
-    view === "ajustes" ? prisma.assetValueAdjustment.count({ where: { asset: assetAccess } }) : Promise.resolve(0),
+    prisma.assetWriteOff.count({ where: { asset: assetAccess } }),
+    prisma.assetValueAdjustment.count({ where: { asset: assetAccess } }),
   ]);
 
   const total = view === "posicao" ? assetTotal : view === "baixas" ? writeOffTotal : adjustmentTotal;
@@ -88,6 +88,7 @@ export default async function AssetLifecyclePage({
           orderBy: { patrimonyNumber: "asc" },
           select: {
             id: true,
+            code: true,
             patrimonyNumber: true,
             name: true,
             currentValue: true,
@@ -114,7 +115,7 @@ export default async function AssetLifecyclePage({
             disposalValue: true,
             bookValue: true,
             gainLoss: true,
-            asset: { select: { patrimonyNumber: true, name: true } },
+            asset: { select: { code: true, patrimonyNumber: true, name: true } },
             integrationPending: { select: { id: true, status: true, expectedEventCode: true } },
             accountingTransaction: { select: { id: true } },
           },
@@ -136,7 +137,7 @@ export default async function AssetLifecyclePage({
             accountingTransactionId: true,
             accountingTransaction: { select: { reversedBy: { select: { id: true } } } },
             evidence: true,
-            asset: { select: { patrimonyNumber: true, name: true } },
+            asset: { select: { code: true, patrimonyNumber: true, name: true } },
           },
         })
       : Promise.resolve([]),
@@ -226,7 +227,7 @@ export default async function AssetLifecyclePage({
           <table className="w-full table-fixed text-left text-[11px] leading-4 text-slate-700">
             <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
               <tr className="h-7">
-                <th className="w-[14%] px-3 text-left">Tombamento</th>
+                 <th className="w-[14%] px-3 text-left">Código / tombamento</th>
                 <th className="w-[36%] px-3 text-left">Descrição</th>
                 <th className="hidden w-[16%] px-3 text-left md:table-cell">Categoria</th>
                 <th className="w-[12%] px-3 text-left">Situação</th>
@@ -246,7 +247,7 @@ export default async function AssetLifecyclePage({
                   <tr key={asset.id} className="h-[clamp(24px,2.8vh,34px)] border-b border-slate-100 hover:bg-slate-50">
                     <td className="px-3 py-0 font-semibold text-emerald-800">
                       <Link className="block truncate underline-offset-2 hover:underline" href={`/patrimonio/bens/${encodeURIComponent(asset.id)}`}>
-                        {asset.patrimonyNumber}
+                         {asset.code || asset.patrimonyNumber}
                       </Link>
                     </td>
                     <td className="px-3 py-0 font-medium">
@@ -259,7 +260,7 @@ export default async function AssetLifecyclePage({
                       <span className="block truncate font-semibold text-slate-700">{asset.status}</span>
                     </td>
                     <td className="hidden px-3 py-0 text-right tabular-nums lg:table-cell">
-                      {asset.category?.lifeSpan ? `${asset.category.lifeSpan} anos` : "—"}
+                       {asset.category?.lifeSpan ? `${asset.category.lifeSpan} meses` : "—"}
                     </td>
                     <td className="px-3 py-0 text-right font-semibold tabular-nums text-emerald-800">
                       {currency(Number(asset.currentValueDecimal ?? asset.currentValue))}
@@ -276,7 +277,7 @@ export default async function AssetLifecyclePage({
             <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
               <tr className="h-7">
                 <th className="w-[12%] px-3 text-left">Data</th>
-                <th className="w-[13%] px-3 text-left">Tombamento</th>
+                 <th className="w-[13%] px-3 text-left">Código</th>
                 <th className="w-[30%] px-3 text-left">Descrição do bem</th>
                 <th className="w-[10%] px-3 text-left">Tipo</th>
                 <th className="w-[12%] px-3 text-right">Valor contábil</th>
@@ -296,7 +297,7 @@ export default async function AssetLifecyclePage({
                   <tr key={writeOff.id} className="h-[clamp(24px,2.8vh,34px)] border-b border-slate-100 hover:bg-slate-50">
                     <td className="px-3 py-0 tabular-nums">{new Date(writeOff.date).toLocaleDateString("pt-BR", { timeZone: "UTC" })}</td>
                     <td className="px-3 py-0 font-semibold text-emerald-800">
-                      <span className="block truncate">{writeOff.asset.patrimonyNumber}</span>
+                       <span className="block truncate" title={`Tombamento ${writeOff.asset.patrimonyNumber}`}>{writeOff.asset.code || writeOff.asset.patrimonyNumber}</span>
                     </td>
                     <td className="px-3 py-0 font-medium">
                       <span className="block truncate">{writeOff.asset.name}</span>
@@ -321,7 +322,7 @@ export default async function AssetLifecyclePage({
             <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
               <tr className="h-7">
                 <th className="w-[12%] px-3 text-left">Data</th>
-                <th className="w-[13%] px-3 text-left">Tombamento</th>
+                 <th className="w-[13%] px-3 text-left">Código</th>
                 <th className="w-[32%] px-3 text-left">Descrição do bem</th>
                 <th className="w-[15%] px-3 text-left">Tipo de ajuste</th>
                 <th className="w-[14%] px-3 text-right">Valor ajuste</th>
@@ -340,7 +341,7 @@ export default async function AssetLifecyclePage({
                   <tr key={adjustment.id} className="h-[clamp(24px,2.8vh,34px)] border-b border-slate-100 hover:bg-slate-50">
                     <td className="px-3 py-0 tabular-nums">{new Date(adjustment.date).toLocaleDateString("pt-BR", { timeZone: "UTC" })}</td>
                     <td className="px-3 py-0 font-semibold text-emerald-800">
-                      <span className="block truncate">{adjustment.asset.patrimonyNumber}</span>
+                       <span className="block truncate" title={`Tombamento ${adjustment.asset.patrimonyNumber}`}>{adjustment.asset.code || adjustment.asset.patrimonyNumber}</span>
                     </td>
                     <td className="px-3 py-0 font-medium">
                       <span className="block truncate">{adjustment.asset.name}</span>

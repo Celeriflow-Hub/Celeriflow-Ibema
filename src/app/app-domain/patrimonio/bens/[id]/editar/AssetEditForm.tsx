@@ -22,7 +22,7 @@ type AssetFormData = {
 };
 
 export function AssetEditForm({ asset, categories }: {
-  asset: AssetFormData & { id: string; patrimonyNumber: string };
+  asset: AssetFormData & { id: string; code?: string | null; patrimonyNumber: string };
   categories: Option[];
 }) {
   const router = useRouter();
@@ -34,7 +34,9 @@ export function AssetEditForm({ asset, categories }: {
     event.preventDefault();
     setError(null);
     startTransition(async () => {
-      const result = await updateAssetAction(asset.id, values);
+      let result;
+      try { result = await updateAssetAction(asset.id, values); }
+      catch { setError("Não foi possível confirmar o salvamento. Tente novamente."); return; }
       if (result.error) {
         setError(result.error);
         return;
@@ -44,9 +46,10 @@ export function AssetEditForm({ asset, categories }: {
   }
 
   return (
-    <PageFrame className="max-w-5xl space-y-2">
+    <PageFrame className="min-h-0 max-w-5xl flex-1 space-y-2 overflow-y-auto p-3">
       <PageHeader title={`Editar bem · ${asset.patrimonyNumber}`} action={<Link href={`/patrimonio/bens/${encodeURIComponent(asset.id)}`}><Button size="sm" variant="outline">Cancelar</Button></Link>} />
       <form onSubmit={save} className="grid gap-3 rounded-md border bg-white p-4 md:grid-cols-2">
+        <div className="space-y-2 md:col-span-2"><Label>Código do equipamento</Label><Input value={asset.code || "Não identificado"} readOnly /></div>
         <div className="space-y-2"><Label>Número de tombamento</Label><Input value={asset.patrimonyNumber} readOnly /></div>
         <div className="space-y-2"><Label htmlFor="asset-name">Nome do bem</Label><Input id="asset-name" required value={values.name} onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))} /></div>
         <div className="space-y-2"><Label htmlFor="asset-brand">Marca</Label><Input id="asset-brand" value={values.brand} onChange={(event) => setValues((current) => ({ ...current, brand: event.target.value }))} /></div>

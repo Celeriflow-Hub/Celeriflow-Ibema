@@ -7,12 +7,13 @@ import { PageHeader } from "@/components/app-ui/PageHeader";
 import { Button } from "@/components/ui/button";
 import { getTenantContextForModule, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { nextMaterialCode } from "@/lib/patrimonio/identifiers";
+import { materialUnits, materialUnitValues } from "@/lib/patrimonio/material-units";
 
 const materialInput = z.object({
   name: z.string().trim().min(1, "Informe o nome do material."),
   description: z.string().trim().optional(),
   type: z.enum(["MATERIAL", "PATRIMONIO"]),
-  unitOfMeasure: z.string().trim().min(1, "Informe a unidade de medida.").max(30, "A unidade deve ter no máximo 30 caracteres."),
+  unitOfMeasure: z.enum(materialUnitValues),
   categoryId: z.string().trim().min(1, "Selecione a categoria."),
   subcategoryId: z.string().trim().optional(),
   catalogItemId: z.string().trim().optional(),
@@ -84,18 +85,18 @@ export default async function NovoMaterialPage() {
   }
 
   return (
-    <PageFrame className="max-w-3xl space-y-2">
+    <PageFrame className="min-h-0 max-w-3xl flex-1 space-y-2 overflow-y-auto p-3">
       <PageHeader title="Novo Material" action={<Link href="/patrimonio/materiais"><Button size="sm" variant="outline">Cancelar</Button></Link>} />
       <form action={createMaterial} className="grid gap-3 rounded-md border bg-white p-4 md:grid-cols-2">
         <label className="grid gap-1 text-sm font-medium">
           Tipo de material
-          <select name="type" defaultValue="MATERIAL" className="h-9 rounded-md border bg-background px-3 text-sm"><option value="MATERIAL">Material</option><option value="PATRIMONIO">Patrimônio</option></select>
+          <select name="type" defaultValue="MATERIAL" className="h-9 rounded-md border bg-background px-3 text-sm"><option value="MATERIAL">Material</option><option value="PATRIMONIO">Equipamento</option></select>
         </label>
         <label className="grid gap-1 text-sm font-medium">
           Unidade de medida
-          <input name="unitOfMeasure" required maxLength={30} defaultValue="UN" className="h-9 rounded-md border bg-background px-3 text-sm" placeholder="UN, KG, RESMA" />
+          <select name="unitOfMeasure" required defaultValue="UN" className="h-9 rounded-md border bg-background px-3 text-sm">{materialUnits.map(unit => <option key={unit.value} value={unit.value}>{unit.label}</option>)}</select>
         </label>
-        <div className="grid gap-1 text-sm font-medium md:col-span-2"><span>Código</span><p className="rounded-md border bg-slate-50 px-3 py-2 text-sm text-slate-600">Gerado automaticamente no padrão MAT00000 ou PAT00000 conforme o tipo selecionado.</p></div>
+        <div className="grid gap-1 text-sm font-medium md:col-span-2"><span>Código</span><p className="rounded-md border bg-slate-50 px-3 py-2 text-sm text-slate-600">Gerado automaticamente no padrão MAT000001 (material) ou EQP000001 (equipamento).</p></div>
         <label className="grid gap-1 text-sm font-medium md:col-span-2">
           Nome
           <input name="name" required className="h-9 rounded-md border bg-background px-3 text-sm" placeholder="Ex.: Papel A4" />

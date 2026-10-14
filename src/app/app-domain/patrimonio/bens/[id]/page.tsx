@@ -9,7 +9,9 @@ import { AssetOperationsClient } from "./AssetOperationsClient";
 export const dynamic = "force-dynamic";
 const day = (v: Date | null) => v?.toISOString().slice(0, 10).split("-").reverse().join("/") || "—";
 export default async function AssetDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ page?: string }> }) {
-  const context = await getTenantContextForModule("PATRIMONIO"), { id } = await params;
+  const context = await getTenantContextForModule("PATRIMONIO"), { id: routeId } = await params;
+  let id: string;
+  try { id = decodeURIComponent(routeId); } catch { notFound(); }
   const page = Math.min(100000, Math.max(1, Number.parseInt((await searchParams).page || "1", 10) || 1));
   const asset = await context.prisma.asset.findFirst({ where: { id, ...assetOperationWhere(context) }, include: { department: true, responsible: { select: { name: true } }, fleetUnit: { select: { id: true, code: true, name: true, status: true } } } });
   if (!asset) notFound();
@@ -19,8 +21,9 @@ export default async function AssetDetailPage({ params, searchParams }: { params
     context.prisma.assetMaintenance.findMany({ where: { assetId: id, status: { in: ["Solicitada", "Em manutenção"] } }, orderBy: [{ startDate: "asc" }, { id: "asc" }], include: { fleetOrder: { select: { id: true } } } }),
     context.prisma.assetTransfer.findMany({ where: { assetId: id }, take: 10, orderBy: [{ date: "desc" }, { id: "desc" }], include: { fromDepartment: { select: { name: true } }, toDepartment: { select: { name: true } }, toResponsible: { select: { name: true } } } }),
   ]);
-  return <PageFrame className="space-y-3">
-    <PageHeader title={`${asset.patrimonyNumber} · ${asset.name}`} action={<Link href="/patrimonio/bens" className="rounded border bg-white px-3 py-2 text-sm">Bens patrimoniais</Link>} />
+  return <PageFrame className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+    <PageHeader title={`${asset.code || asset.patrimonyNumber} · ${asset.name}`} action={<Link href="/patrimonio/bens" className="rounded border bg-white px-3 py-2 text-sm">Bens patrimoniais</Link>} />
+    <p className="text-xs text-slate-600">Código do equipamento: {asset.code || "Não identificado"} · Tombamento: {asset.patrimonyNumber}</p>
     <dl className="grid gap-3 rounded-md border bg-white p-4 text-sm sm:grid-cols-3">{Object.entries({ "Setor de origem": asset.department?.name || "Sem setor", "Responsável": asset.responsible?.name || "Não informado", "Situação patrimonial": asset.status, "Marca / modelo": [asset.brand, asset.model].filter(Boolean).join(" / ") || "—", "Documento de aquisição": asset.invoiceNumber || "—", "Valor contábil": asset.currentValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) }).map(([title, value]) => <div key={title}><dt className="text-xs text-slate-500">{title}</dt><dd className="mt-1 font-medium">{value}</dd></div>)}</dl>
     {asset.fleetUnit && canViewModule(context.user, "FROTAS") && <Link href={`/frotas?unitId=${encodeURIComponent(asset.fleetUnit.id)}`} className="block rounded border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900">Abrir unidade em Frotas · {asset.fleetUnit.code} · {asset.fleetUnit.name}</Link>}
     <AssetOperationsClient key={asset.updatedAt.toISOString()} assetId={id} version={asset.updatedAt.toISOString()} canUpdate={!['Baixado', 'Inativo'].includes(asset.status) && canPerformModuleOperation(context.user, "PATRIMONIO", "update")} maintenances={open.map(m => ({ id: m.id, description: m.description, startDate: m.startDate.toISOString().slice(0, 10), status: m.status, fleetOrderId: m.fleetOrder?.id || null }))} />

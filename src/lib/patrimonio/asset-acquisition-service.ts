@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 import { applyStockMovement } from "./stock-service";
-import { nextAssetPatrimonyNumber } from "./identifiers";
+import { nextAssetPatrimonyNumber, nextEquipmentCode } from "./identifiers";
 
 export class AssetAcquisitionError extends Error {}
 
@@ -110,6 +110,7 @@ export async function acquireAssetFromPurchaseReceipt(db: PrismaClient, actor: A
 
     const asset = await tx.asset.create({
       data: {
+        code: await nextEquipmentCode(tx),
         patrimonyNumber,
         name: receiptItem.material.name,
         description: receiptItem.material.description,

@@ -17,7 +17,7 @@ export async function GET(request: Request) {
       options = (await context.prisma.employee.findMany({
         where: {
           isActive: true,
-          name: contains,
+          AND: [{ OR: [{ name: contains }, { registration: contains }] }],
           ...(allowed ? { department: departmentScope } : {}),
           ...(departmentId ? { departmentId } : {}),
           ...(specialistsOnly ? {
@@ -28,10 +28,10 @@ export async function GET(request: Request) {
             ],
           } : {}),
         },
-        select: { id: true, name: true, department: { select: { name: true } } },
+        select: { id: true, name: true, registration: true, department: { select: { name: true } } },
         orderBy: [{ name: "asc" }, { id: "asc" }],
         take: 20,
-      })).map(v => ({ id: v.id, label: v.department ? `${v.name} · ${v.department.name}` : v.name }));
+      })).map(v => ({ id: v.id, label: [v.name, v.registration ? `Matrícula ${v.registration}` : null, v.department?.name].filter(Boolean).join(" · ") }));
     } else if (p.get("kind") === "assets") {
       if (!canPerformModuleOperation(context.user, "PATRIMONIO", "update")) throw new AccessError("Seu perfil não permite consultar bens patrimoniais.", 403);
       const q = (p.get("q") || "").slice(0, 100);

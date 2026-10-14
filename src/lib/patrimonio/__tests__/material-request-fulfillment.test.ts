@@ -9,19 +9,22 @@ test("creates an idempotent request for the authenticated employee department", 
   const transaction = {
     materialRequest: {
       findUnique: async () => null,
+      findMany: async () => [],
       create: async ({ data }: { data: Record<string, unknown> }) => {
         createdData = data;
-        return { id: "request-1", number: "REQ-DEMO-0030" };
+        return { id: "request-1", ...data };
       },
     },
     employee: { findFirst: async () => ({ id: "employee-requester", departmentId: "department-1" }) },
     material: { findMany: async () => [{ id: "material-paper" }, { id: "material-pen" }] },
+    warehouse: { findFirst: async () => ({ id: "warehouse-1" }) },
+    sequenceCounter: { upsert: async () => ({ value: 1 }) },
     procurementLifecycleEvent: { create: async () => ({ id: "event-1" }) },
   };
   const database = { $transaction: async (callback: (tx: typeof transaction) => Promise<unknown>) => callback(transaction) };
 
   const request = await createMaterialRequest(database as never, { usuarioId: "user-requester", employeeId: "employee-requester" }, {
-    number: "REQ-DEMO-0030",
+    sourceWarehouseId: "warehouse-1",
     idempotencyKey: "material-request-1",
     justification: "Reposição do setor demonstrativo",
     items: [
@@ -30,9 +33,10 @@ test("creates an idempotent request for the authenticated employee department", 
     ],
   });
 
-  assert.equal(request.number, "REQ-DEMO-0030");
+  assert.match(String(request.number), /^REQ-\d{4}-000001$/);
   assert.deepEqual(createdData, {
-    number: "REQ-DEMO-0030",
+    number: request.number,
+    sourceWarehouseId: "warehouse-1",
     idempotencyKey: "material-request-1",
     justification: "Reposição do setor demonstrativo",
     departmentId: "department-1",
@@ -52,6 +56,7 @@ function approvedRequest() {
     number: "REQ-DEMO-0030",
     status: "Aprovada",
     departmentId: "department-1",
+    requesterId: "employee-requester",
     items: [
       { id: "request-item-paper", materialId: "material-paper", quantityApproved: 30, quantityDelivered: 0 },
       { id: "request-item-pen", materialId: "material-pen", quantityApproved: 5, quantityDelivered: 0 },
@@ -65,6 +70,7 @@ test("full delivery issues every remaining request line in the same transaction"
   let requestStatus: Record<string, unknown> | undefined;
   const transaction = {
     $executeRaw: async () => 1,
+    $queryRaw: async () => [],
     procurementLifecycleEvent: {
       findUnique: async () => null,
       create: async () => ({ id: "event-1" }),
@@ -95,7 +101,7 @@ test("full delivery issues every remaining request line in the same transaction"
       updateMany: async () => ({ count: 1 }),
     },
     warehouse: { findFirst: async () => ({ id: "warehouse-1" }) },
-    material: { findUnique: async () => ({ id: "material-1" }) },
+    material: { findUnique: async () => ({ id: "material-1" }), findUniqueOrThrow: async () => ({ name: "Papel", type: "MATERIAL" }) },
     inventorySession: { findFirst: async () => null },
     materialMovement: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
@@ -123,6 +129,7 @@ test("full delivery issues every remaining request line in the same transaction"
 test("full delivery rejects incomplete stock assignments before claiming the request", async () => {
   let claimed = false;
   const transaction = {
+    $queryRaw: async () => [],
     procurementLifecycleEvent: { findUnique: async () => null },
     materialRequest: {
       findUnique: async () => approvedRequest(),
@@ -142,4 +149,8 @@ test("full delivery rejects incomplete stock assignments before claiming the req
     ProcurementLifecycleError,
   );
   assert.equal(claimed, false);
+});
+
+test("request codes cannot be supplied manually", async () => {
+  await assert.rejects(createMaterialRequest({} as never, actor, { number: "abcdef", sourceWarehouseId: "warehouse-1", idempotencyKey: "manual-number", items: [{ materialId: "paper", quantityRequested: 1 }] }), /gerado automaticamente/);
 });

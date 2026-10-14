@@ -42,6 +42,7 @@ export default async function RequisicoesPage({
     include: {
       department: true,
       requester: true,
+      sourceWarehouse: { select: { name: true } },
       items: true,
     },
   });
@@ -77,9 +78,10 @@ export default async function RequisicoesPage({
             >
               <option value="">Todas as situações</option>
               <option value="Pendente">Pendente</option>
+              <option value="Aprovada">Aprovada — aguardando entrega</option>
               <option value="Atendida Parcialmente">Atendida parcialmente</option>
               <option value="Atendida">Atendida</option>
-              <option value="Rejeitada">Rejeitada</option>
+              <option value="Recusada">Recusada</option>
             </select>
             <button type="submit" className={buttonVariants({ size: "sm" })}>
               <Search className="size-3.5" />
@@ -87,7 +89,7 @@ export default async function RequisicoesPage({
             </button>
           </form>
         }
-        summary={<p className="text-[11px] text-slate-600"><strong className="text-slate-900">{total}</strong> requisição(ões) no recorte selecionado</p>}
+        summary={<p className="text-[11px] text-slate-600">Abra a requisição para analisar e entregar. A entrega atualiza automaticamente o estoque e o saldo pendente.</p>}
         pagination={
           <ErpPagination
             page={page}
@@ -99,26 +101,29 @@ export default async function RequisicoesPage({
           />
         }
       >
-        <table className="w-full table-fixed text-left text-[11px] leading-4 text-slate-700">
+        <table className="w-full min-w-[1050px] table-fixed text-left text-[11px] leading-4 text-slate-700">
           <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
             <tr className="h-7">
               <th className="w-[17%] px-3 text-left">Número</th>
               <th className="w-[13%] px-3 text-left">Data</th>
-              <th className="w-[36%] px-3 text-left">Setor solicitante</th>
+              <th className="w-[18%] px-3 text-left">Almoxarifado de origem</th>
+              <th className="w-[26%] px-3 text-left">Destino / solicitante</th>
               <th className="w-[12%] px-3 text-right">Itens</th>
               <th className="w-[22%] px-3 text-left">Situação</th>
+              <th className="w-24 px-3 text-right">Ação</th>
             </tr>
           </thead>
           <tbody>
             {requests.length === 0 ? (
-              <tr><td colSpan={5} className="px-3 py-10 text-center text-slate-500">Nenhuma requisição encontrada para os filtros informados.</td></tr>
+              <tr><td colSpan={7} className="px-3 py-10 text-center text-slate-500">Nenhuma requisição encontrada para os filtros informados.</td></tr>
             ) : (
               requests.map((request) => (
                 <tr key={request.id} className="h-[clamp(18px,2.65vh,28px)] border-b border-slate-100 hover:bg-slate-50">
                   <td className="px-3 py-0 font-semibold text-emerald-800">
                     <Link href={`/patrimonio/requisicoes/${request.id}`} className="block truncate underline-offset-2 hover:underline">{request.number}</Link>
                   </td>
-                  <td className="px-3 py-0 tabular-nums">{request.date.toLocaleDateString("pt-BR", { timeZone: "UTC" })}</td>
+                   <td className="px-3 py-0 tabular-nums">{request.date.toLocaleDateString("pt-BR", { timeZone: "UTC" })}</td>
+                   <td className="px-3 py-0"><span className="block truncate">{request.sourceWarehouse?.name || "Origem no atendimento"}</span></td>
                   <td className="px-3 py-0"><span className="block truncate">{request.department?.name || "Setor não informado"} · {request.requester?.name || "Sem solicitante"}</span></td>
                   <td className="px-3 py-0 text-right tabular-nums">{request.items.length}</td>
                   <td className="px-3 py-0">
@@ -128,7 +133,8 @@ export default async function RequisicoesPage({
                     >
                       {request.status}
                     </Badge>
-                  </td>
+                   </td>
+                   <td className="px-3 text-right"><Link href={`/patrimonio/requisicoes/${encodeURIComponent(request.id)}`} className="font-semibold text-emerald-800 underline">{request.status === "Pendente" ? "Analisar" : ["Aprovada", "Atendida Parcialmente"].includes(request.status) ? "Atender" : "Consultar"}</Link></td>
                 </tr>
               ))
             )}

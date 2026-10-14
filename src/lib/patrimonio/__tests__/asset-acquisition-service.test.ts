@@ -23,6 +23,7 @@ test("tombamento reserves one receipt unit and removes it from free stock atomic
   const stockMovements: Array<Record<string, unknown>> = [];
   const assetCreates: Array<Record<string, unknown>> = [];
   const transaction = {
+    $executeRaw: async () => 1,
     purchaseReceiptItem: {
       findUnique: async () => ({
         id: "receipt-item-1",
@@ -50,7 +51,8 @@ test("tombamento reserves one receipt unit and removes it from free stock atomic
     },
     assetCategory: { findFirst: async () => ({ id: "category-1" }) },
     warehouse: { findFirst: async () => ({ id: "warehouse-1" }) },
-    material: { findUnique: async () => ({ id: "material-1", isActive: true }) },
+    material: { findUnique: async () => ({ id: "material-1", isActive: true }), findMany: async () => [] },
+    equipmentCustody: { findMany: async () => [] },
     inventorySession: { findFirst: async () => null },
     materialStock: {
       findUnique: async () => ({ id: "stock-1", unitCost: 4800 }),
@@ -69,7 +71,7 @@ test("tombamento reserves one receipt unit and removes it from free stock atomic
         return { id: "asset-1", ...data };
       },
     },
-    sequenceCounter: { upsert: async () => ({ value: 1 }) },
+    sequenceCounter: { upsert: async () => ({ value: 1 }), updateMany: async () => ({ count: 0 }) },
     auditEvent: { create: async () => ({ id: "audit-1" }) },
   };
   const database = { $transaction: async (callback: (tx: typeof transaction) => Promise<unknown>) => callback(transaction) };
@@ -91,6 +93,7 @@ test("tombamento reserves one receipt unit and removes it from free stock atomic
   assert.equal(assetCreates[0]?.name, "Notebook administrativo");
   assert.equal(assetCreates[0]?.brand, "Dell");
   assert.equal(assetCreates[0]?.serialNumber, "SN-001");
+  assert.equal(assetCreates[0]?.code, "EQP000001");
 });
 
 test("tombamento rejects a receipt unit claimed concurrently before moving stock", async () => {

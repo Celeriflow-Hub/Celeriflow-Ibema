@@ -7,17 +7,22 @@ import {
   issueMaterialRequestItem,
   ProcurementLifecycleError,
 } from "@/lib/compras/procurement-lifecycle";
-import { getTenantContextForModuleOperation, isSystemAdministrator } from "@/lib/platform/tenant-context";
+import { canPerformModuleOperation, getTenantContextForModuleOperation, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { StockValuationError } from "@/lib/patrimonio/stock-valuation";
 import { MunicipalCostError } from "@/lib/financeiro/cost-ledger";
 import { FinanceError } from "@/lib/financeiro";
+import { StockServiceError } from "@/lib/patrimonio/stock-service";
+import { EquipmentCustodyError } from "@/lib/patrimonio/equipment-custody";
 
-type ActionResult = { error?: string; message?: string };
+type ActionResult = { error?: string; message?: string; requestId?: string };
 
 const createMaterialRequestInput = z.object({
-  number: z.string().trim().max(100, "O número deve ter no máximo 100 caracteres.").optional(),
+  number: z.string().trim().max(0, "O código é gerado automaticamente.").optional(),
+  sourceWarehouseId: z.string().trim().min(1, "Selecione o almoxarifado de origem."),
+  requesterId: z.string().trim().min(1, "Selecione o servidor solicitante."),
+  departmentId: z.string().trim().min(1, "Selecione o setor de destino."),
   justification: z.string().trim().max(1000, "A justificativa deve ter no máximo 1000 caracteres.").optional(),
   idempotencyKey: z.string().trim().min(1, "Chave de idempotência inválida."),
   items: z.array(z.object({
@@ -37,6 +42,9 @@ const fullIssueInput = z.object({
 
 export async function createMaterialRequestAction(data: {
   number?: string;
+  sourceWarehouseId: string;
+  requesterId: string;
+  departmentId: string;
   justification?: string;
   idempotencyKey: string;
   items: Array<{ materialId: string; quantityRequested: number }>;
@@ -46,12 +54,17 @@ export async function createMaterialRequestAction(data: {
 
   try {
     const context = await getTenantContextForModuleOperation("PATRIMONIO", "create");
+    if (!isSystemAdministrator(context.user)) {
+      if (parsed.data.requesterId !== context.user.employeeId && !canPerformModuleOperation(context.user, "PATRIMONIO", "update")) return { error: "Seu perfil permite requisitar somente para o seu próprio servidor." };
+      const units = await context.prisma.budgetUnit.findMany({ where: { id: { in: context.user.allowedBudgetUnitIds } }, select: { secretariatId: true } });
+      if (!await context.prisma.department.count({ where: { id: parsed.data.departmentId, secretariatId: { in: units.flatMap(unit => unit.secretariatId ? [unit.secretariatId] : []) } } })) return { error: "Setor de destino fora do seu escopo autorizado." };
+    }
     const request = await createMaterialRequest(context.prisma, {
       usuarioId: context.user.id,
-      employeeId: context.user.employeeId,
+      employeeId: parsed.data.requesterId,
     }, parsed.data);
     revalidatePath("/patrimonio/requisicoes");
-    return { message: `Requisição ${request.number} registrada.` };
+    return { requestId: request.id, message: `Requisição ${request.number} registrada. Próxima etapa: aprovação.` };
   } catch (error) {
     return { error: error instanceof ProcurementLifecycleError ? error.message : "Não foi possível registrar a requisição." };
   }
@@ -62,22 +75,26 @@ export async function approveMaterialRequestAction(requestId: string, quantities
     const context = await getTenantContextForModuleOperation("PATRIMONIO", "update");
     await approveMaterialRequest(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, { requestId, quantities });
     revalidatePath("/patrimonio/requisicoes");
+    revalidatePath(`/patrimonio/requisicoes/${requestId}`);
     return {};
   } catch (error) {
     return { error: error instanceof ProcurementLifecycleError ? error.message : "Não foi possível aprovar a requisição." };
   }
 }
 
-export async function issueMaterialRequestItemAction(data: { requestItemId: string; stockId: string; quantity: number; settlementId?: string }): Promise<ActionResult> {
+export async function issueMaterialRequestItemAction(data: { requestItemId: string; stockId: string; quantity: number; settlementId?: string; idempotencyKey?: string }): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("PATRIMONIO", "create");
     if (data.settlementId) await getTenantContextForModuleOperation("FINANCEIRO", "update");
     await issueMaterialRequestItem(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, data);
     revalidatePath("/patrimonio/requisicoes");
     revalidatePath("/patrimonio/materiais");
+    revalidatePath("/patrimonio/requisicoes", "layout");
+    revalidatePath("/patrimonio");
+    revalidatePath("/patrimonio/bens");
     return {};
   } catch (error) {
-    return { error: error instanceof ProcurementLifecycleError || error instanceof StockValuationError || error instanceof MunicipalCostError || error instanceof FinanceError ? error.message : "Não foi possível atender a requisição." };
+    return { error: error instanceof ProcurementLifecycleError || error instanceof StockValuationError || error instanceof StockServiceError || error instanceof EquipmentCustodyError || error instanceof MunicipalCostError || error instanceof FinanceError ? error.message : "Não foi possível atender a requisição." };
   }
 }
 
@@ -98,10 +115,11 @@ export async function issueMaterialRequestInFullAction(data: {
     }, parsed.data);
     revalidatePath("/patrimonio/requisicoes");
     revalidatePath(`/patrimonio/requisicoes/${parsed.data.requestId}`);
+    revalidatePath("/patrimonio/bens");
     revalidatePath("/patrimonio/materiais");
     revalidatePath("/patrimonio");
     return { message: "Entrega integral registrada." };
   } catch (error) {
-    return { error: error instanceof ProcurementLifecycleError || error instanceof StockValuationError || error instanceof MunicipalCostError || error instanceof FinanceError ? error.message : "Não foi possível registrar a entrega integral." };
+    return { error: error instanceof ProcurementLifecycleError || error instanceof StockValuationError || error instanceof StockServiceError || error instanceof EquipmentCustodyError || error instanceof MunicipalCostError || error instanceof FinanceError ? error.message : "Não foi possível registrar a entrega integral." };
   }
 }

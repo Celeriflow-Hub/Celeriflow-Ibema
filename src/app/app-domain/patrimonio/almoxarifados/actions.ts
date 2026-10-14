@@ -15,7 +15,7 @@ const warehouseInput = z.object({
   neighborhood: text(120),
   city: text(120),
   state: text(2),
-  managerId: text(100),
+  managerId: z.string().trim().min(1, "Selecione o servidor responsável.").max(100),
   costCenterId: text(100),
 });
 

@@ -11,7 +11,7 @@ export function AssetRowActions({ asset, canUpdate }: { asset: { id: string; nam
   const isInactive = asset.status === "Inativo";
   return (
     <div className="flex items-center justify-end gap-0.5">
-      <Link href={`/patrimonio/bens/${encodeURIComponent(asset.id)}/editar`} aria-label={`Editar ${asset.name}`} title="Editar bem" className="inline-flex size-7 items-center justify-center rounded text-slate-500 outline-none hover:bg-emerald-50 hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-600">
+      <Link href={`/patrimonio/bens/editar?id=${encodeURIComponent(asset.id)}`} aria-label={`Editar ${asset.name}`} title="Editar bem" className="inline-flex size-7 items-center justify-center rounded text-slate-500 outline-none hover:bg-emerald-50 hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-600">
         <Pencil className="size-3.5" />
       </Link>
       <ConfirmActionDialog

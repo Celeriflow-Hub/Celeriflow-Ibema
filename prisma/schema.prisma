@@ -135,6 +135,7 @@ model Department {
   transfersTo      AssetTransfer[]    @relation("TransferToDept")
   materialMoves    MaterialMovement[] @relation("MovementDepartment")
   materialRequests MaterialRequest[]  @relation("MaterialRequestDepartment")
+  equipmentCustodies EquipmentCustody[]
   obrasServices    ObrasServico[]     @relation("ObrasServicoDepartment")
   obrasTeams       ObrasEquipe[]
   costCenters      CostCenter[]
@@ -398,6 +399,7 @@ model Employee {
   // Mod 11
   managedWarehouses           Warehouse[]            @relation("WarehouseManager")
   responsibleAssets           Asset[]                @relation("AssetResponsible")
+  equipmentCustodies          EquipmentCustody[]
   assetTransfersFrom          AssetTransfer[]        @relation("TransferFromResp")
   assetTransfersTo            AssetTransfer[]        @relation("TransferToResp")
   materialRequests            MaterialRequest[]      @relation("MaterialRequester")
@@ -7717,6 +7719,7 @@ model AssetCategory {
 
 model Asset {
   id                String    @id @default(cuid())
+  code              String?   @unique
   patrimonyNumber   String    @unique // NÃºmero do Tombamento
   name              String
   description       String?
@@ -7772,6 +7775,28 @@ model Asset {
   fleetOperations    FleetOperation[]
   fleetUnit          FleetUnit?
   @@index([budgetUnitId, status])
+}
+
+model EquipmentCustody {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  serialNumber String?
+  status String @default("Em uso")
+  deliveredAt DateTime @default(now())
+  materialId String
+  material Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  departmentId String
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  responsibleId String
+  responsible Employee @relation(fields: [responsibleId], references: [id], onDelete: Restrict)
+  stockMovementId String
+  stockMovement MaterialMovement @relation(fields: [stockMovementId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([departmentId, status])
+  @@index([responsibleId])
+  @@index([stockMovementId])
 }
 
 model InternalControlPlan {
@@ -8005,6 +8030,7 @@ model Warehouse {
   movements         MaterialMovement[]
   receiptItems      PurchaseReceiptItem[]
   inventorySessions InventorySession[]
+  materialRequests  MaterialRequest[]
 
   schoolMeals              SchoolMeal[]
   educationFoodMovements   EducationFoodMovement[]
@@ -8266,6 +8292,7 @@ model MaterialSubcategory {
 }
 
 model Material {
+  equipmentCustodies EquipmentCustody[]
   sstEquipment SstEquipment[]
   id            String  @id @default(cuid())
   code          String  @unique
@@ -8344,6 +8371,7 @@ model MaterialStock {
 }
 
 model MaterialMovement {
+  equipmentCustodies EquipmentCustody[]
   valuationEvent MaterialStockValuationEvent?
   quantityDecimal Decimal? @db.Decimal(18, 6)
   unitValueDecimal Decimal? @db.Decimal(18, 6)
@@ -8525,6 +8553,9 @@ model MaterialRequest {
   date           DateTime @default(now())
   justification  String?
 
+  sourceWarehouseId String?
+  sourceWarehouse   Warehouse? @relation(fields: [sourceWarehouseId], references: [id], onDelete: Restrict)
+
   departmentId String
   department   Department @relation("MaterialRequestDepartment", fields: [departmentId], references: [id])
 
@@ -8542,6 +8573,7 @@ model MaterialRequest {
   updatedAt DateTime @updatedAt
 
   items MaterialRequestItem[]
+  @@index([sourceWarehouseId, status])
 }
 
 model MaterialRequestItem {

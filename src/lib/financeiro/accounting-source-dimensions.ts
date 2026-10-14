@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { currentPresentationEntries } from "../planejamento/catalog-presentation";
 
 type Origin = { sourceModule?: string; sourceType?: string; sourceId?: string; date: Date; governmentEntityId: string; budgetUnitId: string };
 const appropriationSelection = { id: true, resourceSourceId: true, expenseNatureId: true, budgetUnitId: true, financialYear: { select: { governmentEntityId: true } }, programPPA: { select: { id: true, code: true } }, actionPPA: { select: { id: true, code: true } }, planningLine: { select: { id: true, functionCode: true, subfunctionCode: true } } } satisfies Prisma.BudgetAppropriationSelect;
@@ -86,14 +87,14 @@ async function classifiedSourceDimensions(tx: Prisma.TransactionClient, origin: 
 
 async function resolveDimensionClassification(tx: Prisma.TransactionClient, origin: Origin, kind: "SOURCE" | "REVENUE" | "EXPENSE", canonicalId: string): Promise<Prisma.InputJsonObject | null> {
   const day = origin.date.toISOString().slice(0, 10);
-  const bindings = await tx.planningCatalogEntry.findMany({ where: { kind, canonicalId, version: { status: "PUBLISHED", year: origin.date.getUTCFullYear() } }, include: { version: { select: { sourceHash: true, normativeReference: true } } } });
-  const current = bindings.filter(entry => {
+  const bindings = await tx.planningCatalogEntry.findMany({ where: { kind, canonicalId, version: { status: "PUBLISHED", year: origin.date.getUTCFullYear() } }, include: { version: { select: { year: true, sourceHash: true, normativeReference: true } } } });
+  const current = currentPresentationEntries(bindings.filter(entry => {
     const attrs = entry.attributes as Prisma.JsonObject;
     return attrs && typeof attrs.effectiveFrom === "string" && typeof attrs.effectiveUntil === "string"
       && attrs.effectiveFrom <= day && attrs.effectiveUntil >= day
       && (!attrs.governmentEntityId || attrs.governmentEntityId === origin.governmentEntityId)
       && (!attrs.budgetUnitId || attrs.budgetUnitId === origin.budgetUnitId);
-  });
+  }), day);
   const replaced = new Set(current.flatMap(entry => {
     const attrs = entry.attributes as Prisma.JsonObject;
     return attrs.operational === true && attrs.pocOnly === false && typeof attrs.predecessorEntryId === "string" ? [attrs.predecessorEntryId] : [];

@@ -5,10 +5,11 @@ import { neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { cadastroTargets } from "./plausible-cadastro-data";
+import { getMunicipalNameTargets, type MunicipalNameTarget } from "./municipal-name-targets";
 
 config({ path: ".env.local", quiet: true }); config({ quiet: true });
 neonConfig.webSocketConstructor = ws;
-const placeholder = /(^|[^a-zA-Z0-9])(POC|DEMONSTRA[ÇC][ÃA]O|DEMO|FICT[ÍI]CI[OA]|TESTE)([^a-zA-Z0-9]|$)|example[.](test|invalid)|[.]poc[.]test/i;
+const placeholder = /(^|[^a-zA-Z0-9])(POC|DEMONSTRA[ÇC][ÃA]O|DEMO|FICT[ÍI]CI[OA]|TESTE|SINT[ÉE]TIC[OA]|EXEMPLO|SIMULAD[OA]|ENSAIO)([^a-zA-Z0-9]|$)|example[.](test|invalid)|[.]poc[.]test/i;
 const apply = process.argv.includes("--apply");
 type Change = { model: string; id: string; before: Record<string, string | null>; after: Record<string, string>; snapshot: Prisma.InputJsonObject };
 async function main() {
@@ -18,7 +19,13 @@ async function main() {
   try {
     const changes: Change[] = [];
     const skipped: Array<{ model: string; id: string; reason: string }> = [];
-    const targetsForRun = [...cadastroTargets];
+    const targetsByKey = new Map<string, MunicipalNameTarget>();
+    const candidates: MunicipalNameTarget[] = [...cadastroTargets, ...(process.argv.includes("--general") ? await getMunicipalNameTargets(db) : [])];
+    for (const target of candidates) {
+      const key = `${target.model}:${target.id}`, previous = targetsByKey.get(key);
+      targetsByKey.set(key, { ...target, values: { ...previous?.values, ...target.values }, expected: { ...previous?.expected, ...target.expected }, fill: [...new Set([...(previous?.fill || []), ...(target.fill || [])])] });
+    }
+    const targetsForRun = [...targetsByKey.values()];
     const personTargets = cadastroTargets.filter(target => target.model === "Person");
     const linkedEmployees = await db.employee.findMany({ where: { personId: { in: personTargets.map(target => target.id) } }, select: { id: true, person: { select: { id: true, fullName: true } } } });
     for (const employee of linkedEmployees) {
@@ -41,7 +48,7 @@ async function main() {
           const current = snapshot[field];
           if (current === value) continue;
           if (current != null && typeof current !== "string") throw new Error("Tipo de campo inesperado.");
-          if ((target.fill?.includes(field) && !current) || (typeof current === "string" && placeholder.test(current))) {
+          if ((target.fill?.includes(field) && !current) || target.expected?.[field] === current || (typeof current === "string" && placeholder.test(current))) {
             before[field] = current as string | null; after[field] = value;
           } else skipped.push({ model: modelName, id: target.id, reason: `${field}: valor personalizado preservado` });
         }

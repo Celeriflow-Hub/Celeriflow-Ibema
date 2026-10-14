@@ -1,4 +1,5 @@
 import "server-only";
+import { currentPresentationEntries } from "./catalog-presentation";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { assertPlanningLegalAuthority, planningEntityWhere, planningUnitWhere, type PlanningContext } from "./access";
@@ -131,7 +132,7 @@ export async function adoptMunicipalCatalog(context: PlanningContext, raw: unkno
       if (attributes.synthetic === true || attributes.pocOnly === true) throw new Error("Uma referência sintética não pode ser promovida a catálogo municipal.");
       if (typeof attributes.effectiveFrom === "string" && input.effectiveFrom < attributes.effectiveFrom || typeof attributes.effectiveUntil === "string" && input.effectiveUntil > attributes.effectiveUntil) throw new Error("Vigência municipal excede a vigência documentada da origem.");
       if (entry.kind === "ACCOUNT" && (attributes.postingAllowed !== true || !["D", "C", "X", "DC", "D/C"].includes(String(attributes.balanceNature)))) throw new Error("Conta de origem sintética ou sem natureza D/C documentada.");
-      const overlaps = await tx.planningCatalogEntry.findMany({ where: { kind: entry.kind, canonicalId: mapping.canonicalId, version: { year, status: "PUBLISHED" } } });
+      const overlaps = await tx.planningCatalogEntry.findMany({ where: { kind: entry.kind, canonicalId: mapping.canonicalId, version: { year, status: "PUBLISHED" } }, include: { version: { select: { year: true } } } });
       const applicable = overlaps.filter(row => {
         const attrs = object(row.attributes);
         return (!attrs.governmentEntityId || attrs.governmentEntityId === input.governmentEntityId)
@@ -140,7 +141,7 @@ export async function adoptMunicipalCatalog(context: PlanningContext, raw: unkno
           && attrs.effectiveFrom <= input.effectiveUntil && attrs.effectiveUntil >= input.effectiveFrom;
       });
       const replaced = new Set(applicable.map(row => object(row.attributes).predecessorEntryId));
-      const current = applicable.filter(row => !replaced.has(row.id));
+      const current = currentPresentationEntries(applicable, input.effectiveFrom).filter(row => !replaced.has(row.id));
       if (mapping.predecessorEntryId) {
         if (current.length !== 1 || current[0].id !== mapping.predecessorEntryId) throw new Error("Selecione a única edição vigente que está sendo sucedida.");
         const previous = object(current[0].attributes);

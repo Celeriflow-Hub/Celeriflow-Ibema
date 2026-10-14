@@ -30,9 +30,9 @@ async function main() {
         const address = suffix === "a" ? "Rua dos Cedros, 240, Jardim das Acácias" : "Avenida das Palmeiras, 680, Parque das Veredas";
         await tx.taxCemetery.upsert({ where: { id: cemeteryId }, create: { id: cemeteryId, code: `DEMO-CEM-${suffix.toUpperCase()}`, name, address, observations: "Estrutura sintética para homologação. Não representa instalação municipal real." }, update: {} });
         await tx.taxCemeteryEmployee.upsert({ where: { id: `${cemeteryId}-employee` }, create: { id: `${cemeteryId}-employee`, cemeteryId, name: suffix === "a" ? "José Roberto Santana" : "Paulo Sérgio Moreira", role: "Coveiro" }, update: {} });
-        await tx.taxCemeterySector.upsert({ where: { cemeteryId_code: { cemeteryId, code: "DEMO-Q1" } }, create: { id: `${cemeteryId}-sector`, cemeteryId, code: "DEMO-Q1", name: "Quadra das Acácias" }, update: {} });
+        await tx.taxCemeterySector.upsert({ where: { id: `${cemeteryId}-sector` }, create: { id: `${cemeteryId}-sector`, cemeteryId, code: "Q-01", name: "Quadra das Acácias" }, update: {} });
         await tx.cemeteryChapel.upsert({ where: { id: `${cemeteryId}-chapel` }, create: { id: `${cemeteryId}-chapel`, cemeteryId, name: suffix === "a" ? "Capela São Miguel" : "Capela Nossa Senhora da Paz", personTaxpayerId: ownerId, responsibleTaxpayerId: ownerId, address }, update: {} });
-        await tx.cemeteryOssuary.upsert({ where: { cemeteryId_code: { cemeteryId, code: "DEMO-O1" } }, create: { id: `${cemeteryId}-ossuary`, cemeteryId, code: "DEMO-O1", address, capacity: 10 }, update: {} });
+        await tx.cemeteryOssuary.upsert({ where: { id: `${cemeteryId}-ossuary` }, create: { id: `${cemeteryId}-ossuary`, cemeteryId, code: "O-01", address, capacity: 10 }, update: {} });
         for (const number of [1, 2]) {
           const lotId = `${cemeteryId}-lot-${number}`;
           await tx.cemeteryLot.upsert({ where: { cemeteryId_identifier: { cemeteryId, identifier: `DEMO-L${number}` } }, create: { id: lotId, cemeteryId, identifier: `DEMO-L${number}`, ownerTaxpayerId: ownerId, graveLimit: 3 }, update: {} });
@@ -40,7 +40,7 @@ async function main() {
         }
       }
       await tx.taxFuneralHome.upsert({ where: { id: "cemetery-demo-funeral" }, create: { id: "cemetery-demo-funeral", name: "Serviço Funerário Municipal de Aurora das Veredas", ownershipType: "PUBLICA" }, update: {} });
-      await tx.taxDeathCause.upsert({ where: { code: "DEMO-CEM-CAUSE" }, create: { id: "cemetery-demo-cause", code: "DEMO-CEM-CAUSE", description: "DEMONSTRAÇÃO — Causa sintética sem declaração médica real" }, update: {} });
+      await tx.taxDeathCause.upsert({ where: { id: "cemetery-demo-cause" }, create: { id: "cemetery-demo-cause", code: "CAUSA-NAO-INFORMADA", description: "Causa não informada; depende de documentação do declarante." }, update: {} });
       return { mode: "DEMONSTRATION", cemeteries: 2, people: 2, lots: 4, graves: 4, realPermissionsGranted: false, deathsCreated: false, feesIssued: false };
     });
     console.log(JSON.stringify(result, null, 2));

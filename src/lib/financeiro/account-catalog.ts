@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { currentPresentationEntries } from "../planejamento/catalog-presentation";
 
 type ClassificationScope = { governmentEntityId: string; budgetUnitId: string };
 
@@ -18,14 +19,14 @@ export async function resolveAccountClassificationSnapshots(tx: Prisma.Transacti
       if (process.env.CELERIFLOW_ACCOUNTING_MODE !== "POC") throw new Error("Conta contábil sem classificação publicada; conclua o de-para municipal antes da postagem.");
       continue;
     }
-    const current = versions.filter((entry) => {
+    const current = currentPresentationEntries(versions.filter((entry) => {
       const attributes = attributesOf(entry.attributes);
       return entry.version.year === date.getUTCFullYear()
         && typeof attributes.effectiveFrom === "string" && typeof attributes.effectiveUntil === "string"
         && attributes.effectiveFrom <= day && attributes.effectiveUntil >= day
         && (!attributes.governmentEntityId || attributes.governmentEntityId === scope?.governmentEntityId)
         && (!attributes.budgetUnitId || attributes.budgetUnitId === scope?.budgetUnitId);
-    });
+    }), day);
     // A municipal adoption supersedes its explicitly linked reference, preserving both immutable editions.
     const replaced = new Set(current.flatMap((entry) => {
       const attributes = attributesOf(entry.attributes);

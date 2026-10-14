@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { cadastroPeople, cadastroRoles, executiveUnits, legislativeUnits } from "./plausible-cadastro-data";
+import { referenceNames } from "./municipal-name-targets";
 
 config({ path: ".env.local", quiet: true });
 config({ quiet: true });
@@ -63,16 +64,16 @@ async function main() {
       for (const suffix of ["exe", "leg"] as const) {
         const governmentEntityId = `${prefix}${suffix}`;
         const secretariatId = `${prefix}secretariat-${suffix}`;
-        await tx.governmentEntity.upsert({ where: { id: governmentEntityId }, update: {}, create: { id: governmentEntityId, code: `POC-P0-${suffix.toUpperCase()}`, name: `POC P0 — ${suffix === "exe" ? "Prefeitura" : "Câmara"} (ensaio)`, type: suffix === "exe" ? "PREFEITURA" : "CAMARA" } });
+        await tx.governmentEntity.upsert({ where: { id: governmentEntityId }, update: {}, create: { id: governmentEntityId, code: suffix === "exe" ? "AURORA-EXEC" : "AURORA-LEG", name: `${suffix === "exe" ? "Prefeitura" : "Câmara"} Municipal de Aurora das Veredas`, type: suffix === "exe" ? "PREFEITURA" : "CAMARA" } });
         for (const year of [2024, 2025, 2026, 2027]) await tx.financialYear.upsert({ where: { governmentEntityId_year: { governmentEntityId, year } }, update: {}, create: { id: `${prefix}fin-year-${suffix}-${year}`, governmentEntityId, year, status: "Preparação", startDate: new Date(`${year}-01-01T00:00:00Z`), endDate: new Date(`${year}-12-31T23:59:59Z`) } });
         await tx.planningEntityScope.upsert({ where: { governmentEntityId }, update: {}, create: { governmentEntityId, jurisdiction: suffix === "exe" ? "EXECUTIVE" : "LEGISLATIVE" } });
-        await tx.secretariat.upsert({ where: { id: secretariatId }, update: {}, create: { id: secretariatId, name: `POC P0 — Administração ${suffix}` } });
+        await tx.secretariat.upsert({ where: { id: secretariatId }, update: {}, create: { id: secretariatId, name: suffix === "exe" ? "Secretaria Municipal de Administração" : "Diretoria Administrativa da Câmara Municipal" } });
         for (let i = 1; i <= 21; i++) {
           const id = `${prefix}${suffix}-ug-${i}`;
           const name = (suffix === "exe" ? executiveUnits : legislativeUnits)[i - 1];
-          await tx.budgetUnit.upsert({ where: { id }, update: {}, create: { id, code: `POC.P0.${suffix}.${String(i).padStart(3, "0")}`, name, secretariatId } });
+          await tx.budgetUnit.upsert({ where: { id }, update: {}, create: { id, code: `AV.${suffix === "exe" ? "01" : "02"}.${String(i).padStart(3, "0")}`, name, secretariatId } });
           await tx.planningEntityUnit.upsert({ where: { budgetUnitId: id }, update: {}, create: { budgetUnitId: id, governmentEntityId } });
-          await tx.costCenter.upsert({ where: { id: `${prefix}${suffix}-cc-${i}` }, update: {}, create: { id: `${prefix}${suffix}-cc-${i}`, code: `POC.P0.${suffix}.CC.${i}`, name: `${name} — Custeio`, governmentEntityId, secretariatId } });
+          await tx.costCenter.upsert({ where: { id: `${prefix}${suffix}-cc-${i}` }, update: {}, create: { id: `${prefix}${suffix}-cc-${i}`, code: `AV.${suffix === "exe" ? "01" : "02"}.CC.${String(i).padStart(3, "0")}`, name: `${name} — Custeio`, governmentEntityId, secretariatId } });
         }
         const roles: Record<string, Record<string, boolean>> = { proponente: { create: true, update: true }, aprovador: { update: true, legalApproval: true }, sancionador: { update: true, legalApproval: true }, consulta: { create: false, update: false, issueReports: true }, financeiro: { create: true, update: true, issueReports: true }, controlador: { create: true, update: true, issueReports: true }, notificado: { create: false, update: false } };
         for (const [role, grants] of Object.entries(roles)) {
@@ -82,33 +83,33 @@ async function main() {
           const roleLabel = cadastroRoles[roleIndex][1];
           const person = cadastroPeople[roleIndex + (suffix === "leg" ? 7 : 0)];
           await tx.configuracaoPerfil.upsert({ where: { id }, update: {}, create: { id, codigo: `POC_P0_${suffix}_${role}`.toUpperCase(), nome: `${roleLabel} — ${suffix === "exe" ? "Executivo" : "Legislativo"}`, permissoes: JSON.stringify(permissions) } });
-          await tx.usuario.upsert({ where: { id }, update: {}, create: { id, nome: person.name, email: `${id}@example.test`, perfilId: id } });
+          await tx.usuario.upsert({ where: { id }, update: {}, create: { id, nome: person.name, email: person.email, perfilId: id } });
           await tx.usuarioUnidadeGestora.upsert({ where: { usuarioId_budgetUnitId: { usuarioId: id, budgetUnitId: `${prefix}${suffix}-ug-1` } }, update: {}, create: { id: `${id}-scope`, usuarioId: id, budgetUnitId: `${prefix}${suffix}-ug-1` } });
         }
         const ppaId = `${prefix}${suffix}-ppa`;
         const pieceId = `${prefix}${suffix}-piece-ppa`;
-        await tx.multiYearPlan.upsert({ where: { id: ppaId }, update: {}, create: { id: ppaId, code: `POC.P0.${suffix}.2024-2027`, name: "POC P0 — PPA de ensaio 2024–2027", startYear: 2024, endYear: 2027, status: "DRAFT", draftedById: actor!.id } });
-        await tx.planningInstrument.upsert({ where: { id: pieceId }, update: {}, create: { id: pieceId, governmentEntityId, kind: "PPA", code: "POC-P0-2024-2027", title: "POC P0 — PPA de ensaio", startYear: 2024, endYear: 2027, multiYearPlanId: ppaId, createdById: actor!.id } });
+        await tx.multiYearPlan.upsert({ where: { id: ppaId }, update: {}, create: { id: ppaId, code: `AV.${suffix.toUpperCase()}.2024-2027`, name: `Plano Plurianual 2024–2027 — ${suffix === "exe" ? "Executivo" : "Legislativo"}`, startYear: 2024, endYear: 2027, status: "DRAFT", draftedById: actor!.id } });
+        await tx.planningInstrument.upsert({ where: { id: pieceId }, update: {}, create: { id: pieceId, governmentEntityId, kind: "PPA", code: "AV-PPA-2024", title: "Plano Plurianual 2024–2027", startYear: 2024, endYear: 2027, multiYearPlanId: ppaId, createdById: actor!.id } });
         for (const year of [2024, 2025, 2026, 2027]) {
           const financialYear = await tx.financialYear.findUniqueOrThrow({ where: { governmentEntityId_year: { governmentEntityId, year } } });
           const ldoId = `${prefix}${suffix}-ldo-${year}`;
           const loaId = `${prefix}${suffix}-loa-${year}`;
           const ldoPiece = `${prefix}${suffix}-piece-ldo-${year}`;
           await tx.budgetGuideline.upsert({ where: { id: ldoId }, update: {}, create: { id: ldoId, financialYearId: financialYear.id, multiYearPlanId: ppaId, status: "DRAFT", draftedById: actor!.id } });
-          await tx.planningInstrument.upsert({ where: { id: ldoPiece }, update: {}, create: { id: ldoPiece, governmentEntityId, kind: "LDO", code: `POC-P0-${year}`, title: `POC P0 — LDO de ensaio ${year}`, startYear: year, endYear: year, budgetGuidelineId: ldoId, parentId: pieceId, createdById: actor!.id } });
-          await tx.annualBudgetLaw.upsert({ where: { id: loaId }, update: {}, create: { id: loaId, lawNumber: `POC-P0-${year}`, financialYearId: financialYear.id, budgetGuidelineId: ldoId, totalRevenue: 0, totalExpense: 0, status: "DRAFT", draftedById: actor!.id } });
-          await tx.planningInstrument.upsert({ where: { id: `${prefix}${suffix}-piece-loa-${year}` }, update: {}, create: { id: `${prefix}${suffix}-piece-loa-${year}`, governmentEntityId, kind: "LOA", code: `POC-P0-${year}`, title: `POC P0 — LOA de ensaio ${year}`, startYear: year, endYear: year, annualBudgetLawId: loaId, parentId: ldoPiece, createdById: actor!.id } });
+          await tx.planningInstrument.upsert({ where: { id: ldoPiece }, update: {}, create: { id: ldoPiece, governmentEntityId, kind: "LDO", code: `AV-LDO-${year}`, title: `Diretrizes Orçamentárias ${year}`, startYear: year, endYear: year, budgetGuidelineId: ldoId, parentId: pieceId, createdById: actor!.id } });
+          await tx.annualBudgetLaw.upsert({ where: { id: loaId }, update: {}, create: { id: loaId, lawNumber: `AV-LOA-${year}`, financialYearId: financialYear.id, budgetGuidelineId: ldoId, totalRevenue: 0, totalExpense: 0, status: "DRAFT", draftedById: actor!.id } });
+          await tx.planningInstrument.upsert({ where: { id: `${prefix}${suffix}-piece-loa-${year}` }, update: {}, create: { id: `${prefix}${suffix}-piece-loa-${year}`, governmentEntityId, kind: "LOA", code: `AV-LOA-${year}`, title: `Orçamento Anual ${year}`, startYear: year, endYear: year, annualBudgetLawId: loaId, parentId: ldoPiece, createdById: actor!.id } });
         }
       }
       for (let i = 1; i <= 21; i++) {
         // Explicitly synthetic codes: never replace or impersonate official classifications.
-        await tx.resourceSource.upsert({ where: { id: `${prefix}source-${i}` }, update: {}, create: { id: `${prefix}source-${i}`, code: `POC.P0.SOURCE.${i}`, name: `POC P0 — Fonte ${i} (sintética)` } });
-        await tx.revenueNature.upsert({ where: { id: `${prefix}revenue-${i}` }, update: {}, create: { id: `${prefix}revenue-${i}`, code: `POC.P0.REVENUE.${i}`, name: `POC P0 — Receita ${i} (sintética)` } });
-        await tx.expenseNature.upsert({ where: { id: `${prefix}expense-${i}` }, update: {}, create: { id: `${prefix}expense-${i}`, code: `POC.P0.EXPENSE.${i}`, name: `POC P0 — Despesa ${i} (sintética)` } });
-        await tx.accountingPlan.upsert({ where: { id: `${prefix}account-${i}` }, update: {}, create: { id: `${prefix}account-${i}`, code: `POC.P0.ACCOUNT.${i}`, name: `POC P0 — Conta ${i} (não PCASP homologado)`, type: i % 2 ? "Ativo" : "Passivo" } });
-        await tx.taxpayer.upsert({ where: { id: `${prefix}taxpayer-${i}` }, update: {}, create: { id: `${prefix}taxpayer-${i}`, taxpayerType: "PF", municipalInsc: `POC.P0.CONTRIB.${i}`, fiscalNotes: "Cadastro sintético P0; identidade pessoal e documentação a completar no roteiro." } });
-        await tx.realEstate.upsert({ where: { id: `${prefix}property-${i}` }, update: {}, create: { id: `${prefix}property-${i}`, municipalInsc: `POC.P0.IMOVEL.${i}`, propertyType: "Terreno", taxpayerId: `${prefix}taxpayer-${i}`, landArea: 100 + i, streetName: "POC P0 — Via de ensaio", number: String(i) } });
-        await tx.economicRegistration.upsert({ where: { id: `${prefix}economic-${i}` }, update: {}, create: { id: `${prefix}economic-${i}`, municipalInsc: `POC.P0.ECON.${i}`, taxpayerId: `${prefix}taxpayer-${i}`, startDate: new Date("2026-01-01T00:00:00Z") } });
+        await tx.resourceSource.upsert({ where: { id: `${prefix}source-${i}` }, update: {}, create: { id: `${prefix}source-${i}`, code: `AV.SOURCE.${String(i).padStart(3, "0")}`, name: referenceNames.ResourceSource[i - 1] } });
+        await tx.revenueNature.upsert({ where: { id: `${prefix}revenue-${i}` }, update: {}, create: { id: `${prefix}revenue-${i}`, code: `AV.REVENUE.${String(i).padStart(3, "0")}`, name: referenceNames.RevenueNature[i - 1] } });
+        await tx.expenseNature.upsert({ where: { id: `${prefix}expense-${i}` }, update: {}, create: { id: `${prefix}expense-${i}`, code: `AV.EXPENSE.${String(i).padStart(3, "0")}`, name: referenceNames.ExpenseNature[i - 1] } });
+        await tx.accountingPlan.upsert({ where: { id: `${prefix}account-${i}` }, update: {}, create: { id: `${prefix}account-${i}`, code: `AV.ACCOUNT.${String(i).padStart(3, "0")}`, name: referenceNames.AccountingPlan[i - 1], type: i % 2 ? "Ativo" : "Passivo" } });
+        await tx.taxpayer.upsert({ where: { id: `${prefix}taxpayer-${i}` }, update: {}, create: { id: `${prefix}taxpayer-${i}`, taxpayerType: "PF", municipalInsc: `AV.PF.${1000 + i}`, fiscalNotes: "Cadastro municipal de referência, com documentação sujeita à conferência cadastral." } });
+        await tx.realEstate.upsert({ where: { id: `${prefix}property-${i}` }, update: {}, create: { id: `${prefix}property-${i}`, municipalInsc: `01.02.${String(i).padStart(4, "0")}.001`, propertyType: "Terreno", taxpayerId: `${prefix}taxpayer-${i}`, landArea: 100 + i, streetName: ["Rua das Veredas", "Avenida do Ipê", "Rua Serra Clara", "Rua do Comércio", "Avenida das Nascentes", "Rua das Palmeiras", "Rua da Estação"][(i - 1) % 7], number: String(i) } });
+        await tx.economicRegistration.upsert({ where: { id: `${prefix}economic-${i}` }, update: {}, create: { id: `${prefix}economic-${i}`, municipalInsc: `AV.EC.${2000 + i}`, taxpayerId: `${prefix}taxpayer-${i}`, startDate: new Date("2026-01-01T00:00:00Z") } });
       }
       const marker = await tx.financialAuditLog.findFirst({ where: { action: "POC_P0_DATASET_PREPARED", entityId: "POC_P0_CURRENT_V1" } });
       if (!marker) await tx.financialAuditLog.create({ data: { action: "POC_P0_DATASET_PREPARED", entityType: "POC_DATASET", entityId: "POC_P0_CURRENT_V1", authorUsuarioId: actor!.id, payload: { phase: "P0", version: 1, prefix, synthetic: true, mode: "ADDITIVE_ONLY", years: [2024, 2025, 2026, 2027] } } });

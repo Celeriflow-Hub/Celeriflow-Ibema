@@ -29,7 +29,9 @@ async function main() {
     if (!isSystemAdministrator(context.user)) throw new Error("A carga exige responsável administrador existente.");
     if (!process.env.BLOB_READ_WRITE_TOKEN || !process.env.CELERIFLOW_INSTANCE_ID) throw new Error("Blob privado e identificador da instância devem estar configurados para os documentos da POC.");
     const result = await populateFleetPoc(context, { ctb, fipe, storeFile: async (name, bytes) => { const blob = await put(`${fleetAttachmentPrefix(actor.id)}poc/${name}`, Buffer.from(bytes), { access: "private", addRandomSuffix: false, allowOverwrite: true, contentType: "application/pdf", token: process.env.BLOB_READ_WRITE_TOKEN }); return { url: blob.url, pathname: blob.pathname }; } });
-    console.log(JSON.stringify(result, null, 2));
+     const marker = await db.financialAuditLog.findFirst({ where: { action: "MUNICIPAL_FLEET_DATASET_POPULATED", entityId: result.dataset } });
+     if (!marker) await db.financialAuditLog.create({ data: { action: "MUNICIPAL_FLEET_DATASET_POPULATED", entityType: "DATASET", entityId: result.dataset, authorUsuarioId: actor.id, payload: { fictional: true, source: "OWNER_AUTHORIZED_REFERENCE", units: Object.values(result.units), referenceDate: result.referenceDate, catalogEntries: result.ctbEntries } } });
+     console.log(JSON.stringify({ ...result, external: result.external.map(({ code, cnpj, kind }) => ({ code, cnpj, kind })) }, null, 2));
     console.log("As contas operadoras ficam vinculadas ao RH e ao perfil setorial. Para login, use a vinculação Firebase da rotina de usuários; a carga não altera credenciais existentes. Se uma autorização externa foi recuperada sem token, reemita a credencial pela tela de Frota.");
   } finally { await db.$disconnect(); }
 }

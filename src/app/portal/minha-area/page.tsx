@@ -15,6 +15,9 @@ export default async function CitizenAreaPage() {
         <p className="mt-2 text-sm text-slate-600">Sua área de serviços e acompanhamento de processos.</p>
         <div className="mt-4 space-y-3"><ServiceNotices authenticated /></div>
         <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold"><Link href="/portal/minha-area/solicitacoes" className="text-emerald-800 hover:underline">Meus pedidos, pendências e respostas</Link><Link href="/portal-servidor" className="text-sky-800 hover:underline">Portal do Servidor</Link><Link href="/portal/tributario" className="text-emerald-800 hover:underline">Área do contribuinte</Link></div>
+        <Link href="/portal/tributario/alvaras" className="mt-3 inline-block text-sm font-semibold text-emerald-800 hover:underline">Alvarás da empresa e autenticidade</Link>
+        <Link href="/portal/tributario/itbi" className="ml-4 mt-3 inline-block text-sm font-semibold text-emerald-800 hover:underline">Processos ITBI, mensagens e documentos</Link>
+        <Link href="/portal/tributario/empresas" className="ml-4 mt-3 inline-block text-sm font-semibold text-emerald-800 hover:underline">Inscrição municipal e certidão cadastral de baixa</Link>
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
           <Link href="/portal/minha-area/servicos" className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 transition hover:border-emerald-500 focus-visible:outline-2 focus-visible:outline-emerald-700">
             <FilePlus2 className="size-7 text-emerald-700" aria-hidden="true" />

@@ -6,6 +6,7 @@ import { assertTaxCreditScope } from "./credit-finance";
 import { reclassifyRestoredTaxReceivable } from "./accrual-accounting";
 import { reversePaidItbiInTransaction } from "./itbi-ownership";
 import { getBankResourceSourceSpendableBalance } from "../financeiro/bank-resource-sources";
+import { reverseConditionalPaymentDiscount } from "./conditional-discounts";
 
 /** Reverses a collection and its unused excess without erasing any origin record. */
 export async function reverseTaxPayment(db: PrismaClient, actor: TaxActor, input: {
@@ -66,13 +67,14 @@ export async function reverseTaxPayment(db: PrismaClient, actor: TaxActor, input
       await tx.taxRegistryEntry.update({ where: { id: credit.id }, data: { status: "ESTORNADO", data: { ...data, available: "0.00", reversalTransactionId: transaction.id, reversalMovementId: movement.id, reversedAt: input.date.toISOString() } } });
     }
     await tx.taxPayment.update({ where: { id: payment.id }, data: { status: "Estornado" } });
+    await reverseConditionalPaymentDiscount(tx, actor, { assessmentId: payment.guide.assessmentId, paymentKey: payment.idempotencyKey, date: input.date, reason: input.reason });
     await reversePaidItbiInTransaction(tx, actor, payment.id, input.date);
     const paid = await tx.taxPayment.findMany({ where: { guide: { assessmentId: payment.guide.assessmentId }, status: "Confirmado" }, select: { guideId: true, amountPaidDecimal: true } });
     const sum = (rows: typeof paid) => rows.reduce((total, row) => { if (!row.amountPaidDecimal) throw new TaxError("Pagamento histórico sem Decimal conciliado."); return total.plus(row.amountPaidDecimal); }, new Prisma.Decimal(0));
     const guidePaid = sum(paid.filter((row) => row.guideId === payment.guideId));
     if (!payment.guide.totalValueDecimal) throw new TaxError("Guia sem Decimal conciliado.");
     if (payment.guide.status !== "Cancelada") await tx.taxGuide.update({ where: { id: payment.guideId }, data: { status: guidePaid.gte(payment.guide.totalValueDecimal) ? "Paga" : guidePaid.gt(0) ? "Parcial" : "Emitida" } });
-    const assessment = payment.guide.assessment;
+    const assessment = await tx.taxAssessment.findUniqueOrThrow({ where: { id: payment.guide.assessmentId } });
     const total = assessment.finalValueDecimal ?? assessment.originalValueDecimal;
     if (!total) throw new TaxError("Lançamento sem Decimal conciliado.");
     const extinguished = sum(paid).plus(await taxAssessmentCompensatedValue(tx, assessment.id));

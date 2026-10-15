@@ -106,6 +106,7 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) {
       assert.equal(await sum("vpa"), "-12.00");
       assert.equal((await getAssessmentAccount(f.db, assessment.id)).position.balance.toFixed(2), "7.00");
       await f.db.taxParameter.create({ data: { id: "accrual-calculation", taxId: "tax-accrual", code: "IPTU", name: "Cálculo municipal", calculationType: "PERCENTUAL_BASE", configuration: { formula: "PERCENTUAL_BASE", rate: 4 }, effectiveFrom: new Date("2026-01-01") } });
+      await f.db.taxRegistryEntry.create({ data: { entityType: "TAX_PARAMETER", entityId: "accrual-calculation", category: "PARAMETER_SCOPE", title: "Origem conferida da regra", data: { governmentEntityId: "ente", budgetUnitId: "ug" } } });
       const input = { taxId: "tax-accrual", taxpayerId: "payer-accrual", taxableBase: "100", competence: base.competence, originKey: "parameter-accrual" };
       const simultaneous = await Promise.all([createParametrizedAssessment(f.db, f.actor, input), createParametrizedAssessment(f.db, f.actor, input)]);
       const parametrized = simultaneous[0];

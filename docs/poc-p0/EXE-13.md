@@ -1,5 +1,19 @@
 # P0 — EXE-13: Gestão de ISS
 
+**Revisão de 15/10/2026:** os 41 itens têm referências individuais de código, regressão e pendências em [REVISAO_IPTU_ISS_ITBI_2026_10_15.md](REVISAO_IPTU_ISS_ITBI_2026_10_15.md#exe-13--iss--cadastro-econômico-41-itens), incluindo unificação CNAE/zoneamento, alvarás, eventos, veículos, documentos do portal e Simples TXT. Aceites não promovidos.
+
+**Quinta continuação:** prazo provisório e política de dívida por tipo de empresa; alvarás anuais configurados, emissão interna/em lote/portal, autenticidade e cancelamento auditado, detalhados na seção «Quinta continuação» de [IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md](IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md). Assinatura oficial e demais limites são explícitos; aceites permanecem não executados.
+
+**Sexta continuação:** bloqueios de alvará por tipo de empresa/CNAE e mensagem própria; carência limitada à taxa vinculada, compensação separada do caixa e sócios limitados à inscrição emissora. Detalhes na seção «Sexta continuação» do mesmo documento.
+
+**Quarta continuação:** cadastro CNAE com lista de serviços ISS/CBO, risco versionado e unificação dos códigos principal/secundários dos perfis conciliados, com resolução dos códigos antigos, detalhados na seção «Quarta continuação» de [IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md](IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md). Referências genéricas e de outros módulos ainda exigem revisão; aceites permanecem não executados.
+
+**Terceira continuação:** inclusão coordenada de empresa/perfil, CRC versionado, validade provisória em dias, política compartilhada de débitos, sócios na avaliação de certidão e alteração geral econômica detalhados na seção «Terceira continuação» de [IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md](IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md). Os limites são registrados por subcritério; aceites permanecem não executados.
+
+**Segunda continuação:** perfil econômico com contador/sócios/atividades/endereço/anexos, tipos configurados, expiração de provisórias, formulários/vistorias e consulta com mapa detalhados na seção «Segunda continuação» de [IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md](IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md). A cobertura de cada subcritério e seus limites estão registrados; os aceites abaixo permanecem não executados.
+
+**Continuação de desenvolvimento:** histórico nativo/REDESIM/Simples, espelho cadastral e comparativo de exercícios documentados em [IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md](IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md), relacionados a .14/.21/.22/.39. O registro explicita cobertura e limites; não altera os aceites abaixo.
+
 Ente: **PREFEITURA**. 41 itens; **nenhum aceite executado nesta fase**. Revisão: f94b8be7d99a5f5a4ef0f4e12b104ad755f383cc.
 
 Texto extraído do PDF local; conferir o original para layouts, listas e paginação. Busca estática indica onde investigar, não comprova atendimento. A matriz individual editável, com fontes, modelos, consumidores, testes e roteiro, está em [CONTROLE_REQUISITOS.json](CONTROLE_REQUISITOS.json). Diagnósticos e gaps abaixo são herdados da faixa do plano; validar cada subcritério antes de abrir desenvolvimento.

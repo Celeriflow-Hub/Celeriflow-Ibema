@@ -1,7 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { createPublicValidationCode } from "@/lib/documents/document-flow-policy";
 import { inspectIcpBrasilCertificate, resolveReferencedA1Config, signDocumentHashICPBrasil } from "@/lib/security/icp-brasil";
 
@@ -19,13 +19,22 @@ export async function setA1CertificateStatus(db: PrismaClient, certificateId: st
 }
 
 export async function signDocumentVersionWithA1(db: PrismaClient, actor: { id: string; name: string; email: string; employeeId: string | null }, input: { documentVersionId: string; certificateId: string; purpose: string }) {
+  return db.$transaction(tx => signDocumentVersionWithA1InTransaction(tx, actor, input), { timeout: 30000 });
+}
+
+export async function signDocumentVersionWithA1InTransaction(db: Prisma.TransactionClient, actor: { id: string; name: string; email: string; employeeId: string | null }, input: { documentVersionId: string; certificateId: string; purpose: string }) {
+  await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`A1_SIGNATURE:${input.documentVersionId}`}))`;
+  await db.$queryRaw`SELECT d.id FROM "Document" d JOIN "DocumentVersion" v ON v."documentId"=d.id WHERE v.id=${input.documentVersionId} FOR UPDATE OF d`;
+  await db.$queryRaw`SELECT id FROM "DigitalCertificate" WHERE id=${input.certificateId} FOR SHARE`;
+  await db.$queryRaw`SELECT id FROM "DocumentVersion" WHERE id=${input.documentVersionId} FOR UPDATE`;
   const correlationId = randomUUID();
   const [version, certificate] = await Promise.all([
     db.documentVersion.findUnique({ where: { id: input.documentVersionId }, include: { document: { include: { documentClass: true } }, icpEvidence: true } }),
     db.digitalCertificate.findUnique({ where: { id: input.certificateId } }),
   ]);
   if (!version || version.icpEvidence) throw new Error("Versão inexistente ou já assinada com A1.");
-  if (version.status !== "FINAL") throw new Error("Somente uma versão final e desbloqueada pode receber assinatura A1.");
+  if (version.status !== "FINAL" || version.lockedAt) throw new Error("Somente uma versão final e desbloqueada pode receber assinatura A1.");
+  if (version.document.status !== "Válido") throw new Error("Documento indisponível para assinatura A1.");
   if (version.document.documentClass?.signaturePolicy !== "ICP_REQUIRED") throw new Error("A classe documental não exige assinatura ICP-Brasil.");
   if (!certificate || certificate.status !== "ACTIVE" || certificate.validFrom > new Date() || certificate.validTo < new Date()) throw new Error("Certificado A1 inexistente, inativo ou fora da validade.");
   const purposes = Array.isArray(certificate.purposes) ? certificate.purposes.filter((value): value is string => typeof value === "string") : [];
@@ -34,8 +43,7 @@ export async function signDocumentVersionWithA1(db: PrismaClient, actor: { id: s
   const config = resolveReferencedA1Config({ credentialReference: certificate.credentialReference, certificatePem: certificate.certificatePem, intermediateCertificatePems: intermediatePems, trustedRootCertificatePem: certificate.trustedRootPem });
   const evidence = signDocumentHashICPBrasil(version.id, version.hashSha256, config);
 
-  return db.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`A1_SIGNATURE:${version.id}`}))`;
+  const tx = db;
     const current = await tx.documentVersion.findUnique({ where: { id: version.id }, select: { status: true } });
     if (current?.status !== "FINAL") throw new Error("A versão foi alterada durante a assinatura.");
     const signature = await tx.documentSignature.create({ data: { documentId: version.documentId, documentVersionId: version.id, signerUsuarioId: actor.id, signerEmployeeId: actor.employeeId, signerName: actor.name, signerEmail: actor.email, signatureType: "SIGN", provider: "ICP_BRASIL_A1", isRequired: true, requestedByUsuarioId: actor.id, authenticationMethod: "SESSION_AND_A1_PRIVATE_KEY", reauthenticatedAt: evidence.signedAt, documentHash: version.hashSha256, verificationCode: createPublicValidationCode(), status: "SIGNED", requestedAt: evidence.signedAt, signedAt: evidence.signedAt } });
@@ -44,7 +52,6 @@ export async function signDocumentVersionWithA1(db: PrismaClient, actor: { id: s
     await tx.document.update({ where: { id: version.documentId }, data: { status: "Assinado" } });
     await tx.certificateUseAudit.create({ data: { certificateId: certificate.id, documentVersionId: version.id, actorUsuarioId: actor.id, purpose: input.purpose, documentHash: version.hashSha256, correlationId, outcome: "SUCCESS" } });
     return { signatureId: signature.id, correlationId };
-  });
 }
 
 export async function recordA1Failure(db: PrismaClient, input: { certificateId?: string; documentVersionId?: string; actorUsuarioId: string; purpose: string; errorCode: string }) {

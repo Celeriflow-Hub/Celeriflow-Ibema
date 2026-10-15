@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { assertPropertyOutsideAssessedSimulation } from "./property-assessment-coverage";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { calculateAccountBalance, evaluateFiscalRule, parseFiscalRuleConfiguration } from "./fiscal-engine";
 import { confirmTaxPaymentInTransaction, TaxError, type TaxActor } from "./index";
@@ -99,6 +100,10 @@ export async function createParametrizedAssessmentInTransaction(
     if (currentRule.parameter.id !== parameter.id || JSON.stringify(currentRule.configuration) !== JSON.stringify(configuration)) throw new TaxError("A regra fiscal foi alterada durante a apuração; simule novamente antes de efetivar.");
     const year = input.competence.getUTCFullYear();
     const scope = await assessmentScope(tx, actor, { taxId: input.taxId, calculationSnapshot: null });
+    const parameterOrigin = await tx.taxRegistryEntry.findFirst({ where: { entityType: "TAX_PARAMETER", entityId: parameter.id, category: "PARAMETER_SCOPE" } });
+    const frozenOrigin = jsonObject(parameterOrigin?.data);
+    if (parameterOrigin && (frozenOrigin.governmentEntityId !== scope.governmentEntityId || frozenOrigin.budgetUnitId !== scope.budgetUnitId)) throw new TaxError("Regra fiscal pertence a outra origem municipal em relação ao arrecadador atual.");
+    if (!parameterOrigin && actor.allowedBudgetUnitIds) throw new TaxError("Regra fiscal legada sem origem conciliada para o acesso autorizado.");
     const [financialYear, taxpayer, property, registration] = await Promise.all([
       resolveTaxFinancialYear(tx, year, scope).catch((error: unknown) => { throw new TaxError(error instanceof Error ? error.message : "Exercício inválido."); }),
       tx.taxpayer.findUnique({ where: { id: input.taxpayerId } }),
@@ -108,6 +113,7 @@ export async function createParametrizedAssessmentInTransaction(
     if (!financialYear || financialYear.status !== "Aberto") throw new TaxError(`O exercício financeiro ${year} deve estar aberto.`);
     if (!taxpayer || taxpayer.status !== "Ativo") throw new TaxError("Selecione um contribuinte ativo.");
     if (input.realEstateId && (!property || property.taxpayerId !== taxpayer.id)) throw new TaxError("O imóvel não pertence ao contribuinte selecionado.");
+    if(input.realEstateId) await assertPropertyOutsideAssessedSimulation(tx,{realEstateId:input.realEstateId,taxId:input.taxId,year});
     if (input.economicRegistrationId && (!registration || registration.taxpayerId !== taxpayer.id)) throw new TaxError("A inscrição econômica não pertence ao contribuinte selecionado.");
     const assessmentNumber = await nextNumber(tx, year, "ASSESSMENT");
     const base = new Prisma.Decimal(String(input.taxableBase));
@@ -133,9 +139,12 @@ export async function createParametrizedAssessmentInTransaction(
 export async function reviseTaxAssessment(db: PrismaClient, actor: TaxActor, input: {
   assessmentId: string; taxableBase?: string | number; imposedValue?: string | number; reason: string; processId?: string; documentId?: string; idempotencyKey: string;
 }) {
+  return db.$transaction(tx=>reviseTaxAssessmentInTransaction(tx,actor,input));
+}
+
+export async function reviseTaxAssessmentInTransaction(tx:Prisma.TransactionClient,actor:TaxActor,input:{assessmentId:string;taxableBase?:string|number;imposedValue?:string|number;reason:string;processId?:string;documentId?:string;idempotencyKey:string}) {
   if (!input.reason.trim() || !input.idempotencyKey.trim()) throw new TaxError("Motivo e chave da revisão são obrigatórios.");
   const request = { taxableBase: input.taxableBase === undefined ? null : money(input.taxableBase, "Base tributável").toFixed(2), imposedValue: input.imposedValue === undefined ? null : money(input.imposedValue, "Valor da decisão").toFixed(2), reason: input.reason.trim(), processId: input.processId?.trim() || null, documentId: input.documentId?.trim() || null };
-  return db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`REVISION:${input.idempotencyKey}`}, 0))::text`;
     const priorEvent = await tx.taxIntegrationEvent.findUnique({ where: { idempotencyKey: `REVISION:${input.idempotencyKey}` } });
     const priorId = jsonObject(priorEvent?.result).registryEntryId;
@@ -192,17 +201,22 @@ export async function reviseTaxAssessment(db: PrismaClient, actor: TaxActor, inp
     await tx.taxIntegrationEvent.create({ data: { integrationCode: "FISCAL_ENGINE", eventType: "ASSESSMENT_REVISED", idempotencyKey: `REVISION:${input.idempotencyKey}`, status: "PROCESSADO", evidenceLevel: "L1", taxpayerId: assessment.taxpayerId, payload: { assessmentId: assessment.id, request, ...scope }, result: { registryEntryId: entry.id, delta: delta.toFixed(2) }, processedAt: new Date() } });
     await audit(tx, actor, "REVISE", "TaxAssessment", assessment.id, { entryId: entry.id, oldValue: oldValue.toFixed(2), newValue: newValue.toFixed(2), delta: delta.toFixed(2) });
     return entry;
-  });
 }
 
 export async function registerCreditEvent(db: PrismaClient, actor: TaxActor, input: {
   assessmentId: string; eventType: "IMPUGNACAO" | "DECISAO" | "SUSPENSAO" | "EXTINCAO_NAO_FINANCEIRA" | "COMPENSACAO";
   amount?: string | number; reason: string; processId?: string; documentId?: string; idempotencyKey: string;
 }) {
+  return db.$transaction(tx => registerCreditEventInTransaction(tx, actor, input));
+}
+
+export async function registerCreditEventInTransaction(tx: Prisma.TransactionClient, actor: TaxActor, input: {
+  assessmentId: string; eventType: "IMPUGNACAO" | "DECISAO" | "SUSPENSAO" | "EXTINCAO_NAO_FINANCEIRA" | "COMPENSACAO";
+  amount?: string | number; reason: string; processId?: string; documentId?: string; idempotencyKey: string;
+}) {
   if (!input.reason.trim() || !input.idempotencyKey.trim()) throw new TaxError("Informe fundamento e chave do evento tributário.");
   if (!["IMPUGNACAO", "DECISAO", "SUSPENSAO", "EXTINCAO_NAO_FINANCEIRA", "COMPENSACAO"].includes(input.eventType)) throw new TaxError("Tipo de evento tributário inválido.");
   const request = { amount: input.amount === undefined ? null : money(input.amount).toFixed(2), reason: input.reason.trim(), processId: input.processId?.trim() || null, documentId: input.documentId?.trim() || null };
-  return db.$transaction(async (tx) => {
     const key = `CREDIT_EVENT:${input.idempotencyKey}`;
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))::text`;
     const existing = await tx.taxIntegrationEvent.findUnique({ where: { idempotencyKey: key } });
@@ -251,7 +265,6 @@ export async function registerCreditEvent(db: PrismaClient, actor: TaxActor, inp
     await tx.taxIntegrationEvent.create({ data: { integrationCode: "FISCAL_ENGINE", eventType: input.eventType, idempotencyKey: key, status: "PROCESSADO", evidenceLevel: "L1", taxpayerId: assessment.taxpayerId, payload: { assessmentId: assessment.id, ...scope, request }, result: { registryEntryId: entry.id }, processedAt: new Date() } });
     await audit(tx, actor, input.eventType, "TaxAssessment", assessment.id, { registryEntryId: entry.id, amount: amountValue?.toFixed(2) ?? null });
     return entry;
-  });
 }
 
 async function assessmentPosition(tx: Db, assessmentId: string) {

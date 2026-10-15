@@ -34,6 +34,8 @@ async function scenario(body: (fixture: Fixture) => Promise<void>, jurisdiction:
 test("P1: motor parametrizado preserva ente/UG e valida escopo e conteúdo também no replay", async () => scenario(async (f) => {
   await f.db.taxParameter.create({ data: { id: "parameter-chain", taxId: "tax-chain", code: "POC", name: "Regra de ensaio", calculationType: "PERCENTUAL_BASE", configuration: { formula: "PERCENTUAL_BASE", rate: 4 }, effectiveFrom: new Date("2026-01-01"), isActive: true } });
   const input = { taxId: "tax-chain", taxpayerId: "taxpayer-chain", taxableBase: "100.00", competence: new Date("2026-03-01"), originKey: "chain-assessment" };
+  await assert.rejects(createParametrizedAssessment(f.db, f.actor, input), /sem origem conciliada/);
+  await f.db.taxRegistryEntry.create({ data: { entityType: "TAX_PARAMETER", entityId: "parameter-chain", category: "PARAMETER_SCOPE", title: "Origem conferida da regra", data: { governmentEntityId: "ente", budgetUnitId: "ug" } } });
   const assessment = await createParametrizedAssessment(f.db, f.actor, input);
   assert.equal((assessment.calculationSnapshot as Prisma.JsonObject).financialYearId, "ano");
   assert.equal((assessment.calculationSnapshot as Prisma.JsonObject).governmentEntityId, "ente");

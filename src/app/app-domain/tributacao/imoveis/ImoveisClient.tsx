@@ -52,6 +52,8 @@ export default function ImoveisClient({ imoveis, taxpayers }: { imoveis: RealEst
   const [editForm, setEditForm] = useState<RealEstateUpdate>({});
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(1);
+  const [processId, setProcessId] = useState("");
+  const [notice, setNotice] = useState("");
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -95,8 +97,10 @@ export default function ImoveisClient({ imoveis, taxpayers }: { imoveis: RealEst
     if (!editingId) return;
     if (confirm("Deseja salvar as alterações?")) {
       try {
-        await updateRealEstate(editingId, editForm);
+        const result = await updateRealEstate(editingId, editForm, processId || undefined);
+        if (result.error) { setNotice(result.error); return; }
         setEditingId(null);
+        setNotice("Alterações salvas com histórico e protocolo.");
       } catch (e) {
         console.error(e);
         alert("Erro ao salvar alterações.");
@@ -106,13 +110,15 @@ export default function ImoveisClient({ imoveis, taxpayers }: { imoveis: RealEst
 
   const handleDeactivate = async (id: string) => {
     if (confirm("Deseja inativar este imóvel?")) {
-      await deactivateRealEstate(id);
+      const result = await deactivateRealEstate(id, processId || undefined);
+      setNotice(result.error ?? "Imóvel inativado.");
     }
   };
 
   const handleActivate = async (id: string) => {
     if (confirm("Deseja reativar este imóvel?")) {
-      await activateRealEstate(id);
+      const result = await activateRealEstate(id, processId || undefined);
+      setNotice(result.error ?? "Imóvel reativado.");
     }
   };
 
@@ -130,6 +136,8 @@ export default function ImoveisClient({ imoveis, taxpayers }: { imoveis: RealEst
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-2.5 overflow-hidden">
+      {notice && <p role="status" className="rounded border bg-amber-50 p-2 text-xs">{notice}</p>}
+      <label className="flex items-center gap-2 text-xs">Protocolo das alterações<input value={processId} onChange={event => setProcessId(event.target.value)} placeholder="Identificador do protocolo" className="rounded border p-2"/></label>
       <ErpPageTitle
         title="Imóveis (IPTU)"
         icon={<Home className="size-4 text-emerald-600" />}

@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { createHash } from "node:crypto";
 import type { TaxActor } from "./index";
 import { buildExclusionExport, calculateSimplesCrossCheck, classifySimplesDivergences, TributarioS5Error } from "./s5-engine";
+import { updateEconomicRegistrationWithHistoryInTransaction } from "./economic-history";
 
 const sources = new Set(["PGDAS", "DASN_DEFIS", "DAF607", "PERIODOS_OPCAO", "PARCELAMENTOS", "PGFN", "OUTROS", "PGDAS_RETIFICACAO"]);
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -27,7 +28,8 @@ export async function importSimplesBatch(db: PrismaClient, actor: TaxActor, inpu
       if (sourceType === "PERIODOS_OPCAO") {
         const startDate = row.startDate ? new Date(`${row.startDate}T12:00:00.000Z`) : competenceDate(competence); const endDate = row.endDate ? new Date(`${row.endDate}T12:00:00.000Z`) : null; const regime = row.regime || "Simples Nacional";
         await tx.simplesOptionPeriod.upsert({ where: { taxpayerId_regime_startDate: { taxpayerId: row.taxpayerId, regime, startDate } }, create: { taxpayerId: row.taxpayerId, regime, startDate, endDate, sourceBatchId: batch.id }, update: { endDate, sourceBatchId: batch.id, status: "ATIVO" } });
-        await tx.economicRegistration.updateMany({ where: { taxpayerId: row.taxpayerId }, data: { taxRegime: regime } });
+        const registrations = await tx.economicRegistration.findMany({ where: { taxpayerId: row.taxpayerId }, select: { id: true }, orderBy: { id: "asc" } });
+        for (const registration of registrations) await updateEconomicRegistrationWithHistoryInTransaction(tx, actor, registration.id, { taxRegime: regime });
       }
       if (sourceType === "DAF607") {
         const cross = calculateSimplesCrossCheck({ nfseService: 0, declaredService: 0, municipalIssDeclared: row.municipalIss ?? 0, daf607Confirmed: row.confirmedPayment ?? 0, nationalDasTotal: row.nationalDasTotal ?? row.nationalRevenue ?? 0 });

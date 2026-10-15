@@ -214,6 +214,7 @@ export async function applyConstructionPropertyUpdate(tx: Prisma.TransactionClie
     const property = await tx.realEstate.findUniqueOrThrow({ where: { id: change.realEstateId }, select: { id: true, builtArea: true, propertyUse: true } });
     if (!new Prisma.Decimal(property.builtArea ?? 0).equals(change.expectedBuiltArea)) throw new Error("Cadastro imobiliário mudou desde a proposta. Revise o processo antes de atualizar.");
     before.push({ ...property, builtArea: new Prisma.Decimal(property.builtArea ?? 0).toFixed(4) });
+    await tx.$queryRaw`SELECT set_config('celeriflow.cadastral_actor', ${actorId}, true), set_config('celeriflow.cadastral_process', ${process.id}, true)`;
     await tx.realEstate.update({ where: { id: property.id }, data: { builtArea: Number(change.builtArea), propertyUse: change.propertyUse } });
     after.push({ id: property.id, builtArea: new Prisma.Decimal(change.builtArea).toFixed(4), propertyUse: change.propertyUse });
   }

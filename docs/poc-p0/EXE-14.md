@@ -1,5 +1,17 @@
 # P0 — EXE-14: Gestão de ITBI
 
+**Revisão de 15/10/2026:** os 26 itens têm referências individuais de código, regressão e pendências em [REVISAO_IPTU_ISS_ITBI_2026_10_15.md](REVISAO_IPTU_ISS_ITBI_2026_10_15.md#exe-14--itbi-26-itens), incluindo canal on-line, anexos, impugnação inicial, retificação e histórico nativo de campos com cadeia de 14 migrations. Aceites não promovidos.
+
+**Quinta continuação:** conjunto de imóveis/unidades com valores individuais no mesmo processo e ciclo interno de impugnação/readequação do crédito e documentos, detalhados na seção «Quinta continuação» de [IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md](IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md). Canal externo e demais limites são explícitos; aceites permanecem não executados.
+
+**Sexta continuação:** compartilhamento transacional dos anexos da impugnação/formulários com a ficha imobiliária e protocolo; cadeia de onze migrations validada com impugnação, decisão, pagamento, transferência e estorno.
+
+**Terceira continuação:** formulário tipado na inclusão da declaração e múltiplos transmitentes, com transferência parcial conservando coproprietários, detalhados na seção «Terceira continuação» de [IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md](IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md). Os limites são registrados por subcritério; aceites permanecem não executados.
+
+**Segunda continuação:** confirmação interna com lançamento/DAM/comprovante GED em uma transação, formulário tipado, anexos compartilhados com o imóvel e restrição de UG na rota do documento detalhados na seção «Segunda continuação» de [IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md](IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md). Fluxo on-line e demais subcritérios continuam explicitados como pendentes; os aceites abaixo permanecem não executados.
+
+**Continuação de desenvolvimento:** avaliação própria, modalidades editáveis, coleção de adquirentes, devedor/vencimento e transferência manual com estorno documentados em [IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md](IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md), relacionados a .1/.3/.4/.5/.12/.14/.19/.20. O registro explicita cobertura parcial e não altera os aceites abaixo.
+
 Ente: **PREFEITURA**. 26 itens; **nenhum aceite executado nesta fase**. Revisão: f94b8be7d99a5f5a4ef0f4e12b104ad755f383cc.
 
 Texto extraído do PDF local; conferir o original para layouts, listas e paginação. Busca estática indica onde investigar, não comprova atendimento. A matriz individual editável, com fontes, modelos, consumidores, testes e roteiro, está em [CONTROLE_REQUISITOS.json](CONTROLE_REQUISITOS.json). Diagnósticos e gaps abaixo são herdados da faixa do plano; validar cada subcritério antes de abrir desenvolvimento.

@@ -3,11 +3,17 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, isSystemAdministrator } from "@/lib/platform/tenant-context";
+import { updateEconomicRegistrationWithHistoryInTransaction } from "@/lib/tributacao/economic-history";
+import { createEconomicRegistrationWithProfileInTransaction, economicProfileSchema } from "@/lib/tributacao/economic-profile";
+import { enforceEconomicProfileDebtPolicy } from "@/lib/tributacao/economic-debt-policy";
+import { taxScopeSnapshot } from "@/lib/tributacao/scope";
+import type { z } from "zod";
+import { touchPropertyMetadata } from "@/lib/tributacao/property-history";
 
 export type FiscalEntityType = "TAXPAYER" | "REAL_ESTATE" | "ECONOMIC_REGISTRATION";
 
-type ActionResult = { error?: string; id?: string; duplicate?: boolean };
+type ActionResult = { error?: string; id?: string; duplicate?: boolean; registrationId?: string };
 
 const entityTypes = new Set<FiscalEntityType>(["TAXPAYER", "REAL_ESTATE", "ECONOMIC_REGISTRATION"]);
 const redesimEvents = new Set(["VIABILIDADE", "FORMALIZACAO", "ABERTURA", "ALTERACAO", "BAIXA", "MEI", "LICENCIAMENTO"]);
@@ -30,7 +36,7 @@ function dateValue(value: unknown, label: string, required = false) {
   const text = String(value ?? "").trim();
   if (!text && !required) return null;
   const date = new Date(`${text}T12:00:00.000Z`);
-  if (!text || Number.isNaN(date.getTime())) throw new Error(`${label} inválida.`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0,10) !== text) throw new Error(`${label} inválida.`);
   return date;
 }
 
@@ -65,6 +71,25 @@ export async function saveTaxRegistryEntry(input: {
     if (!entityTypes.has(input.entityType)) throw new Error("Tipo de cadastro fiscal inválido.");
     const entityId = requiredText(input.entityId, "Cadastro");
     const category = requiredText(input.category, "Categoria", 80).toUpperCase();
+    if (["PROPERTY_VALUATION_RULE", "CONFIGURED_VALUATION_IPTU", "CONFIGURED_VALUATION_ITBI", "CADASTRAL_HISTORY", "PARAMETER_SCOPE", "TYPED_FISCAL_CATALOG", "TYPED_FISCAL_RECORD", "CADASTRAL_OPERATION", "ECONOMIC_PROFILE", "ACCOUNTANT", "PROVISIONAL_EXPIRY", "PROPERTY_EDIT_RESTRICTION", "PROPERTY_EDIT_APPROVAL", "PROPERTY_PROFILE", "PROPERTY_REGISTRATION_POLICY", "FISCAL_OWNERSHIP", "ECONOMIC_BULK_CHANGE"].includes(category)) throw new Error("Esta categoria é gerada exclusivamente pela rotina cadastral ou de avaliação correspondente.");
+    if (["ECONOMIC_ACTIVITY_DEFINITION","ECONOMIC_ACTIVITY_UNIFICATION"].includes(category)) throw new Error("Esta categoria é gerada exclusivamente pela rotina de atividades econômicas.");
+    if (["LICENSE_POLICY","LICENSE_ISSUANCE","LICENSE_LIFECYCLE"].includes(category)) throw new Error("Esta categoria é gerada exclusivamente pela rotina de alvarás configurados.");
+    if (category==="PROPERTY_SIMULATION_ASSESSMENT") throw new Error("Esta categoria é gerada exclusivamente pela efetivação da simulação imobiliária.");
+    if (["ITBI_PROPERTY_COLLECTION","ITBI_CONTESTATION","ITBI_CONTESTATION_DECISION","ITBI_PROCESS_MESSAGE"].includes(category)) throw new Error("Esta categoria é gerada exclusivamente pelo processo de transmissão ITBI.");
+    if (["ECONOMIC_EVENT_TYPE","ECONOMIC_EVENT","ECONOMIC_VEHICLE"].includes(category)) throw new Error("Esta categoria é gerada exclusivamente pela rotina de eventos e veículos econômicos.");
+    if (["ITBI_EXPIRY_POLICY","ITBI_AUTOMATIC_CANCELLATION"].includes(category)) throw new Error("Esta categoria é gerada exclusivamente pelo cancelamento configurado de ITBI.");
+    if (["ITBI_PROCESS_MESSAGE","ITBI_CORRESPONDENCE","ONLINE_ITBI_POLICY","ONLINE_ITBI_REQUEST","ITBI_NOTARY","ONLINE_ITBI_DRAFT_ATTACHMENT","ITBI_FIELD_HISTORY"].includes(category)) throw new Error("Esta categoria é gerada exclusivamente pelas rotinas do processo ITBI.");
+    if (["SIMPLES_OPTION_LAYOUT","SIMPLES_OPTION_FILE","SIMPLES_OPTION_EXPORT","SIMPLES_OPTION_DECISION"].includes(category)) throw new Error("Esta categoria é gerada exclusivamente pela análise dos arquivos de opção pelo Simples.");
+    if (category === "BENEFIT_REPORT_CLASSIFICATION") throw new Error("Use a classificação fiscal de benefícios para o resumo anual.");
+    if (["DEBT_NOTICE_ISSUANCE","DEBT_NOTICE_CANCELLATION","DEBT_NOTICE_REFERENCE","DEBT_NOTICE_BATCH"].includes(category)) throw new Error("Use a rotina de notificações e avisos de débitos.");
+    if (category === "ANNUAL_GUIDE_SCHEDULE") throw new Error("Use a emissão do calendário de cotas e parcelas.");
+    if (["CONDITIONAL_DISCOUNT", "CONDITIONAL_DISCOUNT_REVERSAL"].includes(category)) throw new Error("Descontos condicionais são gerados exclusivamente pela confirmação ou estorno de pagamento.");
+    if (category === "ITBI_FISCAL_TREATMENT") throw new Error("Use a decisão fiscal fundamentada no processo ITBI.");
+    if (category === "ITBI_RECTIFICATION") throw new Error("Use a retificação vinculada ao ITBI transferido.");
+    if (["ITBI_DOCUMENT_MODEL", "ITBI_DOCUMENT_ISSUANCE"].includes(category)) throw new Error("Use os modelos e a emissão de declarações do ITBI.");
+    if (["ECONOMIC_DOCUMENT_ISSUANCE", "ECONOMIC_DOCUMENT_POSITION"].includes(category)) throw new Error("Use a emissão autenticada de documentos cadastrais da empresa.");
+    if (category === "LICENSE_SIGNATURE") throw new Error("Use a assinatura digital de alvarás.");
+    if (category === "ITBI_ENTRY_POLICY") throw new Error("Use a política de bloqueios e avisos de ITBI.");
     const title = requiredText(input.title, "Título");
     const details = requiredText(input.details, "Detalhamento", 4_000);
     const effectiveFrom = dateValue(input.effectiveFrom, "Início da vigência", true)!;
@@ -84,6 +109,22 @@ export async function saveTaxRegistryEntry(input: {
       if (processId && !await tx.process.findUnique({ where: { id: processId }, select: { id: true } })) throw new Error("O processo informado não existe.");
       if (documentId && !await tx.document.findUnique({ where: { id: documentId }, select: { id: true } })) throw new Error("O documento informado não existe no GED.");
 
+      let origin: { governmentEntityId: string; budgetUnitId: string } | null = null;
+      if (input.entityType === "REAL_ESTATE" || input.entityType === "ECONOMIC_REGISTRATION") {
+        const profile = await tx.taxRegistryEntry.findFirst({ where: { entityType: input.entityType, entityId, category: input.entityType === "REAL_ESTATE" ? "PROPERTY_PROFILE" : "ECONOMIC_PROFILE" }, orderBy: { version: "desc" } });
+        const scope = taxScopeSnapshot(profile?.data);
+        if (profile) {
+          if (typeof scope.governmentEntityId !== "string" || typeof scope.budgetUnitId !== "string" || !await tx.planningEntityUnit.findFirst({ where: { governmentEntityId: scope.governmentEntityId, budgetUnitId: scope.budgetUnitId } })) throw new Error("Origem cadastral não conciliada.");
+          origin = { governmentEntityId: scope.governmentEntityId, budgetUnitId: scope.budgetUnitId };
+        }
+        if (!isSystemAdministrator(context.user) && (!origin || !context.user.allowedBudgetUnitIds.includes(origin.budgetUnitId))) throw new Error("Cadastro sem origem conciliada ou fora da UG autorizada.");
+        if (input.entityType === "REAL_ESTATE") await touchPropertyMetadata(tx, context.user.id, entityId, processId);
+        else {
+          await tx.$queryRaw`SELECT id FROM "EconomicRegistration" WHERE id=${entityId} FOR UPDATE`;
+          await enforceEconomicProfileDebtPolicy(tx, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, entityId);
+        }
+      }
+
       const previous = await tx.taxRegistryEntry.findFirst({
         where: { entityType: input.entityType, entityId, category, title },
         orderBy: { version: "desc" },
@@ -96,6 +137,7 @@ export async function saveTaxRegistryEntry(input: {
           category,
           title,
           data: {
+            ...(origin ?? {}),
             details,
             ...(optionalText(input.value, 500) ? { value: optionalText(input.value, 500) } : {}),
             ...(percentage !== null ? { percentage } : {}),
@@ -179,6 +221,7 @@ export async function registerRedesimEvent(input: {
   protocol?: string;
   eventDate: string;
   serviceActivity?: boolean;
+  profile?: z.input<typeof economicProfileSchema>;
 }): Promise<ActionResult> {
   try {
     const eventType = requiredText(input.eventType, "Evento", 40).toUpperCase();
@@ -195,23 +238,40 @@ export async function registerRedesimEvent(input: {
       externalReference: optionalText(input.externalReference, 120),
       eventDate: eventDate.toISOString(),
       serviceActivity: Boolean(input.serviceActivity),
+      ...(input.profile ? { profile: economicProfileSchema.parse(input.profile) } : {}),
     };
     const idempotencyKey = redesimKey(normalized);
     const context = await getTenantContextForModuleOperation("TRIBUTACAO", "create");
     const result = await context.prisma.$transaction(async (tx) => {
+      const actor = { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds };
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`REDESIM:${taxpayerId}`},0))::text`;
       const existing = await tx.taxIntegrationEvent.findUnique({ where: { idempotencyKey } });
-      if (existing) return { event: existing, duplicate: true };
+      if (existing) {
+        if (existing.economicRegistrationId) {
+          const profile = await tx.taxRegistryEntry.findFirst({ where: { entityType: "ECONOMIC_REGISTRATION", entityId: existing.economicRegistrationId, category: "ECONOMIC_PROFILE" }, orderBy: { version: "desc" } });
+          const scope = taxScopeSnapshot(profile?.data);
+          if (actor.allowedBudgetUnitIds && (typeof scope.budgetUnitId !== "string" || !actor.allowedBudgetUnitIds.includes(scope.budgetUnitId))) throw new Error("Evento fora da origem autorizada.");
+        }
+        return { event: existing, duplicate: true };
+      }
       const taxpayer = await tx.taxpayer.findUnique({
         where: { id: taxpayerId },
         include: { company: true, economicRegistrations: { orderBy: { createdAt: "desc" } } },
       });
       if (!taxpayer?.company) throw new Error("A REDESIM exige contribuinte vinculado a uma pessoa jurídica existente.");
 
-      let registration = taxpayer.economicRegistrations[0] ?? null;
+      const candidates = normalized.municipalInsc ? taxpayer.economicRegistrations.filter(row => row.municipalInsc === normalized.municipalInsc) : taxpayer.economicRegistrations;
+      if (candidates.length > 1) throw new Error("Informe a inscrição municipal exata para selecionar o cadastro do evento.");
+      let registration = candidates[0] ?? null;
+      if (registration) {
+        const profile = await tx.taxRegistryEntry.findFirst({ where: { entityType: "ECONOMIC_REGISTRATION", entityId: registration.id, category: "ECONOMIC_PROFILE" }, orderBy: { version: "desc" } });
+        const scope = taxScopeSnapshot(profile?.data);
+        if (actor.allowedBudgetUnitIds && (typeof scope.budgetUnitId !== "string" || !actor.allowedBudgetUnitIds.includes(scope.budgetUnitId))) throw new Error("Cadastro econômico fora da origem autorizada ou sem perfil conciliado.");
+      }
       let status = "PROCESSADO_INTERNO";
       const municipalInsc = normalized.municipalInsc;
       const latestApplied = await tx.taxIntegrationEvent.findFirst({
-        where: { integrationCode: "REDESIM", taxpayerId, status: "PROCESSADO_INTERNO" },
+        where: { integrationCode: "REDESIM", taxpayerId, economicRegistrationId: registration?.id ?? null, status: "PROCESSADO_INTERNO" },
         orderBy: { receivedAt: "desc" },
         select: { receivedAt: true },
       });
@@ -222,33 +282,29 @@ export async function registerRedesimEvent(input: {
       } else if (["ABERTURA", "FORMALIZACAO", "MEI"].includes(eventType)) {
         if (!registration && !municipalInsc) throw new Error("Informe a inscrição municipal para formalização ou abertura.");
         if (!registration) {
-          registration = await tx.economicRegistration.create({
-            data: {
-              taxpayerId,
-              municipalInsc: municipalInsc!,
-              primaryCnae: normalized.primaryCnae,
-              taxRegime: eventType === "MEI" ? "SIMEI" : normalized.taxRegime,
-              startDate: eventDate,
-              status: "Ativo",
-            },
-          });
+          if (!normalized.profile) throw new Error("A inclusão por evento exige perfil completo, origem e política de débitos. Utilize a inclusão completa com origem REDESIM.");
+          if (normalized.primaryCnae && normalized.primaryCnae !== normalized.profile.primaryCnae) throw new Error("CNAE do evento diverge do perfil recebido.");
+          registration = await createEconomicRegistrationWithProfileInTransaction(tx, actor, { taxpayerId, municipalInsc: municipalInsc!, profile: normalized.profile, taxRegime: eventType === "MEI" ? "SIMEI" : normalized.taxRegime ?? "", startDate: eventDate });
+        } else {
+          if (normalized.profile) throw new Error("Já existe inscrição municipal. Confira o cadastro existente antes de reaplicar uma abertura.");
+          await enforceEconomicProfileDebtPolicy(tx, actor, registration.id);
         }
       } else if (eventType === "ALTERACAO") {
         if (!registration) throw new Error("Nenhuma inscrição econômica foi localizada para alteração.");
-        registration = await tx.economicRegistration.update({
-          where: { id: registration.id },
-          data: {
+        registration = await updateEconomicRegistrationWithHistoryInTransaction(tx, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, registration.id, {
             ...(normalized.primaryCnae ? { primaryCnae: normalized.primaryCnae } : {}),
             ...(normalized.taxRegime ? { taxRegime: normalized.taxRegime } : {}),
-          },
         });
       } else if (eventType === "BAIXA") {
         if (!registration) throw new Error("Nenhuma inscrição econômica foi localizada para baixa.");
-        registration = await tx.economicRegistration.update({ where: { id: registration.id }, data: { status: "Baixado" } });
+        registration = await updateEconomicRegistrationWithHistoryInTransaction(tx, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, registration.id, { status: "Baixado" });
       } else if (eventType === "VIABILIDADE" && !normalized.riskLevel) {
         status = "PENDENTE_REGRA";
       }
 
+      const currentProfile = registration ? await tx.taxRegistryEntry.findFirst({ where: { entityType: "ECONOMIC_REGISTRATION", entityId: registration.id, category: "ECONOMIC_PROFILE" }, orderBy: { version: "desc" } }) : null;
+      const recordedOrigin = taxScopeSnapshot(currentProfile?.data);
+      const eventScope = typeof recordedOrigin.governmentEntityId === "string" && typeof recordedOrigin.budgetUnitId === "string" ? { governmentEntityId: recordedOrigin.governmentEntityId, budgetUnitId: recordedOrigin.budgetUnitId } : {};
       const event = await tx.taxIntegrationEvent.create({
         data: {
           integrationCode: "REDESIM",
@@ -260,8 +316,8 @@ export async function registerRedesimEvent(input: {
           evidenceLevel: "L0",
           taxpayerId,
           economicRegistrationId: registration?.id,
-          payload: normalized as Prisma.InputJsonValue,
-          result: { registrationId: registration?.id ?? null, status, officialConfirmation: false },
+          payload: { ...normalized, ...eventScope } as Prisma.InputJsonValue,
+          result: { registrationId: registration?.id ?? null, ...eventScope, status, officialConfirmation: false },
           receivedAt: eventDate,
           processedAt: new Date(),
         },
@@ -306,11 +362,11 @@ export async function registerRedesimEvent(input: {
         },
       });
       return { event, duplicate: false };
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 60000 });
     revalidatePath("/tributacao/redesim");
     revalidatePath("/tributacao/economico");
     if (result.event.economicRegistrationId) revalidatePath(`/tributacao/economico/${result.event.economicRegistrationId}`);
-    return { id: result.event.id, duplicate: result.duplicate };
+    return { id: result.event.id, duplicate: result.duplicate, registrationId: result.event.economicRegistrationId ?? undefined };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Não foi possível registrar o evento REDESIM." };
   }

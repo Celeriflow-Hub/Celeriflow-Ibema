@@ -144,13 +144,13 @@ export default function EconomicoClient({
         title="Cadastro Econômico"
         icon={<Building2 className="size-4 text-indigo-600" />}
         action={
-          <div className="flex items-center gap-2"><Link href="/tributacao/economico/relatorio" className="inline-flex h-8 items-center rounded border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700">Exportar CSV</Link><button
-            onClick={() => setIsCreateModalOpen(true)}
+          <div className="flex items-center gap-2"><Link href="/tributacao/economico/relatorio" className="inline-flex h-8 items-center rounded border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700">Exportar CSV</Link><Link
+            href="/tributacao/economico/novo"
             className="inline-flex h-8 items-center gap-1.5 rounded-md bg-amber-500 px-3 text-xs font-bold text-slate-950 shadow-xs transition-colors hover:bg-amber-600"
           >
             <Plus className="size-3.5" />
             Nova Inscrição
-          </button></div>
+          </Link></div>
         }
       />
 

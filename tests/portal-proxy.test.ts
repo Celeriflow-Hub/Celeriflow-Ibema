@@ -49,6 +49,15 @@ test("rotas internas continuam exigindo sessão e preservando o destino", () => 
   assert.equal(destination.searchParams.get("returnTo"), "/compras?pagina=2");
 });
 
+test("autenticidade de alvará permanece pública nos hosts internos sem contornar rotas administrativas",()=>{
+  for(const hostname of ["app.localhost","celeriflow.vercel.app"]) {
+    const response=proxy(new NextRequest(`https://${hostname}/validar-alvara/12345678-1234-4123-8123-123456789abc`,{headers:{host:hostname,"x-forwarded-for":"192.0.2.181"}}));
+    assert.equal(response.status,200);assert.equal(response.headers.get("x-middleware-next"),"1");
+    const internal=proxy(new NextRequest(`https://${hostname}/tributacao/alvaras/configurados`,{headers:{host:hostname}}));
+    assert.equal(internal.status,307);assert.equal(new URL(internal.headers.get("location")!).pathname,"/login");
+  }
+});
+
 test("navegação autenticada preserva paginação, filtros e identificação do bem", () => {
   for (const hostname of ["app.localhost", "celeriflow.vercel.app"]) {
     for (const path of [

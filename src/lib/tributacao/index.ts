@@ -4,6 +4,10 @@ import { FinanceError, recordConfirmedRevenue, type FinanceActor } from "@/lib/f
 import { resolveTaxAssessmentScope, resolveTaxFinancialYear, taxScopeSnapshot, taxAssessmentCompensatedValue } from "./scope";
 import { recognizeTaxAssessmentInTransaction } from "./accrual-accounting";
 import { readMunicipalServiceRelationships } from "@/lib/planejamento/activity-relations";
+import { evaluateCertificateInTransaction } from "./certificate-subjects";
+import { assertPropertyOutsideAssessedSimulation } from "./property-assessment-coverage";
+import { applyConditionalGuideDiscount } from "./conditional-discounts";
+import { fiscalPaymentOptionsSchema } from "./fiscal-payment-option-schema";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -140,6 +144,7 @@ export async function createTaxAssessmentInTransaction(
     if (input.realEstateId) {
       const property = await tx.realEstate.findUnique({ where: { id: input.realEstateId }, select: { taxpayerId: true } });
       if (!property || property.taxpayerId !== input.taxpayerId) throw new TaxError("O imóvel deve pertencer ao contribuinte do lançamento.");
+      await assertPropertyOutsideAssessedSimulation(tx,{realEstateId:input.realEstateId,taxId:input.taxId,year:input.year});
     }
     if (input.economicRegistrationId) {
       const registration = await tx.economicRegistration.findUnique({ where: { id: input.economicRegistrationId }, select: { taxpayerId: true, status: true } });
@@ -184,6 +189,7 @@ export async function generateTaxGuideInTransaction(tx: Prisma.TransactionClient
     await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${input.assessmentId} FOR UPDATE`;
     const assessment = await tx.taxAssessment.findUnique({ where: { id: input.assessmentId }, include: { guides: { where: { status: { not: "Cancelada" } } } } });
     if (!assessment || ["Cancelado", "Pago", "Extinto", "Suspenso"].includes(assessment.status)) throw new TaxError("O lançamento tributário não está disponível para geração de guia.");
+    if(await tx.itbiDeclaration.count({where:{assessmentId:assessment.id,status:"IMPUGNADA"}})) throw new TaxError("ITBI com impugnação pendente não permite nova guia.");
     const snapshot = taxScopeSnapshot(assessment.calculationSnapshot);
     const enrolledDebt = await tx.activeDebt.findUnique({ where: { assessmentId: assessment.id } });
     if (enrolledDebt || typeof snapshot.legacyOriginDebtId === "string") {
@@ -259,7 +265,9 @@ export async function confirmTaxPaymentInTransaction(
     const paidBefore = guide.payments.reduce((total, payment) => total.plus(requiredAmount(payment.amountPaidDecimal, "TaxPayment.amountPaidDecimal")), new Prisma.Decimal(0));
     const total = requiredAmount(guide.totalValueDecimal, "TaxGuide.totalValueDecimal");
     if (paidBefore.plus(paidAmount).greaterThan(total)) throw new TaxError("O pagamento acumulado excede o valor da guia.");
-    const assessmentTotal = guide.assessment.finalValueDecimal ?? requiredAmount(guide.assessment.originalValueDecimal, "TaxAssessment.originalValueDecimal");
+    await applyConditionalGuideDiscount(tx, actor, { guideId: guide.id, amountPaid: paidAmount, paymentDate: input.paymentDate, paymentKey: input.idempotencyKey.trim() });
+    const currentAssessment = await tx.taxAssessment.findUniqueOrThrow({ where: { id: guide.assessmentId } });
+    const assessmentTotal = currentAssessment.finalValueDecimal ?? requiredAmount(currentAssessment.originalValueDecimal, "TaxAssessment.originalValueDecimal");
     const priorAssessmentPayments = await tx.taxPayment.findMany({ where: { guide: { assessmentId: guide.assessmentId }, status: "Confirmado" }, select: { amountPaidDecimal: true } });
     const priorAssessmentPaid = priorAssessmentPayments.reduce((sum, payment) => sum.plus(requiredAmount(payment.amountPaidDecimal, "TaxPayment.amountPaidDecimal")), new Prisma.Decimal(0));
     const compensated = await taxAssessmentCompensatedValue(tx, guide.assessmentId);
@@ -335,9 +343,18 @@ export async function configureTaxParameter(
   return db.$transaction(async (tx) => {
     const tax = await tx.tax.findUnique({ where: { id: input.taxId }, select: { id: true, isActive: true } });
     if (!tax?.isActive) throw new TaxError("Selecione um tributo ativo para parametrizacao.");
+    const scope = await resolveTaxAssessmentScope(tx, actor, input.taxId);
+    const options = fiscalPaymentOptionsSchema.parse((input.configuration as Prisma.InputJsonObject).paymentOptions ?? []);
+    if (options.length && (!scope.governmentEntityId || !scope.budgetUnitId)) throw new TaxError("Opções de pagamento exigem origem municipal conciliada.");
+    for (const taxId of new Set(options.flatMap(option => option.debtTaxIds))) {
+      if (!await tx.tax.findFirst({ where: { id: taxId, isActive: true } })) throw new TaxError("Selecione tributos ativos na conferência de débitos do desconto.");
+      const origin = await resolveTaxAssessmentScope(tx, actor, taxId);
+      if (origin.governmentEntityId !== scope.governmentEntityId) throw new TaxError("Tributo da conferência de desconto pertence a outro ente municipal.");
+    }
     const parameter = await tx.taxParameter.create({
       data: { taxId: input.taxId, code: input.code.trim(), name: input.name.trim(), calculationType: input.calculationType.trim(), configuration: input.configuration, effectiveFrom: input.effectiveFrom, effectiveUntil: input.effectiveUntil, isActive: input.isActive ?? true },
     });
+    if (scope.governmentEntityId && scope.budgetUnitId) await tx.taxRegistryEntry.create({ data: { entityType: "TAX_PARAMETER", entityId: parameter.id, category: "PARAMETER_SCOPE", title: parameter.name, actorUsuarioId: actor.usuarioId, data: scope } });
     await audit(tx, actor, "CREATE", "TaxParameter", parameter.id, { taxId: input.taxId, code: parameter.code, calculationType: parameter.calculationType, effectiveFrom: parameter.effectiveFrom.toISOString() });
     return parameter;
   });
@@ -461,18 +478,7 @@ export async function createDebtInstallmentPlan(
 }
 
 export async function evaluateTaxCertificateSituation(db: PrismaClient, actor: TaxActor, taxpayerId: string) {
-  return db.$transaction(async (tx) => {
-    const [taxpayer, assessments, debts] = await Promise.all([
-      tx.taxpayer.findUnique({ where: { id: taxpayerId }, select: { id: true } }),
-      tx.taxAssessment.findMany({ where: { taxpayerId, status: { in: ["Lançado", "Emitido", "Parcial", "Dívida Ativa"] } }, select: { id: true, assessmentNumber: true, status: true } }),
-      tx.activeDebt.findMany({ where: { taxpayerId, status: { notIn: ["Paga", "Cancelada"] } }, select: { id: true, cdaNumber: true, status: true } }),
-    ]);
-    if (!taxpayer) throw new TaxError("Contribuinte nao encontrado.");
-    const pendingCount = assessments.length + debts.length;
-    const evaluation = await tx.taxCertificateEvaluation.create({ data: { taxpayerId, result: pendingCount ? "PENDENCIAS_ENCONTRADAS" : "SEM_PENDENCIAS_IDENTIFICADAS", pendingCount, details: { assessments, activeDebts: debts, scope: "AVALIACAO_INTERNA_SEM_EMISSAO_DE_CERTIDAO" } } });
-    await audit(tx, actor, "EVALUATE", "TaxCertificateEvaluation", evaluation.id, { taxpayerId, result: evaluation.result, pendingCount });
-    return evaluation;
-  });
+  return db.$transaction(tx => evaluateCertificateInTransaction(tx, actor, taxpayerId), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function linkTaxCaseRecord(db: PrismaClient, actor: TaxActor, input: { taxpayerId: string; entityType: string; entityId: string; processId?: string; documentId?: string; purpose?: string }) {

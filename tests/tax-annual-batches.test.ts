@@ -19,6 +19,7 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) {
       await f.db.taxpayer.create({ data: { id: "annual-payer", taxpayerType: "PJ", companyId: "empresa", status: "Ativo" } });
       await f.db.taxpayer.create({ data: { id: "annual-payer-2", taxpayerType: "PF", status: "Ativo" } });
       await f.db.taxParameter.create({ data: { id: "annual-rule", taxId: "annual-tax", code: "ANUAL", name: "Regra anual", calculationType: "PERCENTUAL_BASE", configuration: { formula: "PERCENTUAL_BASE", rate: 4 }, effectiveFrom: new Date("2026-01-01"), effectiveUntil: new Date("2026-12-31T23:59:59.999Z") } });
+      await f.db.taxRegistryEntry.create({ data: { entityType: "TAX_PARAMETER", entityId: "annual-rule", category: "PARAMETER_SCOPE", title: "Origem conferida da regra", data: { governmentEntityId: "ente", budgetUnitId: "ug" } } });
       const input = { taxId: "annual-tax", parameterId: "annual-rule", competence: "2026-03-01", targetType: "TAXPAYER" as const, targets: [{ targetId: "annual-payer", taxableBase: "100" }, { targetId: "annual-payer-2", taxableBase: "200" }], reason: "Bases anuais conferidas", idempotencyKey: "annual-job" };
       const simultaneous = await Promise.all([simulateTaxAnnualBatch(f.db, f.actor, input), simulateTaxAnnualBatch(f.db, f.actor, input)]);
       const batch = simultaneous[0];

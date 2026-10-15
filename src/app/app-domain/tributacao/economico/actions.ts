@@ -1,11 +1,9 @@
 "use server";
 
-import { getTenantContextForModuleOperation, type ModuleOperation } from "@/lib/platform/tenant-context";
+import { getTenantContextForModuleOperation, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { revalidatePath } from "next/cache";
-
-async function getTenantPrisma(operation: ModuleOperation) {
-  return (await getTenantContextForModuleOperation("TRIBUTACAO", operation)).prisma;
-}
+import { updateEconomicRegistrationWithHistory } from "@/lib/tributacao/economic-history";
+import { redirect } from "next/navigation";
 
 export async function createEconomicRegistration(data: {
   municipalInsc: string;
@@ -13,20 +11,9 @@ export async function createEconomicRegistration(data: {
   taxRegime: string;
   taxpayerId: string;
 }) {
-  const prisma = await getTenantPrisma("create");
-  const result = await prisma.economicRegistration.create({
-    data: {
-      municipalInsc: data.municipalInsc,
-      primaryCnae: data.primaryCnae,
-      taxRegime: data.taxRegime,
-      taxpayerId: data.taxpayerId,
-      status: "Ativo",
-      startDate: new Date()
-    }
-  });
-
-  revalidatePath("/tributacao/economico");
-  return result;
+  void data;
+  await getTenantContextForModuleOperation("TRIBUTACAO", "create");
+  redirect("/tributacao/economico/novo");
 }
 
 export async function updateEconomicRegistration(id: string, data: {
@@ -34,34 +21,28 @@ export async function updateEconomicRegistration(id: string, data: {
   primaryCnae?: string | null;
   taxRegime?: string | null;
 }) {
-  const prisma = await getTenantPrisma("update");
-  const result = await prisma.economicRegistration.update({
-    where: { id },
-    data
-  });
+  const context = await getTenantContextForModuleOperation("TRIBUTACAO", "update");
+  const result = await updateEconomicRegistrationWithHistory(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, id, data);
 
   revalidatePath("/tributacao/economico");
+  revalidatePath(`/tributacao/economico/${id}`);
   return result;
 }
 
 export async function deactivateEconomicRegistration(id: string) {
-  const prisma = await getTenantPrisma("update");
-  const result = await prisma.economicRegistration.update({
-    where: { id },
-    data: { status: "Inativo" }
-  });
+  const context = await getTenantContextForModuleOperation("TRIBUTACAO", "update");
+  const result = await updateEconomicRegistrationWithHistory(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, id, { status: "Inativo" });
 
   revalidatePath("/tributacao/economico");
+  revalidatePath(`/tributacao/economico/${id}`);
   return result;
 }
 
 export async function activateEconomicRegistration(id: string) {
-  const prisma = await getTenantPrisma("update");
-  const result = await prisma.economicRegistration.update({
-    where: { id },
-    data: { status: "Ativo" }
-  });
+  const context = await getTenantContextForModuleOperation("TRIBUTACAO", "update");
+  const result = await updateEconomicRegistrationWithHistory(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, id, { status: "Ativo" });
 
   revalidatePath("/tributacao/economico");
+  revalidatePath(`/tributacao/economico/${id}`);
   return result;
 }

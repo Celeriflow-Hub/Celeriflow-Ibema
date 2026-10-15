@@ -86,7 +86,8 @@ export default function CertidoesClient({
       return;
     }
     try {
-      await createCertificate(createForm);
+      const result = await createCertificate(createForm);
+      if (result.error) { alert(result.error); return; }
       setIsCreateModalOpen(false);
       setCreateForm({
         certificateType: "Negativa",

@@ -6,6 +6,7 @@ import { reverseTaxCreditMovement } from "@/lib/tributacao/credit-reversal";
 import { grantBenefit } from "@/lib/tributacao/s8-service";
 import { configureTaxAccountingProfile, configureTaxDebtAccountingProfile } from "@/lib/tributacao/accounting-profile";
 import { FinanceError } from "@/lib/financeiro";
+import { evaluateFiscalRule } from "@/lib/tributacao/fiscal-engine";
 import {
   approveRefundRequest,
   closeReconciliation,
@@ -145,7 +146,7 @@ export async function enrollAssessment(assessmentId: string): Promise<ActionResu
 export async function evaluateCertificate(taxpayerId: string): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("TRIBUTACAO", "create");
-    await evaluateTaxCertificateSituation(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, taxpayerId);
+    await evaluateTaxCertificateSituation(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds }, taxpayerId);
     revalidatePath("/tributacao/operacoes");
     return {};
   } catch (error) { return { error: message(error) }; }
@@ -160,14 +161,19 @@ function refreshS2() {
 export async function saveFiscalRuleAction(data: {
   taxId: string; code: string; name: string; formula: "PERCENTUAL_BASE" | "VALOR_FIXO" | "UNIDADE_FISCAL";
   effectiveFrom: string; effectiveUntil?: string; rate?: number; fixedValue?: number; fiscalUnitValue?: number; fiscalUnits?: number;
-  indexFactor?: number; minimumValue?: number; installments?: number; dueDay?: number; reference?: string; legalBasis?: string;
+  indexFactor?: number; minimumValue?: number; minimumInstallmentValue?: number; calendar?: string[]; installments?: number; dueDay?: number; reference?: string; legalBasis?: string;
+  paymentOptions?: import("@/lib/tributacao/fiscal-payment-option-schema").FiscalPaymentOption[];
 }): Promise<ActionResult> {
   try {
     const context = await getTenantContextForModuleOperation("TRIBUTACAO", "create");
-    await configureTaxParameter(context.prisma, { usuarioId: context.user.id, employeeId: context.user.employeeId }, {
+    const configuration = { formula: data.formula, rate: data.rate, fixedValue: data.fixedValue, fiscalUnitValue: data.fiscalUnitValue, fiscalUnits: data.fiscalUnits, indexFactor: data.indexFactor ?? 1, minimumValue: data.minimumValue ?? 0, minimumInstallmentValue: data.minimumInstallmentValue ?? 0, calendar: data.calendar ?? [], installments: data.installments ?? 1, dueDay: data.dueDay, reference: data.reference || "", legalBasis: data.legalBasis || "", version: 1, status: "ATIVA" };
+    const options = data.paymentOptions ?? [];
+    if (options.some(option => option.dueDate < data.effectiveFrom || data.effectiveUntil && option.dueDate > data.effectiveUntil)) throw new Error("As opções de pagamento devem pertencer à vigência da regra anual.");
+    evaluateFiscalRule({ taxableBase: "0", configuration: { ...configuration, paymentOptions: options } });
+    await configureTaxParameter(context.prisma, taxActor(context), {
       taxId: data.taxId, code: data.code, name: data.name, calculationType: data.formula,
       effectiveFrom: new Date(`${data.effectiveFrom}T12:00:00.000Z`), effectiveUntil: data.effectiveUntil ? new Date(`${data.effectiveUntil}T12:00:00.000Z`) : undefined,
-      configuration: { formula: data.formula, rate: data.rate, fixedValue: data.fixedValue, fiscalUnitValue: data.fiscalUnitValue, fiscalUnits: data.fiscalUnits, indexFactor: data.indexFactor ?? 1, minimumValue: data.minimumValue ?? 0, installments: data.installments ?? 1, dueDay: data.dueDay, reference: data.reference || null, legalBasis: data.legalBasis || null, version: 1, status: "ATIVA" },
+      configuration: { ...configuration, paymentOptions: options },
     });
     refreshS2(); return {};
   } catch (error) { return { error: message(error) }; }

@@ -1,5 +1,17 @@
 # P0 — EXE-12: Gestão de IPTU
 
+**Revisão de 15/10/2026:** os 30 itens têm referências individuais de código, regressão e pendências em [REVISAO_IPTU_ISS_ITBI_2026_10_15.md](REVISAO_IPTU_ISS_ITBI_2026_10_15.md#exe-12--iptu--cadastro-imobiliário-30-itens), incluindo vínculos urbanísticos tipados, valores próprios da PGV e total edificado das unidades. Aceites não promovidos.
+
+**Quinta continuação:** inclusão nativa/perfil/titularidade em transação única e simulação individual/englobada com áreas alternativas e efetivação fiscal sem alteração do cadastro, detalhadas na seção «Quinta continuação» de [IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md](IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md). Aceites permanecem não executados.
+
+**Sexta continuação:** alteração geral da PGV por bairro/logradouro, com prévia, versões, editor de campos e rollback validado; detalhes e limites na seção «Sexta continuação» do mesmo documento.
+
+**Terceira continuação:** perfil imobiliário, composição de inscrição, titularidade versionada, protocolo/bloqueio coletivo, cópia do perfil, consumo de PGV/testadas e simulação de englobamento detalhados na seção «Terceira continuação» de [IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md](IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md). Os limites são registrados por subcritério; aceites permanecem não executados.
+
+**Segunda continuação:** catálogos territoriais e PGV/testadas, formulários/vistorias, histórico imobiliário transversal, bloqueios com autorização, cópias, alteração geral e desmembramento/remembramento detalhados na seção «Segunda continuação» de [IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md](IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md). A cobertura de cada subcritério e seus limites estão registrados; os aceites abaixo permanecem não executados.
+
+**Continuação de desenvolvimento:** avaliação anual configurada integrada ao lote e comparativo de exercícios documentados em [IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md](IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md), relacionados a .25/.26/.29/.30. O registro explicita cobertura parcial e não altera os aceites abaixo.
+
 Ente: **PREFEITURA**. 30 itens; **nenhum aceite executado nesta fase**. Revisão: f94b8be7d99a5f5a4ef0f4e12b104ad755f383cc.
 
 Texto extraído do PDF local; conferir o original para layouts, listas e paginação. Busca estática indica onde investigar, não comprova atendimento. A matriz individual editável, com fontes, modelos, consumidores, testes e roteiro, está em [CONTROLE_REQUISITOS.json](CONTROLE_REQUISITOS.json). Diagnósticos e gaps abaixo são herdados da faixa do plano; validar cada subcritério antes de abrir desenvolvimento.

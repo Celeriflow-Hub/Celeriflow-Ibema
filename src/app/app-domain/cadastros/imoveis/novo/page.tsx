@@ -5,6 +5,7 @@ import { getTenantContextForModule, getTenantContextForModuleOperation } from "@
 import type { Prisma } from "@prisma/client";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
+import { createPropertyWithHistory } from "@/lib/tributacao/property-history";
 
 export default async function NovoImovelPage() {
   const { prisma } = await getTenantContextForModule("CADASTROS");
@@ -21,7 +22,7 @@ export default async function NovoImovelPage() {
 
   async function createRealEstate(formData: FormData) {
     "use server";
-    const { prisma } = await getTenantContextForModuleOperation("CADASTROS", "create");
+    const { prisma, user } = await getTenantContextForModuleOperation("CADASTROS", "create");
     
     const municipalInsc = formData.get("municipalInsc") as string;
     const propertyType = formData.get("propertyType") as string;
@@ -49,9 +50,7 @@ export default async function NovoImovelPage() {
     if (neighborhoodId) data.neighborhoodId = neighborhoodId;
     if (taxpayerId) data.taxpayerId = taxpayerId;
 
-    await prisma.realEstate.create({
-      data
-    });
+    await createPropertyWithHistory(prisma, user.id, data);
 
     redirect("/cadastros/imoveis");
   }

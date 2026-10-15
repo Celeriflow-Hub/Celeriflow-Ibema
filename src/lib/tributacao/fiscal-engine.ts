@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { fiscalPaymentOptionsSchema, type FiscalPaymentOption } from "./fiscal-payment-option-schema";
 
 export type FiscalFormula = "PERCENTUAL_BASE" | "VALOR_FIXO" | "UNIDADE_FISCAL";
 
@@ -10,9 +11,11 @@ export type FiscalRuleConfiguration = {
   fiscalUnits?: string | number;
   indexFactor?: string | number;
   minimumValue?: string | number;
+  minimumInstallmentValue?: string | number;
   installments?: number;
   dueDay?: number;
   calendar?: string[];
+  paymentOptions?: FiscalPaymentOption[];
   version?: number;
   status?: string;
   reference?: string;
@@ -39,7 +42,13 @@ export function parseFiscalRuleConfiguration(value: unknown): FiscalRuleConfigur
   if (rule.dueDay !== undefined && (!Number.isInteger(rule.dueDay) || rule.dueDay < 1 || rule.dueDay > 28)) {
     throw new Error("O dia de vencimento deve estar entre 1 e 28.");
   }
-  return rule as FiscalRuleConfiguration;
+  if (rule.minimumInstallmentValue !== undefined) decimal(rule.minimumInstallmentValue, "Valor mínimo da parcela");
+  if (rule.paymentOptions !== undefined) fiscalPaymentOptionsSchema.parse(rule.paymentOptions);
+  if (rule.calendar !== undefined) {
+    if (!Array.isArray(rule.calendar) || rule.calendar.length > 120 || rule.calendar.some(value => typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(new Date(`${value}T12:00:00Z`).valueOf()) || new Date(`${value}T12:00:00Z`).toISOString().slice(0, 10) !== value)) throw new Error("O calendário deve conter datas válidas no formato AAAA-MM-DD.");
+    if (new Set(rule.calendar).size !== rule.calendar.length || rule.calendar.some((value, index) => index > 0 && value <= rule.calendar![index - 1])) throw new Error("As datas do calendário devem ser distintas e crescentes.");
+  }
+  return { ...rule, ...(rule.paymentOptions !== undefined ? { paymentOptions: fiscalPaymentOptionsSchema.parse(rule.paymentOptions) } : {}) } as FiscalRuleConfiguration;
 }
 
 export function evaluateFiscalRule(input: {
@@ -60,8 +69,12 @@ export function evaluateFiscalRule(input: {
   }
   const minimumValue = decimal(rule.minimumValue ?? 0, "Valor mínimo");
   const principal = Prisma.Decimal.max(calculated.toDecimalPlaces(2), minimumValue).toDecimalPlaces(2);
-  const installments = rule.installments ?? 1;
-  const installmentBase = principal.div(installments).toDecimalPlaces(2);
+  const requestedInstallments = rule.installments ?? 1;
+  const minimumInstallment = decimal(rule.minimumInstallmentValue ?? 0, "Valor mínimo da parcela");
+  const effectiveMinimum = Prisma.Decimal.max(minimumInstallment.toDecimalPlaces(2, Prisma.Decimal.ROUND_UP), "0.01");
+  const installments = Math.max(1, Math.min(requestedInstallments, principal.div(effectiveMinimum).floor().toNumber()));
+  if (rule.calendar?.length && rule.calendar.length < installments) throw new Error("O calendário deve informar vencimento para cada parcela.");
+  const installmentBase = principal.div(installments).toDecimalPlaces(2, Prisma.Decimal.ROUND_DOWN);
   const remainder = principal.minus(installmentBase.mul(installments));
   const schedule = Array.from({ length: installments }, (_, index) => ({
     number: index + 1,
@@ -83,9 +96,11 @@ export function evaluateFiscalRule(input: {
       minimumValue: minimumValue.toFixed(2),
       principal: principal.toFixed(2),
       installments,
+      ...(rule.minimumInstallmentValue !== undefined ? { requestedInstallments, minimumInstallmentValue: minimumInstallment.toFixed(2) } : {}),
       version: rule.version ?? 1,
       reference: rule.reference ?? null,
       legalBasis: rule.legalBasis ?? null,
+      ...(rule.paymentOptions?.length ? { paymentOptions: fiscalPaymentOptionsSchema.parse(rule.paymentOptions) } : {}),
     },
   };
 }

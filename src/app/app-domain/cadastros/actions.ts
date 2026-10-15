@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { formText, optionalSupplierText, parseSupplierCnaes, parseSupplierDate, parseSupplierIdentity, validateSubmittedSupplierDocument, validateSupplierIdentityDocument } from "./fornecedores/supplier-form";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
+import { updatePropertyWithHistory } from "@/lib/tributacao/property-history";
 
 type PersonUpdateData = {
   fullName?: string;
@@ -199,20 +200,20 @@ export async function activateCompany(id: string) {
 
 // RealEstate
 export async function updateRealEstate(id: string, data: RealEstateUpdateData) {
-  const prisma = await getTenantPrisma("update");
-  const result = await prisma.realEstate.update({ where: { id }, data });
+  const { prisma, user } = await getTenantContextForModuleOperation("CADASTROS", "update");
+  const result = await updatePropertyWithHistory(prisma, user.id, id, data);
   revalidatePath("/cadastros/imoveis");
   return result;
 }
 export async function deactivateRealEstate(id: string) {
-  const prisma = await getTenantPrisma("update");
-  const result = await prisma.realEstate.update({ where: { id }, data: { status: 'Inativo' } });
+  const { prisma, user } = await getTenantContextForModuleOperation("CADASTROS", "update");
+  const result = await updatePropertyWithHistory(prisma, user.id, id, { status: 'Inativo' });
   revalidatePath("/cadastros/imoveis");
   return result;
 }
 export async function activateRealEstate(id: string) {
-  const prisma = await getTenantPrisma("update");
-  const result = await prisma.realEstate.update({ where: { id }, data: { status: 'Regular' } });
+  const { prisma, user } = await getTenantContextForModuleOperation("CADASTROS", "update");
+  const result = await updatePropertyWithHistory(prisma, user.id, id, { status: 'Regular' });
   revalidatePath("/cadastros/imoveis");
   return result;
 }

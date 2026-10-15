@@ -12,7 +12,13 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
     const models = ["Expense", "Supplier", "Company", "Creditor", "Commitment", "CommitmentMovement", "Settlement", "Payment", "FinancialDocument", "SettlementRetention", "PaymentRetention", "WithholdingPayable", "RetentionRule", "Revenue", "RevenueReversal", "BankAccount", "TreasuryMovement", "TaxRevenueIntegrationEvent", "RevenueResourceRedistribution", "PurchaseRequest", "PurchaseRequestItem", "PurchaseRequestItemBudgetAllocation", "PurchaseProcess", "PurchaseProcessItem", "PurchaseProcessItemOrigin", "Contract", "ProcurementLifecycleEvent", "TaxFinancialMapping", "TaxAssessment", "TaxGuide", "TaxPayment", "TaxAuditLog", "TaxBenefitRule", "TaxBenefitGrant"];
     models.push("TaxIntegrationEvent", "TaxRegistryEntry", "Taxpayer", "TaxDocumentSequence", "TaxParameter");
     models.push("Address");
+    models.push("HealthCbo");
+    models.push("Neighborhood", "Street");
     models.push("ActiveDebt", "DebtInstallment", "DebtInstallmentSchedule");
+    models.push("TaxCertificateEvaluation", "TaxCertificate");
+    models.push("License");
+    models.push("TaxpayerPortalAccess");
+    models.push("ProcessCitizenAccess", "DigitalCertificate", "DocumentSignature", "DocumentIcpEvidence", "CertificateUseAudit");
     models.push("TaxActiveDebtEvent", "TaxProtestItem", "TaxProtestBatch", "TaxCdaVersion");
     models.push("PurchaseReceipt", "PurchaseReceiptItem", "InstrumentMeasurement", "InstrumentInstallment");
     models.push("PurchaseProcessRequestOrigin");
@@ -28,6 +34,7 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
     models.push("TreasuryTransfer", "Asset", "AssetCategory", "AssetMaintenance", "AssetWriteOff", "AssetIntegrationPendingConfiguration", "Department");
     models.push("AssetValueHistory", "AssetValueAdjustment");
     models.push("RealEstate", "PropertyValuation", "ItbiDeclaration", "ItbiParty", "ItbiEvent", "ItbiTransactionType");
+    models.push("SimplesImportBatch", "SimplesFiscalRecord", "SimplesOptionPeriod");
      models.push("EconomicRegistration", "TaxServiceActivity", "TaxDeclaration", "Invoice", "NfseInvoiceData", "NfseEvent", "NfseDmsDeclaration", "NfseCredentialRequest", "NfseCredentialEvent", "NfseDeductionCredit", "NfseDeductionConsumption", "NfseOccasionalRequest", "NfseRpsBatch", "NfseRpsItem", "NfseCorrectionLetter", "TaxServiceRequest");
     const enums = new Set<string>();
     for (const name of models) {
@@ -57,6 +64,7 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
       for (const fields of model.uniqueFields ?? []) await f.pg.exec(`CREATE UNIQUE INDEX ON "${name}" (${fields.map((field) => `"${field}"`).join(",")})`);
     }
     await f.pg.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "DocumentClass_code_fixture_key" ON "DocumentClass" (code);
       CREATE UNIQUE INDEX ON "BudgetReservation" (number);
       CREATE UNIQUE INDEX ON "Creditor" ("supplierId");
       CREATE UNIQUE INDEX ON "Expense" ("idempotencyKey");
@@ -75,6 +83,10 @@ export async function createPlanningExecutionFixture(year = 2026, periodMonths: 
       CREATE UNIQUE INDEX ON "TaxPayment" ("idempotencyKey");
       CREATE UNIQUE INDEX ON "TaxIntegrationEvent" ("idempotencyKey");
       CREATE UNIQUE INDEX ON "TaxDocumentSequence" (year, "documentType");
+      CREATE UNIQUE INDEX IF NOT EXISTS "PropertyValuation_realEstateId_year_key" ON "PropertyValuation" ("realEstateId", "year");
+      CREATE UNIQUE INDEX IF NOT EXISTS "RealEstate_municipalInsc_key" ON "RealEstate" ("municipalInsc");
+      CREATE UNIQUE INDEX IF NOT EXISTS "TaxServiceActivity_taxId_code_key" ON "TaxServiceActivity" ("taxId", "code");
+      CREATE UNIQUE INDEX IF NOT EXISTS "SimplesOptionPeriod_taxpayerId_regime_startDate_key" ON "SimplesOptionPeriod" ("taxpayerId", "regime", "startDate");
       CREATE UNIQUE INDEX ON "TaxRevenueIntegrationEvent" ("taxPaymentId");
       CREATE UNIQUE INDEX ON "TaxRevenueIntegrationEvent" ("revenueId");
       CREATE UNIQUE INDEX ON "TaxRevenueIntegrationEvent" ("idempotencyKey");

@@ -89,7 +89,9 @@ export default function AlvarasClient({
   };
 
   const handleDeactivate = async (id: string) => {
-    if (confirm("Deseja cancelar este alvará?")) await deactivateLicense(id);
+    const reason=prompt("Fundamento do cancelamento do alvará:");
+    if(!reason?.trim()) return;
+    try{await deactivateLicense(id,reason);}catch(error){alert(error instanceof Error ? error.message : "Não foi possível cancelar o alvará.");}
   };
 
   const handleActivate = async (id: string) => {
@@ -101,7 +103,8 @@ export default function AlvarasClient({
     if (!createForm.taxpayerId) { alert("Selecione um contribuinte válido."); return; }
     if (!createForm.validUntil) { alert("Informe a data de validade."); return; }
     try {
-      await createLicense(createForm);
+      const result=await createLicense(createForm);
+      if(result.error){alert(result.error);return;}
       setIsCreateModalOpen(false);
       setCreateForm({ licenseType: "Funcionamento", taxpayerId: taxpayers[0]?.id || "", validUntil: "" });
     } catch (err) {

@@ -2,6 +2,15 @@
   "manifest": {
     "phase": "P0",
     "generatedAt": "2026-10-12T14:14:52.173Z",
+    "taxDevelopmentReconciliation": {
+      "record": "docs/poc-p0/REVISAO_IPTU_ISS_ITBI_2026_10_15.md",
+      "reviewedAt": "2026-10-15",
+      "checklists": ["EXE-12", "EXE-13", "EXE-14"],
+      "requirements": 97,
+      "coverage": "PARCIAL",
+      "acceptance": "NAO_EXECUTADO",
+      "note": "Reconciliação individual atualizada de código, regressões e pendências; consultar junto às revisões históricas. Não promove aceite, não encerra implementação integral e não comprova implantação municipal."
+    },
     "commit": "f94b8be7d99a5f5a4ef0f4e12b104ad755f383cc",
     "gitStatusAtStart": "?? docs/poc-p0/\n?? scripts/prepare-poc-p0-control.mjs\n?? scripts/prepare-poc-p0-current.ts\n?? scripts/prepare-poc-p0-database.mjs\n?? scripts/verify-poc-p0-control.mjs",
     "pdf": {
@@ -121607,6 +121616,7 @@
     },
     {
       "id": "EXE-12.1",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/configurable-cadastres.ts"], "tests": ["tests/configurable-fiscal-cadastres.test.ts"], "remaining": "Homologar cada catálogo e seus vínculos municipais; aceite não executado." },
       "checklist": "EXE-12",
       "number": 1,
       "title": "Gestão de IPTU",
@@ -121739,6 +121749,7 @@
     },
     {
       "id": "EXE-12.2",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/configurable-cadastres.ts"], "tests": ["tests/configurable-fiscal-cadastres.test.ts"], "remaining": "Concluir relacionamentos tipados de atividades urbanísticas e validação de uso." },
       "checklist": "EXE-12",
       "number": 2,
       "title": "Gestão de IPTU",
@@ -121885,6 +121896,7 @@
     },
     {
       "id": "EXE-12.3",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/configurable-cadastres.ts"], "tests": ["tests/configurable-fiscal-cadastres.test.ts"], "remaining": "Homologar desativação e múltiplos zoneamentos; aceite não executado." },
       "checklist": "EXE-12",
       "number": 3,
       "title": "Gestão de IPTU",
@@ -122029,6 +122041,7 @@
     },
     {
       "id": "EXE-12.4",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/configurable-cadastres.ts"], "tests": ["tests/configurable-fiscal-cadastres.test.ts"], "remaining": "Conferir situações padrão/customizadas e implantação; aceite não executado." },
       "checklist": "EXE-12",
       "number": 4,
       "title": "Gestão de IPTU",
@@ -122173,6 +122186,7 @@
     },
     {
       "id": "EXE-12.5",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/configurable-cadastres.ts"], "tests": ["tests/configurable-fiscal-cadastres.test.ts"], "remaining": "Conferir gestão de vistorias, upload e anexos nas telas autenticadas." },
       "checklist": "EXE-12",
       "number": 5,
       "title": "Gestão de IPTU",
@@ -122300,6 +122314,7 @@
     },
     {
       "id": "EXE-12.6",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/configurable-cadastres.ts"], "tests": ["tests/configurable-fiscal-cadastres.test.ts"], "remaining": "Homologar PGV municipal e integrar faces/testadas ao cálculo anual." },
       "checklist": "EXE-12",
       "number": 6,
       "title": "Gestão de IPTU",
@@ -122444,6 +122459,7 @@
     },
     {
       "id": "EXE-12.7",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/configurable-cadastres.ts"], "tests": ["tests/configurable-fiscal-cadastres.test.ts"], "remaining": "Integração das múltiplas plantas/testadas ao cálculo e restrição por terreno urbano." },
       "checklist": "EXE-12",
       "number": 7,
       "title": "Gestão de IPTU",
@@ -122588,6 +122604,14 @@
     },
     {
       "id": "EXE-12.8",
+      "fifthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Inclusão do cadastro nativo, perfil e titularidade na mesma transação; falha de perfil/protocolo/inscrição reverte o conjunto.","code":["src/lib/tributacao/property-profile.ts","src/app/app-domain/tributacao/imoveis/novo/page.tsx"],"tests":["tests/property-profile.test.ts"],"remaining":"Homologar todos os campos e produtores imobiliários e os relacionamentos territoriais adicionais."},
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Perfil versionado de terreno, unidade e rural na ficha existente.",
+        "code": ["src/lib/tributacao/property-profile.ts", "src/app/app-domain/tributacao/imoveis/[id]/perfil/page.tsx"],
+        "tests": ["tests/property-profile.test.ts"],
+        "remaining": "Inclusão imobiliária coordenada com perfil e conferência integral dos campos municipais."
+      },
       "checklist": "EXE-12",
       "number": 8,
       "title": "Gestão de IPTU",
@@ -122730,6 +122754,14 @@
     },
     {
       "id": "EXE-12.9",
+      "fifthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Inclusão de terreno ou unidade com vínculo obrigatório na mesma transação e código novo gerado pelo servidor.","code":["src/lib/tributacao/property-profile.ts"],"tests":["tests/property-profile.test.ts"],"remaining":"Conferência dos produtores antigos de subunidade e conciliação dos legados."},
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Código nativo, tipo, inscrição composta e terreno obrigatório para unidade autônoma/englobada; guarda PostgreSQL diferida.",
+        "code": ["src/lib/tributacao/property-profile-schema.ts", "prisma/migrations-ibema/20261015150000_property_profiles_and_registration/migration.sql"],
+        "tests": ["tests/property-profile.test.ts"],
+        "remaining": "Conciliação explícita dos cadastros legados e revisão dos produtores antigos de subunidade."
+      },
       "checklist": "EXE-12",
       "number": 9,
       "title": "Gestão de IPTU",
@@ -122872,6 +122904,7 @@
     },
     {
       "id": "EXE-12.10",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/configurable-cadastres.ts"], "tests": ["tests/configurable-fiscal-cadastres.test.ts"], "remaining": "Conferir aplicação dos BCI conforme tipo nativo de terreno/unidade/rural." },
       "checklist": "EXE-12",
       "number": 10,
       "title": "Gestão de IPTU",
@@ -123016,6 +123049,14 @@
     },
     {
       "id": "EXE-12.11",
+      "fifthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Inclusão completa reúne dados nativos de matrícula/endereço/áreas/uso/zona e perfil de correspondência/coordenadas/proprietários/índices.","code":["src/app/app-domain/tributacao/imoveis/[id]/perfil/PropertyProfileClient.tsx","src/lib/tributacao/property-profile.ts"],"tests":["tests/property-profile.test.ts"],"remaining":"Total construído por conjunto e conferência autenticada de todos os relacionamentos territoriais."},
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Coproprietários/percentuais, correspondência, mapa/coordenadas, pavimentos e afastamentos no perfil; base nativa e catálogos conservam endereço/áreas/matrícula/zoneamentos/testadas/uso.",
+        "code": ["src/lib/tributacao/property-profile.ts", "src/app/app-domain/tributacao/imoveis/[id]/perfil/PropertyProfileClient.tsx"],
+        "tests": ["tests/property-profile.test.ts"],
+        "remaining": "Total construído por conjunto e conferência autenticada integral dos campos e relações."
+      },
       "checklist": "EXE-12",
       "number": 11,
       "title": "Gestão de IPTU",
@@ -123158,6 +123199,13 @@
     },
     {
       "id": "EXE-12.12",
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Editor de componentes da inscrição com ordem, tamanho, descrição, chave e separador; novas versões e aplicação explícita ao perfil.",
+        "code": ["src/lib/tributacao/property-profile-schema.ts", "src/app/app-domain/tributacao/imoveis/configuracao/PropertyRegistrationPolicyClient.tsx"],
+        "tests": ["tests/property-profile.test.ts"],
+        "remaining": "Homologação da composição municipal e validação autenticada da edição/reordenação."
+      },
       "checklist": "EXE-12",
       "number": 12,
       "title": "Gestão de IPTU",
@@ -123300,6 +123348,14 @@
     },
     {
       "id": "EXE-12.13",
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Perfil e titulares por referência com snapshots imutáveis e vigência fiscal; integração ao histórico nativo.",
+        "code": ["src/app/app-domain/tributacao/imoveis/[id]/PropertyProfilePosition.tsx", "src/lib/tributacao/itbi-ownership.ts"],
+        "tests": ["tests/property-profile.test.ts", "tests/tax-property-cadastral-completion.test.ts"],
+        "remaining": "Relacionamentos genéricos antigos e passado anterior ao primeiro registro observado."
+      },
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/property-history.ts", "src/app/app-domain/tributacao/imoveis/[id]/PropertyHistory.tsx"], "tests": ["tests/property-history.test.ts"], "remaining": "Histórico nativo documentado; revisar histórico de todos os relacionamentos e legados." },
       "checklist": "EXE-12",
       "number": 13,
       "title": "Gestão de IPTU",
@@ -123446,6 +123502,14 @@
     },
     {
       "id": "EXE-12.14",
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Espelho por referência inclui perfil imobiliário e posição de titulares fiscal vigente na data.",
+        "code": ["src/app/app-domain/tributacao/imoveis/[id]/PropertyProfilePosition.tsx", "src/app/app-domain/tributacao/imoveis/[id]/PropertyHistory.tsx"],
+        "tests": ["tests/property-profile.test.ts"],
+        "remaining": "Conferência do layout impresso municipal e relacionamentos sem histórico próprio."
+      },
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/app/app-domain/tributacao/imoveis/[id]/PropertyHistory.tsx"], "tests": ["tests/property-history.test.ts"], "remaining": "Homologar espelho impresso e todos os relacionamentos na referência." },
       "checklist": "EXE-12",
       "number": 14,
       "title": "Gestão de IPTU",
@@ -123870,6 +123934,7 @@
     },
     {
       "id": "EXE-12.17",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/app/app-domain/tributacao/imoveis/[id]/PropertyHistory.tsx"], "tests": ["tests/property-history.test.ts"], "remaining": "Não reconstruir passado legado desconhecido; conferir linha do tempo completa das relações." },
       "checklist": "EXE-12",
       "number": 17,
       "title": "Gestão de IPTU",
@@ -124016,6 +124081,7 @@
     },
     {
       "id": "EXE-12.18",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/property-history.ts"], "tests": ["tests/property-history.test.ts"], "remaining": "Histórico nativo cobre produtores instrumentados; conferir registros manuais e relacionamentos auxiliares." },
       "checklist": "EXE-12",
       "number": 18,
       "title": "Gestão de IPTU",
@@ -124173,6 +124239,14 @@
     },
     {
       "id": "EXE-12.19",
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Bloqueio coletivo por risco/APP na política de ente/UG; guarda PostgreSQL e autorização pontual por operador/posição/prazo.",
+        "code": ["src/lib/tributacao/property-edit-restrictions.ts", "prisma/migrations-ibema/20261015150000_property_profiles_and_registration/migration.sql"],
+        "tests": ["tests/property-profile.test.ts", "tests/property-edit-restrictions.test.ts"],
+        "remaining": "Perfis municipais adicionais de supervisor e homologação dos grupos de risco/APP."
+      },
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/property-edit-restrictions.ts"], "tests": ["tests/property-edit-restrictions.test.ts"], "remaining": "Regra coletiva APP/risco e perfis municipais adicionais de supervisor." },
       "checklist": "EXE-12",
       "number": 19,
       "title": "Gestão de IPTU",
@@ -124319,6 +124393,14 @@
     },
     {
       "id": "EXE-12.20",
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Cópia preserva perfil e posição atual dos coproprietários; novas inscrições são conferidas contra composição configurada.",
+        "code": ["src/lib/tributacao/property-operations.ts"],
+        "tests": ["tests/property-profile.test.ts", "tests/property-operations.test.ts"],
+        "remaining": "Conferência municipal de todos os vínculos copiáveis e experiência de ajuste de cada ficha."
+      },
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/property-operations.ts"], "tests": ["tests/property-operations.test.ts"], "remaining": "Homologar quantidade por inscrições, ajuste das cópias e relações copiáveis." },
       "checklist": "EXE-12",
       "number": 20,
       "title": "Gestão de IPTU",
@@ -124463,6 +124545,7 @@
     },
     {
       "id": "EXE-12.21",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/property-operations.ts"], "tests": ["tests/property-operations.test.ts"], "remaining": "Ampliar alteração geral de campos adicionais e relacionamentos; limite atual de 1.000 imóveis." },
       "checklist": "EXE-12",
       "number": 21,
       "title": "Gestão de IPTU",
@@ -124607,6 +124690,7 @@
     },
     {
       "id": "EXE-12.22",
+      "sixthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Alteração geral de PGVs por origem/bairro/logradouro, com prévia completa, controle de versões, publicação transacional e auditoria; tela altera valor do m², situação, nome, bairro, logradouro e definições adicionais em editor tipado.","code":["src/lib/tributacao/pgv-bulk.ts","src/app/app-domain/tributacao/configuracoes-cadastrais/pgv-lote/page.tsx"],"tests":["tests/property-pgv-integration.test.ts"],"remaining":"Conferência autenticada da operação em lote e homologação dos dados municipais."},
       "checklist": "EXE-12",
       "number": 22,
       "title": "Gestão de IPTU",
@@ -124751,6 +124835,14 @@
     },
     {
       "id": "EXE-12.23",
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Protocolo obrigatório configurável para cadastro conciliado; guarda transversal e atribuição por perfil, operações, formulários, Obras e ITBI.",
+        "code": ["src/lib/tributacao/property-profile.ts", "prisma/migrations-ibema/20261015150000_property_profiles_and_registration/migration.sql"],
+        "tests": ["tests/property-profile.test.ts"],
+        "remaining": "Seleção de protocolo em todos os editores antigos e conciliação explícita dos legados."
+      },
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/property-operations.ts"], "tests": ["tests/property-operations.test.ts"], "remaining": "Protocolo obrigatório configurável em todas as alterações individuais." },
       "checklist": "EXE-12",
       "number": 23,
       "title": "Gestão de IPTU",
@@ -124897,6 +124989,7 @@
     },
     {
       "id": "EXE-12.24",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/property-operations.ts"], "tests": ["tests/property-operations.test.ts"], "remaining": "Homologar comprovante e regras municipais de origem/destino; aceite não executado." },
       "checklist": "EXE-12",
       "number": 24,
       "title": "Gestão de IPTU",
@@ -125044,6 +125137,14 @@
     },
     {
       "id": "EXE-12.25",
+      "fifthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Simulação individual/englobada com áreas alternativas do principal e das unidades, efetivação fiscal com hash reconferido e memória imutável, preservando cadastro e avaliação nativa.","code":["src/lib/tributacao/property-group-simulation.ts","src/lib/tributacao/property-simulation-assessment.ts","src/lib/tributacao/property-assessment-coverage.ts"],"tests":["tests/property-profile.test.ts"],"remaining":"Homologar fórmulas municipais, benefícios e campos simuláveis além das áreas; conferir cancelamento/revisão da base simulada."},
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Simulação conjunta de unidades vinculadas ao terreno com PGV/regra, soma de construções, alíquota e memória, sem gravar cadastro/avaliação/lançamento.",
+        "code": ["src/lib/tributacao/property-group-simulation.ts", "src/app/app-domain/tributacao/avaliacoes/simulacao/page.tsx"],
+        "tests": ["tests/property-profile.test.ts", "tests/property-pgv-integration.test.ts"],
+        "remaining": "Overrides individuais das unidades e efetivação fiscal sobre a base simulada sem alterar cadastro."
+      },
       "checklist": "EXE-12",
       "number": 25,
       "title": "Gestão de IPTU",
@@ -125919,6 +126020,14 @@
     },
     {
       "id": "EXE-13.1",
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Cadastro único do contador com correção versionada de CRC, controle de concorrência e preservação de perfis anteriores.",
+        "code": ["src/lib/tributacao/accountants.ts", "src/app/app-domain/tributacao/economico/contadores/page.tsx"],
+        "tests": ["tests/economic-profile.test.ts"],
+        "remaining": "Habilitação municipal e atualização orientada dos perfis econômicos após correção."
+      },
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/economic-profile.ts"], "tests": ["tests/economic-profile.test.ts"], "remaining": "Correção/versionamento de CRC e habilitação municipal do contador." },
       "checklist": "EXE-13",
       "number": 1,
       "title": "Gestão de ISS",
@@ -126065,6 +126174,13 @@
     },
     {
       "id": "EXE-13.2",
+      "fourthContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Atividade CNAE com descrição e vínculos tipados a itens ativos da lista de serviços ISS na mesma origem fiscal.",
+        "code": ["src/lib/tributacao/economic-activity-registry.ts", "src/app/app-domain/tributacao/economico/atividades/page.tsx"],
+        "tests": ["tests/economic-activity-registry.test.ts"],
+        "remaining": "Adoção municipal dos códigos/classificações oficiais e homologação integral dos relacionamentos."
+      },
       "checklist": "EXE-13",
       "number": 2,
       "title": "Gestão de ISS",
@@ -126209,6 +126325,13 @@
     },
     {
       "id": "EXE-13.3",
+      "fourthContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Atividade CNAE admite múltiplas ocupações CBO ativas do cadastro único, com códigos e descrições congelados na versão.",
+        "code": ["src/lib/tributacao/economic-activity-registry.ts", "src/app/app-domain/tributacao/economico/atividades/EconomicActivitiesClient.tsx"],
+        "tests": ["tests/economic-activity-registry.test.ts"],
+        "remaining": "Adoção municipal do catálogo e conferência de identificação dos autônomos em todos os consumidores."
+      },
       "checklist": "EXE-13",
       "number": 3,
       "title": "Gestão de ISS",
@@ -126353,6 +126476,13 @@
     },
     {
       "id": "EXE-13.4",
+      "fourthContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Definição de grau de risco BAIXO, MEDIO, ALTO ou DEPENDENTE por atividade, versionada com fundamento e ator.",
+        "code": ["src/lib/tributacao/economic-activity-registry.ts", "src/app/app-domain/tributacao/economico/atividades/EconomicActivitiesClient.tsx"],
+        "tests": ["tests/economic-activity-registry.test.ts"],
+        "remaining": "Homologação dos enquadramentos municipais e consumo das classificações nos fluxos de licenciamento."
+      },
       "checklist": "EXE-13",
       "number": 4,
       "title": "Gestão de ISS",
@@ -126497,6 +126627,13 @@
     },
     {
       "id": "EXE-13.5",
+      "fourthContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Manutenção geral da descrição, risco, ativação e vínculos da atividade publica definição vigente e preserva versões anteriores.",
+        "code": ["src/lib/tributacao/economic-activity-registry.ts", "prisma/migrations-ibema/20261015170000_economic_activity_registry/migration.sql"],
+        "tests": ["tests/economic-activity-registry.test.ts"],
+        "remaining": "Conferência autenticada do reflexo das características em todos os consumidores municipais."
+      },
       "checklist": "EXE-13",
       "number": 5,
       "title": "Gestão de ISS",
@@ -126641,6 +126778,13 @@
     },
     {
       "id": "EXE-13.6",
+      "fourthContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Unificação atualiza CNAE principal/secundários dos perfis conciliados na origem, elimina duplicações e resolve o código antigo em novas alterações; operação serializada com rollback e versões.",
+        "code": ["src/lib/tributacao/economic-activity-operations.ts", "src/lib/tributacao/economic-activity-registry.ts", "src/app/app-domain/tributacao/economico/atividades/EconomicActivityUnificationClient.tsx"],
+        "tests": ["tests/economic-activity-registry.test.ts"],
+        "remaining": "Referências em campos adicionais genéricos, classificações globais compartilhadas e outros módulos precisam de revisão individual e origem explícita. Legados sem perfil não recebem origem inferida."
+      },
       "checklist": "EXE-13",
       "number": 6,
       "title": "Gestão de ISS",
@@ -126785,6 +126929,7 @@
     },
     {
       "id": "EXE-13.7",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/configurable-cadastres.ts", "src/lib/tributacao/economic-history.ts"], "tests": ["tests/configurable-fiscal-cadastres.test.ts"], "remaining": "Homologar situações econômicas padrão/customizadas; aceite não executado." },
       "checklist": "EXE-13",
       "number": 7,
       "title": "Gestão de ISS",
@@ -126929,6 +127074,7 @@
     },
     {
       "id": "EXE-13.8",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/configurable-cadastres.ts"], "tests": ["tests/configurable-fiscal-cadastres.test.ts"], "remaining": "Conferência autenticada de vistorias econômicas, upload e anexos." },
       "checklist": "EXE-13",
       "number": 8,
       "title": "Gestão de ISS",
@@ -127063,6 +127209,7 @@
     },
     {
       "id": "EXE-13.9",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/configurable-cadastres.ts", "src/lib/tributacao/economic-profile.ts"], "tests": ["tests/economic-profile.test.ts"], "remaining": "Homologar catálogos de tipos por UG e seleção na inclusão integral da empresa." },
       "checklist": "EXE-13",
       "number": 9,
       "title": "Gestão de ISS",
@@ -127209,6 +127356,14 @@
     },
     {
       "id": "EXE-13.10",
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Avaliação de certidão resolve tipos de sócio vigentes na mesma origem e inclui os sujeitos à validação; rascunho negativa recusa pendências desses sujeitos.",
+        "code": ["src/lib/tributacao/certificate-subjects.ts", "src/app/app-domain/tributacao/certidoes/actions.ts"],
+        "tests": ["tests/economic-profile.test.ts"],
+        "remaining": "Emissão oficial, modelos/assinatura e regras integrais de suspensão ou positiva com efeitos de negativa."
+      },
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/configurable-cadastres.ts", "src/lib/tributacao/economic-profile.ts"], "tests": ["tests/economic-profile.test.ts"], "remaining": "Integrar a validação dos tipos de sócio ao emissor de certidão negativa." },
       "checklist": "EXE-13",
       "number": 10,
       "title": "Gestão de ISS",
@@ -127353,6 +127508,7 @@
     },
     {
       "id": "EXE-13.11",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/economic-query.ts"], "tests": ["tests/economic-profile.test.ts"], "remaining": "Conferir todos os filtros e conciliar perfis legados sem inferir origem." },
       "checklist": "EXE-13",
       "number": 11,
       "title": "Gestão de ISS",
@@ -127497,6 +127653,14 @@
     },
     {
       "id": "EXE-13.12",
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Inclusão da inscrição e perfil completo em transação única, incluindo regime, contribuinte, imóveis, atividades, contador/sócios, contrato e endereços.",
+        "code": ["src/lib/tributacao/economic-profile.ts", "src/app/app-domain/tributacao/economico/novo/page.tsx"],
+        "tests": ["tests/economic-profile.test.ts"],
+        "remaining": "Integração dos produtores externos e homologação das regras municipais de atividade."
+      },
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/economic-profile.ts"], "tests": ["tests/economic-profile.test.ts"], "remaining": "Inclusão da inscrição e perfil econômico completo em uma única transação." },
       "checklist": "EXE-13",
       "number": 12,
       "title": "Gestão de ISS",
@@ -127643,6 +127807,15 @@
     },
     {
       "id": "EXE-13.13",
+      "fifthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Prazo provisório padrão em dias por tipo de empresa aplicado à nova inclusão; data inicial e validade ficam na memória do perfil.","code":["src/lib/tributacao/configurable-cadastres.ts","src/lib/tributacao/economic-profile.ts"],"tests":["tests/economic-profile.test.ts"],"remaining":"Implantar cron autenticado e homologar prazos/efeitos municipais."},
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Prazo provisório em dias/data inicial, validade calculada e desativação idempotente pelo job existente.",
+        "code": ["src/lib/tributacao/economic-profile.ts", "src/app/app-domain/tributacao/economico/[id]/perfil/EconomicProfileClient.tsx"],
+        "tests": ["tests/economic-profile.test.ts"],
+        "remaining": "Prazo padrão por tipo e implantação municipal do cron autenticado."
+      },
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/economic-profile.ts", "src/app/api/tributacao/economico/expiracao/route.ts"], "tests": ["tests/economic-profile.test.ts"], "remaining": "Validade em quantidade de dias por tipo e implantação autenticada do cron." },
       "checklist": "EXE-13",
       "number": 13,
       "title": "Gestão de ISS",
@@ -127787,6 +127960,7 @@
     },
     {
       "id": "EXE-13.14",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/app/app-domain/tributacao/economico/[id]/EconomicProfilePosition.tsx"], "tests": ["tests/economic-profile.test.ts"], "remaining": "Conferir última alteração nativa e do perfil na edição autenticada." },
       "checklist": "EXE-13",
       "number": 14,
       "title": "Gestão de ISS",
@@ -127931,6 +128105,7 @@
     },
     {
       "id": "EXE-13.15",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/economic-profile.ts"], "tests": ["tests/economic-profile.test.ts"], "remaining": "Integrar os dois endereços também à inclusão inicial coordenada." },
       "checklist": "EXE-13",
       "number": 15,
       "title": "Gestão de ISS",
@@ -128077,6 +128252,15 @@
     },
     {
       "id": "EXE-13.16",
+      "fifthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Tipo de empresa impõe validação de débitos da empresa e sócios mesmo com flags desmarcados no formulário; alterações verificam a configuração vigente.","code":["src/lib/tributacao/economic-profile.ts","src/lib/tributacao/economic-debt-policy.ts"],"tests":["tests/economic-profile.test.ts"],"remaining":"Integrar inclusões externas ainda sem tipo/perfil de origem explícita."},
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Guarda de dívida compartilhada nas alterações nativas/REDESIM/Simples/formulários e inclusão coordenada com perfil; considera Decimal, pagamentos, compensações e dívida ativa.",
+        "code": ["src/lib/tributacao/economic-debt-policy.ts", "src/lib/tributacao/economic-history.ts", "src/lib/tributacao/economic-profile.ts"],
+        "tests": ["tests/economic-profile.test.ts"],
+        "remaining": "Política municipal geral para inclusão por produtores externos ainda sem perfil de origem conciliada."
+      },
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/economic-profile.ts"], "tests": ["tests/economic-profile.test.ts"], "remaining": "Aplicar a política a todos os produtores de inclusão/alteração econômica, além da gravação do perfil." },
       "checklist": "EXE-13",
       "number": 16,
       "title": "Gestão de ISS",
@@ -128221,6 +128405,7 @@
     },
     {
       "id": "EXE-13.17",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/economic-profile.ts"], "tests": ["tests/economic-profile.test.ts"], "remaining": "Homologar upload GED e consulta/download de anexos na ficha." },
       "checklist": "EXE-13",
       "number": 17,
       "title": "Gestão de ISS",
@@ -128369,6 +128554,7 @@
     },
     {
       "id": "EXE-13.18",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/components/app-ui/GeographicPointPicker.tsx"], "tests": ["tests/economic-profile.test.ts"], "remaining": "Avaliação visual autenticada de seleção e persistência das coordenadas." },
       "checklist": "EXE-13",
       "number": 18,
       "title": "Gestão de ISS",
@@ -128515,6 +128701,7 @@
     },
     {
       "id": "EXE-13.19",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/app/app-domain/tributacao/economico/consulta/page.tsx"], "tests": ["tests/economic-profile.test.ts"], "remaining": "Conferir visualmente todos os marcadores retornados pelos filtros." },
       "checklist": "EXE-13",
       "number": 19,
       "title": "Gestão de ISS",
@@ -128659,6 +128846,7 @@
     },
     {
       "id": "EXE-13.20",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/configurable-cadastres.ts"], "tests": ["tests/configurable-fiscal-cadastres.test.ts"], "remaining": "Homologar configuração e preenchimento dos formulários econômicos." },
       "checklist": "EXE-13",
       "number": 20,
       "title": "Gestão de ISS",
@@ -128803,6 +128991,7 @@
     },
     {
       "id": "EXE-13.21",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/economic-history.ts", "src/lib/tributacao/economic-profile.ts"], "tests": ["tests/tax-property-cadastral-completion.test.ts", "tests/economic-profile.test.ts"], "remaining": "Revisar produtores de todos os relacionamentos econômicos além do perfil." },
       "checklist": "EXE-13",
       "number": 21,
       "title": "Gestão de ISS",
@@ -128947,6 +129136,7 @@
     },
     {
       "id": "EXE-13.22",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/app/app-domain/tributacao/economico/[id]/EconomicProfilePosition.tsx"], "tests": ["tests/economic-profile.test.ts"], "remaining": "Conferir espelho integral; não reconstruir relações/nome anteriores aos snapshots." },
       "checklist": "EXE-13",
       "number": 22,
       "title": "Gestão de ISS",
@@ -129237,6 +129427,13 @@
     },
     {
       "id": "EXE-13.24",
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Alteração geral econômica com filtros, CNAEs principal/secundários, tipo, regime e situação; reconferência transacional de seleção/versões/datas e histórico por cadastro.",
+        "code": ["src/lib/tributacao/economic-operations.ts", "src/app/app-domain/tributacao/economico/alteracao-geral/page.tsx"],
+        "tests": ["tests/economic-profile.test.ts"],
+        "remaining": "Ampliar os campos/relacionamentos em lote e homologar os filtros municipais; limite de 1.000 perfis por operação."
+      },
       "checklist": "EXE-13",
       "number": 24,
       "title": "Gestão de ISS",
@@ -129381,6 +129578,7 @@
     },
     {
       "id": "EXE-13.25",
+      "fifthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Configuração anual por tipo/ente/UG: validade em dias, layout textual próprio, validação de dívida, taxa, isenção fundamentada e prazo anterior ao pagamento; emissão congela a versão.","code":["src/lib/tributacao/license-policy.ts","src/app/app-domain/tributacao/alvaras/configurados/page.tsx"],"tests":["tests/configured-licenses.test.ts"],"remaining":"Modelos e assinatura oficiais; editor gráfico irrestrito de layouts não implementado."},
       "checklist": "EXE-13",
       "number": 25,
       "title": "Gestão de ISS",
@@ -129525,6 +129723,7 @@
     },
     {
       "id": "EXE-13.26",
+      "sixthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Tipo anual configura bloqueios por tipo de empresa e CNAE principal/secundário com mensagem própria, aplicados à emissão interna/lote/portal.","code":["src/lib/tributacao/license-policy.ts","src/app/app-domain/tributacao/alvaras/configurados/LicensePortalPolicyClient.tsx"],"tests":["tests/configured-licenses.test.ts"],"remaining":"Ampliar critérios municipais de bloqueio para demais campos/restrições e homologar as mensagens."},
       "checklist": "EXE-13",
       "number": 26,
       "title": "Gestão de ISS",
@@ -129669,6 +129868,7 @@
     },
     {
       "id": "EXE-13.27",
+      "fifthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Permissão por tipo anual para emissão no portal; serviço compartilhado exige titular autenticado com autorização ALVARAS ativa e rejeita autorização revogada.","code":["src/lib/tributacao/portal-licenses.ts","src/app/portal/tributario/alvaras/page.tsx","src/app/app-domain/tributacao/alvaras/configurados/LicensePortalPolicyClient.tsx"],"tests":["tests/configured-licenses.test.ts"],"remaining":"Homologar tipos municipais disponíveis no portal e regras de concessão de isenção externa."},
       "checklist": "EXE-13",
       "number": 27,
       "title": "Gestão de ISS",
@@ -129828,6 +130028,7 @@
     },
     {
       "id": "EXE-13.28",
+      "fifthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Consulta das emissões configuradas, documento/autenticidade e ciclo auditado de suspensão/cancelamento definitivo; conteúdo emitido é imutável.","code":["src/lib/tributacao/license-lifecycle.ts","src/app/app-domain/tributacao/alvaras/configurados/ConfiguredLicensesClient.tsx","src/app/validar-alvara/[code]/page.tsx"],"tests":["tests/configured-licenses.test.ts"],"remaining":"Filtros completos de período/tipo/empresa e assinatura digital oficial."},
       "checklist": "EXE-13",
       "number": 28,
       "title": "Gestão de ISS",
@@ -129972,6 +130173,7 @@
     },
     {
       "id": "EXE-13.29",
+      "sixthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Ficha econômica lista processos de todos os exercícios explicitamente vinculados à inscrição, lançamentos e alvarás, com assunto/tipo/setor e contagem de trâmites, anexos e despachos; link para detalhes no Protocolo.","code":["src/app/app-domain/tributacao/economico/[id]/EconomicProcesses.tsx","src/app/app-domain/tributacao/economico/[id]/page.tsx"],"tests":[],"remaining":"Conferência autenticada das permissões e detalhes; legados sem perfil de origem exigem conciliação."},
       "checklist": "EXE-13",
       "number": 29,
       "title": "Gestão de ISS",
@@ -130116,6 +130318,7 @@
     },
     {
       "id": "EXE-13.30",
+      "fifthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Emissão individual ou em lote de até 1.000 inscrições por operação transacional, com reconferência das posições e rollback integral se um item falhar.","code":["src/lib/tributacao/license-policy.ts","src/app/app-domain/tributacao/alvaras/configurados/ConfiguredLicensesClient.tsx"],"tests":["tests/configured-licenses.test.ts"],"remaining":"Filtros municipais completos para seleção do lote e conferência autenticada dos documentos emitidos."},
       "checklist": "EXE-13",
       "number": 30,
       "title": "Gestão de ISS",
@@ -130260,6 +130463,7 @@
     },
     {
       "id": "EXE-13.31",
+      "fifthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Consulta pública por código aleatório em /validar-alvara/[code], com documento e situação atual, validade, suspensão e cancelamento; proxy mantém rota pública nos hosts internos.","code":["src/app/validar-alvara/[code]/page.tsx","src/proxy.ts"],"tests":["tests/configured-licenses.test.ts","tests/portal-proxy.test.ts"],"remaining":"Conferência autenticada e pública no domínio municipal após implantação."},
       "checklist": "EXE-13",
       "number": 31,
       "title": "Gestão de ISS",
@@ -132097,6 +132301,7 @@
     },
     {
       "id": "EXE-14.2",
+      "fifthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Conjunto transacional de imóveis/unidades no mesmo processo, mantendo declaração e valor/base/ITBI próprios por item; falha em uma parte reverte todas as inclusões.","code":["src/lib/tributacao/itbi-property-collection.ts","src/app/app-domain/tributacao/itbi/ItbiCollectionClient.tsx"],"tests":["tests/itbi-process-completion.test.ts"],"remaining":"Integração externa da seleção de unidades e apresentação integral dos documentos agregados."},
       "checklist": "EXE-14",
       "number": 2,
       "title": "Gestão de ITBI",
@@ -132523,6 +132728,13 @@
     },
     {
       "id": "EXE-14.5",
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Múltiplos transmitentes e adquirentes com participações; transferência parcial conserva os coproprietários remanescentes e valida cada parcela transmitida.",
+        "code": ["src/lib/tributacao/s3-service.ts", "src/lib/tributacao/itbi-ownership.ts", "src/app/app-domain/tributacao/itbi/ItbiClient.tsx"],
+        "tests": ["tests/tax-property-cadastral-completion.test.ts"],
+        "remaining": "Coleção de transmitentes no executor externo e homologação integral da inclusão on-line."
+      },
       "checklist": "EXE-14",
       "number": 5,
       "title": "Gestão de ITBI",
@@ -132822,6 +133034,14 @@
     },
     {
       "id": "EXE-14.7",
+      "thirdContinuationReview": {
+        "state": "DESENVOLVIMENTO_PARCIAL_SEM_ACEITE",
+        "implemented": "Formulário tipado na inclusão inicial e mesma transação da declaração; validação dos campos e anexos com rollback da declaração se inválido.",
+        "code": ["src/lib/tributacao/configurable-cadastres.ts", "src/lib/tributacao/s3-service.ts", "src/app/app-domain/tributacao/itbi/ItbiClient.tsx"],
+        "tests": ["tests/tax-property-cadastral-completion.test.ts", "tests/configurable-fiscal-cadastres.test.ts"],
+        "remaining": "Formulário inicial no executor on-line e homologação dos modelos municipais."
+      },
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/configurable-cadastres.ts"], "tests": ["tests/configurable-fiscal-cadastres.test.ts"], "remaining": "Integrar formulário à inclusão inicial e ao ITBI on-line." },
       "checklist": "EXE-14",
       "number": 7,
       "title": "Gestão de ITBI",
@@ -132996,6 +133216,7 @@
     },
     {
       "id": "EXE-14.8",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/configurable-cadastres.ts"], "tests": ["tests/configurable-fiscal-cadastres.test.ts"], "remaining": "Upload/acesso on-line de tabelionatos e conferência autenticada dos anexos internos." },
       "checklist": "EXE-14",
       "number": 8,
       "title": "Gestão de ITBI",
@@ -133518,6 +133739,7 @@
     },
     {
       "id": "EXE-14.11",
+      "fifthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Impugnação interna com justificativa/anexos e valor proposto; decisão fiscal readequa crédito e documentos atomicamente, preservando o valor declarado e a trilha original.","code":["src/lib/tributacao/itbi-contestation.ts","src/app/app-domain/tributacao/itbi/processos/page.tsx"],"tests":["tests/itbi-process-completion.test.ts"],"remaining":"Canal externo do tabelionato, configuração de liberação automática e impugnação de crédito já pago."},
       "checklist": "EXE-14",
       "number": 11,
       "title": "Gestão de ITBI",
@@ -133995,6 +134217,7 @@
     },
     {
       "id": "EXE-14.14",
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/s3-service.ts"], "tests": ["tests/tax-property-cadastral-completion.test.ts"], "remaining": "Confirmação interna coordenada testada; integração da liberação on-line pendente." },
       "checklist": "EXE-14",
       "number": 14,
       "title": "Gestão de ITBI",
@@ -134624,6 +134847,8 @@
     },
     {
       "id": "EXE-14.18",
+      "sixthContinuationReview": {"state":"DESENVOLVIMENTO_PARCIAL_SEM_ACEITE","implemented":"Anexos de formulários tipados e impugnações compartilham referência GED com a ficha imobiliária e protocolo na mesma transação, preservando o arquivo original.","code":["src/lib/tributacao/itbi-attachments.ts","src/lib/tributacao/itbi-contestation.ts","src/lib/tributacao/configurable-cadastres.ts"],"tests":["tests/itbi-process-completion.test.ts","tests/tax-property-cadastral-completion.test.ts"],"remaining":"Integrar anexos dos canais externos quando esses produtores forem implementados."},
+      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/s3-service.ts", "src/lib/tributacao/configurable-cadastres.ts"], "tests": ["tests/tax-property-cadastral-completion.test.ts"], "remaining": "Compartilhamento interno implementado; garantir todos os anexos do fluxo on-line." },
       "checklist": "EXE-14",
       "number": 18,
       "title": "Gestão de ITBI",

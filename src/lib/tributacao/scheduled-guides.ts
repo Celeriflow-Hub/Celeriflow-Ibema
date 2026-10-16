@@ -13,6 +13,7 @@ export async function issueScheduledAssessmentGuides(db: PrismaClient, actor: Ta
     const scope = await resolveTaxAssessmentScope(tx, actor, assessment.taxId, assessment.calculationSnapshot);
     if (assessment.updatedAt.toISOString() !== input.expectedUpdatedAt) throw new Error("Lançamento alterado. Recarregue antes de emitir.");
     if (["Cancelado", "Pago", "Extinto", "Suspenso", "Dívida Ativa"].includes(assessment.status)) throw new Error("Crédito indisponível para emissão anual.");
+    if (await tx.itbiDeclaration.count({ where: { assessmentId: assessment.id, status: "IMPUGNADA" } })) throw new Error("ITBI com impugnação pendente não permite nova guia.");
     if (!assessment.finalValueDecimal || assessment.finalValueDecimal.lte(0)) throw new Error("Crédito sem valor Decimal conciliado.");
     if (await tx.taxGuide.count({ where: { assessmentId: assessment.id, status: { not: "Cancelada" } } })) throw new Error("O lançamento possui guias vigentes. Consulte ou cancele as emissões anteriores.");
     if (await tx.taxPayment.count({ where: { guide: { assessmentId: assessment.id }, status: "Confirmado" } }) || (await taxAssessmentCompensatedValue(tx, assessment.id)).gt(0)) throw new Error("Lançamento com recebimento ou compensação exige calendário do saldo remanescente.");

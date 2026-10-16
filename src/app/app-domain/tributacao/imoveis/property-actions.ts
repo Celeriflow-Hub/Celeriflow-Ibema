@@ -6,6 +6,7 @@ import { getTenantContextForModuleOperation, isSystemAdministrator } from "@/lib
 import { assertPropertyCadastralAccess } from "@/lib/tributacao/property-access";
 import { calculateTerritorialFraction, previewPropertyValuation } from "@/lib/tributacao/property-cadastral-engine";
 import { createPropertySubunit } from "@/lib/tributacao/property-subunits";
+import { touchPropertyMetadata } from "@/lib/tributacao/property-history";
 
 type Result<T = undefined> = { data?: T; error?: string };
 
@@ -35,25 +36,36 @@ export async function createCondominiumSubunit(input: { parentId: string; munici
   } catch (error) { return { error: error instanceof Error ? error.message : "Não foi possível criar a subunidade." }; }
 }
 
-export async function copyPropertyCharacteristics(input: { sourceId: string; targetId: string }): Promise<Result<{ copied: number }>> {
+export async function copyPropertyCharacteristics(input: { sourceId: string; targetId: string; processId?: string }): Promise<Result<{ copied: number }>> {
   try {
     if (input.sourceId === input.targetId) throw new Error("Selecione imóveis diferentes para copiar características.");
     const context = await getTenantContextForModuleOperation("TRIBUTACAO", "update");
     const copied = await context.prisma.$transaction(async (tx) => {
       const actor = { usuarioId: context.user.id, employeeId: context.user.employeeId, allowedBudgetUnitIds: isSystemAdministrator(context.user) ? undefined : context.user.allowedBudgetUnitIds };
+      for (const id of [input.sourceId, input.targetId].sort()) await tx.$queryRaw`SELECT id FROM "RealEstate" WHERE id=${id} FOR UPDATE`;
       const origin = await assertPropertyCadastralAccess(tx, actor, input.sourceId);
       const destination = await assertPropertyCadastralAccess(tx, actor, input.targetId);
-      if (origin.scope.budgetUnitId !== destination.scope.budgetUnitId || origin.scope.governmentEntityId !== destination.scope.governmentEntityId) throw new Error("Copie características somente entre imóveis da mesma origem conciliada.");
+      if (!origin.profile || !destination.profile || origin.scope.budgetUnitId !== destination.scope.budgetUnitId || origin.scope.governmentEntityId !== destination.scope.governmentEntityId) throw new Error("Copie características somente entre imóveis da mesma origem conciliada.");
       const [source, target, entries] = await Promise.all([
         tx.realEstate.findUnique({ where: { id: input.sourceId }, select: { id: true } }),
         tx.realEstate.findUnique({ where: { id: input.targetId }, select: { id: true } }),
-        tx.taxRegistryEntry.findMany({ where: { entityType: "REAL_ESTATE", entityId: input.sourceId, category: { in: ["BCI", "AREA", "CARACTERISTICA", "ATRIBUTO"] }, status: "ATIVO" } }),
+        tx.taxRegistryEntry.findMany({ where: { entityType: "REAL_ESTATE", entityId: input.sourceId, category: { in: ["BCI", "AREA", "CARACTERISTICA", "ATRIBUTO"] } }, orderBy: [{ version: "desc" }, { createdAt: "desc" }] }),
       ]);
       if (!source || !target) throw new Error("Imóvel de origem ou destino não encontrado.");
-      if (!entries.length) throw new Error("O imóvel de origem não possui características ativas para copiar.");
-      await tx.taxRegistryEntry.createMany({ data: entries.map((entry) => ({ entityType: "REAL_ESTATE", entityId: input.targetId, category: entry.category, title: entry.title, data: { copiedFrom: input.sourceId, snapshot: entry.data } as Prisma.InputJsonValue, status: "PENDENTE_VALIDACAO", source: "COPIA_CADASTRAL", effectiveFrom: new Date(), actorUsuarioId: context.user.id, version: entry.version + 1 })) });
-      await tx.taxAuditLog.create({ data: { action: "COPY_CHARACTERISTICS", entityType: "RealEstate", entityId: input.targetId, payload: { sourceId: input.sourceId, count: entries.length, status: "PENDENTE_VALIDACAO" }, authorUsuarioId: context.user.id, authorEmployeeId: context.user.employeeId } });
-      return entries.length;
+      const latest = new Map<string, typeof entries[number]>();
+      for (const entry of entries) if (!latest.has(`${entry.category}:${entry.title}`)) latest.set(`${entry.category}:${entry.title}`, entry);
+      const active = [...latest.values()].filter(entry => entry.status === "ATIVO" && entry.effectiveFrom <= new Date() && (!entry.effectiveUntil || entry.effectiveUntil > new Date()));
+      if (!active.length) throw new Error("O imóvel de origem não possui características ativas para copiar.");
+      const processId = input.processId?.trim() || null;
+      if (processId && !await tx.process.findUnique({ where: { id: processId } })) throw new Error("Protocolo não encontrado.");
+      await touchPropertyMetadata(tx, context.user.id, input.targetId, processId);
+      for (const entry of active) {
+        const previous = await tx.taxRegistryEntry.findFirst({ where: { entityType: "REAL_ESTATE", entityId: input.targetId, category: entry.category, title: entry.title }, orderBy: { version: "desc" } });
+        const data = entry.data && typeof entry.data === "object" && !Array.isArray(entry.data) ? entry.data : {};
+        await tx.taxRegistryEntry.create({ data: { entityType: "REAL_ESTATE", entityId: input.targetId, category: entry.category, title: entry.title, processId, documentId: entry.documentId, data: { ...data, governmentEntityId: destination.scope.governmentEntityId, budgetUnitId: destination.scope.budgetUnitId, copiedFrom: input.sourceId, sourceEntryId: entry.id, previousId: previous?.id ?? null, snapshot: entry.data } as Prisma.InputJsonValue, status: "PENDENTE_VALIDACAO", source: "COPIA_CADASTRAL", effectiveFrom: new Date(), actorUsuarioId: context.user.id, version: (previous?.version ?? 0) + 1 } });
+      }
+      await tx.taxAuditLog.create({ data: { action: "COPY_CHARACTERISTICS", entityType: "RealEstate", entityId: input.targetId, payload: { sourceId: input.sourceId, count: active.length, processId, status: "PENDENTE_VALIDACAO" }, authorUsuarioId: context.user.id, authorEmployeeId: context.user.employeeId } });
+      return active.length;
     });
     revalidatePath(`/tributacao/imoveis/${input.targetId}`);
     return { data: { copied } };

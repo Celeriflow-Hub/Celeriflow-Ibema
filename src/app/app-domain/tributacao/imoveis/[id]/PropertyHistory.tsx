@@ -3,6 +3,7 @@ import { taxScopeSnapshot } from "@/lib/tributacao/scope";
 import ConfiguredFiscalDetails from "../../cadastros-fiscais/ConfiguredFiscalDetails";
 import FiscalReferenceFilter from "../../cadastros-fiscais/FiscalReferenceFilter";
 import PropertyProfilePosition from "./PropertyProfilePosition";
+import CadastralRelationships from "../../cadastros-fiscais/CadastralRelationships";
 
 const labels: Record<string, string> = { municipalInsc: "Inscrição municipal", registration: "Matrícula", propertyType: "Tipo", status: "Situação", streetName: "Logradouro", number: "Número", complement: "Complemento", lot: "Lote", block: "Quadra", landArea: "Área do terreno", builtArea: "Área construída", propertyUse: "Uso", fiscalZone: "Zona fiscal", neighborhoodId: "Bairro", streetId: "Logradouro cadastrado", taxpayerId: "Titular principal" };
 
@@ -20,5 +21,6 @@ export default async function PropertyHistory({ prisma, id, at }: { prisma: Pris
     <div className="mt-2 max-h-40 overflow-auto"><table className="w-full text-left text-xs"><thead><tr><th>Data / usuário</th><th>Campo</th><th>Anterior</th><th>Novo</th></tr></thead><tbody>{entries.flatMap(entry => { const memory = taxScopeSnapshot(entry.data); const before = taxScopeSnapshot(memory.before); const after = taxScopeSnapshot(memory.after); const changed = Array.isArray(memory.fields) ? memory.fields.filter((field): field is string => typeof field === "string") : []; return changed.map(field => <tr key={`${entry.id}:${field}`} className="border-t"><td className="py-1">{entry.effectiveFrom.toLocaleString("pt-BR")} · {names.get(entry.actorUsuarioId ?? "") ?? entry.actorUsuarioId ?? "Origem sem usuário atribuído"}</td><td>{labels[field] ?? field}</td><td>{memory.baseline ? "Posição inicial" : String(before[field] ?? "Não informado")}</td><td>{String(after[field] ?? "Não informado")}</td></tr>); })}</tbody></table>{!entries.length && <p className="text-xs text-slate-500">Sem posições documentadas. O próximo movimento registrará a posição observada e a alteração.</p>}</div>
     <ConfiguredFiscalDetails prisma={prisma} entityType="REAL_ESTATE" entityId={id} at={at}/>
     <PropertyProfilePosition prisma={prisma} id={id} at={at}/>
+    <CadastralRelationships prisma={prisma} entityType="REAL_ESTATE" entityId={id} at={at}/>
   </section>;
 }

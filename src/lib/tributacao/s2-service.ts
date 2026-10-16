@@ -8,6 +8,7 @@ import { assertTaxCreditScope, recordTaxExcessInTransaction, resolveCreditDestin
 import { assertAccountingPeriodOpen, postAccountingEventInTransaction } from "@/lib/financeiro";
 import { recognizeTaxAssessmentInTransaction, postTaxAssessmentAdjustment, recognizedTaxProfile } from "./accrual-accounting";
 import { recognizeSettledItbiExcess, reverseSettledItbiExcess, settledItbiExcessCredits } from "./itbi-settled-excess";
+import { assertAssessmentCadastralScope } from "./assessment-cadastral-scope";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -116,6 +117,7 @@ export async function createParametrizedAssessmentInTransaction(
     if (input.realEstateId && (!property || property.taxpayerId !== taxpayer.id)) throw new TaxError("O imóvel não pertence ao contribuinte selecionado.");
     if(input.realEstateId) await assertPropertyOutsideAssessedSimulation(tx,{realEstateId:input.realEstateId,taxId:input.taxId,year});
     if (input.economicRegistrationId && (!registration || registration.taxpayerId !== taxpayer.id)) throw new TaxError("A inscrição econômica não pertence ao contribuinte selecionado.");
+    await assertAssessmentCadastralScope(tx, actor, scope, input);
     const assessmentNumber = await nextNumber(tx, year, "ASSESSMENT");
     const base = new Prisma.Decimal(String(input.taxableBase));
     const rate = configuration.formula === "PERCENTUAL_BASE" ? new Prisma.Decimal(String(configuration.rate ?? 0)) : base.isZero() ? new Prisma.Decimal(0) : calculation.principal.div(base).mul(100);
@@ -299,6 +301,7 @@ export async function generatePartialTaxGuide(db: PrismaClient, actor: TaxActor,
     const position = await assessmentPosition(tx, input.assessmentId);
     const scope = await assessmentScope(tx, actor, position.assessment);
     if (["Cancelado", "Pago", "Extinto", "Suspenso"].includes(position.assessment.status)) throw new TaxError("O lançamento não está disponível para emissão.");
+    if (await tx.itbiDeclaration.count({ where: { assessmentId: input.assessmentId, status: "IMPUGNADA" } })) throw new TaxError("ITBI com impugnação pendente não permite nova guia.");
     if (requested.greaterThan(position.availableForGuide)) throw new TaxError(`O valor disponível para novos DAMs é ${position.availableForGuide.toFixed(2)}.`);
     const guideNumber = await nextNumber(tx, position.assessment.year, "GUIDE");
     const guide = await tx.taxGuide.create({ data: { assessmentId: position.assessment.id, guideNumber, totalValue: Number(requested), totalValueDecimal: requested, dueDate: input.dueDate, documentId: input.documentId, status: "Emitida", calculationSnapshot: { ...scope, assessmentId: position.assessment.id, amount: requested.toFixed(2), effect: "EMISSAO_SEM_BAIXA" } } });
@@ -323,6 +326,7 @@ export async function generateGroupedTaxGuides(db: PrismaClient, actor: TaxActor
       await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${assessment.id} FOR UPDATE`;
       const position = await assessmentPosition(tx, assessment.id);
       if (["Cancelado", "Pago", "Extinto", "Suspenso"].includes(position.assessment.status)) throw new TaxError("O lançamento não está disponível para emissão agrupada.");
+      if (await tx.itbiDeclaration.count({ where: { assessmentId: assessment.id, status: "IMPUGNADA" } })) throw new TaxError("ITBI com impugnação pendente não permite nova guia.");
       if (position.availableForGuide.lessThanOrEqualTo(0)) throw new TaxError(`O lançamento ${assessment.assessmentNumber ?? assessment.id} não possui saldo livre para emissão.`);
       const guideNumber = await nextNumber(tx, assessment.year, "GUIDE");
       const guide = await tx.taxGuide.create({ data: { assessmentId: assessment.id, guideNumber, totalValue: Number(position.availableForGuide), totalValueDecimal: position.availableForGuide, dueDate: input.dueDate, status: "Emitida", calculationSnapshot: { ...scopes[0], groupId, assessmentId: assessment.id, amount: position.availableForGuide.toFixed(2), effect: "EMISSAO_SEM_BAIXA" } } });

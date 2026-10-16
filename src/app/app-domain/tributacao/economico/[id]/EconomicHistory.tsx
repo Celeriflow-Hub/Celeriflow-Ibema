@@ -3,6 +3,7 @@ import { taxScopeSnapshot } from "@/lib/tributacao/scope";
 import ConfiguredFiscalDetails from "../../cadastros-fiscais/ConfiguredFiscalDetails";
 import FiscalReferenceFilter from "../../cadastros-fiscais/FiscalReferenceFilter";
 import EconomicProfilePosition from "./EconomicProfilePosition";
+import CadastralRelationships from "../../cadastros-fiscais/CadastralRelationships";
 
 export default async function EconomicHistory({ prisma, registrationId, at }: { prisma: PrismaClient; registrationId: string; at?: string }) {
   const entries = await prisma.taxRegistryEntry.findMany({ where: { entityType: "ECONOMIC_REGISTRATION", entityId: registrationId, category: "CADASTRAL_HISTORY" }, orderBy: { version: "desc" } });
@@ -21,5 +22,6 @@ export default async function EconomicHistory({ prisma, registrationId, at }: { 
     <div className="mt-2 max-h-40 overflow-auto"><table className="w-full text-left text-xs"><thead><tr><th>Data / usuário</th><th>Campo</th><th>Anterior</th><th>Novo</th></tr></thead><tbody>{entries.flatMap(entry => { const memory = taxScopeSnapshot(entry.data); const before = taxScopeSnapshot(memory.before); const after = taxScopeSnapshot(memory.after); const changed = Array.isArray(memory.fields) ? memory.fields.filter((field): field is string => typeof field === "string") : []; return changed.map(field => <tr key={`${entry.id}:${field}`} className="border-t"><td className="py-1">{entry.effectiveFrom.toLocaleString("pt-BR")} · {names.get(entry.actorUsuarioId ?? "") ?? entry.actorUsuarioId}</td><td>{field}</td><td>{memory.baseline ? "Posição inicial documentada" : String(before[field] ?? "Não informado")}</td><td>{String(after[field] ?? "Não informado")}</td></tr>); })}</tbody></table>{!entries.length && <p className="text-xs text-slate-500">Histórico será registrado a partir da próxima alteração; posições anteriores não foram reconstruídas.</p>}</div>
     <ConfiguredFiscalDetails prisma={prisma} entityType="ECONOMIC_REGISTRATION" entityId={registrationId} at={at}/>
     <EconomicProfilePosition prisma={prisma} id={registrationId} at={at}/>
+    <CadastralRelationships prisma={prisma} entityType="ECONOMIC_REGISTRATION" entityId={registrationId} at={at}/>
   </section>;
 }

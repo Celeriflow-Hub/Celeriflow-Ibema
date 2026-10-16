@@ -8,6 +8,7 @@ import { evaluateCertificateInTransaction } from "./certificate-subjects";
 import { assertPropertyOutsideAssessedSimulation } from "./property-assessment-coverage";
 import { applyConditionalGuideDiscount } from "./conditional-discounts";
 import { fiscalPaymentOptionsSchema } from "./fiscal-payment-option-schema";
+import { assertAssessmentCadastralScope } from "./assessment-cadastral-scope";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -150,6 +151,7 @@ export async function createTaxAssessmentInTransaction(
       const registration = await tx.economicRegistration.findUnique({ where: { id: input.economicRegistrationId }, select: { taxpayerId: true, status: true } });
       if (!registration || registration.taxpayerId !== input.taxpayerId || registration.status !== "Ativo") throw new TaxError("A inscrição econômica deve estar ativa e pertencer ao contribuinte.");
     }
+    await assertAssessmentCadastralScope(tx, actor, scope, input);
     const assessmentNumber = await nextNumber(tx, input.year, "ASSESSMENT");
     const assessment = await tx.taxAssessment.create({
       data: {

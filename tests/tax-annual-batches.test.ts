@@ -54,6 +54,7 @@ for (const jurisdiction of ["EXECUTIVE", "LEGISLATIVE"] as const) {
       assert.equal(await f.db.taxAssessment.count(), 2);
       assert.equal((await f.db.taxAnnualBatch.findUniqueOrThrow({ where: { id: replay.id } })).status, "COMPLETED");
       await f.db.realEstate.create({ data: { id: "annual-property", taxpayerId: "annual-payer", municipalInsc: "ANNUAL-1" } });
+      await f.db.taxRegistryEntry.create({ data: { entityType: "REAL_ESTATE", entityId: "annual-property", category: "PROPERTY_PROFILE", title: "Origem do imóvel conferida", data: { governmentEntityId: "ente", budgetUnitId: "ug" } } });
       const propertyInput = { taxId: "annual-tax", parameterId: "annual-rule", year: 2026, realEstateIds: ["annual-property"], reason: "Avaliações anuais conferidas e documentadas", idempotencyKey: "annual-property-job" };
       await assert.rejects(simulateTaxAnnualPropertyBatch(f.db, f.actor, propertyInput), /sem avaliação/);
       await f.db.propertyValuation.create({ data: { id: "annual-value", realEstateId: "annual-property", year: 2026, venalValueDecimal: "1000.01", source: "Avaliação municipal documentada" } });

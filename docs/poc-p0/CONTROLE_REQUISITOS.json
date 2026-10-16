@@ -124989,7 +124989,7 @@
     },
     {
       "id": "EXE-12.24",
-      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/property-operations.ts"], "tests": ["tests/property-operations.test.ts"], "remaining": "Homologar comprovante e regras municipais de origem/destino; aceite não executado." },
+      "developmentReview": { "record": "docs/poc-p0/REVISAO_IPTU_ISS_ITBI_2026_10_15.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/property-operations.ts", "src/lib/tributacao/property-profile.ts"], "tests": ["tests/property-operations.test.ts", "tests/property-reorganization-links.test.ts"], "remaining": "Regressão de perfis e remanejamento explícito das unidades e build aprovados; homologar comprovante e regras municipais de origem/destino; aceite não executado." },
       "checklist": "EXE-12",
       "number": 24,
       "title": "Gestão de IPTU",
@@ -128991,7 +128991,7 @@
     },
     {
       "id": "EXE-13.21",
-      "developmentReview": { "record": "docs/poc-p0/IMPLEMENTACAO_IPTU_ISS_ITBI_2026_10_14.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/economic-history.ts", "src/lib/tributacao/economic-profile.ts"], "tests": ["tests/tax-property-cadastral-completion.test.ts", "tests/economic-profile.test.ts"], "remaining": "Revisar produtores de todos os relacionamentos econômicos além do perfil." },
+      "developmentReview": { "record": "docs/poc-p0/REVISAO_IPTU_ISS_ITBI_2026_10_15.md", "coverage": "PARCIAL", "code": ["src/lib/tributacao/economic-history.ts", "src/lib/tributacao/economic-profile.ts", "src/lib/tributacao/cadastral-relationships.ts"], "tests": ["tests/tax-property-cadastral-completion.test.ts", "tests/economic-profile.test.ts", "tests/cadastral-relationships.test.ts"], "remaining": "Regressão do espelho complementar e decisões por data e build aprovados; conferir telas autenticadas e parâmetros municipais; aceite não executado." },
       "checklist": "EXE-13",
       "number": 21,
       "title": "Gestão de ISS",

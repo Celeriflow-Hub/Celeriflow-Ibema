@@ -30,7 +30,7 @@ export default function RedesimClient({ events, taxpayers }: { events: EventRow[
     });
     if (result.error) return setMessage(result.error);
     setOpen(false);
-    setMessage(result.duplicate ? "O evento já havia sido processado; a inscrição existente foi preservada." : "Evento registrado e processado no ambiente interno controlado.");
+    setMessage(!result.applied ? "Evento registrado sem alteração cadastral aplicada. Confira sua situação e a ordem dos eventos na lista." : result.duplicate ? "O evento já havia sido processado; a inscrição existente foi preservada." : "Evento registrado e processado no ambiente interno controlado.");
   }
 
   return <div className="flex h-full min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2 sm:p-2.5">

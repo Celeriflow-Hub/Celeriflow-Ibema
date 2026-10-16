@@ -52,6 +52,10 @@ import { getHealthRaasSources } from "../src/lib/saude/raas-source-service";
 import { configureHealthFollowup, followupBatchForActor, generateHealthFollowupBatches } from "../src/lib/saude/followup-exchange-service";
 import { processHealthFollowupBatch } from "../src/lib/saude/followup-receiver-service";
 import { addWaitlist, transitionWaitlist } from "../src/lib/saude/schedule-service";
+import { captureCareIndicatorContext, classifyHealthTeam } from "../src/lib/saude/indicator-context";
+import { healthAnnualSeries, healthCareIndicators } from "../src/lib/saude/health-indicator-service";
+import { healthIndicatorDocument } from "../src/lib/saude/health-indicator-document";
+import { createVisit } from "../src/lib/saude/territory-service";
 
 test("Saúde: aprovação de entradas, cotas sem duplicação e observação vinculada à evolução clínica", async () => {
   const previous = process.env.CELERIFLOW_ACCOUNTING_MODE;
@@ -83,6 +87,7 @@ test("Saúde: aprovação de entradas, cotas sem duplicação e observação vin
     names.push("HealthMedicationAdministration", "SpecializedDistribution", "SpecializedQuota");
     names.push("HealthProcedurePriceTable", "HealthProcedurePriceItem", "HealthCareAgreement", "HealthCareCoverage");
     names.push("HealthWaitlistEvent", "HealthClinicalExamReview", "IntegrationConnection", "IntegrationRun", "HealthFollowupReceiver", "HealthFollowupBinding", "HealthFollowupBatch", "HealthFollowupBatchItem", "HealthFollowupReceipt", "HealthFollowupRecord", "HealthFollowupProcessedKey", "HealthFollowupResult");
+    names.push("HealthTeamClassificationEvent");
     for (const name of names) {
       const model = Prisma.dmmf.datamodel.models.find(model => model.name === name)!;
       const definition = new RegExp(`^model ${name} \\{([\\s\\S]*?)^\\}`, "m").exec(schema)![1];
@@ -459,8 +464,11 @@ test("Saúde: aprovação de entradas, cotas sem duplicação e observação vin
     const received = await createExtendedRows(context, { reportType: "DOC_DISPENSATION", recordId: dispensation.id });
     assert.equal(received?.rows.find(row => row.Campo === "Retirante")?.Valor, "slot-person-two");
     await assert.rejects(dispenseElectronicPrescription(context, { ...electronicInput, idempotencyKey: "electronic-over-prescription" }), /saldo da prescrição/);
+    const seriesYear = Number(new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }).slice(0, 4));
+    const dispensationSeriesBeforeCancellation = (await healthAnnualSeries(onlyUnitOne, { fromYear: seriesYear, toYear: seriesYear })).rows[0].dispensations;
     await cancelMedicineDispensation(context, { dispensationId: dispensation.id, reason: "Cancelamento justificado" });
     await cancelMedicineDispensation(context, { dispensationId: dispensation.id, reason: "Repetição da confirmação" });
+    assert.equal((await healthAnnualSeries(onlyUnitOne, { fromYear: seriesYear, toYear: seriesYear })).rows[0].dispensations, dispensationSeriesBeforeCancellation - 1);
     assert.equal((await f.db.materialStock.findUniqueOrThrow({ where: { id: invoiceStock.id } })).quantity, 20);
     assert.equal(await f.db.healthDispensationEvent.count({ where: { dispensationId: dispensation.id, kind: "CANCELLED" } }), 1);
     await assert.rejects(createExtendedRows(context, { reportType: "DOC_DISPENSATION", recordId: dispensation.id }), /cancelada/);
@@ -636,8 +644,10 @@ test("Saúde: aprovação de entradas, cotas sem duplicação e observação vin
     await f.db.materialStock.update({ where: { id: vaccineStock.id }, data: { blockedAt: null, expirationDate: new Date("2020-01-01") } });
     await assert.rejects(recordVaccination(context, { ...application, idempotencyKey: "vax-expired-lot" }), /bloqueado ou vencido/);
     await f.db.materialStock.update({ where: { id: vaccineStock.id }, data: { expirationDate: new Date("2030-12-31") } });
+    const vaccinationsBeforeApplication = (await healthAnnualSeries(onlyUnitOne, { fromYear: seriesYear, toYear: seriesYear })).rows[0].vaccinations;
     const firstApplication = await recordVaccination(context, application);
     assert.equal((await recordVaccination(context, application)).id, firstApplication.id);
+    assert.equal((await healthAnnualSeries(onlyUnitOne, { fromYear: seriesYear, toYear: seriesYear })).rows[0].vaccinations, vaccinationsBeforeApplication + 1);
     const savedApplication = await f.db.vaccinationRecord.findUniqueOrThrow({ where: { id: firstApplication.id } });
     assert.equal(savedApplication.date.valueOf(), application.appliedAt.valueOf()); assert.equal(savedApplication.professionalId, "vax-nurse"); assert.equal(savedApplication.actorUsuarioId, context.user.id); assert.equal(savedApplication.indicationEventId, indication.id);
     assert.equal((await f.db.materialStock.findUniqueOrThrow({ where: { id: vaccineStock.id } })).quantity, 19);
@@ -1045,7 +1055,7 @@ test("Saúde: aprovação de entradas, cotas sem duplicação e observação vin
     assert.equal(await f.db.healthFollowupRecord.count({ where: { receiverId: gestationalBinding.receiverId } }), gestationalBatches.total);
     stage = "Hipertensão e diabetes: dados estruturados recebidos com identidade e origem clínica";
     const chronicBinding = await configureHealthFollowup(context, { unitId: "health-u1", contract: "CELERIFLOW_HIPERDIA", code: "CRONICOS_UNIT_ONE", name: "Hipertensão e diabetes da unidade" });
-    const backgroundCondition = await f.db.healthPatientCondition.create({ data: { patientId: "health-patient", kind: "CHRONIC", label: "Condição preexistente registrada no cadastro", startedAt: new Date("2026-01-01T12:00:00Z"), narrative: "Origem clínica anterior não vinculada a atendimento local", actorUsuarioId: context.user.id, medicalRecordId: null, professionalId: null } });
+    const backgroundCondition = await f.db.healthPatientCondition.create({ data: { patientId: "health-patient", kind: "CHRONIC", label: "Condição preexistente registrada no cadastro", startedAt: new Date("2026-01-01T12:00:00Z"), narrative: "Condição registrada pelo profissional sem vínculo a atendimento local", actorUsuarioId: context.user.id, medicalRecordId: null, professionalId: "health-professional" } });
     const chronicBatch = await generateHealthFollowupBatches(context, { bindingId: chronicBinding.id, requestKey: randomUUID(), fromDate: "2000-01-01", toDate: dateText(0) });
     const chronicReceipt = await processHealthFollowupBatch(context, chronicBatch.batchIds[0]);
     assert.equal(chronicReceipt.rejected, 0); assert.ok(chronicReceipt.accepted > 0);
@@ -1132,6 +1142,74 @@ test("Saúde: aprovação de entradas, cotas sem duplicação e observação vin
       await assert.rejects(f.db.healthWaitlistEvent.update({ where: { id: waitingEvidence.id }, data: { notes: "Tentativa de alteração do histórico" } }), /imutável/);
       assert.equal((await processHealthFollowupBatch(context, riraBatch.batchIds[0])).protocol, partialReceipt.protocol);
     }
+    stage = "Indicadores: população nominal, dez linhas de cuidado e mudança por operação clínica";
+    await f.db.healthUnit.createMany({ data: [{ id: "indicator-u1", name: "Unidade dos indicadores", type: "UBS" }, { id: "indicator-u2", name: "Outra unidade dos indicadores", type: "UBS" }] });
+    const indicatorContext = { ...context, user: { ...context.user, profileCode: "HEALTH_OPERATOR", hasHealthAccessScope: true, allowedHealthUnitIds: ["indicator-u1"] } };
+    for (const [id, birthDate] of [["elder", "1940-01-01"], ["child", "2004-09-01"], ["mother", "1980-01-01"], ["unknown", null], ["foreign", "1940-01-01"]] as const) {
+      await f.db.person.create({ data: { id: `indicator-person-${id}`, fullName: `Indicador ${id}`, cpf: null, birthDate: birthDate ? new Date(birthDate) : null, phonePrimary: id === "elder" ? "41999990000" : null, status: "Ativo" } });
+      await f.db.patient.create({ data: { id: `indicator-patient-${id}`, personId: `indicator-person-${id}`, referenceUnitId: id === "foreign" ? "indicator-u2" : "indicator-u1", status: "Ativo" } });
+    }
+    await f.db.healthTeam.create({ data: { id: "indicator-team", name: "Equipe dos indicadores", unitId: "indicator-u1" } });
+    await f.db.healthProfessionalAssignment.create({ data: { professionalId: "health-professional", unitId: "indicator-u1", isActive: true } });
+    await f.db.healthProfessional.update({ where: { id: "health-professional" }, data: { teamId: "indicator-team", cbo: "225125" } });
+    await classifyHealthTeam(indicatorContext, { teamId: "indicator-team", classification: "EMULTI", reason: "Classificação da equipe do cenário isolado" });
+    const careSnapshot = await captureCareIndicatorContext(f.db, "health-professional", "indicator-u1");
+    for (const id of ["elder", "child", "mother", "unknown", "postpartum"] as const) await f.db.medicalRecord.create({ data: { id: `indicator-record-${id}`, patientId: `indicator-patient-${id === "postpartum" ? "mother" : id}`, unitId: "indicator-u1", professionalId: "health-professional", date: new Date(id === "postpartum" ? "2005-03-15T12:00:00Z" : "2005-03-03T12:00:00Z"), careContextSnapshot: id === "unknown" ? { ...careSnapshot, professionalCbo: "223208" } : careSnapshot, ...(id === "child" ? { weight: 7, height: 0.6 } : {}) } });
+    await f.db.medicalRecord.createMany({ data: [{ id: "indicator-record-legacy", patientId: "indicator-patient-unknown", unitId: "indicator-u1", professionalId: "health-professional", date: new Date("2004-05-01T12:00:00Z"), completedAt: new Date("2004-05-01T13:00:00Z") }, { id: "indicator-record-foreign", patientId: "indicator-patient-foreign", unitId: "indicator-u2", professionalId: "health-professional", date: new Date("2005-03-03T12:00:00Z"), completedAt: new Date("2005-03-03T13:00:00Z"), careContextSnapshot: careSnapshot }] });
+    const indicatorPregnancy = await openPregnancy(indicatorContext, { ...pregnancyInput, medicalRecordId: "indicator-record-mother", lastMenstrualDate: "2004-11-01" });
+    await recordPrenatalVisit(indicatorContext, { medicalRecordId: "indicator-record-mother", pregnancyId: indicatorPregnancy.id, weight: 65, bloodPressure: "120/80", notes: "Consulta pré-natal estruturada" });
+    await closePregnancy(indicatorContext, { medicalRecordId: "indicator-record-postpartum", pregnancyId: indicatorPregnancy.id, outcome: "DELIVERED", reason: "Parto informado na consulta puerperal", gestationalDaysAtBirth: 140, deliveryType: "Vaginal", deliveryLocation: "Hospital", deliveryDate: "2005-03-12", clinicalConditions: "Avaliação puerperal registrada" });
+    for (const conditionKind of ["HYPERTENSION", "DIABETES"]) await recordChronicAssessment(indicatorContext, { medicalRecordId: "indicator-record-elder", conditionKind, systolic: 120, diastolic: 80, glucose: 100, hba1c: null, riskFactors: [], complications: [], notes: "Medidas do acompanhamento longitudinal" });
+    for (const kind of ["CYTOLOGY", "MAMMOGRAPHY"]) await saveClinicalScreening(indicatorContext, { medicalRecordId: "indicator-record-mother", id: null, kind, eligible: true, eligibilityReason: "Elegibilidade avaliada pelo profissional", performedAt: "2005-03-03", resultedAt: null, result: null, examRequestId: null, followupNotes: "Acompanhamento do rastreamento" });
+    await recordDentalMark(indicatorContext, { ...dental, medicalRecordId: "indicator-record-unknown" });
+    const indicatorInput = { period: "2005-03" };
+    const beforeCare = await healthCareIndicators(indicatorContext, indicatorInput);
+    assert.equal(beforeCare.indicators.length, 10);
+    for (const metric of beforeCare.indicators) { assert.equal(metric.numerator, 0, metric.key); assert.equal(metric.denominator, metric.key === "EMULTI" ? 4 : metric.key === "DENTAL" ? 0 : 1, metric.key); }
+    assert.equal(beforeCare.dataQuality.missingBirth[0].patientId, "indicator-patient-unknown");
+    assert.ok(beforeCare.indicators.every(metric => metric.people.every(person => person.patientId !== "indicator-patient-foreign")));
+    for (const id of ["elder", "child", "mother", "unknown", "postpartum"]) await concludeHealthCare(indicatorContext, { medicalRecordId: `indicator-record-${id}`, outcome: "Alta", conduct: "Cuidados e acompanhamento registrados" });
+    const afterCare = await healthCareIndicators(indicatorContext, indicatorInput);
+    for (const metric of afterCare.indicators) { assert.equal(metric.numerator, metric.denominator, metric.key); assert.equal(metric.percentage, 100, metric.key); assert.ok(metric.people.every(person => person.status === "RECORDED" && person.evidence.length)); }
+    await classifyHealthTeam(indicatorContext, { teamId: "indicator-team", classification: "OTHER", reason: "Revisão preserva os contextos já gravados" });
+    assert.equal((await healthCareIndicators(indicatorContext, indicatorInput)).indicators.find(metric => metric.key === "EMULTI")?.numerator, 4);
+    assert.equal((await f.db.healthTeamClassificationEvent.findMany({ where: { teamId: "indicator-team" } })).length, 2);
+    const indicatorCollective = { ...collective, unitId: "indicator-u1", teamId: "indicator-team", occurredAt: "2005-04-03", participantIds: ["indicator-person-unknown"], procedureId: null };
+    await recordCollectiveActivity(indicatorContext, indicatorCollective);
+    assert.equal((await healthCareIndicators(indicatorContext, { period: "2005-04" })).indicators.find(metric => metric.key === "EMULTI")?.numerator, 0);
+    await classifyHealthTeam(indicatorContext, { teamId: "indicator-team", classification: "EMULTI", reason: "Retomada da classificação no cenário coletivo" });
+    await recordCollectiveActivity(indicatorContext, { ...indicatorCollective, activityType: "TEAM_MEETING", practices: [] });
+    assert.equal((await healthCareIndicators(indicatorContext, { period: "2005-04" })).indicators.find(metric => metric.key === "EMULTI")?.numerator, 0);
+    await recordCollectiveActivity(indicatorContext, indicatorCollective);
+    await recordCollectiveActivity(indicatorContext, indicatorCollective);
+    assert.equal((await healthCareIndicators(indicatorContext, { period: "2005-04" })).indicators.find(metric => metric.key === "EMULTI")?.numerator, 1);
+    await assert.rejects(healthCareIndicators(indicatorContext, { period: "2005-03", unitId: "indicator-u2" }), /acesso|unidade/i);
+    await assert.rejects(healthAnnualSeries(indicatorContext, { fromYear: 2004, toYear: 2005, unitId: "indicator-u2" }), /acesso|unidade/i);
+    await assert.rejects(classifyHealthTeam({ ...indicatorContext, user: { ...indicatorContext.user, allowedHealthUnitIds: ["indicator-u2"] } }, { teamId: "indicator-team", classification: "EMULTI", reason: "Fora do escopo autorizado" }), /acesso|unidade/i);
+    const emptyIndicators = await healthCareIndicators(context, { period: "2005-03", unitId: "indicator-u2" });
+    assert.equal(emptyIndicators.indicators.find(metric => metric.key === "GESTATION")?.percentage, null);
+    stage = "Indicadores: séries anuais por ocorrência, visita contada uma vez e exportação nominal";
+    await f.db.healthTerritoryArea.create({ data: { id: "indicator-area", code: "IND", name: "Área dos indicadores", unitId: "indicator-u1" } });
+    await f.db.healthMicroarea.create({ data: { id: "indicator-micro", code: "IND", areaId: "indicator-area" } });
+    const indicatorHousehold = await savePrimaryHousehold(indicatorContext, { householdCode: "IND", microareaId: "indicator-micro", addressId: address.id, housingDetails });
+    const indicatorFamily = await savePrimaryFamily(indicatorContext, { masterFamilyId: null, familyCode: "IND", responsiblePersonId: "indicator-person-elder", householdId: indicatorHousehold.id, unitId: "indicator-u1", teamId: "indicator-team", classification: "Acompanhamento", familyType: "Extensa" });
+    await changePrimaryFamilyMember(indicatorContext, { familyId: indicatorFamily.id, personId: "indicator-person-child", kinship: "Neto", operation: "JOIN", effectiveAt: new Date(), reason: "Composição da família visitada" });
+    const indicatorVisit = await createVisit(indicatorContext, { unitId: "indicator-u1", familyId: indicatorFamily.id, householdId: indicatorHousehold.id, professionalId: "health-professional", visitedAt: "2005-03-03", actions: "Visita com dois integrantes" });
+    await recordVisitOutcome(indicatorContext, { ...visitInput, visitId: indicatorVisit.id, personId: "indicator-person-elder", outcome: "PRESENT", weight: null, height: null, temperature: null });
+    await recordVisitOutcome(indicatorContext, { ...visitInput, visitId: indicatorVisit.id, personId: "indicator-person-child", outcome: "PRESENT", weight: null, height: null, temperature: null });
+    const indicatorSeries = await healthAnnualSeries(indicatorContext, { fromYear: 2004, toYear: 2005 });
+    assert.equal(indicatorSeries.rows[0].otherOrUnclassifiedCare, 1);
+    assert.equal(indicatorSeries.rows[1].medicalConsultations, 4); assert.equal(indicatorSeries.rows[1].dentalConsultations, 1); assert.equal(indicatorSeries.rows[1].visits, 1);
+    const indicatorCsv = await healthIndicatorDocument(indicatorContext, { period: "2005-03", indicator: "ELDERLY", status: "ALL", formato: "csv" });
+    assert.match(indicatorCsv.bytes.toString("utf8"), /Indicador elder/); assert.match(indicatorCsv.bytes.toString("utf8"), /41999990000/); assert.doesNotMatch(indicatorCsv.bytes.toString("utf8"), /Indicador foreign/);
+    await f.db.person.createMany({ data: Array.from({ length: 51 }, (_, index) => ({ id: `indicator-bulk-person-${index}`, fullName: `Paciente da lista completa ${index}`, cpf: null, birthDate: new Date("1940-01-01"), status: "Ativo" })) });
+    await f.db.patient.createMany({ data: Array.from({ length: 51 }, (_, index) => ({ id: `indicator-bulk-patient-${index}`, personId: `indicator-bulk-person-${index}`, referenceUnitId: "indicator-u1", status: "Ativo" })) });
+    const completeCsv = await healthIndicatorDocument(indicatorContext, { period: "2005-03", indicator: "ELDERLY", status: "ALL", formato: "csv" });
+    assert.equal(completeCsv.bytes.toString("utf8").split("\r\n").filter(line => line.startsWith('"PACIENTE"')).length, 52);
+    const indicatorPdf = await healthIndicatorDocument(indicatorContext, { period: "2005-03", indicator: "ELDERLY", status: "ALL", formato: "pdf" });
+    assert.ok((await PdfReader.load(indicatorPdf.bytes)).getPageCount() >= 2);
+    const emptyCsv = await healthIndicatorDocument(context, { period: "2005-03", unitId: "indicator-u2", indicator: "GESTATION", formato: "csv" });
+    assert.match(emptyCsv.bytes.toString("utf8"), /RESUMO/); assert.match(emptyCsv.bytes.toString("utf8"), /"0";"0";"Não informado"/);
   } catch (cause) { throw new Error(`Falha na etapa: ${stage}`, { cause }); }
   finally { await f.close(); if (previous === undefined) delete process.env.CELERIFLOW_ACCOUNTING_MODE; else process.env.CELERIFLOW_ACCOUNTING_MODE = previous; }
 });

@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { assertPatientRegistrationCurrent } from "./patient-registration-service";
 import { registerProductionFactTx } from "./production-service";
+import { captureCareIndicatorContext } from "./indicator-context";
 import { syncRegulationAppointment } from "./regulation-agenda-service";
 import { professionalAcceptsTime, professionalBookingWindows } from "./professional-booking-service";
 import type { AppContext } from "@/lib/platform/tenant-context";
@@ -291,6 +292,7 @@ export async function completeHealthAppointment(context: AppContext, raw: unknow
           unitId: appointment.unitId,
           professionalId: professional.id,
           appointmentId: appointment.id,
+          careContextSnapshot: await captureCareIndicatorContext(tx, professional.id, appointment.unitId),
         },
         select: { id: true },
       });

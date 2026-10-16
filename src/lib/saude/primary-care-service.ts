@@ -4,6 +4,7 @@ import type { AppContext } from "@/lib/platform/tenant-context";
 import { assertHealthUnitAccess } from "@/lib/platform/tenant-context";
 import { collectiveActivityTypes, collectivePractices, collectiveThemes, householdDetailsSchema, validateFoodMarkers } from "./primary-care-contract";
 import { registerProductionFactTx } from "./production-service";
+import { captureCareIndicatorContext } from "./indicator-context";
 type Tx = Prisma.TransactionClient;
 
 async function familyForAccess(tx: Tx, context: AppContext, familyId: string) {
@@ -133,7 +134,9 @@ export async function recordVisitOutcome(context: AppContext, raw: unknown) {
   return context.prisma.$transaction(async tx => {
     const visit = await tx.healthHomeVisit.findUniqueOrThrow({ where: { id: input.visitId }, include: { professional: true } });
     if (visit.status !== "REALIZADA" || visit.professional.employeeId !== context.user.employeeId || !visit.professional.isActive) throw new Error("A participação exige visita realizada pelo profissional autenticado.");
-    if (visit.professional.unitId) assertHealthUnitAccess(context.user, visit.professional.unitId);
+    const visitUnitId = visit.unitId || visit.professional.unitId;
+    if (visitUnitId) assertHealthUnitAccess(context.user, visitUnitId);
+    else if (context.user.hasHealthAccessScope) throw new Error("Visita sem unidade responsável acessível.");
     if (input.outcome === "REFUSED" && !input.refusalReason) throw new Error("Informe o motivo da recusa.");
     if (input.outcome !== "PRESENT" && [input.weight, input.height, input.bloodPressure, input.temperature, input.heartRate, input.bloodGlucose].some(value => value !== null)) throw new Error("Ausência ou recusa não permitem registrar medidas não coletadas.");
     if (visit.familyId && !await tx.healthFamilyMember.count({ where: { familyId: visit.familyId, personId: input.personId } })) throw new Error("Inclua a pessoa na composição familiar antes de registrar a participação.");
@@ -174,7 +177,7 @@ export async function performHomeCare(context: AppContext, raw: unknown) {
     const professional = await professionalInUnit(tx, context, request.unitId);
     if (!assessment.eligible || latest?.id !== assessment.id || request.status !== "ELIGIBLE" || input.performedAt < assessment.assessedAt) throw new Error("O atendimento domiciliar exige a última avaliação de elegibilidade anterior e favorável.");
     if (input.procedureId && !await tx.healthSusProcedure.count({ where: { id: input.procedureId, isActive: true, isCurrent: true } })) throw new Error("Selecione procedimento ativo.");
-    const record = await tx.medicalRecord.create({ data: { type: "Atendimento domiciliar", date: input.performedAt, patientId: request.patientId, professionalId: professional.id, unitId: request.unitId, evolution: input.narrative, outcome: "Alta", completedAt: input.performedAt } });
+    const record = await tx.medicalRecord.create({ data: { type: "Atendimento domiciliar", date: input.performedAt, patientId: request.patientId, professionalId: professional.id, unitId: request.unitId, careContextSnapshot: await captureCareIndicatorContext(tx, professional.id, request.unitId), evolution: input.narrative, outcome: "Alta", completedAt: input.performedAt } });
     if (input.procedureId) await tx.healthPerformedProcedure.create({ data: { medicalRecordId: record.id, procedureId: input.procedureId, professionalId: professional.id, performedAt: input.performedAt, quantity: 1 } });
     return tx.healthHomeCareAttendance.create({ data: { requestId: request.id, assessmentId: assessment.id, medicalRecordId: record.id, performedAt: input.performedAt, actorUsuarioId: context.user.id } });
   });
@@ -186,11 +189,13 @@ export async function recordCollectiveActivity(context: AppContext, raw: unknown
     const professional = await professionalInUnit(tx, context, input.unitId);
     if (new Set(input.participantIds).size !== input.participantIds.length || await tx.person.count({ where: { id: { in: input.participantIds }, status: "Ativo" } }) !== input.participantIds.length) throw new Error("Selecione participantes ativos sem duplicação.");
     if (input.procedureId && !await tx.healthSusProcedure.count({ where: { id: input.procedureId, isActive: true, isCurrent: true } })) throw new Error("Selecione procedimento ativo para a produção coletiva.");
-    if (!await tx.healthTeam.count({ where: { id: input.teamId, unitId: input.unitId, isActive: true } })) throw new Error("Equipe incompatível com a unidade.");
+    const team = await tx.healthTeam.findFirst({ where: { id: input.teamId, unitId: input.unitId, isActive: true }, select: { id: true, name: true, unitId: true, classification: true } });
+    if (!team) throw new Error("Equipe incompatível com a unidade.");
     if (input.activityType === "EDUCATION" && !input.themes.length) throw new Error("Selecione os temas da educação em saúde.");
     if (["GROUP_CARE", "ASSESSMENT"].includes(input.activityType) && (!input.practices.length || !input.participantIds.length)) throw new Error("Atividade assistencial exige práticas e participantes.");
     if (["TEAM_MEETING", "COMMUNITY_MEETING"].includes(input.activityType) && input.procedureId) throw new Error("Reunião não gera procedimento assistencial.");
-    const activity = await tx.healthCollectiveActivity.create({ data: { ...input, professionalId: professional.id, createdByUsuarioId: context.user.id } });
+    if (input.occurredAt > new Date()) throw new Error("Atividade realizada não pode ter data futura.");
+    const activity = await tx.healthCollectiveActivity.create({ data: { ...input, teamSnapshot: team, professionalId: professional.id, createdByUsuarioId: context.user.id } });
     if (input.procedureId) await registerProductionFactTx(tx, { originType: "COLLECTIVE_ACTIVITY", originId: activity.id, unitId: input.unitId, professionalId: professional.id, procedureId: input.procedureId, quantity: 1, occurredAt: input.occurredAt, idempotencyKey: `COLLECTIVE_ACTIVITY:${activity.id}` });
     return activity;
   });

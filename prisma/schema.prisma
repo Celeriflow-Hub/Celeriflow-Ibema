@@ -9715,6 +9715,7 @@ model SchoolCalendarEvent {
 // --- Modulo 13: Saude ---
 
 model HealthUnit {
+  indicatorHomeVisits HealthHomeVisit[]
   followupReceivers HealthFollowupReceiver[]
   followupBindings HealthFollowupBinding[]
   receivedFollowups HealthFollowupRecord[]
@@ -10049,6 +10050,8 @@ model HealthProfessional {
 }
 
 model HealthTeam {
+  classificationEvents HealthTeamClassificationEvent[]
+  classification String?
   id        String  @id @default(cuid())
   name      String
   code      String? @unique
@@ -10068,6 +10071,18 @@ model HealthTeam {
   healthTerritoryAreas HealthTerritoryArea[]
   healthHomeVisits     HealthHomeVisit[]
   healthEsusForms      HealthEsusForm[]
+}
+
+model HealthTeamClassificationEvent {
+  id String @id @default(cuid())
+  teamId String
+  team HealthTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  before String?
+  after String
+  reason String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@index([teamId, createdAt])
 }
 
 model HealthAppointment {
@@ -10177,6 +10192,7 @@ model HealthTriage {
 }
 
 model MedicalRecord {
+  careContextSnapshot Json?
   treatmentReports HealthTreatmentReport[]
   tfdClinicalReports HealthTfdClinicalReport[]
   vaccinations VaccinationRecord[]
@@ -13367,6 +13383,8 @@ model HealthFamilyMember {
 }
 
 model HealthHomeVisit {
+  unitId String?
+  unit HealthUnit? @relation(fields: [unitId], references: [id], onDelete: Restrict)
   id                 String               @id @default(cuid())
   householdId        String?
   household          HealthHousehold?     @relation(fields: [householdId], references: [id], onDelete: Restrict)
@@ -13517,6 +13535,7 @@ model HealthHomeCareAttendance {
 }
 
 model HealthCollectiveActivity {
+  teamSnapshot Json?
   id String @id @default(cuid())
   unitId String
   teamId String

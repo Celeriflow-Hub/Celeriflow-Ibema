@@ -101,6 +101,7 @@ export async function addFamilyMember(context: AppContext, input: { familyId: st
 }
 
 const visitSchema = z.object({
+  unitId: z.string().min(1).nullable().optional(),
   householdId: z.string().min(1).nullable().optional(),
   familyId: z.string().min(1).nullable().optional(),
   teamId: z.string().min(1).nullable().optional(),
@@ -117,9 +118,12 @@ export async function createVisit(context: AppContext, raw: unknown) {
   if (!input.householdId && !input.familyId) throw new TerritoryError("Informe o domicílio ou a família visitada.");
   const professional = await context.prisma.healthProfessional.findUnique({ where: { id: input.professionalId }, select: { id: true, unitId: true } });
   if (!professional) throw new TerritoryError("Agente/profissional não encontrado.");
-  if (professional.unitId) assertHealthUnitAccess(context.user, professional.unitId);
+  const unitId = input.unitId || professional.unitId;
+  if (unitId) assertHealthUnitAccess(context.user, unitId);
+  else if (context.user.hasHealthAccessScope) throw new TerritoryError("Informe a unidade responsável pela visita.");
+  if (unitId && professional.unitId !== unitId && !await context.prisma.healthProfessionalAssignment.count({ where: { professionalId: professional.id, unitId, isActive: true, AND: [{ OR: [{ validFrom: null }, { validFrom: { lte: input.visitedAt } }] }, { OR: [{ validUntil: null }, { validUntil: { gte: input.visitedAt } }] }] } })) throw new TerritoryError("Profissional sem vínculo vigente na unidade da visita.");
   return context.prisma.healthHomeVisit.create({
-    data: { ...input, householdId: input.householdId || null, familyId: input.familyId || null, teamId: input.teamId || null, areaId: input.areaId || null, microareaId: input.microareaId || null, observations: input.observations || null, createdByUsuarioId: context.user.id },
+    data: { ...input, unitId, householdId: input.householdId || null, familyId: input.familyId || null, teamId: input.teamId || null, areaId: input.areaId || null, microareaId: input.microareaId || null, observations: input.observations || null, createdByUsuarioId: context.user.id },
     select: { id: true },
   });
 }

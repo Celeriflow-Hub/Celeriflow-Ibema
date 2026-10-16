@@ -9,6 +9,7 @@ import { ingestGedDocument } from "@/lib/documents/document-flow-service";
 import { syncRegulationAppointment } from "./regulation-agenda-service";
 import { prescribeClinicalLineTx } from "./prescription-service";
 import { assertRequiredClinicalQuestionnaires } from "./clinical-extension-service";
+import { captureCareIndicatorContext } from "./indicator-context";
 
 type Tx = Prisma.TransactionClient;
 
@@ -43,7 +44,8 @@ export async function startHealthCare(context: AppContext, appointmentId: string
     assertHealthAppointmentCanBeCompleted(appointment.status);
     if (!["Aguardando", "Em Atendimento"].includes(appointment.status)) throw new HealthOperationError("Registre a chegada do paciente antes de iniciar o atendimento.");
     if (appointment.origin === "SCHEDULED") assertHealthAppointmentCanBeCompletedAt(appointment.date);
-    const record = await tx.medicalRecord.create({ data: { type: "Consulta", patientId: appointment.patientId, unitId: appointment.unitId, professionalId: professional.id, appointmentId: appointment.id, bloodPressure: appointment.triage?.bloodPressure, temperature: appointment.triage?.temperature, weight: appointment.triage?.weight, height: appointment.triage?.height, heartRate: appointment.triage?.heartRate, respiratoryRate: appointment.triage?.respiratoryRate, oxygenSaturation: appointment.triage?.oxygenSaturation, bloodGlucose: appointment.triage?.bloodGlucose, chiefComplaint: appointment.triage?.chiefComplaint }, select: { id: true } });
+    const careContextSnapshot = await captureCareIndicatorContext(tx, professional.id, appointment.unitId);
+    const record = await tx.medicalRecord.create({ data: { type: "Consulta", patientId: appointment.patientId, unitId: appointment.unitId, professionalId: professional.id, appointmentId: appointment.id, careContextSnapshot, bloodPressure: appointment.triage?.bloodPressure, temperature: appointment.triage?.temperature, weight: appointment.triage?.weight, height: appointment.triage?.height, heartRate: appointment.triage?.heartRate, respiratoryRate: appointment.triage?.respiratoryRate, oxygenSaturation: appointment.triage?.oxygenSaturation, bloodGlucose: appointment.triage?.bloodGlucose, chiefComplaint: appointment.triage?.chiefComplaint }, select: { id: true } });
     await tx.healthAppointment.update({ where: { id: appointment.id }, data: { status: "Em Atendimento", startedAt: new Date(), professionalId: professional.id } });
     await tx.healthAppointmentEvent.create({ data: { appointmentId: appointment.id, eventType: "CARE_STARTED", fromStatus: appointment.status, toStatus: "Em Atendimento", actorUsuarioId: context.user.id } });
     return record;

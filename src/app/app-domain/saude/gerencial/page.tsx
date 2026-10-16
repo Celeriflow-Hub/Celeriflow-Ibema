@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { BarChart3 } from "lucide-react";
-import { getTenantContextForModule, assertHealthUnitAccess } from "@/lib/platform/tenant-context";
+import { getTenantContextForModule, assertHealthUnitAccess, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
 import { listPatientTimeline } from "@/lib/saude/patient-timeline-service";
+import { tfdTripAccessWhere } from "@/lib/saude/tfd-service";
 
 const card = "rounded border bg-white p-2";
 const kpi = "text-lg font-bold tabular-nums";
@@ -20,6 +21,8 @@ export default async function GerencialPage({ searchParams }: { searchParams: Pr
   const professionalFilter = (first(params.professional) || "").trim().slice(0, 64);
   const specialtyFilter = (first(params.specialty) || "").trim().slice(0, 64);
   const patientFilter = (first(params.patient) || "").trim().slice(0, 64);
+  if (unitFilter) assertHealthUnitAccess(context.user, unitFilter);
+  const auditScope = isSystemAdministrator(context.user) ? {} : { actorUsuarioId: context.user.id };
   const range = /^\d{4}-\d{2}$/.test(period) ? { gte: new Date(`${period}-01T00:00:00`), lt: new Date(`${period}-01T00:00:00`).getMonth() === 11 ? new Date(`${Number(period.slice(0, 4)) + 1}-01-01T00:00:00`) : new Date(`${period.slice(0, 4)}-${String(Number(period.slice(5, 7)) + 1).padStart(2, "0")}-01T00:00:00`) } : undefined;
   const unitScope = unitFilter ? { unitId: unitFilter } : unitIds ? { unitId: { in: unitIds } } : {};
   const [
@@ -34,11 +37,11 @@ export default async function GerencialPage({ searchParams }: { searchParams: Pr
     prisma.vaccinationRecord.count({ where: { ...(range ? { date: range } : {}), ...(unitFilter ? { unitId: unitFilter } : unitIds ? { unitId: { in: unitIds } } : {}) } }),
     prisma.healthLabOrder.groupBy({ by: ["status"], where: { ...(range ? { createdAt: range } : {}), ...(unitIds || unitFilter ? { OR: [{ requestUnitId: unitFilter || { in: unitIds! } }, { collectionUnitId: unitFilter || { in: unitIds! } }] } : {}) }, _count: true }),
     prisma.healthRegulationRequest.groupBy({ by: ["status"], where: { ...(range ? { createdAt: range } : {}), ...(unitFilter ? { requestUnitId: unitFilter } : unitIds ? { requestUnitId: { in: unitIds } } : {}) }, _count: true }),
-    prisma.healthTfdTrip.count({ where: range ? { date: { gte: range.gte, lt: range.lt } } : {} }),
+    prisma.healthTfdTrip.count({ where: { AND: [tfdTripAccessWhere(context.user)], ...(range ? { date: { gte: range.gte, lt: range.lt } } : {}) } }),
     prisma.healthProductionFact.groupBy({ by: ["status"], where: { ...(period ? { period } : {}), ...(unitFilter ? { unitId: unitFilter } : unitIds ? { unitId: { in: unitIds } } : {}) }, _count: true }),
     prisma.healthEsusForm.count({ where: { status: "FINALIZADA", ...(period ? { period } : {}), ...(unitFilter ? { unitId: unitFilter } : unitIds ? { unitId: { in: unitIds } } : {}) } }),
     prisma.specializedTherapeuticPlan.count({ where: { status: "ACTIVE", ...(unitFilter ? { unitId: unitFilter } : unitIds ? { unitId: { in: unitIds } } : {}) } }),
-    prisma.auditEvent.groupBy({ by: ["eventType"], where: range ? { createdAt: range } : {}, _count: true, orderBy: { _count: { eventType: "desc" } }, take: 20 }),
+    prisma.auditEvent.groupBy({ by: ["eventType"], where: { ...auditScope, ...(range ? { createdAt: range } : {}) }, _count: true, orderBy: { _count: { eventType: "desc" } }, take: 20 }),
     prisma.patient.findMany({ where: { status: "Ativo", ...(unitIds ? { referenceUnitId: { in: unitIds } } : {}) }, take: 300, orderBy: { person: { fullName: "asc" } }, select: { id: true, referenceUnitId: true, person: { select: { fullName: true } } } }),
     prisma.healthUnit.findMany({ where: { isActive: true, ...(unitIds ? { id: { in: unitIds } } : {}) }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.healthProfessional.findMany({ where: { isActive: true }, take: 200, select: { id: true, cbo: true } }),
@@ -51,11 +54,12 @@ export default async function GerencialPage({ searchParams }: { searchParams: Pr
     const target = await prisma.patient.findUnique({ where: { id: patientFilter }, select: { id: true, referenceUnitId: true, person: { select: { fullName: true } } } });
     if (target) {
       if (target.referenceUnitId) assertHealthUnitAccess(context.user, target.referenceUnitId);
+      else if (context.user.hasHealthAccessScope) throw new Error("Paciente sem unidade de referência acessível.");
       timeline = await listPatientTimeline(prisma, target.id);
       timelinePatient = target.person.fullName;
     }
   }
-  const accessByUser = await prisma.auditEvent.groupBy({ by: ["actorUsuarioId"], where: range ? { createdAt: range } : {}, _count: true, orderBy: { _count: { actorUsuarioId: "desc" } }, take: 20 });
+  const accessByUser = await prisma.auditEvent.groupBy({ by: ["actorUsuarioId"], where: { ...auditScope, ...(range ? { createdAt: range } : {}) }, _count: true, orderBy: { _count: { actorUsuarioId: "desc" } }, take: 20 });
   const actorNames = await prisma.usuario.findMany({ where: { id: { in: accessByUser.map(a => a.actorUsuarioId) } }, select: { id: true, nome: true } });
   const actorName = new Map(actorNames.map(a => [a.id, a.nome]));
 
@@ -75,6 +79,7 @@ export default async function GerencialPage({ searchParams }: { searchParams: Pr
     <PageFrame className="flex h-[calc(100dvh-7.5rem)] min-h-0 flex-col gap-2 overflow-hidden px-1 py-1 md:px-2">
       <PageHeader title="Gerencial da Saúde" icon={<BarChart3 className="size-4 text-slate-700" />} />
       <Link href="/saude/acompanhamento" className="shrink-0 text-sm font-semibold underline">Remessas e receptores de acompanhamento gestacional, crônicos e regulação</Link>
+      <Link href="/saude/indicadores" className="shrink-0 text-sm font-semibold underline">Séries anuais, indicadores da atenção primária e busca ativa nominal</Link>
       <form method="get" className="grid shrink-0 gap-2 rounded-md border bg-white p-2 text-xs sm:grid-cols-2 lg:grid-cols-[160px_1fr_200px_200px_auto]">
         <input name="period" type="month" defaultValue={period} className="h-8 rounded border px-2" />
         <select name="unit" defaultValue={unitFilter} className="h-8 rounded border bg-white px-2"><option value="">Todas as unidades</option>{units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select>

@@ -293,6 +293,8 @@ model Role {
 
 // Servidores BÃ¡sicos (Base para RH e vinculaÃ§Ã£o de responsÃ¡veis)
 model Employee {
+  assistedHealthTfdTrips HealthTfdTrip[] @relation("HealthTfdAssistant")
+  responsibleHealthTfdTrips HealthTfdTrip[] @relation("HealthTfdResponsible")
   functionalPortalBindings HrPortalRequestBinding[]
   legislativeAdvisor CamAdvisor?
   sstEquipmentItems SstEquipmentDeliveryItem[]
@@ -474,6 +476,11 @@ model CalendarEvent {
 
 // Pessoas FÃ­sicas
 model Person {
+  receivedTfdBenefits HealthTfdBenefit[]
+  pharmacyRequestWithdrawals PharmacyRequestFulfillment[]
+  pharmacyKitReceipts HealthPharmacyKitDelivery[] @relation("PharmacyKitReceiver")
+  pharmacyLawyer HealthPharmacyLawyer?
+  pharmacyWithdrawals MedicineDispensation[] @relation("HealthDispensationReceiver")
   citizenRegistryIdentities CitizenRegistryIdentity[]
   legislativeAdvisors CamAdvisor[]
   sstEquipmentEvents SstEquipmentEvent[]
@@ -496,7 +503,7 @@ model Person {
   sstAssessments SstMedicalAssessment[] @relation("SstAssessmentExaminer")
   fullName       String
   socialName     String?
-  cpf            String    @unique
+  cpf            String?   @unique
   rg             String?
   rgIssuer       String?
   birthDate      DateTime?
@@ -509,6 +516,8 @@ model Person {
   educationLevel String?
   motherName     String?
   fatherName     String?
+  motherUnknown  Boolean   @default(false)
+  fatherUnknown  Boolean   @default(false)
   status         String    @default("Ativo") // Ativo, Inativo
   deathDate      DateTime?
   estateApplied  Boolean   @default(false)
@@ -578,6 +587,7 @@ model Person {
 
 // Pessoas JurÃ­dicas
 model Company {
+  healthMaintainer HealthMaintainer?
   citizenRegistryIdentities CitizenRegistryIdentity[]
   sstOperatedHealthPlans SstHealthPlan[]
   constructionProfile ConstructionCompanyProfile?
@@ -742,6 +752,7 @@ model LegalRepresentative {
 }
 
 model Family {
+  healthDocuments HealthFamilyDocument[]
   id                  String   @id @default(cuid())
   code                String?  @unique
   responsiblePersonId String?
@@ -1718,6 +1729,9 @@ model DocumentClass {
 }
 
 model Document {
+  pharmacyJudicialDocuments HealthPharmacyJudicialDocument[]
+  healthFamilyDocuments HealthFamilyDocument[]
+  healthPatientDocuments HealthPatientDocument[]
   planningDocumentLinks PlanningDocumentLink[]
   constructionEnforcementEvidence ConstructionEnforcementEvidence[]
   id              String         @id @default(cuid())
@@ -1968,6 +1982,7 @@ model Subject {
 
 // Processo / Protocolo Principal
 model Process {
+  pharmacyJudicialCases HealthPharmacyJudicialCase[]
   citizenAccessApplication CitizenAccessApplication?
   externalServiceRequest PortalServiceRequest?
   transparencyCitizenRequests TransparencyCitizenRequest[]
@@ -5573,6 +5588,7 @@ model CatalogItem {
 }
 
 model PurchaseRequest {
+  pharmacyJudicialCases HealthPharmacyJudicialCase[]
   id             String @id @default(cuid())
   number         String @unique
   object         String
@@ -7696,6 +7712,7 @@ model HrIntegrationEvent {
 }
 
 model HrPortalRequest {
+  healthTfdTrips HealthTfdTrip[]
   functionalBinding HrPortalRequestBinding?
   id String @id @default(cuid())
   employeeId String
@@ -8077,6 +8094,8 @@ model AssetIntegrationPendingConfiguration {
 
 // Almoxarifado
 model Warehouse {
+  outgoingPharmacyRequests PharmacyRequest[] @relation("PharmacyRequestOrigin")
+  pharmacyKitDeliveries HealthPharmacyKitDelivery[]
   id              String        @id @default(cuid())
   name            String
   type            String        @default("Central") // Central, Setorial
@@ -8373,6 +8392,9 @@ model MaterialSubcategory {
 }
 
 model Material {
+  diluentVaccines Vaccine[] @relation("VaccineDiluentMaterial")
+  pharmacyKitItems HealthPharmacyKitItem[]
+  pharmacyKitDeliveryItems HealthPharmacyKitDeliveryItem[]
   equipmentCustodies EquipmentCustody[]
   sstEquipment SstEquipment[]
   id            String  @id @default(cuid())
@@ -8421,6 +8443,10 @@ model Material {
 }
 
 model MaterialStock {
+  vaccineLotProfile HealthVaccineLotProfile?
+  openedVaccineVials HealthVaccineOpenedVial[] @relation("OpenedVaccineStock")
+  vaccineDiluentVials HealthVaccineOpenedVial[] @relation("OpenedVaccineDiluent")
+  pharmacyKitItems HealthPharmacyKitDeliveryItem[]
   valuationEnabled Boolean @default(false)
   id             String    @id @default(cuid())
   quantity       Float     @default(0)
@@ -8452,6 +8478,7 @@ model MaterialStock {
 }
 
 model MaterialMovement {
+  pharmacyRequestFulfillment PharmacyRequestFulfillment?
   equipmentCustodies EquipmentCustody[]
   valuationEvent MaterialStockValuationEvent?
   quantityDecimal Decimal? @db.Decimal(18, 6)
@@ -9688,6 +9715,23 @@ model SchoolCalendarEvent {
 // --- Modulo 13: Saude ---
 
 model HealthUnit {
+  followupReceivers HealthFollowupReceiver[]
+  followupBindings HealthFollowupBinding[]
+  receivedFollowups HealthFollowupRecord[]
+  procedurePriceTables HealthProcedurePriceTable[]
+  treatmentReports HealthTreatmentReport[]
+  vaccinationCardEvents HealthVaccinationCardEvent[]
+  vaccineAdverseEvents HealthVaccineAdverseEvent[]
+  careProgramEnrollments HealthCareProgramEnrollment[]
+  maintainerId String?
+  maintainer HealthMaintainer? @relation(fields: [maintainerId], references: [id], onDelete: Restrict)
+  pharmacyReportingUnitId String?
+  pharmacyReportingUnit HealthUnit? @relation("HealthPharmacyReporting", fields: [pharmacyReportingUnitId], references: [id], onDelete: Restrict)
+  reportedPharmacies HealthUnit[] @relation("HealthPharmacyReporting")
+  spontaneousProviderUnitId String?
+  spontaneousProviderUnit HealthUnit? @relation("HealthSpontaneousProvider", fields: [spontaneousProviderUnitId], references: [id], onDelete: Restrict)
+  spontaneousRequestUnits HealthUnit[] @relation("HealthSpontaneousProvider")
+  careCoverages HealthCareCoverage[]
   id                 String    @id @default(cuid())
   name               String
   type               String // UBS, ESF, FarmÃ¡cia, CAPS
@@ -9751,6 +9795,21 @@ model HealthUnit {
 }
 
 model Patient {
+  receivedFollowups HealthFollowupRecord[]
+  treatmentReports HealthTreatmentReport[]
+  vaccinationCardEvents HealthVaccinationCardEvent[]
+  vaccineAdverseEvents HealthVaccineAdverseEvent[]
+  careProgramEnrollments HealthCareProgramEnrollment[]
+  pharmacyKitDeliveries HealthPharmacyKitDelivery[]
+  judicialPharmacyCases HealthPharmacyJudicialCase[]
+  pregnancies HealthPregnancy[]
+  chronicAssessments HealthChronicAssessment[]
+  screenings HealthClinicalScreening[]
+  dentalMarks HealthDentalMark[]
+  clinicalConditions HealthPatientCondition[]
+  ongoingMedications HealthOngoingMedication[]
+  homeCareRequests HealthHomeCareRequest[]
+  foodMarkers HealthFoodMarker[]
   id             String   @id @default(cuid())
   cns            String?  @unique
   bloodType      String?
@@ -9796,9 +9855,143 @@ model Patient {
   healthReceptions            HealthReception[]
   healthBedOccupancies        HealthBedOccupancy[]
   healthObservations          HealthObservation[]
+  registrationProfile         HealthPatientRegistration?
+  registrationChanges         HealthPatientRegistrationChange[]
+  contactRecords              HealthPatientContact[]
+  patientDocuments            HealthPatientDocument[]
+  phoneCalls                  HealthPatientCall[]
+}
+
+model HealthPatientRegistration {
+  patientId String @id
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  stage String @default("COMPLETE")
+  reviewedAt DateTime @default(now())
+  contactStartTime String?
+  contactEndTime String?
+  workplace String?
+  socialMotherName String?
+  socialFatherName String?
+  deathRegisteredAt DateTime?
+  deathMunicipality String?
+  deathCause String?
+  deathCidReferenceId String?
+  photoDocumentId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model HealthPatientRegistrationChange {
+  id String @id @default(cuid())
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  actorUsuarioId String
+  changes Json
+  createdAt DateTime @default(now())
+  @@index([patientId, createdAt])
+}
+
+model HealthPatientContact {
+  id String @id @default(cuid())
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  name String
+  phone String
+  kinship String
+  relationshipKind String @default("BIOLOGICAL")
+  startTime String?
+  endTime String?
+  isActive Boolean @default(true)
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([patientId, isActive])
+}
+
+model HealthPatientCall {
+  id String @id @default(cuid())
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  regulationRequestId String?
+  regulationRequest HealthRegulationRequest? @relation(fields: [regulationRequestId], references: [id], onDelete: Restrict)
+  calledAt DateTime
+  phone String
+  result String
+  notes String?
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@index([patientId, calledAt])
+}
+
+model HealthPatientDocument {
+  id String @id @default(cuid())
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  documentId String
+  document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  kind String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@unique([patientId, documentId])
+}
+
+model HealthMaintainer {
+  id String @id @default(cuid())
+  companyId String @unique
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankName String?
+  agency String?
+  account String?
+  supportServices String[]
+  characterization String
+  units HealthUnit[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model HealthCareAgreement {
+  procedurePriceTables HealthProcedurePriceTable[]
+  schedules HealthCareSchedule[]
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  covenantId String?
+  validFrom DateTime
+  validUntil DateTime?
+  isActive Boolean @default(true)
+  coverages HealthCareCoverage[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model HealthCareCoverage {
+  id String @id @default(cuid())
+  agreementId String
+  agreement HealthCareAgreement @relation(fields: [agreementId], references: [id], onDelete: Restrict)
+  unitId String
+  unit HealthUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  specialtyId String?
+  specialty HealthSpecialty? @relation(fields: [specialtyId], references: [id], onDelete: Restrict)
+  procedureId String?
+  procedure HealthSusProcedure? @relation(fields: [procedureId], references: [id], onDelete: Restrict)
+  validFrom DateTime
+  validUntil DateTime?
+  unitValue Decimal? @db.Decimal(18,6)
+  auxiliaryTable String?
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([agreementId, unitId, isActive])
 }
 
 model HealthProfessional {
+  receivedFollowups HealthFollowupRecord[]
+  performedTreatmentReportItems HealthTreatmentReportProcedure[]
+  requestedTreatmentReports HealthTreatmentReport[]
+  tfdClinicalReports HealthTfdClinicalReport[]
+  vaccinationCardEvents HealthVaccinationCardEvent[]
+  vaccineAdverseFollowups HealthVaccineAdverseFollowup[]
+  prescribedDispensations MedicineDispensation[] @relation("HealthDispensationPrescriber")
   id                          String     @id @default(cuid())
   cbo                         String?
   cboId                       String?
@@ -9878,6 +10071,11 @@ model HealthTeam {
 }
 
 model HealthAppointment {
+  waitlistEvents HealthWaitlistEvent[]
+  billingContextSnapshot Json?
+  vaccinations VaccinationRecord[]
+  regulationRequest HealthRegulationRequest?
+  waitlistEntry HealthWaitlist?
   id                   String    @id @default(cuid())
   date                 DateTime
   specialty            String?
@@ -9979,6 +10177,16 @@ model HealthTriage {
 }
 
 model MedicalRecord {
+  treatmentReports HealthTreatmentReport[]
+  tfdClinicalReports HealthTfdClinicalReport[]
+  vaccinations VaccinationRecord[]
+  documentOrders HealthClinicalDocumentOrder[]
+  questionnaireResponses HealthClinicalQuestionnaireResponse[]
+  medicationAdministrations HealthMedicationAdministration[]
+  revisions HealthCareRevision[]
+  examReviews HealthClinicalExamReview[]
+  counterreferences HealthCounterreference[]
+  internalReferrals HealthInternalCareReferral[]
   id   String   @id @default(cuid())
   date DateTime @default(now())
   type String   @default("Consulta") // Consulta, Triagem, Procedimento
@@ -10024,10 +10232,327 @@ model MedicalRecord {
   clinicalDocuments  HealthClinicalDocument[]
   specializedPlans   SpecializedTherapeuticPlan[]
   specializedEntries SpecializedPlanEntry[]
+  observation        HealthObservation?
 
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   healthEsusForms HealthEsusForm[]
+}
+
+model HealthPatientCondition {
+  chronicKind String?
+  revisions HealthPatientConditionRevision[]
+  id String @id @default(cuid())
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  kind String
+  label String
+  startedAt DateTime
+  endedAt DateTime?
+  narrative String
+  medicalRecordId String?
+  professionalId String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([patientId, kind, endedAt])
+}
+
+model HealthPatientConditionRevision {
+  id String @id @default(cuid())
+  conditionId String
+  condition HealthPatientCondition @relation(fields: [conditionId], references: [id], onDelete: Restrict)
+  medicalRecordId String
+  actorUsuarioId String
+  before Json?
+  after Json
+  createdAt DateTime @default(now())
+  @@index([conditionId, createdAt])
+}
+
+model HealthOngoingMedication {
+  id String @id @default(cuid())
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  medicineId String?
+  name String
+  dosage String
+  startedAt DateTime
+  endedAt DateTime?
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@index([patientId, endedAt])
+}
+
+model HealthClinicalQuestionnaire {
+  id String @id @default(cuid())
+  code String
+  version Int
+  name String
+  specialtyId String?
+  conditionKind String?
+  required Boolean @default(false)
+  fields Json
+  isActive Boolean @default(true)
+  responses HealthClinicalQuestionnaireResponse[]
+  createdAt DateTime @default(now())
+  @@unique([code, version])
+}
+
+model HealthClinicalQuestionnaireResponse {
+  id String @id @default(cuid())
+  questionnaireId String
+  questionnaire HealthClinicalQuestionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Restrict)
+  medicalRecordId String
+  medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Restrict)
+  answers Json
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@unique([questionnaireId, medicalRecordId])
+}
+
+model HealthMedicationAdministration {
+  id String @id @default(cuid())
+  medicalRecordId String
+  medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Restrict)
+  medicineId String?
+  medicineName String
+  dosage String
+  quantity Float
+  administeredAt DateTime
+  patientOwned Boolean
+  professionalId String
+  actorUsuarioId String
+  movementId String? @unique
+  materials Json
+  createdAt DateTime @default(now())
+}
+
+model HealthCareRevision {
+  id String @id @default(cuid())
+  medicalRecordId String
+  medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Restrict)
+  reason String
+  before Json
+  after Json
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@index([medicalRecordId, createdAt])
+}
+
+model HealthClinicalExamReview {
+  id String @id @default(cuid())
+  medicalRecordId String
+  medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Restrict)
+  examRequestId String
+  performedAt DateTime?
+  resultedAt DateTime?
+  resultChanged Boolean
+  providerSupplierId String?
+  evaluation String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+}
+
+model HealthCounterreference {
+  id String @id @default(cuid())
+  medicalRecordId String
+  medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Restrict)
+  referralId String
+  response String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+}
+
+model HealthInternalCareReferral {
+  id String @id @default(cuid())
+  medicalRecordId String
+  medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Restrict)
+  appointmentId String @unique
+  reason String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+}
+
+model HealthSpecialtyProcedureRule {
+  id String @id @default(cuid())
+  unitId String?
+  specialtyId String?
+  eventType String
+  procedureId String
+  quantity Int @default(1)
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+}
+
+model HealthPrescriptionTemplate {
+  id String @id @default(cuid())
+  name String
+  prescriptionType String
+  items Json
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+}
+
+model HealthClinicalDocumentTemplate {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  kind String
+  bodyHtml String
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model HealthClinicalDocumentOrder {
+  id String @id @default(cuid())
+  medicalRecordId String
+  medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Restrict)
+  kind String
+  templateId String?
+  data Json
+  documentId String? @unique
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+}
+
+model HealthPregnancy {
+  id String @id @default(cuid())
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  openedMedicalRecordId String
+  unitId String
+  lastMenstrualDate DateTime?
+  ultrasoundDate DateTime?
+  ultrasoundGestationalDays Int?
+  estimatedDeliveryDate DateTime
+  calculationMethod String
+  baselineWeight Float
+  height Float
+  pregnancyType String
+  previousPregnancies Int
+  lastScreeningDate DateTime?
+  status String @default("ACTIVE")
+  closureReason String?
+  closedAt DateTime?
+  closedByUsuarioId String?
+  createdByUsuarioId String
+  visits HealthPregnancyVisit[]
+  postpartumVisits HealthPostpartumVisit[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([patientId, status])
+}
+
+model HealthPregnancyVisit {
+  id String @id @default(cuid())
+  pregnancyId String
+  pregnancy HealthPregnancy @relation(fields: [pregnancyId], references: [id], onDelete: Restrict)
+  medicalRecordId String @unique
+  occurredAt DateTime
+  gestationalDays Int
+  trimester Int
+  weight Float
+  bmi Float
+  bloodPressure String?
+  notes String
+  professionalId String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+}
+
+model HealthPostpartumVisit {
+  id String @id @default(cuid())
+  pregnancyId String
+  pregnancy HealthPregnancy @relation(fields: [pregnancyId], references: [id], onDelete: Restrict)
+  medicalRecordId String @unique
+  occurredAt DateTime
+  outcome String
+  gestationalDaysAtBirth Int?
+  deliveryType String?
+  deliveryLocation String?
+  deliveryDate DateTime?
+  clinicalConditions String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+}
+
+model HealthChronicAssessment {
+  id String @id @default(cuid())
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  medicalRecordId String
+  conditionKind String
+  assessedAt DateTime
+  systolic Float?
+  diastolic Float?
+  glucose Float?
+  hba1c Float?
+  riskFactors String[]
+  complications String[]
+  notes String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@index([patientId, conditionKind, assessedAt])
+}
+
+model HealthClinicalScreening {
+  id String @id @default(cuid())
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  medicalRecordId String
+  kind String
+  eligible Boolean
+  eligibilityReason String
+  requestedAt DateTime
+  performedAt DateTime?
+  resultedAt DateTime?
+  result String?
+  status String
+  examRequestId String?
+  followupNotes String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([patientId, kind, status])
+}
+
+model HealthDentalMark {
+  id String @id @default(cuid())
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  medicalRecordId String
+  dentition String
+  targetType String
+  targetCode String
+  surface String?
+  condition String
+  procedureId String?
+  performedProcedureId String? @unique
+  performedAt DateTime?
+  notes String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@index([patientId, targetType, targetCode, createdAt])
+}
+
+model HealthTherapySession {
+  id String @id @default(cuid())
+  planId String
+  plan SpecializedTherapeuticPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  sessionNumber Int
+  specialtyKind String
+  scheduledAt DateTime
+  performedAt DateTime?
+  status String @default("SCHEDULED")
+  evolution String?
+  medicalRecordId String?
+  professionalId String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([planId, sessionNumber])
 }
 
 model HealthClinicalEvolution {
@@ -10087,6 +10612,7 @@ model HealthClinicalDocument {
 }
 
 model Medicine {
+  judicialPharmacyItems HealthPharmacyJudicialItem[]
   id              String  @id @default(cuid())
   name            String
   activePrinciple String?
@@ -10145,6 +10671,9 @@ model MedicineDosageTemplate {
 }
 
 model HealthPrescription {
+  prescriptionType String @default("SIMPLE")
+  manualGroup String?
+  barcode String? @unique
   id         String    @id @default(cuid())
   date       DateTime  @default(now())
   content    String // Detalhes da prescriÃ§Ã£o
@@ -10169,6 +10698,10 @@ model HealthPrescription {
 }
 
 model HealthPrescriptionItem {
+  pharmacyKitItems HealthPharmacyKitDeliveryItem[]
+  judicialPharmacyItems HealthPharmacyJudicialItem[]
+  usageType String @default("ACUTE")
+  treatmentDays Int?
   id             String                 @id @default(cuid())
   prescriptionId String
   prescription   HealthPrescription     @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
@@ -10190,6 +10723,23 @@ model HealthPrescriptionItem {
 }
 
 model MedicineDispensation {
+  pharmacyRequestFulfillment PharmacyRequestFulfillment?
+  kitDeliveryItemId String? @unique
+  kitDeliveryItem HealthPharmacyKitDeliveryItem? @relation(fields: [kitDeliveryItemId], references: [id], onDelete: Restrict)
+  judicialCaseItemId String?
+  judicialCaseItem HealthPharmacyJudicialItem? @relation(fields: [judicialCaseItemId], references: [id], onDelete: Restrict)
+  status String @default("ACTIVE")
+  prescriptionType String @default("SIMPLE")
+  prescriberProfessionalId String?
+  prescriberProfessional HealthProfessional? @relation("HealthDispensationPrescriber", fields: [prescriberProfessionalId], references: [id], onDelete: Restrict)
+  receiverPersonId String?
+  receiverPerson Person? @relation("HealthDispensationReceiver", fields: [receiverPersonId], references: [id], onDelete: Restrict)
+  receiverRelationship String?
+  cancelledAt DateTime?
+  cancelledByUsuarioId String?
+  cancellationReason String?
+  reversalMovementId String? @unique
+  events HealthDispensationEvent[]
   id       String   @id @default(cuid())
   date     DateTime @default(now())
   quantity Float
@@ -10227,7 +10777,31 @@ model MedicineDispensation {
   updatedAt DateTime @updatedAt
 }
 
+model HealthDispensationEvent {
+  id String @id @default(cuid())
+  dispensationId String
+  dispensation MedicineDispensation @relation(fields: [dispensationId], references: [id], onDelete: Restrict)
+  kind String
+  reason String
+  snapshot Json
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@index([dispensationId, createdAt])
+}
+
 model Vaccine {
+  diluentMaterialId String?
+  diluentMaterial Material? @relation("VaccineDiluentMaterial", fields: [diluentMaterialId], references: [id], onDelete: Restrict)
+  diluentUnitsPerVial Float @default(1)
+  useAfterOpeningHours Float?
+  rndsAuthorized Boolean @default(false)
+  codeMappings HealthVaccineCodeMapping[]
+  calendarRules HealthVaccineCalendarRule[]
+  interactionsAsFirst HealthVaccineInteraction[] @relation("VaccineInteractionFirst")
+  interactionsAsSecond HealthVaccineInteraction[] @relation("VaccineInteractionSecond")
+  openedVials HealthVaccineOpenedVial[]
+  cardEvents HealthVaccinationCardEvent[]
+  adverseEvents HealthVaccineAdverseEvent[]
   sstVaccinations SstVaccination[]
   id            String  @id @default(cuid())
   name          String
@@ -10245,6 +10819,22 @@ model Vaccine {
 }
 
 model VaccinationRecord {
+  careGroup String?
+  actorUsuarioId String?
+  codeSnapshot Json?
+  manufacturerId String?
+  manufacturerReference HealthVaccineManufacturer? @relation(fields: [manufacturerId], references: [id], onDelete: Restrict)
+  campaignId String?
+  campaign HealthVaccinationCampaign? @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  openedVialId String?
+  openedVial HealthVaccineOpenedVial? @relation(fields: [openedVialId], references: [id], onDelete: Restrict)
+  indicationEventId String? @unique
+  indicationEvent HealthVaccinationCardEvent? @relation(fields: [indicationEventId], references: [id], onDelete: Restrict)
+  appointmentId String?
+  appointment HealthAppointment? @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  medicalRecordId String?
+  medicalRecord MedicalRecord? @relation(fields: [medicalRecordId], references: [id], onDelete: Restrict)
+  adverseEvents HealthVaccineAdverseEvent[]
   id                  String   @id @default(cuid())
   date                DateTime @default(now())
   doseNumber          Int      @default(1)
@@ -10278,6 +10868,175 @@ model VaccinationRecord {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model HealthVaccineManufacturer {
+  id String @id @default(cuid())
+  name String
+  rndsCode String? @unique
+  sourceReference String?
+  isActive Boolean @default(true)
+  actorUsuarioId String
+  lots HealthVaccineLotProfile[]
+  records VaccinationRecord[]
+  receiptItems HealthStockReceiptItem[]
+  createdAt DateTime @default(now())
+}
+
+model HealthVaccineCodeMapping {
+  id String @id @default(cuid())
+  vaccineId String
+  vaccine Vaccine @relation(fields: [vaccineId], references: [id], onDelete: Restrict)
+  system String
+  code String
+  version String
+  sourceReference String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@unique([vaccineId, system, version])
+}
+
+model HealthVaccineLotProfile {
+  stockId String @id
+  stock MaterialStock @relation(fields: [stockId], references: [id], onDelete: Restrict)
+  dosesPerVial Int
+  manufacturerId String?
+  manufacturer HealthVaccineManufacturer? @relation(fields: [manufacturerId], references: [id], onDelete: Restrict)
+  manufacturerName String?
+  actorUsuarioId String
+  updatedAt DateTime @updatedAt
+}
+
+model HealthVaccineOpenedVial {
+  preparationKey String? @unique
+  id String @id @default(cuid())
+  stockId String
+  stock MaterialStock @relation("OpenedVaccineStock", fields: [stockId], references: [id], onDelete: Restrict)
+  vaccineId String
+  vaccine Vaccine @relation(fields: [vaccineId], references: [id], onDelete: Restrict)
+  openedAt DateTime
+  expiresAt DateTime?
+  remainingDoses Int
+  totalDoses Int
+  sourceReference String?
+  adjustments Json @default("[]")
+  diluentStockId String?
+  diluentStock MaterialStock? @relation("OpenedVaccineDiluent", fields: [diluentStockId], references: [id], onDelete: Restrict)
+  diluentMovementId String? @unique
+  actorUsuarioId String
+  records VaccinationRecord[]
+  createdAt DateTime @default(now())
+  @@index([stockId, remainingDoses])
+}
+
+model HealthVaccineCalendarRule {
+  id String @id @default(cuid())
+  code String
+  version Int
+  vaccineId String
+  vaccine Vaccine @relation(fields: [vaccineId], references: [id], onDelete: Restrict)
+  doseNumber Int
+  strategy String
+  ageUnit String
+  minimumAge Int
+  maximumAge Int?
+  minimumIntervalDays Int @default(0)
+  repeatEveryMonths Int?
+  required Boolean @default(true)
+  enabled Boolean @default(true)
+  validFrom DateTime
+  validUntil DateTime?
+  sourceReference String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@unique([code, version])
+  @@index([vaccineId, doseNumber, strategy])
+}
+
+model HealthVaccineInteraction {
+  id String @id @default(cuid())
+  firstVaccineId String
+  firstVaccine Vaccine @relation("VaccineInteractionFirst", fields: [firstVaccineId], references: [id], onDelete: Restrict)
+  secondVaccineId String
+  secondVaccine Vaccine @relation("VaccineInteractionSecond", fields: [secondVaccineId], references: [id], onDelete: Restrict)
+  minimumIntervalDays Int
+  allowSameDay Boolean @default(false)
+  sourceReference String
+  actorUsuarioId String
+  @@unique([firstVaccineId, secondVaccineId])
+}
+
+model HealthVaccinationCampaign {
+  id String @id @default(cuid())
+  name String
+  startsAt DateTime
+  endsAt DateTime
+  publicInformation String
+  actorUsuarioId String
+  records VaccinationRecord[]
+  createdAt DateTime @default(now())
+}
+
+model HealthVaccinationCardEvent {
+  id String @id @default(cuid())
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  vaccineId String
+  vaccine Vaccine @relation(fields: [vaccineId], references: [id], onDelete: Restrict)
+  kind String
+  doseNumber Int
+  strategy String
+  occurredAt DateTime
+  scheduledFor DateTime?
+  until DateTime?
+  professionalId String
+  professional HealthProfessional @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  unitId String
+  unit HealthUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  reason String
+  sourceReference String?
+  lotNumber String?
+  revokedAt DateTime?
+  revokedReason String?
+  revokedByUsuarioId String?
+  actorUsuarioId String
+  vaccination VaccinationRecord?
+  createdAt DateTime @default(now())
+  @@index([patientId, vaccineId, kind])
+}
+
+model HealthVaccineAdverseEvent {
+  id String @id @default(cuid())
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  vaccineId String
+  vaccine Vaccine @relation(fields: [vaccineId], references: [id], onDelete: Restrict)
+  vaccinationRecordId String?
+  vaccinationRecord VaccinationRecord? @relation(fields: [vaccinationRecordId], references: [id], onDelete: Restrict)
+  unitId String
+  unit HealthUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  occurredAt DateTime
+  eventType String
+  lesionType String
+  lesionLocation String
+  severity String
+  clinicalNotes String
+  actorUsuarioId String
+  followups HealthVaccineAdverseFollowup[]
+  createdAt DateTime @default(now())
+}
+
+model HealthVaccineAdverseFollowup {
+  id String @id @default(cuid())
+  eventId String
+  event HealthVaccineAdverseEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  occurredAt DateTime
+  conduct String
+  narrative String
+  professionalId String
+  professional HealthProfessional @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  actorUsuarioId String
+  createdAt DateTime @default(now())
 }
 
 model MedicineBatch {
@@ -10372,6 +11131,7 @@ model HealthCbo {
 }
 
 model HealthSpecialty {
+  careCoverages HealthCareCoverage[]
   id        String   @id @default(cuid())
   code      String   @unique
   name      String   @unique
@@ -10489,6 +11249,9 @@ model HealthProfessionalAssignment {
   specialtyId    String?
   specialty      HealthSpecialty?   @relation(fields: [specialtyId], references: [id], onDelete: Restrict)
   weeklyHours    Int                @default(0)
+  validFrom      DateTime?
+  validUntil     DateTime?
+  shifts         HealthProfessionalShift[]
   isActive       Boolean            @default(true)
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
@@ -10496,6 +11259,19 @@ model HealthProfessionalAssignment {
   @@unique([professionalId, unitId, specialtyId])
   @@index([unitId, isActive])
   @@index([specialtyId, isActive])
+}
+
+model HealthProfessionalShift {
+  id String @id @default(cuid())
+  assignmentId String
+  assignment HealthProfessionalAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  weekday Int
+  startTime String
+  endTime String
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([assignmentId, weekday, startTime])
 }
 
 model HealthServiceAssignment {
@@ -10627,6 +11403,10 @@ model HealthSusImportIssue {
 }
 
 model HealthSusProcedure {
+  auxiliaryPriceItems HealthProcedurePriceItem[]
+  treatmentReportItems HealthTreatmentReportProcedure[]
+  tfdClinicalReports HealthTfdClinicalReport[]
+  careCoverages HealthCareCoverage[]
   id                       String                        @id @default(cuid())
   source                   String
   competence               String
@@ -10765,6 +11545,18 @@ model HealthLaboratoryConfiguration {
 // Produtos assistenciais especializam o cadastro único de Material; saldo e lote
 // continuam exclusivamente em MaterialStock/MaterialMovement.
 model HealthMaterialProfile {
+  catmatCode String?
+  supplyUnitCode String?
+  stockUnitsPerSupply Float @default(1)
+  renameMember Boolean @default(false)
+  renameReference String?
+  remumeMember Boolean @default(false)
+  remumeReference String?
+  prescriptionRecommendation String?
+  pharmaceuticalComponent String?
+  dcbSubstanceId String?
+  dcbSubstance HealthDcbSubstance? @relation(fields: [dcbSubstanceId], references: [id], onDelete: Restrict)
+  catmatUnitMappings HealthCatmatUnitMapping[]
   id                     String    @id @default(cuid())
   materialId             String    @unique
   material               Material  @relation(fields: [materialId], references: [id], onDelete: Restrict)
@@ -10785,6 +11577,219 @@ model HealthMaterialProfile {
 
   @@index([productKind, isActive])
   @@index([sourceCatalog, sourceCode])
+}
+
+model HealthDcbSubstance {
+  id String @id @default(cuid())
+  code String
+  name String
+  casNumber String
+  version String
+  sourceReference String
+  isActive Boolean @default(true)
+  createdByUsuarioId String
+  createdAt DateTime @default(now())
+  profiles HealthMaterialProfile[]
+  @@unique([code, version])
+  @@index([name, isActive])
+}
+
+model HealthCatmatUnitMapping {
+  id String @id @default(cuid())
+  profileId String
+  profile HealthMaterialProfile @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  localUnitCode String
+  officialUnitCode String
+  localUnitsPerOfficial Float
+  reference String
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([profileId, officialUnitCode])
+}
+
+model HealthPharmacyLawyer {
+  id String @id @default(cuid())
+  personId String @unique
+  person Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+  registration String
+  registrationState String
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  cases HealthPharmacyJudicialCase[]
+  @@unique([registration, registrationState])
+}
+
+model HealthPharmacyJudicialCase {
+  id String @id @default(cuid())
+  caseNumber String
+  version Int @default(1)
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  unitId String
+  lawyerId String
+  lawyer HealthPharmacyLawyer @relation(fields: [lawyerId], references: [id], onDelete: Restrict)
+  openedAt DateTime
+  validUntil DateTime
+  reason String
+  processId String?
+  process Process? @relation(fields: [processId], references: [id], onDelete: Restrict)
+  purchaseRequestId String?
+  purchaseRequest PurchaseRequest? @relation(fields: [purchaseRequestId], references: [id], onDelete: Restrict)
+  status String @default("OPEN")
+  renewalOfId String?
+  renewalOf HealthPharmacyJudicialCase? @relation("PharmacyJudicialRenewal", fields: [renewalOfId], references: [id], onDelete: Restrict)
+  renewals HealthPharmacyJudicialCase[] @relation("PharmacyJudicialRenewal")
+  createdByUsuarioId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items HealthPharmacyJudicialItem[]
+  events HealthPharmacyJudicialEvent[]
+  documents HealthPharmacyJudicialDocument[]
+  @@unique([caseNumber, version])
+  @@index([patientId, status])
+  @@index([unitId, status])
+}
+
+model HealthPharmacyJudicialItem {
+  id String @id @default(cuid())
+  caseId String
+  case HealthPharmacyJudicialCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  medicineId String
+  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Restrict)
+  quantity Float
+  dosage String
+  prescriptionItemId String?
+  prescriptionItem HealthPrescriptionItem? @relation(fields: [prescriptionItemId], references: [id], onDelete: Restrict)
+  dispensations MedicineDispensation[]
+  @@unique([caseId, medicineId])
+}
+
+model HealthPharmacyJudicialEvent {
+  id String @id @default(cuid())
+  caseId String
+  case HealthPharmacyJudicialCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  fromStatus String?
+  toStatus String
+  reason String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+}
+
+model HealthPharmacyJudicialDocument {
+  id String @id @default(cuid())
+  caseId String
+  case HealthPharmacyJudicialCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  documentId String
+  document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@unique([caseId, documentId])
+}
+
+model HealthCareProgram {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  enrollments HealthCareProgramEnrollment[]
+}
+
+model HealthCareProgramEnrollment {
+  id String @id @default(cuid())
+  programId String
+  program HealthCareProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  unitId String
+  unit HealthUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  startsAt DateTime
+  endsAt DateTime?
+  reason String
+  closureReason String?
+  createdByUsuarioId String
+  closedByUsuarioId String?
+  createdAt DateTime @default(now())
+  @@index([programId, patientId, startsAt])
+}
+
+model HealthPharmacyKit {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  version Int @default(1)
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items HealthPharmacyKitItem[]
+  deliveries HealthPharmacyKitDelivery[]
+}
+
+model HealthPharmacyKitItem {
+  id String @id @default(cuid())
+  kitId String
+  kit HealthPharmacyKit @relation(fields: [kitId], references: [id], onDelete: Restrict)
+  materialId String
+  material Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  quantity Float
+  @@unique([kitId, materialId])
+}
+
+model HealthPharmacyKitDelivery {
+  id String @id @default(cuid())
+  kitId String
+  kit HealthPharmacyKit @relation(fields: [kitId], references: [id], onDelete: Restrict)
+  kitVersion Int
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  warehouseId String
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  status String @default("GENERATED")
+  criteria Json
+  sourceSnapshot Json
+  receiverPersonId String?
+  receiverPerson Person? @relation("PharmacyKitReceiver", fields: [receiverPersonId], references: [id], onDelete: Restrict)
+  receiverRelationship String?
+  generatedByUsuarioId String
+  deliveredAt DateTime?
+  deliveredByUsuarioId String?
+  returnedAt DateTime?
+  returnedByUsuarioId String?
+  idempotencyKey String @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items HealthPharmacyKitDeliveryItem[]
+  events HealthPharmacyKitEvent[]
+  @@index([patientId, status])
+  @@index([warehouseId, status])
+}
+
+model HealthPharmacyKitDeliveryItem {
+  id String @id @default(cuid())
+  deliveryId String
+  delivery HealthPharmacyKitDelivery @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+  materialId String
+  material Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  quantity Float
+  prescriptionItemId String?
+  prescriptionItem HealthPrescriptionItem? @relation(fields: [prescriptionItemId], references: [id], onDelete: Restrict)
+  stockId String?
+  stock MaterialStock? @relation(fields: [stockId], references: [id], onDelete: Restrict)
+  movementId String? @unique
+  reversalMovementId String? @unique
+  dispensation MedicineDispensation?
+  @@unique([deliveryId, materialId])
+}
+
+model HealthPharmacyKitEvent {
+  id String @id @default(cuid())
+  deliveryId String
+  delivery HealthPharmacyKitDelivery @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+  status String
+  reason String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
 }
 
 model HealthStockPolicy {
@@ -10815,7 +11820,11 @@ model HealthStockReceipt {
   invoiceNumber      String?
   invoiceKey         String?
   invoiceXmlHash     String?
-  status             String                   @default("DRAFT") // DRAFT, POSTED, CANCELLED
+  donorName          String?
+  invoiceIssuedAt    DateTime?
+  approvedAt         DateTime?
+  approvedByUsuarioId String?
+  status             String                   @default("DRAFT") // DRAFT, PENDING_APPROVAL, POSTED, CANCELLED
   idempotencyKey     String                   @unique
   receivedAt         DateTime                 @default(now())
   postedAt           DateTime?
@@ -10829,6 +11838,9 @@ model HealthStockReceipt {
 }
 
 model HealthStockReceiptItem {
+  vaccineDosesPerVial Int?
+  vaccineManufacturerId String?
+  vaccineManufacturer HealthVaccineManufacturer? @relation(fields: [vaccineManufacturerId], references: [id], onDelete: Restrict)
   id             String             @id @default(cuid())
   receiptId      String
   receipt        HealthStockReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
@@ -10837,6 +11849,7 @@ model HealthStockReceiptItem {
   batchNumber    String
   productionDate DateTime?
   expirationDate DateTime?
+  manufacturerName String?
   quantity       Float
   unitCost       Float
   movementId     String?            @unique
@@ -10869,6 +11882,12 @@ model HealthStockTransfer {
 }
 
 model HealthStockTransferItem {
+  vaccineDosesPerVial Int?
+  vaccineManufacturerId String?
+  vaccineManufacturerName String?
+  pharmacyRequestItemId String?
+  pharmacyRequestItem PharmacyRequestItem? @relation(fields: [pharmacyRequestItemId], references: [id], onDelete: Restrict)
+  pharmacyRequestFulfillment PharmacyRequestFulfillment?
   id                  String              @id @default(cuid())
   transferId          String
   transfer            HealthStockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
@@ -10887,6 +11906,10 @@ model HealthStockTransferItem {
 }
 
 model PharmacyRequest {
+  idempotencyKey String? @unique
+  originWarehouseId String?
+  originWarehouse Warehouse? @relation("PharmacyRequestOrigin", fields: [originWarehouseId], references: [id], onDelete: Restrict)
+  events PharmacyRequestEvent[]
   id                     String                @id @default(cuid())
   patientId              String?
   patient                Patient?              @relation(fields: [patientId], references: [id], onDelete: Restrict)
@@ -10906,6 +11929,8 @@ model PharmacyRequest {
 }
 
 model PharmacyRequestItem {
+  transfers HealthStockTransferItem[]
+  fulfillments PharmacyRequestFulfillment[]
   id                String          @id @default(cuid())
   requestId         String
   request           PharmacyRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
@@ -10916,6 +11941,36 @@ model PharmacyRequestItem {
   createdAt         DateTime        @default(now())
 
   @@unique([requestId, materialId])
+}
+
+model PharmacyRequestFulfillment {
+  id String @id @default(cuid())
+  requestItemId String
+  requestItem PharmacyRequestItem @relation(fields: [requestItemId], references: [id], onDelete: Restrict)
+  quantity Float
+  movementId String @unique
+  movement MaterialMovement @relation(fields: [movementId], references: [id], onDelete: Restrict)
+  dispensationId String? @unique
+  dispensation MedicineDispensation? @relation(fields: [dispensationId], references: [id], onDelete: Restrict)
+  transferItemId String? @unique
+  transferItem HealthStockTransferItem? @relation(fields: [transferItemId], references: [id], onDelete: Restrict)
+  receiverPersonId String?
+  receiverPerson Person? @relation(fields: [receiverPersonId], references: [id], onDelete: Restrict)
+  status String @default("ACTIVE")
+  reason String
+  actorUsuarioId String
+  cancelledAt DateTime?
+  createdAt DateTime @default(now())
+}
+
+model PharmacyRequestEvent {
+  id String @id @default(cuid())
+  requestId String
+  request PharmacyRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  status String
+  reason String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
 }
 
 model ControlledMedicineBook {
@@ -11208,6 +12263,7 @@ model SpecializedTeamSchedule {
 }
 
 model SpecializedTherapeuticPlan {
+  sessions HealthTherapySession[]
   id                     String                    @id @default(cuid())
   patientId              String
   patient                Patient                   @relation(fields: [patientId], references: [id], onDelete: Restrict)
@@ -11304,6 +12360,7 @@ model SpecializedDistribution {
 
 // --- S4: Regulacao, Cotas, TFD e Transporte ---
 model HealthRegulationQuota {
+  allocations HealthRegulationQuotaAllocation[]
   id                 String              @id @default(cuid())
   providerSupplierId String
   provider           Supplier            @relation(fields: [providerSupplierId], references: [id], onDelete: Restrict)
@@ -11333,7 +12390,25 @@ model HealthRegulationQuota {
   @@index([period, isActive])
 }
 
+model HealthRegulationQuotaAllocation {
+  id String @id @default(cuid())
+  quotaId String
+  quota HealthRegulationQuota @relation(fields: [quotaId], references: [id], onDelete: Restrict)
+  requestUnitId String
+  totalQuantity Int
+  reservedQuantity Int @default(0)
+  realizedQuantity Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([quotaId, requestUnitId])
+}
+
 model HealthRegulationRequest {
+  appointmentId String? @unique
+  appointment HealthAppointment? @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  waitlistEntry HealthWaitlist?
+  reviews HealthRegulationReview[]
+  phoneCalls HealthPatientCall[]
   id                 String                  @id @default(cuid())
   patientId          String
   patient            Patient                 @relation(fields: [patientId], references: [id], onDelete: Restrict)
@@ -11427,12 +12502,124 @@ model HealthTfdRequest {
   updatedAt           DateTime                 @updatedAt
 
   passengers HealthTfdPassenger[]
+  clinicalReport HealthTfdClinicalReport?
+  events HealthTfdRequestEvent[]
+  benefits HealthTfdBenefit[]
 
   @@index([status, createdAt])
   @@index([patientId, status])
 }
 
+model HealthTfdClinicalReport {
+  id String @id @default(cuid())
+  requestId String @unique
+  request HealthTfdRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  version Int @default(1)
+  medicalRecordId String?
+  medicalRecord MedicalRecord? @relation(fields: [medicalRecordId], references: [id], onDelete: Restrict)
+  professionalId String
+  professional HealthProfessional @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  procedureId String?
+  procedure HealthSusProcedure? @relation(fields: [procedureId], references: [id], onDelete: Restrict)
+  diagnosis String
+  diagnosticCode String?
+  clinicalHistory String
+  examinations String
+  treatment String
+  localTreatmentUnavailableReason String
+  transportType String
+  transportJustification String
+  companionRequired Boolean @default(false)
+  companionJustification String?
+  patientSnapshot Json
+  professionalSnapshot Json
+  createdByUsuarioId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  revisions HealthTfdReportRevision[]
+  supplements HealthTfdReportSupplement[]
+
+  @@index([professionalId, procedureId])
+}
+
+model HealthTfdReportRevision {
+  id String @id @default(cuid())
+  reportId String
+  report HealthTfdClinicalReport @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  version Int
+  snapshot Json
+  reason String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+
+  @@unique([reportId, version])
+}
+
+model HealthTfdReportSupplement {
+  id String @id @default(cuid())
+  reportId String
+  report HealthTfdClinicalReport @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  reportVersion Int
+  narrative String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+
+  @@index([reportId, createdAt])
+}
+
+model HealthTfdRequestEvent {
+  id String @id @default(cuid())
+  requestId String
+  request HealthTfdRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  eventType String
+  fromStatus String?
+  toStatus String
+  reportVersion Int?
+  reason String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+
+  @@index([requestId, createdAt])
+}
+
+model HealthTfdBenefit {
+  id String @id @default(cuid())
+  requestId String
+  request HealthTfdRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  reportVersion Int
+  kind String
+  description String
+  quantity Int
+  unitValue Decimal? @db.Decimal(14, 2)
+  status String @default("SOLICITADO")
+  createdByUsuarioId String
+  authorizedByUsuarioId String?
+  authorizedAt DateTime?
+  deliveredByUsuarioId String?
+  deliveredAt DateTime?
+  receivedByPersonId String?
+  receivedByPerson Person? @relation(fields: [receivedByPersonId], references: [id], onDelete: Restrict)
+  deliveryReceipt String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([requestId, status])
+}
+
 model HealthTfdTrip {
+  fleetBookingId String? @unique
+  fleetBooking FleetBooking? @relation(fields: [fleetBookingId], references: [id], onDelete: Restrict)
+  assistantEmployeeId String?
+  assistantEmployee Employee? @relation("HealthTfdAssistant", fields: [assistantEmployeeId], references: [id], onDelete: Restrict)
+  responsibleEmployeeId String?
+  responsibleEmployee Employee? @relation("HealthTfdResponsible", fields: [responsibleEmployeeId], references: [id], onDelete: Restrict)
+  advanceRequestId String?
+  advanceRequest HrPortalRequest? @relation(fields: [advanceRequestId], references: [id], onDelete: Restrict)
+  advanceAuthorizedAmount Decimal? @db.Decimal(14, 2)
+  purpose String?
+  confirmedAt DateTime?
+  confirmedByUsuarioId String?
+  events HealthTfdTripEvent[]
   id                 String    @id @default(cuid())
   date               DateTime  @db.Date
   origin             String
@@ -11456,6 +12643,10 @@ model HealthTfdTrip {
 }
 
 model HealthTfdPassenger {
+  boardingLocation String?
+  presenceStatus String @default("PENDING")
+  presenceAt DateTime?
+  presenceByUsuarioId String?
   id                        String                     @id @default(cuid())
   tripId                    String
   trip                      HealthTfdTrip              @relation(fields: [tripId], references: [id], onDelete: Cascade)
@@ -11474,6 +12665,337 @@ model HealthTfdPassenger {
 }
 
 // --- S4-C: Producao e Faturamento SUS ---
+model HealthTfdTripEvent {
+  id String @id @default(cuid())
+  tripId String
+  trip HealthTfdTrip @relation(fields: [tripId], references: [id], onDelete: Restrict)
+  passengerId String?
+  eventType String
+  reason String
+  metadata Json?
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+
+  @@index([tripId, createdAt])
+}
+
+// --- S4-C: Producao e Faturamento SUS ---
+model HealthAuthorizationIssuer {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  typeCode String
+  sourceReference String
+  isActive Boolean @default(true)
+  createdByUsuarioId String
+  createdAt DateTime @default(now())
+  ranges HealthAuthorizationNumberRange[]
+}
+
+model HealthAuthorizationNumberRange {
+  id String @id @default(cuid())
+  issuerId String
+  issuer HealthAuthorizationIssuer @relation(fields: [issuerId], references: [id], onDelete: Restrict)
+  kind String
+  firstNumber String
+  lastNumber String
+  nextNumber String
+  validFrom DateTime @db.Date
+  validUntil DateTime @db.Date
+  sourceReference String
+  createdByUsuarioId String
+  createdAt DateTime @default(now())
+  authorizations HealthTreatmentAuthorization[]
+
+  @@index([kind, validFrom, validUntil])
+}
+
+model HealthTreatmentReport {
+  id String @id @default(cuid())
+  kind String
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  unitId String
+  unit HealthUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  professionalId String
+  professional HealthProfessional @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  medicalRecordId String?
+  medicalRecord MedicalRecord? @relation(fields: [medicalRecordId], references: [id], onDelete: Restrict)
+  version Int @default(1)
+  status String @default("SOLICITADA")
+  diagnosis String
+  diagnosticCode String?
+  clinicalHistory String
+  examinations String
+  treatmentJustification String
+  admissionAt DateTime?
+  plannedStart DateTime @db.Date
+  plannedEnd DateTime @db.Date
+  initialApac Boolean @default(true)
+  patientSnapshot Json
+  professionalSnapshot Json
+  renewalOfId String? @unique
+  renewalOf HealthTreatmentReport? @relation("HealthTreatmentRenewal", fields: [renewalOfId], references: [id], onDelete: Restrict)
+  renewal HealthTreatmentReport? @relation("HealthTreatmentRenewal")
+  paidManuallyAt DateTime?
+  paidManuallyByUsuarioId String?
+  manualPaymentReference String?
+  dischargedAt DateTime?
+  dischargeOutcome String?
+  createdByUsuarioId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  procedures HealthTreatmentReportProcedure[]
+  revisions HealthTreatmentReportRevision[]
+  events HealthTreatmentReportEvent[]
+  authorization HealthTreatmentAuthorization?
+
+  @@index([kind, unitId, status])
+  @@index([patientId, createdAt])
+}
+
+model HealthTreatmentReportProcedure {
+  id String @id @default(cuid())
+  reportId String
+  report HealthTreatmentReport @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  procedureId String
+  procedure HealthSusProcedure @relation(fields: [procedureId], references: [id], onDelete: Restrict)
+  role String
+  quantity Int
+  performerProfessionalId String?
+  performerProfessional HealthProfessional? @relation(fields: [performerProfessionalId], references: [id], onDelete: Restrict)
+
+  @@unique([reportId, procedureId, role])
+}
+
+model HealthTreatmentReportRevision {
+  id String @id @default(cuid())
+  reportId String
+  report HealthTreatmentReport @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  version Int
+  snapshot Json
+  reason String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+
+  @@unique([reportId, version])
+}
+
+model HealthTreatmentReportEvent {
+  id String @id @default(cuid())
+  reportId String
+  report HealthTreatmentReport @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  eventType String
+  fromStatus String?
+  toStatus String
+  reason String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+
+  @@index([reportId, createdAt])
+}
+
+model HealthTreatmentAuthorization {
+  id String @id @default(cuid())
+  reportId String @unique
+  report HealthTreatmentReport @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  rangeId String
+  range HealthAuthorizationNumberRange @relation(fields: [rangeId], references: [id], onDelete: Restrict)
+  kind String
+  number String
+  reportVersion Int
+  validFrom DateTime @db.Date
+  validUntil DateTime @db.Date
+  authorizedByUsuarioId String
+  authorizedAt DateTime @default(now())
+  status String @default("ATIVA")
+  cancelledAt DateTime?
+  cancelledByUsuarioId String?
+  cancellationReason String?
+
+  @@unique([kind, number])
+}
+
+model HealthProcedurePriceTable {
+  id String @id @default(cuid())
+  unitId String
+  unit HealthUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  agreementId String?
+  agreement HealthCareAgreement? @relation(fields: [agreementId], references: [id], onDelete: Restrict)
+  code String
+  name String
+  version Int
+  validFrom DateTime @db.Date
+  validUntil DateTime @db.Date
+  sourceReference String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  items HealthProcedurePriceItem[]
+
+  @@unique([unitId, code, version])
+  @@index([unitId, agreementId, validFrom, validUntil])
+}
+
+model HealthProcedurePriceItem {
+  id String @id @default(cuid())
+  tableId String
+  table HealthProcedurePriceTable @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  procedureId String
+  procedure HealthSusProcedure @relation(fields: [procedureId], references: [id], onDelete: Restrict)
+  unitValue Decimal @db.Decimal(18, 6)
+
+  @@unique([tableId, procedureId])
+}
+
+model HealthFollowupReceiver {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  contractName String
+  schemaVersion String
+  unitId String
+  unit HealthUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  nextSequence Int @default(1)
+  createdAt DateTime @default(now())
+  binding HealthFollowupBinding?
+  receipts HealthFollowupReceipt[]
+  records HealthFollowupRecord[]
+  processedKeys HealthFollowupProcessedKey[]
+}
+
+model HealthFollowupBinding {
+  id String @id @default(cuid())
+  connectionId String @unique
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  receiverId String @unique
+  receiver HealthFollowupReceiver @relation(fields: [receiverId], references: [id], onDelete: Restrict)
+  unitId String
+  unit HealthUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  contractName String
+  schemaVersion String
+  createdByUsuarioId String
+  createdAt DateTime @default(now())
+  batches HealthFollowupBatch[]
+
+  @@unique([unitId, contractName])
+}
+
+model HealthFollowupBatch {
+  id String @id @default(cuid())
+  bindingId String
+  binding HealthFollowupBinding @relation(fields: [bindingId], references: [id], onDelete: Restrict)
+  idempotencyKey String
+  fromDate DateTime @db.Date
+  toDate DateTime @db.Date
+  contractName String
+  schemaVersion String
+  reprocessOfId String?
+  onlyRejected Boolean @default(false)
+  reprocessOf HealthFollowupBatch? @relation("HealthFollowupReprocessing", fields: [reprocessOfId], references: [id], onDelete: Restrict)
+  reprocessings HealthFollowupBatch[] @relation("HealthFollowupReprocessing")
+  hashSha256 String
+  payload Json
+  status String @default("GERADA")
+  createdByUsuarioId String
+  createdAt DateTime @default(now())
+  items HealthFollowupBatchItem[]
+  receipt HealthFollowupReceipt?
+  receivedRecords HealthFollowupRecord[] @relation("HealthFollowupLastBatch")
+
+  @@unique([bindingId, idempotencyKey])
+  @@index([bindingId, createdAt])
+}
+
+model HealthFollowupBatchItem {
+  id String @id @default(cuid())
+  batchId String
+  batch HealthFollowupBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  ordinal Int
+  originType String
+  originId String
+  idempotencyKey String
+  sourceVersion String
+  payload Json
+  result HealthFollowupResult?
+
+  @@unique([batchId, ordinal])
+  @@unique([batchId, originType, originId])
+}
+
+model HealthFollowupReceipt {
+  id String @id @default(cuid())
+  receiverId String
+  receiver HealthFollowupReceiver @relation(fields: [receiverId], references: [id], onDelete: Restrict)
+  batchId String @unique
+  batch HealthFollowupBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  integrationRunId String @unique
+  integrationRun IntegrationRun @relation(fields: [integrationRunId], references: [id], onDelete: Restrict)
+  protocol String @unique
+  receiverSnapshot Json
+  status String
+  total Int
+  accepted Int
+  rejected Int
+  unchanged Int
+  processedByUsuarioId String
+  createdAt DateTime @default(now())
+  results HealthFollowupResult[]
+}
+
+model HealthFollowupRecord {
+  id String @id @default(cuid())
+  receiverId String
+  receiver HealthFollowupReceiver @relation(fields: [receiverId], references: [id], onDelete: Restrict)
+  originType String
+  originId String
+  unitId String
+  unit HealthUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  professionalId String?
+  professional HealthProfessional? @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  sourceVersion String
+  sourceUpdatedAt DateTime
+  snapshotAt DateTime
+  payload Json
+  lastBatchId String
+  lastBatch HealthFollowupBatch @relation("HealthFollowupLastBatch", fields: [lastBatchId], references: [id], onDelete: Restrict)
+  lastReceivedAt DateTime @default(now())
+  processedKeys HealthFollowupProcessedKey[]
+  results HealthFollowupResult[]
+
+  @@unique([receiverId, originType, originId])
+  @@index([unitId, patientId])
+}
+
+model HealthFollowupProcessedKey {
+  id String @id @default(cuid())
+  receiverId String
+  receiver HealthFollowupReceiver @relation(fields: [receiverId], references: [id], onDelete: Restrict)
+  key String
+  recordId String
+  record HealthFollowupRecord @relation(fields: [recordId], references: [id], onDelete: Restrict)
+  sourceVersion String
+  createdAt DateTime @default(now())
+
+  @@unique([receiverId, key])
+}
+
+model HealthFollowupResult {
+  id String @id @default(cuid())
+  receiptId String
+  receipt HealthFollowupReceipt @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  batchItemId String @unique
+  batchItem HealthFollowupBatchItem @relation(fields: [batchItemId], references: [id], onDelete: Restrict)
+  recordId String?
+  record HealthFollowupRecord? @relation(fields: [recordId], references: [id], onDelete: Restrict)
+  status String
+  message String
+  createdAt DateTime @default(now())
+
+  @@index([receiptId, status])
+}
+
 model HealthProductionCompetence {
   id                 String    @id @default(cuid())
   period             String    @unique // YYYY-MM
@@ -11493,6 +13015,9 @@ model HealthProductionCompetence {
 }
 
 model HealthProductionFact {
+  pricingSnapshot Json?
+  version Int @default(1)
+  revisions HealthProductionFactRevision[]
   id             String                      @id @default(cuid())
   originType     String // PEP_PROCEDURE, LAB_RESULT, VACCINATION, REGULATION
   originId       String
@@ -11525,6 +13050,20 @@ model HealthProductionFact {
   @@index([unitId, period])
   @@index([cidReferenceId])
   @@index([municipality, state])
+}
+
+model HealthProductionFactRevision {
+  id String @id @default(cuid())
+  factId String
+  fact HealthProductionFact @relation(fields: [factId], references: [id], onDelete: Restrict)
+  version Int
+  before Json
+  after Json
+  reason String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+
+  @@unique([factId, version])
 }
 
 model HealthProductionCriticism {
@@ -11686,6 +13225,8 @@ model HealthBedOccupancy {
 
 model HealthObservation {
   id                 String     @id @default(cuid())
+  medicalRecordId    String?    @unique
+  medicalRecord      MedicalRecord? @relation(fields: [medicalRecordId], references: [id], onDelete: Restrict)
   patientId          String
   patient            Patient    @relation(fields: [patientId], references: [id], onDelete: Restrict)
   unitId             String
@@ -11772,6 +13313,7 @@ model HealthMicroarea {
 }
 
 model HealthHousehold {
+  housingDetails Json?
   id            String           @id @default(cuid())
   householdCode String?          @unique
   microareaId   String?
@@ -11788,6 +13330,11 @@ model HealthHousehold {
 }
 
 model HealthFamily {
+  classification String?
+  familyType String?
+  unitId String?
+  teamId String?
+  events HealthFamilyEvent[]
   id                  String           @id @default(cuid())
   familyCode          String?
   householdId         String?
@@ -11847,6 +13394,14 @@ model HealthHomeVisit {
 }
 
 model HealthHomeVisitParticipant {
+  outcome String @default("PRESENT")
+  refusalReason String?
+  weight Float?
+  height Float?
+  bloodPressure String?
+  temperature Float?
+  heartRate Int?
+  bloodGlucose Float?
   id        String          @id @default(cuid())
   visitId   String
   visit     HealthHomeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
@@ -11893,6 +13448,106 @@ model HealthEsusForm {
   @@index([unitId, period])
 }
 
+model HealthFamilyEvent {
+  id String @id @default(cuid())
+  familyId String
+  family HealthFamily @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  eventType String
+  personId String?
+  effectiveAt DateTime
+  reason String
+  snapshot Json
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@index([familyId, effectiveAt])
+}
+
+model HealthFamilyDocument {
+  id String @id @default(cuid())
+  familyId String
+  family Family @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  documentId String
+  document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@unique([familyId, documentId])
+}
+
+model HealthHomeCareRequest {
+  id String @id @default(cuid())
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  unitId String
+  requestedAt DateTime
+  reason String
+  status String @default("REQUESTED")
+  createdByUsuarioId String
+  assessments HealthHomeCareAssessment[]
+  attendances HealthHomeCareAttendance[]
+  createdAt DateTime @default(now())
+  @@index([unitId, status])
+}
+
+model HealthHomeCareAssessment {
+  id String @id @default(cuid())
+  requestId String
+  request HealthHomeCareRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  assessedAt DateTime
+  professionalId String
+  eligible Boolean
+  modality String
+  cidReferenceId String?
+  character String
+  evaluation String
+  actorUsuarioId String
+  attendances HealthHomeCareAttendance[]
+  createdAt DateTime @default(now())
+}
+
+model HealthHomeCareAttendance {
+  id String @id @default(cuid())
+  requestId String
+  request HealthHomeCareRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  assessmentId String
+  assessment HealthHomeCareAssessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  medicalRecordId String @unique
+  performedAt DateTime
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+}
+
+model HealthCollectiveActivity {
+  id String @id @default(cuid())
+  unitId String
+  teamId String
+  professionalId String
+  occurredAt DateTime
+  activityType String
+  themes String[]
+  practices String[]
+  participantIds String[]
+  procedureId String?
+  notes String?
+  createdByUsuarioId String
+  createdAt DateTime @default(now())
+  @@index([unitId, occurredAt])
+}
+
+model HealthFoodMarker {
+  id String @id @default(cuid())
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  unitId String
+  professionalId String
+  recordedAt DateTime
+  ageGroup String
+  place String
+  markers Json
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@index([patientId, recordedAt])
+}
+
 model HealthEsusBatch {
   id                 String    @id @default(cuid())
   competence         String // YYYY-MM
@@ -11927,6 +13582,21 @@ model HealthEsusBatchItem {
 
 // --- Correção final POC: Agenda (cronogramas, vagas, espera) ---
 model HealthCareSchedule {
+  agreementId String?
+  agreement HealthCareAgreement? @relation(fields: [agreementId], references: [id], onDelete: Restrict)
+  procedureId String?
+  locationUnitId String?
+  validFrom DateTime?
+  validUntil DateTime?
+  genderRestriction String?
+  minAge Int?
+  maxAge Int?
+  allowHolidays Boolean @default(false)
+  requirePresenceConfirmation Boolean @default(false)
+  releaseAbsenceSlot Boolean @default(true)
+  fixedReceiptTime String?
+  slotMinutes Int @default(15)
+  blocks HealthScheduleBlock[]
   id                 String                 @id @default(cuid())
   kind               String                 @default("FIXO") // FIXO, DIARIO
   unitId             String
@@ -11959,6 +13629,14 @@ model HealthCareSchedule {
 }
 
 model HealthWaitlist {
+  events HealthWaitlistEvent[]
+  unitId String?
+  procedureId String?
+  programName String?
+  regulationRequestId String? @unique
+  regulationRequest HealthRegulationRequest? @relation(fields: [regulationRequestId], references: [id], onDelete: Restrict)
+  appointmentId String? @unique
+  appointment HealthAppointment? @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
   id                 String              @id @default(cuid())
   patientId          String
   patient            Patient             @relation(fields: [patientId], references: [id], onDelete: Restrict)
@@ -11978,6 +13656,76 @@ model HealthWaitlist {
 }
 
 // --- S5: Portal do Prestador e Vigilância em Saúde ---
+model HealthWaitlistEvent {
+  id String @id @default(cuid())
+  waitlistId String
+  waitlist HealthWaitlist @relation(fields: [waitlistId], references: [id], onDelete: Restrict)
+  eventType String
+  fromStatus String?
+  toStatus String
+  notes String?
+  appointmentId String?
+  appointment HealthAppointment? @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+
+  @@index([waitlistId, createdAt])
+}
+
+// --- S5: Portal do Prestador e Vigilância em Saúde ---
+model HealthScheduleBlock {
+  id String @id @default(cuid())
+  scheduleId String
+  schedule HealthCareSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+  startsAt DateTime
+  endsAt DateTime
+  reason String
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@index([scheduleId, startsAt, endsAt])
+}
+
+model HealthRegulationReview {
+  id String @id @default(cuid())
+  requestId String
+  request HealthRegulationRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  step String
+  decision String
+  priority String
+  notes String
+  professionalId String?
+  actorUsuarioId String
+  createdAt DateTime @default(now())
+  @@index([requestId, createdAt])
+}
+
+model HealthCallPanel {
+  id String @id @default(cuid())
+  unitId String
+  sector String
+  title String
+  callMessage String
+  news String
+  isActive Boolean @default(true)
+  calls HealthPanelCall[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([unitId, sector])
+}
+
+model HealthPanelCall {
+  id String @id @default(cuid())
+  panelId String
+  panel HealthCallPanel @relation(fields: [panelId], references: [id], onDelete: Restrict)
+  patientId String
+  appointmentId String?
+  pharmacyRequestId String?
+  message String
+  actorUsuarioId String
+  calledAt DateTime @default(now())
+  @@index([panelId, calledAt])
+}
+
 model HealthProviderAccess {
   id         String   @id @default(cuid())
   supplierId String
@@ -14732,6 +16480,7 @@ model ConfiguracaoModulo {
 }
 
 model IntegrationConnection {
+  healthFollowupBinding HealthFollowupBinding?
   id                  String    @id @default(cuid())
   code                String    @unique
   name                String
@@ -14755,6 +16504,7 @@ model IntegrationConnection {
 }
 
 model IntegrationRun {
+  healthFollowupReceipt HealthFollowupReceipt?
   id           String                @id @default(cuid())
   connectionId String
   connection   IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
@@ -15698,6 +17448,7 @@ model FleetDestination {
 }
 
 model FleetBooking {
+  healthTfdTrip HealthTfdTrip?
   id String @id @default(cuid())
   unitId String
   driverId String?

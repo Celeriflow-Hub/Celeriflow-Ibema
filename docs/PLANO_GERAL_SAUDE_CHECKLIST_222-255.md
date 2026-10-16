@@ -2,6 +2,12 @@
 
 Data da análise: 12/10/2026. Objetivo: concluir os seis blocos de Saúde com fluxos operacionais completos, aproveitando as estruturas existentes.
 
+## Acompanhamento da execução
+
+A execução foi iniciada a partir deste plano e da matriz normativa. Evidências e pendências estão em [EXECUCAO_SAUDE_CHECKLIST_222-255.md](EXECUCAO_SAUDE_CHECKLIST_222-255.md). As entregas registradas são parciais no conjunto do módulo; este documento não declara encerramento das 12 fases nem dos 339 requisitos.
+
+**Orientação confirmada para a execução:** integrações externas ainda não foram configuradas. Manter os pontos de integração previstos, sem executar ou considerar atendidos transmissão/aceite oficiais nesta conferência. Configurar e verificar cada destino posteriormente, um por vez, após os fluxos internos estarem concluídos. Essa orientação não dispensa os dados e fluxos internos dos requisitos associados.
+
 ## 1. Fonte, escopo e método
 
 Fonte principal: `docs/Termo de Referencia/Checklist real POC MÓDULOS EXECUTIVO e CAMARA.pdf`. Os números de página abaixo correspondem às páginas do arquivo PDF. A matriz complementar preserva a numeração de cada bloco e descreve a entrega necessária por item.

@@ -50,6 +50,7 @@ export async function addPassengerAction(data: FormData): Promise<void> {
     companionDocument: text(data, "companionDocument") || null,
     kind: text(data, "kind") || "PACIENTE",
   });
+  revalidatePath(`/saude/tfd/viagens/${encodeURIComponent(text(data, "tripId"))}`);
   refresh();
 }
 
@@ -62,6 +63,7 @@ export async function movePassengerAction(data: FormData): Promise<void> {
 export async function updateTripStatusAction(data: FormData): Promise<void> {
   const context = await getTenantContextForModuleOperation("SAUDE", "update");
   await updateTripStatus(context, text(data, "tripId"), text(data, "status"));
+  revalidatePath(`/saude/tfd/viagens/${encodeURIComponent(text(data, "tripId"))}`);
   refresh();
 }
 

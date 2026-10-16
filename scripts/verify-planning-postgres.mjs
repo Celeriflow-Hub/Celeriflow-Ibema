@@ -18,7 +18,8 @@ await new Promise((accept, reject) => probe.close((error) => error ? reject(erro
 const password = randomUUID();
 const databaseDir = join(temporaryParent, `planning-pg-${randomUUID()}`);
 // Own cleanup so transient Windows file locks can be retried after the server exits.
-const database = new EmbeddedPostgres({ databaseDir, user: "postgres", password, port, persistent: true, createPostgresUser: false, initdbFlags: ["--encoding=UTF8"], postgresFlags: ["-h", "127.0.0.1"], onLog: () => {}, onError: (error) => console.error(String(error).replaceAll(password, "[redacted]")) });
+// Prisma's timestamp-without-time-zone values use UTC, including trigger-generated timestamps.
+const database = new EmbeddedPostgres({ databaseDir, user: "postgres", password, port, persistent: true, createPostgresUser: false, initdbFlags: ["--encoding=UTF8"], postgresFlags: ["-h", "127.0.0.1", "-c", "timezone=UTC"], onLog: () => {}, onError: (error) => console.error(String(error).replaceAll(password, "[redacted]")) });
 let testExitCode = 1;
 try {
   await database.initialise();

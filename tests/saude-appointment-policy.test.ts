@@ -49,7 +49,7 @@ test("exige motivo de cancelamento e normaliza valores opcionais", () => {
   );
   assert.deepEqual(
     patientInputSchema.parse({ personId: "", cns: "", bloodType: "", referenceUnitId: "", teamId: "", fullName: "", cpf: "", birthDate: "" }),
-    { personId: "", cns: null, bloodType: null, referenceUnitId: null, teamId: null, fullName: null, cpf: null, birthDate: null },
+    { registrationStage: "COMPLETE", motherUnknown: false, fatherUnknown: false, personId: "", cns: null, bloodType: null, referenceUnitId: null, teamId: null, fullName: null, cpf: null, birthDate: null },
   );
 });
 

@@ -15,7 +15,7 @@ type TaxpayerInfo = {
 type Person = {
   id: string;
   fullName: string;
-  cpf: string;
+  cpf: string | null;
   email: string | null;
   phonePrimary: string | null;
   status: string;
@@ -50,7 +50,7 @@ export default function PessoasFisicasClient({ persons }: { persons: Person[] })
       try {
         await updatePerson(editingId, {
           fullName: editForm.fullName,
-          cpf: editForm.cpf,
+          cpf: editForm.cpf || undefined,
           email: editForm.email,
           phonePrimary: editForm.phonePrimary,
           // Pass the taxpayer fields to the action
@@ -129,7 +129,7 @@ export default function PessoasFisicasClient({ persons }: { persons: Person[] })
                     placeholder="CPF (apenas números)"
                   />
                 ) : (
-                  person.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
+                   person.cpf?.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") || "Não informado"
                 )}
               </td>
               <td className="max-w-0 truncate px-3 py-1.5 text-slate-600" title={person.phonePrimary || undefined}>

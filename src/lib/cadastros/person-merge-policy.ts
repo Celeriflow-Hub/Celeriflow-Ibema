@@ -1,7 +1,7 @@
 export type MergeCandidatePerson = {
   id: string;
   fullName: string;
-  cpf: string;
+  cpf: string | null;
   birthDate?: Date | null;
   email?: string | null;
   phonePrimary?: string | null;

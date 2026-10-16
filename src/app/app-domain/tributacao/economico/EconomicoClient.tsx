@@ -25,7 +25,7 @@ type Registration = {
   status: string;
   taxpayer: {
     id: string;
-    person: { fullName: string; cpf: string } | null;
+    person: { fullName: string; cpf: string | null } | null;
     company: { corporateName: string; cnpj: string } | null;
   };
 };

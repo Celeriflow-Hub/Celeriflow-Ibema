@@ -28,7 +28,7 @@ type Guide = {
     year: number;
     tax: { name: string };
     taxpayer: {
-      person: { fullName: string; cpf: string } | null;
+      person: { fullName: string; cpf: string | null } | null;
       company: { corporateName: string; cnpj: string } | null;
     };
   };

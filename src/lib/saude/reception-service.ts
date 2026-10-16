@@ -151,5 +151,6 @@ export async function transitionObservation(context: AppContext, observationId: 
   if (!observation) throw new ReceptionError("Observação não encontrada.");
   assertHealthUnitAccess(context.user, observation.unitId);
   if (observation.status !== "Em observação") throw new ReceptionError("Observação já encerrada.");
+  if (target === observation.status) return { id: observation.id };
   return context.prisma.healthObservation.update({ where: { id: observationId }, data: { status: target, dischargedAt: new Date() }, select: { id: true } });
 }

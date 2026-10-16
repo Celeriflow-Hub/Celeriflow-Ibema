@@ -12,7 +12,7 @@ import { registerSocialFact, endSocialFact, registerSocialFinancialEntry, cancel
 import { socialAmountCents, socialCentsDisplay } from "@/lib/social/money";
 
 type Profile = { nis: string; genderIdentity: string; sexualOrientation: string; workSituation: string; occupation: string; workplace: string; admittedAt: string };
-type Person = { id: string; fullName: string; socialName: string | null; cpf: string; birthDate: string; gender: string | null; raceColor: string | null; motherName: string | null; fatherName: string | null; educationLevel: string | null; phonePrimary: string | null; status: string; socialProfile: Profile | null };
+type Person = { id: string; fullName: string; socialName: string | null; cpf: string | null; birthDate: string; gender: string | null; raceColor: string | null; motherName: string | null; fatherName: string | null; educationLevel: string | null; phonePrimary: string | null; status: string; socialProfile: Profile | null };
 type Fact = { id: string; kind: string; name: string; unit: string; identifiedAt: string; endedAt: string; observations: string; endingReason: string };
 type Financial = { id: string; kind: string; name: string; unit: string; competence: string; value: string; observations: string; employmentDescription: string; cancelled: boolean; cancellationReason: string };
 type Attendance = { id: string; date: string; type: string; description: string; secrecyLevel: string; unit: string };

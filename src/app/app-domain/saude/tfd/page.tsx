@@ -1,10 +1,12 @@
 import { Bus } from "lucide-react";
+import Link from "next/link";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
 import { HealthSimpleListClient } from "../HealthSimpleListClient";
 import { addPassengerAction, authorizeTfdAction, confirmPassengerRemovalAction, createTfdRequestAction, createTripAction, movePassengerAction, requestPassengerRemovalAction, updateTripStatusAction } from "./actions";
 import type { Prisma } from "@prisma/client";
+import { activeTfdPassengerWhere, tfdTripAccessWhere } from "@/lib/saude/tfd-service";
 
 const field = "h-8 min-w-0 rounded border border-slate-200 bg-white px-2 text-xs";
 const PAGE_SIZE = 20;
@@ -20,27 +22,31 @@ export default async function TfdPage({ searchParams }: { searchParams: Promise<
   const q = (first(params.q) || "").trim().slice(0, 120);
   const filter = (first(params.filter) || "").trim().slice(0, 40);
   const where: Prisma.HealthTfdTripWhereInput = {
+    AND: [tfdTripAccessWhere(context.user)],
     ...(filter ? { status: filter } : {}),
     ...(q ? { OR: [{ origin: { contains: q, mode: "insensitive" } }, { destination: { contains: q, mode: "insensitive" } }] } : {}),
   };
   const total = await prisma.healthTfdTrip.count({ where });
   const page = Math.min(num(first(params.page)), Math.max(1, Math.ceil(total / PAGE_SIZE)));
-  const [trips, requests, patients, units, fleetUnits, employees, passengers, removals] = await Promise.all([
-    prisma.healthTfdTrip.findMany({ where, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE, orderBy: { date: "desc" }, include: { fleetUnit: true, driverEmployee: true, passengers: { include: { patient: { include: { person: true } } } } } }),
+  const [trips, requests, patients, units, fleetUnits, employees, passengers, removals, regulationRequests] = await Promise.all([
+    prisma.healthTfdTrip.findMany({ where, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE, orderBy: { date: "desc" }, include: { fleetUnit: true, driverEmployee: true, passengers: { where: activeTfdPassengerWhere, include: { patient: { include: { person: true } } } } } }),
     prisma.healthTfdRequest.findMany({ where: unitIds ? { originUnitId: { in: unitIds } } : {}, orderBy: { createdAt: "desc" }, take: 500, include: { patient: { include: { person: true } }, originUnit: true } }),
     prisma.patient.findMany({ where: { status: "Ativo", ...(unitIds ? { referenceUnitId: { in: unitIds } } : {}) }, take: 500, orderBy: { person: { fullName: "asc" } }, include: { person: true } }),
     prisma.healthUnit.findMany({ where: { isActive: true, ...(unitIds ? { id: { in: unitIds } } : {}) }, orderBy: { name: "asc" } }),
     prisma.fleetUnit.findMany({ where: { category: "VEICULO", status: "ATIVO" }, take: 200, orderBy: { name: "asc" } }),
     prisma.employee.findMany({ where: { isActive: true }, take: 200, orderBy: { name: "asc" } }),
-    prisma.healthTfdPassenger.findMany({ take: 200, orderBy: { createdAt: "desc" }, include: { trip: true, patient: { include: { person: true } } } }),
-    prisma.healthTfdPassengerRemoval.findMany({ where: { status: "Pendente" }, take: 100, include: { passenger: { include: { patient: { include: { person: true } } } } } }),
+    prisma.healthTfdPassenger.findMany({ where: { ...activeTfdPassengerWhere, trip: tfdTripAccessWhere(context.user) }, take: 200, orderBy: { createdAt: "desc" }, include: { trip: true, patient: { include: { person: true } } } }),
+    prisma.healthTfdPassengerRemoval.findMany({ where: { status: "Pendente", passenger: { trip: tfdTripAccessWhere(context.user) } }, take: 100, include: { passenger: { include: { patient: { include: { person: true } } } } } }),
+    prisma.healthRegulationRequest.findMany({ where: unitIds ? { requestUnitId: { in: unitIds } } : {}, orderBy: { createdAt: "desc" }, take: 100, select: { id: true, description: true, patient: { select: { person: { select: { fullName: true } } } } } }),
   ]);
 
   return (
     <PageFrame className="flex h-[calc(100dvh-7.5rem)] min-h-0 flex-col gap-2 overflow-hidden px-1 py-1 md:px-2">
       <PageHeader title="TFD e Transporte" icon={<Bus className="size-4 text-amber-700" />} />
+      <Link href="/saude/tfd/laudos" className="shrink-0 text-sm font-semibold text-amber-800 underline">Laudos clínicos, trâmites e benefícios TFD</Link>
+      <Link href="/saude/tfd/viagens" className="shrink-0 text-sm font-semibold text-amber-800 underline">Agenda por destino, confirmação, embarque e ordem de tráfego</Link>
       <div className="grid shrink-0 gap-2 lg:grid-cols-3">
-        <details className="rounded border bg-white p-2 text-xs"><summary className="cursor-pointer font-semibold">Solicitar TFD</summary><form action={createTfdRequestAction} className="mt-2 grid gap-1"><select name="patientId" required className={field}><option value="">Paciente</option>{patients.map(p => <option key={p.id} value={p.id}>{p.person.fullName}</option>)}</select><select name="originUnitId" className={field}><option value="">Unidade origem</option>{units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select><select name="regulationRequestId" className={field}><option value="">Sem regulação vinculada</option>{requests.slice(0,100).map(r => <option key={r.id} value={r.id}>{r.patient.person.fullName} · {r.destination}</option>)}</select><input name="destination" required placeholder="Destino" className={field}/><textarea name="reason" required placeholder="Motivo" className="min-h-12 rounded border p-2"/><select name="priority" className={field}><option>Normal</option><option>Media</option><option>Alta</option></select><input name="companionName" placeholder="Acompanhante (opcional)" className={field}/><input name="companionDocument" placeholder="Doc acompanhante" className={field}/><button className="h-8 rounded bg-amber-700 font-semibold text-white">Solicitar</button></form></details>
+        <details className="rounded border bg-white p-2 text-xs"><summary className="cursor-pointer font-semibold">Solicitar TFD</summary><form action={createTfdRequestAction} className="mt-2 grid gap-1"><select name="patientId" required className={field}><option value="">Paciente</option>{patients.map(p => <option key={p.id} value={p.id}>{p.person.fullName}</option>)}</select><select name="originUnitId" required={Boolean(unitIds)} className={field}><option value="">Unidade origem</option>{units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select><select name="regulationRequestId" className={field}><option value="">Sem regulação vinculada</option>{regulationRequests.map(r => <option key={r.id} value={r.id}>{r.patient.person.fullName} · {r.description || r.id}</option>)}</select><input name="destination" required placeholder="Destino" className={field}/><textarea name="reason" required placeholder="Motivo" className="min-h-12 rounded border p-2"/><select name="priority" className={field}><option>Normal</option><option>Media</option><option>Alta</option></select><input name="companionName" placeholder="Acompanhante (opcional)" className={field}/><input name="companionDocument" placeholder="Doc acompanhante" className={field}/><button className="h-8 rounded bg-amber-700 font-semibold text-white">Solicitar</button></form></details>
         <details className="rounded border bg-white p-2 text-xs"><summary className="cursor-pointer font-semibold">Autorizar / Criar viagem</summary>
           <form action={authorizeTfdAction} className="mt-2 grid gap-1"><select name="requestId" required className={field}><option value="">Solicitação TFD</option>{requests.filter(r => r.status==="SOLICITADA").map(r => <option key={r.id} value={r.id}>{r.patient.person.fullName} → {r.destination}</option>)}</select><button className="h-8 rounded bg-slate-800 font-semibold text-white">Autorizar</button></form>
           <form action={createTripAction} className="mt-2 grid gap-1 border-t pt-2"><input name="date" type="date" required className={field}/><input name="origin" required placeholder="Origem" className={field}/><input name="destination" required placeholder="Destino" className={field}/><select name="fleetUnitId" required className={field}><option value="">Veículo (Frotas)</option>{fleetUnits.map(f => <option key={f.id} value={f.id}>{f.name} · {f.plate || ""}</option>)}</select><select name="driverEmployeeId" className={field}><option value="">Condutor</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select><input name="capacity" type="number" min="1" required placeholder="Capacidade" className={field}/><button className="h-8 rounded bg-amber-700 font-semibold text-white">Criar viagem</button></form>

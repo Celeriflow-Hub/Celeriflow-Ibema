@@ -6,7 +6,7 @@ import ItbiCollectionClient from "./ItbiCollectionClient";
 
 export const dynamic = "force-dynamic";
 
-function taxpayerName(item: { person: { fullName: string; cpf: string } | null; company: { corporateName: string; cnpj: string } | null }) {
+function taxpayerName(item: { person: { fullName: string; cpf: string | null } | null; company: { corporateName: string; cnpj: string } | null }) {
   return item.company ? `${item.company.corporateName} · ${item.company.cnpj}` : item.person ? `${item.person.fullName} · ${item.person.cpf}` : "Contribuinte sem identificação";
 }
 

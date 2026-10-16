@@ -4,10 +4,11 @@ import type { Prisma } from "@prisma/client";
 import { requireValidCpf } from "@/lib/identifiers/brazilian-identifiers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { AccessError, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
+import { AccessError, assertHealthUnitAccess, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
 import { HealthOperationError, runHealthTransaction } from "@/lib/saude/appointment-service";
 import { healthEntityIdSchema, patientInputSchema, type PatientInput } from "@/lib/saude/contract";
+import { validateRegistrationIdentity } from "@/lib/saude/patient-registration-service";
 
 function hasErrorCode(error: unknown, code: string) {
   return typeof error === "object" && error !== null && "code" in error && error.code === code;
@@ -16,7 +17,7 @@ function hasErrorCode(error: unknown, code: string) {
 type PatientValues = ReturnType<typeof patientInputSchema.parse>;
 
 function revalidatePatients() {
-  for (const path of ["/app-domain/saude", "/app-domain/saude/pacientes", "/app-domain/saude/agenda", "/app-domain/saude/atendimentos"]) {
+  for (const path of ["/saude", "/saude/pacientes", "/saude/agenda", "/saude/atendimentos", "/cadastros/pessoas-fisicas", "/social"]) {
     revalidatePath(path);
   }
 }
@@ -47,26 +48,31 @@ export async function createPatient(data: PatientInput) {
   try {
     const input = patientInputSchema.parse(data);
     const context = await getTenantContextForModuleOperation("SAUDE", "create");
+    if (input.referenceUnitId) assertHealthUnitAccess(context.user, input.referenceUnitId);
+    else if (context.user.hasHealthAccessScope) throw new HealthOperationError("Selecione uma unidade de referência autorizada.");
     await runHealthTransaction(context, async tx => {
       await requireActivePatientReferences(tx, input);
       let personId = input.personId;
       if (!personId) {
-        if (!input.fullName || !input.cpf) {
-          throw new HealthOperationError("Nome completo e CPF sao obrigatorios para cadastrar uma nova pessoa.");
-        }
+        if (!input.fullName) throw new HealthOperationError("Informe o nome completo.");
+        const identity = await validateRegistrationIdentity(tx, input.referenceUnitId, { stage: input.registrationStage, fullName: input.fullName, cpf: input.cpf, birthDate: input.birthDate, gender: input.gender, raceColor: input.raceColor, motherName: input.motherName, fatherName: input.fatherName, motherUnknown: input.motherUnknown, fatherUnknown: input.fatherUnknown });
         const person = await tx.person.create({
           data: {
             fullName: input.fullName,
-            cpf: requireValidCpf(input.cpf),
+            cpf: identity.cpf,
             birthDate: input.birthDate ? new Date(`${input.birthDate}T12:00:00.000Z`) : null,
+            gender: input.gender, raceColor: input.raceColor, motherName: input.motherName, fatherName: input.fatherName,
+            phonePrimary: input.phonePrimary, whatsapp: input.whatsapp, email: input.email, profession: input.profession,
+            motherUnknown: input.motherUnknown, fatherUnknown: input.fatherUnknown,
           },
         });
         personId = person.id;
       } else {
-        const person = await tx.person.findFirst({ where: { id: personId, status: "Ativo" }, select: { id: true } });
+        const person = await tx.person.findFirst({ where: { id: personId, status: "Ativo" } });
         if (!person) throw new HealthOperationError("A pessoa selecionada nao foi encontrada ou esta inativa.");
         const existing = await tx.patient.findUnique({ where: { personId }, select: { id: true } });
         if (existing) throw new HealthOperationError("Esta pessoa ja possui um registro de paciente.");
+        await validateRegistrationIdentity(tx, input.referenceUnitId, { stage: input.registrationStage, fullName: person.fullName, cpf: person.cpf, birthDate: person.birthDate?.toISOString().slice(0, 10) || null, gender: person.gender, raceColor: person.raceColor, motherName: person.motherName, fatherName: person.fatherName, motherUnknown: person.motherUnknown, fatherUnknown: person.fatherUnknown });
       }
 
       const patient = await tx.patient.create({
@@ -78,9 +84,11 @@ export async function createPatient(data: PatientInput) {
           referenceUnitId: input.referenceUnitId,
           teamId: input.teamId,
           status: "Ativo",
+          registrationProfile: { create: { stage: input.registrationStage } },
         },
       });
       await writeAuditEvent(tx, { actorUsuarioId: context.user.id, eventType: auditEventTypes.administrativeMutation, targetType: "PATIENT", targetId: patient.id });
+      await tx.healthPatientRegistrationChange.create({ data: { patientId: patient.id, actorUsuarioId: context.user.id, changes: JSON.parse(JSON.stringify({ field: "CREATED", before: null, after: { personId, cns: patient.cns, unitId: patient.referenceUnitId, stage: input.registrationStage } })) } });
     });
     revalidatePatients();
     return { success: true };
@@ -95,7 +103,18 @@ export async function updatePatient(id: string, data: PatientInput) {
     const input = patientInputSchema.parse(data);
     const context = await getTenantContextForModuleOperation("SAUDE", "update");
     await runHealthTransaction(context, async tx => {
+      const existing = await tx.patient.findUnique({ where: { id: patientId }, select: { personId: true, referenceUnitId: true } });
+      if (!existing) throw new HealthOperationError("Paciente não encontrado.");
+      if (existing.referenceUnitId) assertHealthUnitAccess(context.user, existing.referenceUnitId);
+      if (input.referenceUnitId) assertHealthUnitAccess(context.user, input.referenceUnitId);
+      if (input.personId && input.personId !== existing.personId) throw new HealthOperationError("A pessoa vinculada ao paciente deve ser preservada.");
       await requireActivePatientReferences(tx, input);
+      const personData: Prisma.PersonUpdateInput = {};
+      if (data.fullName !== undefined) { if (!input.fullName) throw new HealthOperationError("Informe o nome completo."); personData.fullName = input.fullName; }
+      if (data.cpf !== undefined) { if (!input.cpf) throw new HealthOperationError("O CPF deste cadastro deve ser preservado."); personData.cpf = requireValidCpf(input.cpf); }
+      if (data.birthDate !== undefined) personData.birthDate = input.birthDate ? new Date(`${input.birthDate}T12:00:00.000Z`) : null;
+      for (const field of ["gender", "raceColor", "motherName", "fatherName", "phonePrimary", "whatsapp", "email", "profession"] as const) if (data[field] !== undefined) personData[field] = input[field];
+      if (Object.keys(personData).length) await tx.person.update({ where: { id: existing.personId }, data: personData });
       const patient = await tx.patient.update({
         where: { id: patientId },
         data: {

@@ -130,6 +130,10 @@ export async function createCompany(formData: FormData): Promise<void> {
 export async function updatePerson(id: string, data: PersonUpdateData) {
   const prisma = await getTenantPrisma("update");
   const { isTaxpayer, municipalInsc, ...personData } = data;
+  if (isTaxpayer === true) {
+    const identity = await prisma.person.findUniqueOrThrow({ where: { id }, select: { cpf: true } });
+    requireValidCpf(personData.cpf || identity.cpf);
+  }
   
   const result = await prisma.person.update({ where: { id }, data: personData });
   

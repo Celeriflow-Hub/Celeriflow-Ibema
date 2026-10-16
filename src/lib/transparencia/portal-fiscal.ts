@@ -83,7 +83,7 @@ function normalizePublicFilter(filter: PublicDataFilter = {}) {
 function publicSupplier(
   creditor: { name: string; document: string | null; personId: string | null } | null,
   supplier: {
-    person: { cpf: string } | null;
+    person: { cpf: string | null } | null;
     company: { corporateName: string; cnpj: string } | null;
   } | null,
 ) {

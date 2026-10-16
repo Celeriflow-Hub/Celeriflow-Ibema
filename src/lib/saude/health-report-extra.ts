@@ -1,6 +1,7 @@
 import type { AppContext } from "@/lib/platform/tenant-context";
 import type { ReportRow } from "@/lib/financeiro/report-delivery";
 import type { HealthReportInput } from "./health-report-service";
+import { activeTfdPassengerWhere, tfdTripAccessWhere } from "./tfd-service";
 
 type Ctx = AppContext;
 type Period = { gte?: Date; lte?: Date } | undefined;
@@ -338,7 +339,7 @@ export async function createExtendedRows(context: Ctx, input: HealthReportInput)
       return { rows: [...grouped.values()].map(g => ({ Prestador: g.provider, Guias: g.count, Valor: g.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) })), warnings: [] };
     }
     if (type === "REGREP_TRIPS" || type === "REGREP_TRANSPORT") {
-      const trips = await prisma.healthTfdTrip.findMany({ where: period ? { date: { gte: period.gte, lt: period.lte } } : {}, include: { fleetUnit: { select: { name: true, plate: true } }, driverEmployee: { select: { name: true } }, passengers: { select: { id: true } } }, orderBy: { date: "desc" }, take: 2000 });
+      const trips = await prisma.healthTfdTrip.findMany({ where: { AND: [tfdTripAccessWhere(context.user)], ...(period ? { date: { gte: period.gte, lte: period.lte } } : {}) }, include: { fleetUnit: { select: { name: true, plate: true } }, driverEmployee: { select: { name: true } }, passengers: { where: activeTfdPassengerWhere, select: { id: true } } }, orderBy: { date: "desc" }, take: 2000 });
       return { rows: trips.map(t => ({ Data: dateText(t.date), Origem: t.origin, Destino: t.destination, Veículo: `${t.fleetUnit.name}${t.fleetUnit.plate ? ` · ${t.fleetUnit.plate}` : ""}`, Condutor: t.driverEmployee?.name || "Não informado", Passageiros: t.passengers.length, Capacidade: t.capacity, Situação: t.status })), warnings: [] };
     }
     if (type === "REGREP_AUDIT") {
@@ -487,10 +488,11 @@ export async function createExtendedRows(context: Ctx, input: HealthReportInput)
     if (!recordId) throw new Error("Informe o registro (ID ou protocolo) para emitir o documento.");
     const pair = (campo: string, valor: string | number | null | undefined) => ({ Campo: campo, Valor: valor ?? "Não informado" });
     if (type === "DOC_DISPENSATION") {
-      const disp = await prisma.medicineDispensation.findFirst({ where: { OR: [{ id: recordId }, { prescriptionItemId: recordId }] }, include: { patient: { include: { person: true } }, medicine: true, unit: true, stock: true, dispensedByProfessional: { select: { employee: { select: { name: true } } } } } });
+      const disp = await prisma.medicineDispensation.findFirst({ where: { OR: [{ id: recordId }, { prescriptionItemId: recordId, status: "ACTIVE" }] }, include: { patient: { include: { person: true } }, medicine: true, unit: true, stock: true, receiverPerson: true, dispensedByProfessional: { select: { employee: { select: { name: true } } } } } });
       if (!disp) throw new Error("Dispensação não encontrada.");
       if (unitIds && !unitIds.includes(disp.unitId)) throw new Error("Registro fora do seu escopo de acesso.");
-      return { rows: [pair("Documento", "Comprovante de dispensação"), pair("Data", dateText(disp.date)), pair("Paciente", disp.patient.person.fullName), pair("Medicamento", disp.medicine.name), pair("Quantidade", disp.quantity), pair("Lote", disp.stock?.batchNumber), pair("Unidade", disp.unit.name), pair("Responsável", disp.dispensedByProfessional?.employee.name), pair("Posologia", disp.dosageSnapshot), pair("Retorno", disp.nextWithdrawalAt ? dateText(disp.nextWithdrawalAt) : null)], warnings: [] };
+      if (disp.status !== "ACTIVE") throw new Error("Dispensação cancelada não permite emitir declaração de recebimento.");
+      return { rows: [pair("Documento", "Declaração de recebimento de medicamentos"), pair("Data", dateText(disp.date)), pair("Paciente", disp.patient.person.fullName), pair("Retirante", disp.receiverPerson?.fullName || disp.patient.person.fullName), pair("Vínculo do retirante", disp.receiverRelationship || "Próprio paciente"), pair("Medicamento", disp.medicine.name), pair("Quantidade", disp.quantity), pair("Lote", disp.stock?.batchNumber), pair("Unidade", disp.unit.name), pair("Responsável", disp.dispensedByProfessional?.employee.name), pair("Posologia", disp.dosageSnapshot), pair("Retorno", disp.nextWithdrawalAt ? dateText(disp.nextWithdrawalAt) : null)], warnings: [] };
     }
     if (type === "DOC_TRANSFER_RECEIPT") {
       const transfer = await prisma.healthStockTransfer.findFirst({ where: { OR: [{ id: recordId }, { requestNumber: recordId }] }, include: { originWarehouse: true, destinationWarehouse: true, items: { include: { material: true } } } });
@@ -515,12 +517,13 @@ export async function createExtendedRows(context: Ctx, input: HealthReportInput)
       return { rows: [pair("Documento", type === "DOC_REGULATION_GUIDE" ? "Guia de autorização" : "Comprovante de agendamento regulado"), pair("Guia", request.guideNumber), pair("Paciente", request.patient.person.fullName), pair("Serviço", request.specialty?.name || request.service?.name), pair("Procedimento", request.procedure ? `${request.procedure.code} · ${request.procedure.description}` : null), pair("Prestador", request.quota?.provider.company?.corporateName || request.quota?.provider.person?.fullName), pair("Unidade solicitante", request.requestUnit?.name), pair("Agendada", request.scheduledAt ? dateText(request.scheduledAt) : null), pair("Situação", request.status)], warnings: [] };
     }
     if (["DOC_TFD_LIST", "DOC_TFD_PUBLIC", "DOC_TFD_AUTH"].includes(type)) {
-      const trip = await prisma.healthTfdTrip.findUnique({ where: { id: recordId }, include: { fleetUnit: true, driverEmployee: { select: { name: true } }, passengers: { include: { patient: { include: { person: { select: { fullName: true } } } } } } } });
+      const trip = await prisma.healthTfdTrip.findFirst({ where: { id: recordId, ...tfdTripAccessWhere(context.user) }, include: { fleetUnit: true, driverEmployee: { select: { name: true } }, passengers: { where: activeTfdPassengerWhere, include: { patient: { include: { person: { select: { fullName: true } } } } } } } });
       if (trip) {
         return { rows: [pair("Documento", type === "DOC_TFD_AUTH" ? "Autorização de viagem" : "Lista de passageiros"), pair("Data", dateText(trip.date)), pair("Origem", trip.origin), pair("Destino", trip.destination), pair("Veículo", `${trip.fleetUnit.name}${trip.fleetUnit.plate ? ` · ${trip.fleetUnit.plate}` : ""}`), pair("Condutor", trip.driverEmployee?.name), pair("Lotação", `${trip.passengers.length}/${trip.capacity}`), pair("Situação", trip.status), ...trip.passengers.flatMap(p => [pair("Passageiro", `${p.patient.person.fullName}${p.kind === "ACOMPANHANTE" ? " (acompanhante)" : ""}`), pair("Acompanhante", p.companionName)])], warnings: [] };
       }
       const request = await prisma.healthTfdRequest.findFirst({ where: { OR: [{ id: recordId }] }, include: { patient: { include: { person: { select: { fullName: true } } } }, originUnit: true } });
       if (!request) throw new Error("Viagem ou solicitação TFD não encontrada.");
+      if (unitIds && (!request.originUnitId || !unitIds.includes(request.originUnitId))) throw new Error("Registro fora do seu escopo de acesso.");
       return { rows: [pair("Documento", "Autorização de TFD"), pair("Paciente", request.patient.person.fullName), pair("Origem", request.originUnit?.name), pair("Destino", request.destination), pair("Motivo", request.reason), pair("Situação", request.status)], warnings: [] };
     }
     if (["DOC_PA_BAU", "DOC_PA_DISCHARGE"].includes(type)) {

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import type { AppContext } from "@/lib/platform/tenant-context";
 import { assertHealthUnitAccess } from "@/lib/platform/tenant-context";
+import { registerProductionFactTx } from "./production-service";
 
 export class TerritoryError extends Error {}
 
@@ -199,6 +200,10 @@ export async function finalizeForm(context: AppContext, formId: string) {
   if (form.unitId) assertHealthUnitAccess(context.user, form.unitId);
   if (form.status === "FINALIZADA") return { id: form.id };
   return context.prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM "HealthEsusForm" WHERE id=${formId} FOR UPDATE`;
+    const form = await tx.healthEsusForm.findUniqueOrThrow({ where: { id: formId }, select: { id: true, status: true, unitId: true, period: true, patientId: true, personId: true, professionalId: true, kind: true } });
+    if (form.unitId) assertHealthUnitAccess(context.user, form.unitId);
+    if (form.status === "FINALIZADA") return { id: form.id };
     await tx.healthEsusForm.update({ where: { id: form.id }, data: { status: "FINALIZADA", finalizedAt: new Date() } });
     // Produção automática idempotente a partir da ficha (reutiliza a origem)
     const key = `ESUS_FORM:${form.id}`;
@@ -209,9 +214,7 @@ export async function finalizeForm(context: AppContext, formId: string) {
         const patient = await tx.patient.findUnique({ where: { personId: form.personId }, select: { id: true } });
         patientId = patient?.id || null;
       }
-      await tx.healthProductionFact.create({
-        data: { originType: "ESUS_FORM", originId: form.id, patientId, unitId: form.unitId, professionalId: form.professionalId, quantity: 1, occurredAt: new Date(), period: form.period, idempotencyKey: key },
-      });
+      await registerProductionFactTx(tx, { originType: "ESUS_FORM", originId: form.id, patientId, unitId: form.unitId, professionalId: form.professionalId, quantity: 1, occurredAt: new Date(), period: form.period, idempotencyKey: key });
     }
     return { id: form.id };
   });

@@ -11,6 +11,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const file = await context.prisma.healthSusFile.findUnique({ where: { id }, include: { competence: { select: { period: true } } } });
     if (!file) return NextResponse.json({ error: "Arquivo não encontrado." }, { status: 404 });
     if (file.unitId) assertHealthUnitAccess(context.user, file.unitId);
+    else if (context.user.hasHealthAccessScope) throw new AccessError("Arquivo consolidado fora do seu escopo de unidade.", 403);
     const filename = `${file.fileType}_${file.competence.period}.txt`;
     return new NextResponse(file.content, {
       headers: {

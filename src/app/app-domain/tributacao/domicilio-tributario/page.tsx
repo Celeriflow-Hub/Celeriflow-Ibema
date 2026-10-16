@@ -3,7 +3,7 @@ import { ensureTributarioS3Defaults } from "@/lib/tributacao/s3-service";
 import DteClient from "./DteClient";
 
 export const dynamic = "force-dynamic";
-function name(item: { person: { fullName: string; cpf: string } | null; company: { corporateName: string; cnpj: string } | null }) { return item.company ? `${item.company.corporateName} · ${item.company.cnpj}` : item.person ? `${item.person.fullName} · ${item.person.cpf}` : "Contribuinte sem identificação"; }
+function name(item: { person: { fullName: string; cpf: string | null } | null; company: { corporateName: string; cnpj: string } | null }) { return item.company ? `${item.company.corporateName} · ${item.company.cnpj}` : item.person ? `${item.person.fullName} · ${item.person.cpf || "CPF não informado"}` : "Contribuinte sem identificação"; }
 
 export default async function DtePage() {
   const { prisma } = await getTenantContextForModule("TRIBUTACAO"); await ensureTributarioS3Defaults(prisma);

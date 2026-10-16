@@ -6,6 +6,9 @@ import { assertHealthAppointmentCanBeCompleted, assertHealthAppointmentCanBeComp
 import { clinicalEvolutionSchema, concludeCareSchema, diagnosisInputSchema, examRequestInputSchema, medicalRecordNarrativeSchema, performedProcedureInputSchema, prescriptionInputSchema, referralInputSchema } from "./care-contract";
 import { uploadFile } from "@/lib/platform/blob";
 import { ingestGedDocument } from "@/lib/documents/document-flow-service";
+import { syncRegulationAppointment } from "./regulation-agenda-service";
+import { prescribeClinicalLineTx } from "./prescription-service";
+import { assertRequiredClinicalQuestionnaires } from "./clinical-extension-service";
 
 type Tx = Prisma.TransactionClient;
 
@@ -16,11 +19,12 @@ async function currentProfessional(tx: Tx, context: AppContext) {
   return professional;
 }
 
-async function activeRecord(tx: Tx, context: AppContext, medicalRecordId: string) {
-  const record = await tx.medicalRecord.findUnique({ where: { id: medicalRecordId }, select: { id: true, patientId: true, unitId: true, professionalId: true, completedAt: true, appointmentId: true } });
+async function activeRecord(tx: Tx, context: AppContext, medicalRecordId: string, observationEvolution = false) {
+  await tx.$queryRaw`SELECT id FROM "MedicalRecord" WHERE id=${medicalRecordId} FOR UPDATE`;
+  const record = await tx.medicalRecord.findUnique({ where: { id: medicalRecordId }, select: { id: true, patientId: true, unitId: true, professionalId: true, completedAt: true, appointmentId: true, observation: { select: { status: true } } } });
   if (!record) throw new HealthOperationError("Prontuário de atendimento não encontrado.");
   assertHealthUnitAccess(context.user, record.unitId);
-  if (record.completedAt) throw new HealthOperationError("O atendimento concluído está disponível somente para consulta.");
+  if (record.completedAt && !(observationEvolution && record.observation?.status === "Em observação")) throw new HealthOperationError("O atendimento concluído está disponível somente para consulta.");
   const professional = await currentProfessional(tx, context);
   if (record.professionalId !== professional.id) throw new HealthOperationError("O prontuário pertence a outro profissional de saúde.");
   return record;
@@ -29,12 +33,13 @@ async function activeRecord(tx: Tx, context: AppContext, medicalRecordId: string
 export async function startHealthCare(context: AppContext, appointmentId: string) {
   return runHealthTransaction(context, async tx => {
     const professional = await currentProfessional(tx, context);
-    const appointment = await tx.healthAppointment.findUnique({ where: { id: appointmentId }, select: { id: true, date: true, origin: true, status: true, patientId: true, unitId: true, professionalId: true, medicalRecord: { select: { id: true } }, triage: true } });
+    const appointment = await tx.healthAppointment.findUnique({ where: { id: appointmentId }, select: { id: true, date: true, origin: true, status: true, patientId: true, unitId: true, professionalId: true, confirmedAt: true, schedule: { select: { requirePresenceConfirmation: true } }, medicalRecord: { select: { id: true } }, triage: true } });
     if (!appointment) throw new HealthOperationError("Atendimento não encontrado.");
     assertHealthUnitAccess(context.user, appointment.unitId);
     if (professional.unitId !== appointment.unitId && !professional.assignments.some(item => item.unitId === appointment.unitId)) throw new HealthOperationError("O profissional autenticado não possui vínculo ativo com a unidade do atendimento.");
     if (appointment.professionalId && appointment.professionalId !== professional.id) throw new HealthOperationError("O atendimento pertence a outro profissional.");
     if (appointment.medicalRecord) return appointment.medicalRecord;
+    if (appointment.schedule?.requirePresenceConfirmation && !appointment.confirmedAt) throw new HealthOperationError("Confirme a presença exigida pela agenda antes de iniciar o atendimento.");
     assertHealthAppointmentCanBeCompleted(appointment.status);
     if (!["Aguardando", "Em Atendimento"].includes(appointment.status)) throw new HealthOperationError("Registre a chegada do paciente antes de iniciar o atendimento.");
     if (appointment.origin === "SCHEDULED") assertHealthAppointmentCanBeCompletedAt(appointment.date);
@@ -52,7 +57,7 @@ export async function saveMedicalRecordNarrative(context: AppContext, raw: unkno
 
 export async function addClinicalEvolution(context: AppContext, raw: unknown) {
   const input = clinicalEvolutionSchema.parse(raw);
-  return runHealthTransaction(context, async tx => { const record = await activeRecord(tx, context, input.medicalRecordId); const professional = await currentProfessional(tx, context); return tx.healthClinicalEvolution.create({ data: { medicalRecordId: record.id, professionalId: professional.id, content: input.content }, select: { id: true } }); });
+  return runHealthTransaction(context, async tx => { const record = await activeRecord(tx, context, input.medicalRecordId, true); const professional = await currentProfessional(tx, context); return tx.healthClinicalEvolution.create({ data: { medicalRecordId: record.id, professionalId: professional.id, content: input.content }, select: { id: true } }); });
 }
 
 export async function addHealthDiagnosis(context: AppContext, raw: unknown) {
@@ -62,7 +67,7 @@ export async function addHealthDiagnosis(context: AppContext, raw: unknown) {
 
 export async function addHealthPrescription(context: AppContext, raw: unknown) {
   const input = prescriptionInputSchema.parse(raw);
-  return runHealthTransaction(context, async tx => { const record = await activeRecord(tx, context, input.medicalRecordId); const professional = await currentProfessional(tx, context); if (input.medicineId && !await tx.medicine.findFirst({ where: { id: input.medicineId, isActive: true }, select: { id: true } })) throw new HealthOperationError("Medicamento ativo não encontrado."); return tx.healthPrescription.create({ data: { patientId: record.patientId, professionalId: professional.id, unitId: record.unitId, medicalRecordId: record.id, content: `${input.medicineName} · ${input.dose} · ${input.frequency}`, items: { create: { medicineId: input.medicineId, medicineName: input.medicineName, presentation: input.presentation, dose: input.dose, route: input.route, frequency: input.frequency, duration: input.duration, quantity: input.quantity, instructions: input.instructions } } }, select: { id: true } }); });
+  return runHealthTransaction(context, tx => prescribeClinicalLineTx(tx, context, input.medicalRecordId, input));
 }
 
 export async function addHealthExamRequest(context: AppContext, raw: unknown) {
@@ -97,7 +102,26 @@ export async function addHealthReferral(context: AppContext, raw: unknown) {
 
 export async function concludeHealthCare(context: AppContext, raw: unknown) {
   const input = concludeCareSchema.parse(raw);
-  return runHealthTransaction(context, async tx => { const record = await activeRecord(tx, context, input.medicalRecordId); const professional = await currentProfessional(tx, context); if (record.professionalId !== professional.id) throw new HealthOperationError("Somente o profissional responsável pode concluir o atendimento."); const now = new Date(); await tx.medicalRecord.update({ where: { id: record.id }, data: { outcome: input.outcome, conduct: input.conduct, completedAt: now } }); if (record.appointmentId) { await tx.healthAppointment.update({ where: { id: record.appointmentId }, data: { status: "Atendido", outcome: input.outcome, completedAt: now } }); await tx.healthAppointmentEvent.create({ data: { appointmentId: record.appointmentId, eventType: "CARE_COMPLETED", fromStatus: "Em Atendimento", toStatus: "Atendido", notes: input.outcome, actorUsuarioId: context.user.id } }); } return { id: record.id }; });
+  return runHealthTransaction(context, async tx => {
+    const record = await activeRecord(tx, context, input.medicalRecordId);
+    const professional = await currentProfessional(tx, context);
+    if (record.professionalId !== professional.id) throw new HealthOperationError("Somente o profissional responsável pode concluir o atendimento.");
+    await assertRequiredClinicalQuestionnaires(tx, record.id);
+    const now = new Date();
+    if (input.outcome === "Observação") await tx.healthObservation.create({ data: { medicalRecordId: record.id, patientId: record.patientId, unitId: record.unitId, admittedAt: now, createdByUsuarioId: context.user.id } });
+    await tx.medicalRecord.update({ where: { id: record.id }, data: { outcome: input.outcome, conduct: input.conduct, completedAt: now } });
+    const appointment = record.appointmentId ? await tx.healthAppointment.findUnique({ where: { id: record.appointmentId }, select: { specialtyId: true } }) : null;
+    const dental = await tx.healthDentalMark.count({ where: { medicalRecordId: record.id } }) > 0;
+    const rules = await tx.healthSpecialtyProcedureRule.findMany({ where: { isActive: true, eventType: { in: dental ? ["CARE_COMPLETED", "DENTAL_COMPLETED"] : ["CARE_COMPLETED"] }, AND: [{ OR: [{ unitId: null }, { unitId: record.unitId }] }, { OR: [{ specialtyId: null }, { specialtyId: appointment?.specialtyId || "__SEM_ESPECIALIDADE__" }] }] } });
+    for (const rule of rules) if (!await tx.healthPerformedProcedure.count({ where: { medicalRecordId: record.id, procedureId: rule.procedureId } })) await tx.healthPerformedProcedure.create({ data: { medicalRecordId: record.id, professionalId: professional.id, procedureId: rule.procedureId, quantity: rule.quantity, performedAt: now, notes: "Gerado pelo ato de conclusão do atendimento" } });
+    if (input.outcome === "Óbito") { const patient = await tx.patient.update({ where: { id: record.patientId }, data: { status: "Falecido" }, select: { personId: true } }); await tx.person.update({ where: { id: patient.personId }, data: { status: "Falecido", deathDate: now } }); }
+    if (record.appointmentId) {
+      await tx.healthAppointment.update({ where: { id: record.appointmentId }, data: { status: "Atendido", outcome: input.outcome, completedAt: now } });
+      await tx.healthAppointmentEvent.create({ data: { appointmentId: record.appointmentId, eventType: "CARE_COMPLETED", fromStatus: "Em Atendimento", toStatus: "Atendido", notes: input.outcome, actorUsuarioId: context.user.id } });
+      await syncRegulationAppointment(tx, record.appointmentId, "Atendido", context.user.id);
+    }
+    return { id: record.id };
+  });
 }
 
 export async function addHealthClinicalDocument(context: AppContext, input: { medicalRecordId: string; kind: string; title: string; file: File }) {

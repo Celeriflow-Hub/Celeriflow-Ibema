@@ -17,13 +17,13 @@ export default async function Page() {
       referenceUnitId: true,
       teamId: true,
       status: true,
-      person: { select: { id: true, fullName: true, cpf: true, birthDate: true } },
+      person: { select: { id: true, fullName: true, cpf: true, birthDate: true, gender: true, raceColor: true, motherName: true, fatherName: true, phonePrimary: true, whatsapp: true, email: true, profession: true } },
     },
   });
 
   const people = await prisma.person.findMany({
     orderBy: { fullName: 'asc' },
-    select: { id: true, fullName: true, cpf: true, birthDate: true },
+    select: { id: true, fullName: true, cpf: true, birthDate: true, gender: true, raceColor: true, motherName: true, fatherName: true, phonePrimary: true, whatsapp: true, email: true, profession: true },
   });
 
   const units = await prisma.healthUnit.findMany({

@@ -7,6 +7,7 @@ test("approved inventory closure records the adjustment and releases the movemen
   const itemUpdates: Array<Record<string, unknown>> = [];
   let closedData: Record<string, unknown> | undefined;
   const transaction = {
+    $executeRaw: async () => 1,
     inventorySession: {
       findUnique: async () => ({
         id: "inventory-1",
@@ -52,6 +53,7 @@ test("approved inventory closure records the adjustment and releases the movemen
 
 test("rejeita encerramento de inventário quando aprovador é o mesmo inventoriante (segregação de funções)", async () => {
   const transaction = {
+    $executeRaw: async () => 1,
     inventorySession: {
       findUnique: async () => ({
         id: "inventory-1",

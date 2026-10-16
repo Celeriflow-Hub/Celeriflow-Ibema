@@ -114,6 +114,7 @@ test("persists an active settlement reference with a stock exit", async () => {
 
 test("blocks every regular stock movement while the warehouse inventory is locked", async () => {
   const transaction = {
+    $executeRaw: async () => 1,
     warehouse: { findFirst: async () => ({ id: "warehouse-1" }) },
     material: { findUnique: async () => ({ id: "material-1" }) },
     inventorySession: { findFirst: async () => ({ id: "inventory-1" }) },

@@ -1,10 +1,13 @@
 import { Factory } from "lucide-react";
+import { randomUUID } from "node:crypto";
+import Link from "next/link";
 import { getTenantContextForModule } from "@/lib/platform/tenant-context";
 import { PageFrame } from "@/components/app-ui/PageFrame";
 import { PageHeader } from "@/components/app-ui/PageHeader";
 import { HealthSimpleListClient } from "../HealthSimpleListClient";
 import { captureFactsAction, captureManualFactAction, closeCompetenceAction, generateFileAction, importProductionFileAction, openCompetenceAction, processCompetenceAction, processFileAction, reopenCompetenceAction, resolveCriticismAction, saveProductionTargetAction, saveUnitCeilingAction } from "./actions";
 import type { Prisma } from "@prisma/client";
+import { ProcedureField } from "./laudos/TreatmentReportEditor";
 
 const field = "h-8 min-w-0 rounded border border-slate-200 bg-white px-2 text-xs";
 const PAGE_SIZE = 20;
@@ -38,21 +41,28 @@ export default async function ProducaoPage({ searchParams }: { searchParams: Pro
   };
   const total = await prisma.healthProductionFact.count({ where });
   const page = Math.min(num(first(params.page)), Math.max(1, Math.ceil(total / PAGE_SIZE)));
-  const [facts, competences, criticisms, files, units, professionals, procedures, cids, municipalities] = await Promise.all([
+  const [facts, competences, criticisms, files, units, professionals, procedures, cids, municipalities, agreements, patients] = await Promise.all([
     prisma.healthProductionFact.findMany({ where, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE, orderBy: { occurredAt: "desc" }, include: { procedure: { select: { code: true } }, cidReference: { select: { code: true } }, unit: true, professional: { select: { id: true } } } }),
     prisma.healthProductionCompetence.findMany({ orderBy: { period: "desc" }, take: 24 }),
     prisma.healthProductionCriticism.findMany({ where: { status: "ABERTA", ...(unitIds ? { fact: { unitId: { in: unitIds } } } : {}) }, orderBy: { createdAt: "desc" }, take: 100, include: { fact: { select: { originType: true, originId: true, period: true } } } }),
-    prisma.healthSusFile.findMany({ orderBy: { createdAt: "desc" }, take: 100, include: { competence: true, unit: true } }),
+    prisma.healthSusFile.findMany({ where: unitIds ? { unitId: { in: unitIds } } : {}, orderBy: { createdAt: "desc" }, take: 100, include: { competence: true, unit: true } }),
     prisma.healthUnit.findMany({ where: { isActive: true, ...(unitIds ? { id: { in: unitIds } } : {}) }, orderBy: { name: "asc" } }),
     prisma.healthProfessional.findMany({ where: { isActive: true }, take: 200, select: { id: true, cbo: true } }),
     prisma.healthSusProcedure.findMany({ where: { isActive: true, isCurrent: true }, take: 300, orderBy: { code: "asc" }, select: { id: true, code: true } }),
     prisma.healthSusReference.findMany({ where: { kind: "CID", isActive: true, isCurrent: true }, take: 200, orderBy: { code: "asc" }, select: { id: true, code: true } }),
     prisma.healthProductionFact.findMany({ where: { ...(unitIds ? { unitId: { in: unitIds } } : {}), municipality: { not: null } }, distinct: ["municipality"], take: 100, select: { municipality: true, state: true } }),
+    prisma.healthCareAgreement.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.patient.findMany({ where: unitIds ? { OR: [{ referenceUnitId: { in: unitIds } }, { records: { some: { unitId: { in: unitIds } } } }] } : {}, orderBy: { person: { fullName: "asc" } }, take: 500, select: { id: true, person: { select: { fullName: true } } } }),
   ]);
 
   return (
     <PageFrame className="flex h-[calc(100dvh-7.5rem)] min-h-0 flex-col gap-2 overflow-hidden px-1 py-1 md:px-2">
       <PageHeader title="Produção e Faturamento SUS" icon={<Factory className="size-4 text-teal-700" />} />
+      <Link href="/saude/producao/laudos" className="shrink-0 text-sm font-semibold text-teal-800 underline">Gestores AIH/APAC: laudos, órgãos, faixas e autorizações</Link>
+      <Link href="/saude/producao/previas" className="shrink-0 text-sm font-semibold text-teal-800 underline">Prévias por unidade/profissional, BPA impresso e custo de consumo do paciente</Link>
+      <Link href="/saude/producao/tabelas" className="shrink-0 text-sm font-semibold text-teal-800 underline">Tabelas auxiliares e preços versionados por unidade/convênio/vigência</Link>
+      <Link href="/saude/producao/raas" className="shrink-0 text-sm font-semibold text-teal-800 underline">Origens clínicas RAAS domiciliar e psicossocial</Link>
+      <details className="shrink-0 rounded border bg-white p-2 text-xs"><summary className="cursor-pointer font-semibold">Abrir origem ou corrigir digitação dos fatos desta página</summary><div className="mt-2 grid max-h-32 gap-1 overflow-auto md:grid-cols-2">{facts.map(fact => <Link key={fact.id} href={`/saude/producao/fatos/${encodeURIComponent(fact.id)}`} className="rounded border p-2 underline">{fact.originType}:{fact.originId.slice(0, 8)} · {fact.procedure?.code || "Sem procedimento"} · {fact.unit?.name || "Sem unidade"} · {fact.period} · {fact.status}</Link>)}</div></details>
       <form method="get" className="grid shrink-0 gap-2 rounded-md border bg-white p-2 text-xs sm:grid-cols-2 lg:grid-cols-[1fr_130px_170px_170px_130px_170px_60px_auto]">
         <input name="q" defaultValue={q} placeholder="Buscar origem, procedimento, CID ou município" className="h-8 rounded border px-2.5" />
         <select name="comp" defaultValue={compFilter} className="h-8 rounded border bg-white px-2"><option value="">Todas as competências</option>{competences.map(c => <option key={c.id} value={c.period}>{c.period}</option>)}</select>
@@ -75,7 +85,16 @@ export default async function ProducaoPage({ searchParams }: { searchParams: Pro
         </details>
         <details className="rounded border bg-white p-2 text-xs"><summary className="cursor-pointer font-semibold">Gerar arquivo SUS</summary><form action={generateFileAction} className="mt-2 grid gap-1"><select name="competenceId" required className={field}><option value="">Competência</option>{competences.map(c => <option key={c.id} value={c.id}>{c.period} · {c.status}</option>)}</select><select name="fileType" required className={field}><option value="BPA">BPA</option><option value="RAAS">RAAS</option><option value="AIH">AIH</option><option value="FPO">FPO</option><option value="OUTRO">Outro</option></select><select name="unitId" className={field}><option value="">Todas as unidades (consolidado)</option>{units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select><select name="financing" className={field}><option value="">Todos os financiamentos</option><option value="PAB">PAB</option><option value="MAC">MAC</option><option value="FAEC">FAEC</option></select><button className="h-8 rounded bg-teal-700 font-semibold text-white">Gerar a partir da competência</button></form></details>
         <details className="rounded border bg-white p-2 text-xs"><summary className="cursor-pointer font-semibold">Digitação e metas</summary>
-          <form action={captureManualFactAction} className="mt-2 grid gap-1"><select name="procedureId" required className={field}><option value="">Procedimento</option>{procedures.map(p => <option key={p.id} value={p.id}>{p.code}</option>)}</select><select name="unitId" required className={field}><option value="">Unidade</option>{units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select><select name="professionalId" className={field}><option value="">Profissional</option>{professionals.map(p => <option key={p.id} value={p.id}>{p.cbo || p.id.slice(0, 8)}</option>)}</select><div className="grid grid-cols-2 gap-1"><input name="quantity" type="number" min="1" required placeholder="Qtde" className={field} /><input name="occurredAt" type="date" required className={field} /></div><input name="value" type="number" step="0.01" placeholder="Valor (vazio usa tabela)" className={field} /><button className="h-8 rounded bg-teal-700 font-semibold text-white">Digitar fato</button></form>
+          <form action={captureManualFactAction} className="mt-2 grid gap-1">
+            <input name="idempotencyKey" type="hidden" value={randomUUID()}/>
+            <ProcedureField selected={null}/>
+            <select name="unitId" required className={field}><option value="">Unidade</option>{units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select>
+            <select name="professionalId" className={field}><option value="">Profissional</option>{professionals.map(p => <option key={p.id} value={p.id}>{p.cbo || p.id.slice(0, 8)}</option>)}</select>
+            <select name="patientId" className={field}><option value="">Produção consolidada / sem paciente</option>{patients.map(patient => <option key={patient.id} value={patient.id}>{patient.person.fullName}</option>)}</select>
+            <select name="agreementId" className={field}><option value="">Sem convênio específico</option>{agreements.map(agreement => <option key={agreement.id} value={agreement.id}>{agreement.name}</option>)}</select>
+            <div className="grid grid-cols-2 gap-1"><input name="quantity" type="number" min="1" required placeholder="Qtde" className={field}/><input name="occurredAt" type="date" required className={field}/></div>
+            <input name="value" type="number" step="0.01" placeholder="Valor total (vazio usa tabela vigente)" className={field}/><button className="h-8 rounded bg-teal-700 font-semibold text-white">Digitar fato</button>
+          </form>
           <form action={importProductionFileAction} className="mt-2 grid gap-1 border-t pt-2"><input name="file" type="file" accept=".txt,.csv" required className={field} /><button className="h-8 rounded bg-slate-800 font-semibold text-white">Importar BPA recebido</button></form>
           <form action={saveProductionTargetAction} className="mt-2 grid gap-1 border-t pt-2"><select name="competenceId" required className={field}><option value="">Competência (FPO)</option>{competences.map(c => <option key={c.id} value={c.id}>{c.period}</option>)}</select><select name="procedureId" required className={field}><option value="">Procedimento</option>{procedures.map(p => <option key={p.id} value={p.id}>{p.code}</option>)}</select><input name="contractedQuantity" type="number" min="1" required placeholder="Qtd contratada" className={field} /><button className="h-8 rounded bg-teal-700 font-semibold text-white">Definir meta FPO</button></form>
           <form action={saveUnitCeilingAction} className="mt-2 grid gap-1 border-t pt-2"><select name="unitId" required className={field}><option value="">Unidade (teto)</option>{units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select><input name="period" type="month" required className={field} /><input name="value" type="number" min="0" step="0.01" required placeholder="Teto R$" className={field} /><button className="h-8 rounded bg-slate-800 font-semibold text-white">Definir teto</button></form>

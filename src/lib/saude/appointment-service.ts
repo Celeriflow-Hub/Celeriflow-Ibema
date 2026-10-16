@@ -1,4 +1,8 @@
 import { Prisma } from "@prisma/client";
+import { assertPatientRegistrationCurrent } from "./patient-registration-service";
+import { registerProductionFactTx } from "./production-service";
+import { syncRegulationAppointment } from "./regulation-agenda-service";
+import { professionalAcceptsTime, professionalBookingWindows } from "./professional-booking-service";
 import type { AppContext } from "@/lib/platform/tenant-context";
 import { assertHealthUnitAccess } from "@/lib/platform/tenant-context";
 import { auditEventTypes, writeAuditEvent } from "@/lib/platform/audit-evidence";
@@ -50,7 +54,7 @@ async function requireActiveAppointmentReferences(tx: Tx, patientId: string, uni
     select: { id: true, unitId: true, employee: { select: { isActive: true } } },
   });
   if (!professional || !professional.employee.isActive) throw new HealthOperationError("Profissional nao encontrado ou inativo.");
-  if (professional.unitId && professional.unitId !== unitId) {
+  if (professional.unitId !== unitId && !await tx.healthProfessionalAssignment.count({ where: { professionalId, unitId, isActive: true } })) {
     throw new HealthOperationError("O profissional selecionado deve pertencer a unidade do agendamento.");
   }
   return professional;
@@ -74,15 +78,28 @@ async function validateSchedulingReferences(tx: Tx, unitId: string, schedulingGr
 }
 
 export async function createHealthAppointment(context: AppContext, raw: unknown) {
+  return runHealthTransaction(context, tx => createHealthAppointmentInTransaction(context, tx, raw));
+}
+
+export async function createHealthAppointmentInTransaction(context: AppContext, tx: Prisma.TransactionClient, raw: unknown) {
   const input = healthAppointmentCreateSchema.parse(raw);
   const date = parseBrazilDateTime(input.date);
   assertHealthUnitAccess(context.user, input.unitId);
 
-  return runHealthTransaction(context, async tx => {
+    let agreementIdSnapshot: string | null = null;
+    if (input.scheduleId) {
+      const schedule = await tx.healthCareSchedule.findUniqueOrThrow({ where: { id: input.scheduleId }, select: { professionalId: true, agreementId: true } });
+      agreementIdSnapshot = schedule.agreementId;
+      if (schedule.professionalId && input.professionalId && schedule.professionalId !== input.professionalId) throw new HealthOperationError("O profissional deve corresponder ao responsável da agenda.");
+      input.professionalId ||= schedule.professionalId;
+    }
+    if (input.professionalId && !professionalAcceptsTime(await professionalBookingWindows(tx, { professionalId: input.professionalId, unitId: input.unitId, specialtyId: input.specialtyId, date }), date)) throw new HealthOperationError("Horário fora da vigência ou expediente do profissional na unidade/especialidade.");
+
     await requireActiveAppointmentReferences(tx, input.patientId, input.unitId, input.professionalId);
     await validateSchedulingReferences(tx, input.unitId, input.schedulingGroupId, input.specialtyId, input.serviceId);
-    const { assertBookingRules } = await import("./schedule-service");
-    await assertBookingRules(tx, { patientId: input.patientId, unitId: input.unitId, specialtyId: input.specialtyId || null, specialty: input.specialty || null, scheduleId: input.scheduleId || null, date });
+     const { assertBookingRules } = await import("./schedule-service");
+     await assertBookingRules(tx, { patientId: input.patientId, unitId: input.unitId, specialtyId: input.specialtyId || null, specialty: input.specialty || null, scheduleId: input.scheduleId || null, date });
+     for (const key of [`HEALTH_BOOKING_PATIENT:${input.patientId}:${date.toISOString()}`, ...(input.professionalId ? [`HEALTH_BOOKING_PROFESSIONAL:${input.professionalId}:${date.toISOString()}`] : [])].sort()) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
     const conflict = await tx.healthAppointment.findFirst({
       where: {
         date,
@@ -106,6 +123,7 @@ export async function createHealthAppointment(context: AppContext, raw: unknown)
         unitId: input.unitId,
         professionalId: input.professionalId,
         scheduleId: input.scheduleId || null,
+        billingContextSnapshot: { agreementId: agreementIdSnapshot, providerUnit: null },
         visitType: input.visitType || null,
         specialty: input.specialty,
         schedulingGroupId: input.schedulingGroupId,
@@ -125,7 +143,6 @@ export async function createHealthAppointment(context: AppContext, raw: unknown)
       targetId: appointment.id,
     });
     return appointment;
-  });
 }
 
 export async function transitionHealthAppointment(context: AppContext, raw: unknown) {
@@ -149,6 +166,7 @@ export async function transitionHealthAppointment(context: AppContext, raw: unkn
       select: { id: true },
     });
     await tx.healthAppointmentEvent.create({ data: { appointmentId: appointment.id, eventType: input.status === "Cancelado" ? "CANCELLED" : "STATUS_CHANGED", fromStatus: appointment.status, toStatus: input.status, notes: input.cancellationReason, actorUsuarioId: context.user.id } });
+    await syncRegulationAppointment(tx, appointment.id, input.status, context.user.id);
     await writeAuditEvent(tx, {
       actorUsuarioId: context.user.id,
       eventType: auditEventTypes.administrativeMutation,
@@ -165,8 +183,12 @@ export async function createSpontaneousCare(context: AppContext, raw: unknown) {
   return runHealthTransaction(context, async tx => {
     await requireActiveAppointmentReferences(tx, input.patientId, input.unitId, input.professionalId);
     await validateSchedulingReferences(tx, input.unitId, null, input.specialtyId, input.serviceId);
+    await assertPatientRegistrationCurrent(tx, input.patientId, input.unitId, input.priority === "Urgência");
     const snapshot = await patientMunicipalitySnapshot(tx, input.patientId);
-    const appointment = await tx.healthAppointment.create({ data: { date: new Date(), origin: "SPONTANEOUS", status: "Aguardando", priority: input.priority, patientId: input.patientId, unitId: input.unitId, professionalId: input.professionalId, specialtyId: input.specialtyId, serviceId: input.serviceId, arrivalNotes: input.arrivalNotes, arrivedAt: new Date(), ...snapshot }, select: { id: true } });
+    const reporting = await tx.healthUnit.findUniqueOrThrow({ where: { id: input.unitId }, select: { spontaneousProviderUnit: { select: { id: true, name: true, cnes: true, isActive: true } } } });
+    if (reporting.spontaneousProviderUnit && !reporting.spontaneousProviderUnit.isActive) throw new HealthOperationError("A unidade prestadora da demanda espontânea está inativa. Corrija a configuração da origem.");
+    const provider = reporting.spontaneousProviderUnit;
+    const appointment = await tx.healthAppointment.create({ data: { date: new Date(), origin: "SPONTANEOUS", status: "Aguardando", priority: input.priority, patientId: input.patientId, unitId: input.unitId, professionalId: input.professionalId, specialtyId: input.specialtyId, serviceId: input.serviceId, arrivalNotes: input.arrivalNotes, arrivedAt: new Date(), ...snapshot, billingContextSnapshot: { agreementId: null, providerUnit: provider ? { id: provider.id, name: provider.name, cnes: provider.cnes } : null } }, select: { id: true } });
     await tx.healthAppointmentEvent.create({ data: { appointmentId: appointment.id, eventType: "SPONTANEOUS_ARRIVAL", toStatus: "Aguardando", notes: input.arrivalNotes, actorUsuarioId: context.user.id } });
     return appointment;
   });
@@ -178,13 +200,17 @@ export async function registerHealthTriage(context: AppContext, raw: unknown) {
   return runHealthTransaction(context, async tx => {
     const professional = await tx.healthProfessional.findFirst({ where: { employeeId: context.user.employeeId!, isActive: true }, select: { id: true } });
     if (!professional) throw new HealthOperationError("Profissional de saúde ativo não encontrado.");
-    const appointment = await tx.healthAppointment.findUnique({ where: { id: input.appointmentId }, select: { id: true, unitId: true, status: true } });
+    const appointment = await tx.healthAppointment.findUnique({ where: { id: input.appointmentId }, select: { id: true, patientId: true, unitId: true, specialtyId: true, status: true, billingContextSnapshot: true } });
     if (!appointment) throw new HealthOperationError("Atendimento não encontrado.");
     assertHealthUnitAccess(context.user, appointment.unitId);
     if (appointment.status !== "Aguardando") throw new HealthOperationError("Registre a chegada do paciente antes do acolhimento.");
+    await requireActiveAppointmentReferences(tx, appointment.patientId, appointment.unitId, professional.id);
     const triage = await tx.healthTriage.upsert({ where: { appointmentId: appointment.id }, create: { ...input, professionalId: professional.id }, update: { ...input, professionalId: professional.id }, select: { id: true } });
     await tx.healthAppointment.update({ where: { id: appointment.id }, data: { triagedAt: new Date(), status: "Aguardando", priority: input.priorityLabel } });
     await tx.healthAppointmentEvent.create({ data: { appointmentId: appointment.id, eventType: "TRIAGED", fromStatus: appointment.status, toStatus: "Aguardando", notes: input.riskClassification, actorUsuarioId: context.user.id } });
+    const now = new Date();
+    const rules = await tx.healthSpecialtyProcedureRule.findMany({ where: { isActive: true, eventType: "TRIAGE_COMPLETED", AND: [{ OR: [{ unitId: null }, { unitId: appointment.unitId }] }, { OR: [{ specialtyId: null }, { specialtyId: appointment.specialtyId || "__SEM_ESPECIALIDADE__" }] }] } });
+    for (const rule of rules) await registerProductionFactTx(tx, { originType: "TRIAGE", originId: triage.id, unitId: appointment.unitId, professionalId: professional.id, patientId: appointment.patientId, procedureId: rule.procedureId, quantity: rule.quantity, occurredAt: now, idempotencyKey: `TRIAGE_RULE:${triage.id}:${rule.id}` }, appointment.billingContextSnapshot);
     return triage;
   });
 }

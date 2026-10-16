@@ -30,7 +30,7 @@ export default async function GerencialPage({ searchParams }: { searchParams: Pr
     prisma.healthAppointment.count({ where: { status: "Atendido", ...(range ? { date: range } : {}), ...unitScope } }),
     prisma.medicalRecord.count({ where: { completedAt: { not: null }, ...(range ? { date: range } : {}), ...unitScope, ...(professionalFilter ? { professionalId: professionalFilter } : {}) } }),
     prisma.healthTriage.count({ where: { ...(range ? { createdAt: range } : {}), ...(unitIds || unitFilter ? { appointment: unitScope } : {}) } }),
-    prisma.medicineDispensation.count({ where: { ...(range ? { date: range } : {}), ...(unitFilter ? { unitId: unitFilter } : unitIds ? { unitId: { in: unitIds } } : {}) } }),
+    prisma.medicineDispensation.count({ where: { status: "ACTIVE", ...(range ? { date: range } : {}), ...(unitFilter ? { unitId: unitFilter } : unitIds ? { unitId: { in: unitIds } } : {}) } }),
     prisma.vaccinationRecord.count({ where: { ...(range ? { date: range } : {}), ...(unitFilter ? { unitId: unitFilter } : unitIds ? { unitId: { in: unitIds } } : {}) } }),
     prisma.healthLabOrder.groupBy({ by: ["status"], where: { ...(range ? { createdAt: range } : {}), ...(unitIds || unitFilter ? { OR: [{ requestUnitId: unitFilter || { in: unitIds! } }, { collectionUnitId: unitFilter || { in: unitIds! } }] } : {}) }, _count: true }),
     prisma.healthRegulationRequest.groupBy({ by: ["status"], where: { ...(range ? { createdAt: range } : {}), ...(unitFilter ? { requestUnitId: unitFilter } : unitIds ? { requestUnitId: { in: unitIds } } : {}) }, _count: true }),
@@ -74,6 +74,7 @@ export default async function GerencialPage({ searchParams }: { searchParams: Pr
   return (
     <PageFrame className="flex h-[calc(100dvh-7.5rem)] min-h-0 flex-col gap-2 overflow-hidden px-1 py-1 md:px-2">
       <PageHeader title="Gerencial da Saúde" icon={<BarChart3 className="size-4 text-slate-700" />} />
+      <Link href="/saude/acompanhamento" className="shrink-0 text-sm font-semibold underline">Remessas e receptores de acompanhamento gestacional, crônicos e regulação</Link>
       <form method="get" className="grid shrink-0 gap-2 rounded-md border bg-white p-2 text-xs sm:grid-cols-2 lg:grid-cols-[160px_1fr_200px_200px_auto]">
         <input name="period" type="month" defaultValue={period} className="h-8 rounded border px-2" />
         <select name="unit" defaultValue={unitFilter} className="h-8 rounded border bg-white px-2"><option value="">Todas as unidades</option>{units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select>

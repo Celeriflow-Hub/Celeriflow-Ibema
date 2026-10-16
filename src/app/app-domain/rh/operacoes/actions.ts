@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requireValidCpf } from "@/lib/identifiers/brazilian-identifiers";
 import { getTenantContextForModuleOperation, assertBudgetUnitAccess, canViewModule, canPerformModuleOperation, isSystemAdministrator } from "@/lib/platform/tenant-context";
 import { calculatePayrollRun, cancelPayrollRun, closePayrollRun, publishPayrollStatements, recordHrRightEntry, saveEmploymentContract, savePayrollMovement } from "@/lib/rh/workforce-service";
 import { acquireVacationRights, cancelVacationReservation, reserveVacationRight } from "@/lib/rh/vacation-rights";
@@ -347,8 +348,9 @@ export async function executeWorkforceOperation(command: string, values: Record<
         const employee = await tx.employee.findUniqueOrThrow({ where: { id: input.employeeId } });
         const person = await tx.person.findUniqueOrThrow({ where: { id: input.personId } });
         if (employee.personId && employee.personId !== person.id) throw new Error("Servidor já vinculado a outra pessoa física.");
-        if (employee.cpf && employee.cpf.replace(/\D/g, "") !== person.cpf.replace(/\D/g, "")) throw new Error("CPF do servidor difere do cadastro central. Faça o saneamento antes de vincular.");
-        await tx.employee.update({ where: { id: employee.id }, data: { personId: person.id, name: person.fullName, cpf: person.cpf } });
+        const cpf = requireValidCpf(person.cpf);
+        if (employee.cpf && employee.cpf.replace(/\D/g, "") !== cpf) throw new Error("CPF do servidor difere do cadastro central. Faça o saneamento antes de vincular.");
+        await tx.employee.update({ where: { id: employee.id }, data: { personId: person.id, name: person.fullName, cpf } });
       });
       id = input.employeeId;
     }

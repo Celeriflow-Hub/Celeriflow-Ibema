@@ -50,7 +50,7 @@ export async function generateFileAction(data: FormData): Promise<void> {
 
 export async function captureManualFactAction(data: FormData): Promise<void> {
   const context = await getTenantContextForModuleOperation("SAUDE", "create");
-  await captureManualFact(context, { procedureId: text(data, "procedureId"), unitId: text(data, "unitId"), professionalId: text(data, "professionalId") || null, patientId: text(data, "patientId") || null, quantity: Number(data.get("quantity")), value: text(data, "value") ? Number(data.get("value")) : null, occurredAt: text(data, "occurredAt"), idempotencyKey: text(data, "idempotencyKey") || null });
+  await captureManualFact(context, { procedureId: text(data, "procedureId"), unitId: text(data, "unitId"), professionalId: text(data, "professionalId") || null, patientId: text(data, "patientId") || null, agreementId: text(data, "agreementId") || null, quantity: Number(data.get("quantity")), value: text(data, "value") ? Number(data.get("value")) : null, occurredAt: text(data, "occurredAt"), idempotencyKey: text(data, "idempotencyKey") || null });
   refresh();
 }
 

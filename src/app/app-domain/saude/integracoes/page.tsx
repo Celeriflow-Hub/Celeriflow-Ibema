@@ -23,6 +23,7 @@ export default async function SaudeIntegracoesPage() {
   return (
     <PageFrame className="flex h-[calc(100dvh-7.5rem)] min-h-0 flex-col gap-2 overflow-hidden px-1 py-1 md:px-2">
       <PageHeader title="Integrações da Saúde" icon={<PlugZap className="size-4 text-slate-700" />} action={<Link href="/app-domain/configuracoes/integracoes" className="inline-flex h-7 items-center rounded border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700">Configuração global</Link>} />
+      <Link href="/saude/acompanhamento" className="shrink-0 text-sm font-semibold underline">Acompanhamento gestacional, hipertensão/diabetes e regulação · remessas e receptores</Link>
       <div className="grid min-h-0 flex-1 gap-2 overflow-y-auto md:grid-cols-2">
         <div className="rounded border bg-white p-2"><h2 className="text-xs font-bold uppercase text-slate-500">Conectores</h2>{HEALTH_CODES.map(code => {
           const definition = getIntegrationDefinition(code);

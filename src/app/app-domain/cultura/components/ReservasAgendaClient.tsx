@@ -26,7 +26,7 @@ type Reserva = {
       complement: string | null;
     } | null;
   };
-  person: { fullName: string; cpf: string } | null;
+  person: { fullName: string; cpf: string | null } | null;
   company: { corporateName: string; tradeName: string | null; cnpj: string } | null;
   event: { nome: string; tipo: string; status: string } | null;
   documentos: { id: string; purpose: string; document: { title: string; documentType: string; status: string } }[];

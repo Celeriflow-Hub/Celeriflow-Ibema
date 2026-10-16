@@ -6,5 +6,5 @@ export async function resolveEmployeePerson(tx: Prisma.TransactionClient, input:
   const id = input.existingPersonId || input.personId;
   const person = id ? await tx.person.findUnique({ where: { id } }) : await tx.person.findUnique({ where: { cpf: requireValidCpf(input.cpf || "") } });
   if (!person || person.status !== "Ativo") throw new Error("Selecione uma pessoa física ativa do Cadastro Único. Nenhum cadastro pessoal paralelo será criado.");
-  return { personId: person.id, name: person.fullName, cpf: person.cpf, email: person.email, phone: person.phonePrimary };
+  return { personId: person.id, name: person.fullName, cpf: requireValidCpf(person.cpf), email: person.email, phone: person.phonePrimary };
 }

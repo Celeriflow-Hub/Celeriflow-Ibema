@@ -149,6 +149,7 @@ async function ensureStockTarget(tx: Prisma.TransactionClient, input: ValidStock
 }
 
 async function ensureWarehouseIsNotCounting(tx: Prisma.TransactionClient, input: ValidStockMovementInput) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`WAREHOUSE_INVENTORY:${input.warehouseId}`}))`;
   const lockedSession = await tx.inventorySession.findFirst({
     where: {
       warehouseId: input.warehouseId,
@@ -342,56 +343,58 @@ export async function returnStockMovement(db: PrismaClient, rawInput: ReturnStoc
 }
 
 export async function reverseStockMovement(db: PrismaClient, rawInput: ReverseStockMovementInput) {
+  return db.$transaction(tx => reverseStockMovementInTransaction(tx, rawInput));
+}
+
+export async function reverseStockMovementInTransaction(tx: Prisma.TransactionClient, rawInput: ReverseStockMovementInput) {
   const movementId = required(rawInput.movementId, "Movimento original");
   const reason = required(rawInput.reason, "Motivo do estorno");
   const idempotencyKey = required(rawInput.idempotencyKey, "Chave de idempotência");
 
-  return db.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`MATERIAL_MOVEMENT:${movementId}`}))`;
-    const existing = await tx.materialMovement.findUnique({ where: { idempotencyKey } });
-    if (existing) {
-      if (existing.operation !== "REVERSAL" || existing.reversedMovementId !== movementId || existing.reason !== reason || existing.actorUsuarioId !== rawInput.actor.usuarioId) throw new StockServiceError("Chave já utilizada para outro estorno de material.");
-      return existing;
-    }
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`MATERIAL_MOVEMENT:${movementId}`}))`;
+  const existing = await tx.materialMovement.findUnique({ where: { idempotencyKey } });
+  if (existing) {
+    if (existing.operation !== "REVERSAL" || existing.reversedMovementId !== movementId || existing.reason !== reason || existing.actorUsuarioId !== rawInput.actor.usuarioId) throw new StockServiceError("Chave já utilizada para outro estorno de material.");
+    return existing;
+  }
 
-    const original = await tx.materialMovement.findUnique({
-      where: { id: movementId },
-      include: {
-        stock: { select: { batchNumber: true } },
-        reversalMovement: { select: { id: true } },
-        returnMovements: { where: { operation: "RETURN" }, select: { id: true }, take: 1 },
-      },
-    });
-    if (!original || !["Entrada", "Saída"].includes(original.type) || original.operation !== "REGULAR") {
-      throw new StockServiceError("Somente uma entrada ou saída regular pode ser estornada.");
-    }
-    if (!original.stock) throw new StockServiceError("O movimento não possui posição de estoque vinculada.");
-    if (original.reversalMovement) throw new StockServiceError("O movimento já foi estornado.");
-    if (original.returnMovements.length) throw new StockServiceError("Uma saída com devolução não pode ser estornada integralmente.");
-    if (["TRANSFERENCIA_EM_TRANSITO", "ACEITE_TRANSFERENCIA"].includes(original.reason?.split(":")[0] ?? "")) throw new StockServiceError("Movimento de transferência exige tratamento do documento de transferência; não pode ser estornado isoladamente.");
-
-    const result = await applyStockMovement(tx, {
-      kind: original.type === "Entrada" ? "EXIT" : "ENTRY",
-      sourceType: "STOCK_REVERSAL",
-      operation: "REVERSAL",
-      idempotencyKey,
-      reversedMovementId: original.id,
-      warehouseId: original.warehouseId,
-      materialId: original.materialId,
-      batchNumber: original.stock.batchNumber,
-      quantity: Math.abs(original.quantity),
-      unitCost: original.unitValue,
-      departmentId: original.departmentId,
-      reason,
-      actor: rawInput.actor,
-    });
-    await reduceStockMunicipalCosts(tx, rawInput.actor, original, result.movement);
-    await writeAuditEvent(tx, {
-      actorUsuarioId: rawInput.actor.usuarioId,
-      eventType: auditEventTypes.stockMovementReversed,
-      targetType: "MATERIAL_MOVEMENT",
-      targetId: result.movement.id,
-    });
-    return result.movement;
+  const original = await tx.materialMovement.findUnique({
+    where: { id: movementId },
+    include: {
+      stock: { select: { batchNumber: true } },
+      reversalMovement: { select: { id: true } },
+      returnMovements: { where: { operation: "RETURN" }, select: { id: true }, take: 1 },
+    },
   });
+  if (!original || !["Entrada", "Saída"].includes(original.type) || original.operation !== "REGULAR") {
+    throw new StockServiceError("Somente uma entrada ou saída regular pode ser estornada.");
+  }
+  if (!original.stock) throw new StockServiceError("O movimento não possui posição de estoque vinculada.");
+  if (original.reversalMovement) throw new StockServiceError("O movimento já foi estornado.");
+  if (original.returnMovements.length) throw new StockServiceError("Uma saída com devolução não pode ser estornada integralmente.");
+  if (["TRANSFERENCIA_EM_TRANSITO", "ACEITE_TRANSFERENCIA"].includes(original.reason?.split(":")[0] ?? "")) throw new StockServiceError("Movimento de transferência exige tratamento do documento de transferência; não pode ser estornado isoladamente.");
+
+  const result = await applyStockMovement(tx, {
+    kind: original.type === "Entrada" ? "EXIT" : "ENTRY",
+    sourceType: "STOCK_REVERSAL",
+    operation: "REVERSAL",
+    idempotencyKey,
+    reversedMovementId: original.id,
+    warehouseId: original.warehouseId,
+    materialId: original.materialId,
+    batchNumber: original.stock.batchNumber,
+    quantity: Math.abs(original.quantity),
+    unitCost: original.unitValue,
+    departmentId: original.departmentId,
+    reason,
+    actor: rawInput.actor,
+  });
+  await reduceStockMunicipalCosts(tx, rawInput.actor, original, result.movement);
+  await writeAuditEvent(tx, {
+    actorUsuarioId: rawInput.actor.usuarioId,
+    eventType: auditEventTypes.stockMovementReversed,
+    targetType: "MATERIAL_MOVEMENT",
+    targetId: result.movement.id,
+  });
+  return result.movement;
 }

@@ -35,7 +35,7 @@ function maskDocument(doc?: string | null): string {
 }
 
 function publicSupplier(supplier: {
-  person: { fullName: string; cpf: string } | null;
+  person: { fullName: string; cpf: string | null } | null;
   company: { corporateName: string; tradeName: string | null; cnpj: string } | null;
 }) {
   if (supplier.person) return { name: "PESSOA FÍSICA", documentMasked: maskDocument(supplier.person.cpf) };

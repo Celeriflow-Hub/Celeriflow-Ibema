@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { approveAndExecutePfDuplicateMerge, proposePfDuplicateMerge, reviewPersonMergeCandidates, reversePfDuplicateMerge } from "./actions";
 
-type PersonOption = { id: string; fullName: string; cpf: string };
+type PersonOption = { id: string; fullName: string; cpf: string | null };
 type MergeRequest = { id: string; status: string; sourceName: string; targetName: string; proposedBy: string };
 type Candidate = { personId: string; score: number; reasons: string[] };
 

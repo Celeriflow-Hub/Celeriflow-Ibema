@@ -51,6 +51,9 @@ export const healthTeamInputSchema = z.object({
 export type HealthTeamInput = z.input<typeof healthTeamInputSchema>;
 
 export const patientInputSchema = z.object({
+  registrationStage: z.enum(["PRE", "COMPLETE"]).default("COMPLETE"),
+  motherUnknown: z.boolean().default(false),
+  fatherUnknown: z.boolean().default(false),
   personId: z.string().trim().max(100, "Identificador da pessoa invalido.").default(""),
   cns: optionalText("CNS", 30),
   bloodType: optionalText("Tipo sanguineo", 10),
@@ -60,6 +63,14 @@ export const patientInputSchema = z.object({
   fullName: optionalText("Nome completo", 200),
   cpf: optionalText("CPF", 30),
   birthDate: optionalDate(),
+  gender: optionalText("Sexo", 30).optional(),
+  raceColor: optionalText("Raça/cor", 50).optional(),
+  motherName: optionalText("Nome da mãe", 200).optional(),
+  fatherName: optionalText("Nome do pai", 200).optional(),
+  phonePrimary: optionalText("Telefone", 50).optional(),
+  whatsapp: optionalText("Celular", 50).optional(),
+  email: optionalText("E-mail", 200).refine(value => !value || z.email().safeParse(value).success, "Informe um e-mail válido.").optional(),
+  profession: optionalText("Ocupação", 200).optional(),
 }).strict();
 export type PatientInput = z.input<typeof patientInputSchema>;
 

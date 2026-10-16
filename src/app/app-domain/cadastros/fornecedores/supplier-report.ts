@@ -8,7 +8,7 @@ function csvCell(value: string | number) {
 }
 
 function supplierIdentity(supplier: SupplierListItem) {
-  if (supplier.person) return { type: "PF", name: supplier.person.fullName, document: formatCpf(supplier.person.cpf), documents: supplier.person.documents };
+  if (supplier.person) return { type: "PF", name: supplier.person.fullName, document: supplier.person.cpf ? formatCpf(supplier.person.cpf) : "Não informado", documents: supplier.person.documents };
   if (supplier.company) return { type: "PJ", name: supplier.company.corporateName, document: formatCnpj(supplier.company.cnpj), documents: supplier.company.documents };
   return { type: "Não informado", name: "Identidade não informada", document: "", documents: [] };
 }

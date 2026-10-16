@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { FleetScope } from "./service";
 import { controlSchemas } from "./control-policy";
 import { eligibleFleetDriver, FleetControlError, fleetControlReading, lockFleetResources, scopedFleetUnit, type FleetControlTx } from "./control-access";
+import { assertTfdBoardingReady } from "@/lib/saude/tfd-transport-policy";
 
 async function routeForUnit(tx: FleetControlTx, unit: { departmentId: string | null; control: { fixedRouteId: string | null } | null }, selected: string) {
   const id = selected || unit.control?.fixedRouteId;
@@ -51,6 +52,13 @@ export async function departFleetTrip(tx: FleetControlTx, scope: FleetScope, raw
   if (input.bookingId) {
     const booking = await tx.fleetBooking.findFirst({ where: { id: input.bookingId, unitId: unit.id, driverId: driver.id, status: "AGENDADO", startsAt: { lte: now }, endsAt: { gte: now } } });
     if (!booking) throw new FleetControlError("Agenda incompatível com veículo, motorista ou horário.");
+    const linkedTransport = await tx.healthTfdTrip.findUnique({ where: { fleetBookingId: booking.id }, select: { id: true } });
+    if (linkedTransport) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${linkedTransport.id}))`;
+      const transport = await tx.healthTfdTrip.findUniqueOrThrow({ where: { id: linkedTransport.id }, include: { passengers: { where: { OR: [{ healthTfdPassengerRemoval: null }, { healthTfdPassengerRemoval: { is: { status: { not: "Confirmada" } } } }] }, select: { patientId: true, kind: true, presenceStatus: true, tfdRequest: { select: { status: true, clinicalReport: { select: { companionRequired: true } } } } } } } });
+      if (transport.status !== "EMBARCANDO" || !transport.confirmedAt) throw new FleetControlError("Confirme a viagem TFD e abra o embarque antes da saída em Frotas.");
+      assertTfdBoardingReady(transport.passengers);
+    }
     await tx.fleetBooking.update({ where: { id: booking.id }, data: { status: "EM_USO" } });
   }
   if (await tx.fleetBooking.count({ where: { id: { not: input.bookingId || "__NONE__" }, status: { in: ["AGENDADO", "EM_USO"] }, startsAt: { lte: now }, endsAt: { gt: now }, OR: [{ unitId: unit.id }, { driverId: driver.id }] } })) throw new FleetControlError("Existe agenda de outro uso em curso.");

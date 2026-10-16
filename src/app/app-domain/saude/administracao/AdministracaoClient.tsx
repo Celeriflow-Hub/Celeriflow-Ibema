@@ -57,7 +57,7 @@ export type GroupRow = {
 export type SchedulingGroupRow = { id: string; name: string; isActive: boolean; unit: ReferenceOption; specialtyGroup: ReferenceOption };
 export type HolidayRow = { id: string; title: string; description: string | null; date: string; type: string };
 export type PersonRow = {
-  id: string; fullName: string; cpf: string; birthDate: string | null; gender: string | null; raceColor: string | null; motherName: string | null; email: string | null; phonePrimary: string | null; status: string;
+  id: string; fullName: string; cpf: string | null; birthDate: string | null; gender: string | null; raceColor: string | null; motherName: string | null; email: string | null; phonePrimary: string | null; status: string;
   addresses: { id: string; addressType: string | null; streetName: string | null; number: string | null; zipCode: string | null }[];
   documentCount: number; isPatient: boolean; usuario: { id: string; nome: string; ativo: boolean } | null;
 };

@@ -41,7 +41,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
         specialtyRef: { select: { name: true } },
         priority: true,
         status: true,
-        patient: { select: { person: { select: { fullName: true } } } },
+        patient: { select: { id: true, person: { select: { fullName: true } } } },
         unit: { select: { name: true } },
         professional: { select: { employee: { select: { name: true } } } },
       },

@@ -38,6 +38,7 @@ export async function createInventorySession(db: PrismaClient, input: { warehous
   const createdByUsuarioId = required(input.actor.usuarioId, "Usuário responsável");
 
   return db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`WAREHOUSE_INVENTORY:${warehouseId}`}))`;
     const warehouse = await tx.warehouse.findFirst({ where: { id: warehouseId, isActive: true }, select: { id: true } });
     if (!warehouse) throw new InventoryServiceError("Almoxarifado não encontrado ou inativo.");
 
@@ -80,6 +81,7 @@ export async function recordInventoryCount(db: PrismaClient, input: {
   if (requestedType && !DIVERGENCE_TYPES.has(requestedType)) throw new InventoryServiceError("Tipo de divergência inválido.");
 
   return db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT id FROM "InventorySession" WHERE id=${sessionId} FOR UPDATE`;
     const item = await tx.inventorySessionItem.findFirst({
       where: { id: itemId, sessionId },
       select: { id: true, expectedQuantity: true, session: { select: { status: true } } },
@@ -110,6 +112,7 @@ export async function recordInventoryCount(db: PrismaClient, input: {
 export async function submitInventoryForApproval(db: PrismaClient, sessionId: string) {
   const id = required(sessionId, "Inventário");
   return db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT id FROM "InventorySession" WHERE id=${id} FOR UPDATE`;
     const session = await tx.inventorySession.findUnique({
       where: { id },
       include: { items: { select: { countedQuantity: true } } },
@@ -133,6 +136,7 @@ export async function closeApprovedInventory(db: PrismaClient, input: {
   const approvedByUsuarioId = required(input.actor.usuarioId, "Usuário aprovador");
 
   return db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT id FROM "InventorySession" WHERE id=${sessionId} FOR UPDATE`;
     const session = await tx.inventorySession.findUnique({
       where: { id: sessionId },
       include: {
@@ -164,6 +168,7 @@ export async function closeApprovedInventory(db: PrismaClient, input: {
         unitCost: item.stock.unitCost,
         reason: `Inventário ${session.id}: ${item.adjustmentReason}`,
         inventorySessionId: session.id,
+        idempotencyKey: `INVENTORY_CLOSE:${session.id}:${item.id}`,
         actor: { usuarioId: approvedByUsuarioId, employeeId: input.actor.employeeId },
       });
       await tx.inventorySessionItem.update({ where: { id: item.id }, data: { adjustmentMovementId: movement.id } });

@@ -51,7 +51,7 @@ export async function portalVaccinations(context: AppContext, patientId: string)
 }
 
 export async function portalDispensations(context: AppContext, patientId: string) {
-  return context.prisma.medicineDispensation.findMany({ where: { patientId }, orderBy: { date: "desc" }, take: 200, select: { id: true, date: true, quantity: true, dosageSnapshot: true, observation: true, nextWithdrawalAt: true, medicine: { select: { name: true } }, unit: { select: { name: true } } } });
+  return context.prisma.medicineDispensation.findMany({ where: { patientId, status: "ACTIVE" }, orderBy: { date: "desc" }, take: 200, select: { id: true, date: true, quantity: true, dosageSnapshot: true, observation: true, nextWithdrawalAt: true, medicine: { select: { name: true } }, unit: { select: { name: true } } } });
 }
 
 // Somente laudos LIBERADOS com publicação ao paciente aparecem.

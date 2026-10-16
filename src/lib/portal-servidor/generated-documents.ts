@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
+import { requireValidCpf } from "@/lib/identifiers/brazilian-identifiers";
 import { AccessError, assertBudgetUnitAccess, canPerformModuleOperation, type AppContext } from "@/lib/platform/tenant-context";
 import { documentLayoutPolicySchema, functionalDocumentInputSchema, renderFunctionalTemplate, type FunctionalDocumentInput, type DocumentLayoutPolicy } from "./document-policy";
 import { buildFunctionalDocumentSource } from "./document-sources";
@@ -45,7 +46,7 @@ export async function issueOwnFunctionalDocument(context: AppContext, raw: unkno
   if (previous) { if (previous.status === "REVOGADO" || generatedArtifactSchema.parse(previous.payload).sourceHash !== sourceHash) throw new Error("Chave já utilizada com outro conteúdo ou documento revogado. Inicie uma nova emissão."); return previous.id; }
   const code = randomUUID(), issuedAt = new Date().toISOString();
   const expiresAt = input.kind === "MARGEM" ? new Date(Date.now() + model.policy.validityDays! * 86400000).toISOString() : null;
-  const fields = { nome: employee.person!.fullName, cpf: employee.person!.cpf, matricula: employee.registration || "", inicio: input.from, fim: input.until, dias: "", ano: String(input.year || ""), emitente: model.policy.issuerName, cnpj: model.policy.issuerCnpj, cargo: "", lotacao: "", situacao: "", banco: "", margem: "", validade: expiresAt?.slice(0, 10) || "", ...source.fields };
+  const fields = { nome: employee.person!.fullName, cpf: requireValidCpf(employee.person!.cpf), matricula: employee.registration || "", inicio: input.from, fim: input.until, dias: "", ano: String(input.year || ""), emitente: model.policy.issuerName, cnpj: model.policy.issuerCnpj, cargo: "", lotacao: "", situacao: "", banco: "", margem: "", validade: expiresAt?.slice(0, 10) || "", ...source.fields };
   const text = renderFunctionalTemplate(model.policy.text, fields);
   const file = await renderHrReport({ title: model.policy.title, headers: ["Informação", "Conteúdo"], rows: [["Emitente", `${model.policy.issuerName} · CNPJ ${model.policy.issuerCnpj}`], ["Titular", `${employee.person!.fullName} · CPF ${employee.person!.cpf}`], ["Documento", text], ["Fundamento", model.policy.legalReference], ...source.rows.map(row => [source.headers.map((header, index) => `${header}: ${row[index] || ""}`).join(" · "), ""]), ["Modelo", `${model.name} · ${input.policyId}`], ["Emissão", issuedAt], ["Autenticidade", `/validar-emissao/${code}`], ["Rodapé", model.policy.footer]] }, "PDF");
   const blob = await uploadGeneratedFinancialFile(`${input.kind.toLowerCase()}-${code}.pdf`, file.bytes, file.contentType);

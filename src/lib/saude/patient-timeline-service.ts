@@ -23,7 +23,7 @@ export async function listPatientTimeline(db: Reader, patientId: string, limit =
   const [appointments, records, dispensations, vaccinations, examRequests, labOrders, reports, referrals, regulations, tfdRequests, visitParts, plans] = await Promise.all([
     db.healthAppointment.findMany({ where: { patientId }, orderBy: { date: "desc" }, take: 100, select: { id: true, date: true, status: true, specialty: true, unit: { select: { name: true } } } }),
     db.medicalRecord.findMany({ where: { patientId }, orderBy: { date: "desc" }, take: 100, select: { id: true, date: true, type: true, outcome: true, unit: { select: { name: true } }, diagnoses: { select: { cidReference: { select: { code: true } } } }, prescriptions: { select: { id: true } } } }),
-    db.medicineDispensation.findMany({ where: { patientId }, orderBy: { date: "desc" }, take: 100, select: { id: true, date: true, quantity: true, medicine: { select: { name: true } }, unit: { select: { name: true } } } }),
+    db.medicineDispensation.findMany({ where: { patientId }, orderBy: { date: "desc" }, take: 100, select: { id: true, date: true, quantity: true, status: true, cancellationReason: true, medicine: { select: { name: true } }, unit: { select: { name: true } } } }),
     db.vaccinationRecord.findMany({ where: { patientId }, orderBy: { date: "desc" }, take: 100, select: { id: true, date: true, doseNumber: true, vaccine: { select: { name: true } }, unit: { select: { name: true } } } }),
     db.healthExamRequest.findMany({ where: { patientId }, orderBy: { date: "desc" }, take: 100, select: { id: true, date: true, examName: true, status: true } }),
     db.healthLabOrder.findMany({ where: { patientId }, orderBy: { createdAt: "desc" }, take: 100, select: { id: true, createdAt: true, status: true, examRequest: { select: { examName: true } }, examModel: { select: { name: true } } } }),
@@ -43,7 +43,7 @@ export async function listPatientTimeline(db: Reader, patientId: string, limit =
     for (const d of r.diagnoses) events.push({ id: `diagnostico:${r.id}:${d.cidReference.code}`, date: r.date, kind: "DIAGNOSTICO", title: `CID ${d.cidReference.code}`, detail: null, href: `/saude/atendimentos/${r.id}` });
     for (const p of r.prescriptions) events.push({ id: `receita:${p.id}`, date: r.date, kind: "PRESCRICAO", title: "Receita emitida", detail: null, href: `/saude/atendimentos/${r.id}` });
   }
-  for (const d of dispensations) events.push({ id: `dispensacao:${d.id}`, date: d.date, kind: "DISPENSACAO", title: `${d.medicine.name} · ${d.quantity}`, detail: d.unit?.name || null, href: "/saude/farmacia" });
+  for (const d of dispensations) events.push({ id: `dispensacao:${d.id}`, date: d.date, kind: "DISPENSACAO", title: `${d.medicine.name} · ${d.quantity}${d.status === "CANCELLED" ? " · cancelada" : ""}`, detail: d.status === "CANCELLED" ? d.cancellationReason : d.unit?.name || null, href: "/saude/farmacia/dispensacoes" });
   for (const v of vaccinations) events.push({ id: `vacina:${v.id}`, date: v.date, kind: "VACINA", title: `${v.vaccine.name} · dose ${v.doseNumber}`, detail: v.unit?.name || null, href: "/saude/vacinacao" });
   for (const e of examRequests) events.push({ id: `exame:${e.id}`, date: e.date, kind: "EXAME", title: `${e.examName} · ${e.status}`, detail: null, href: "/saude/laboratorio" });
   for (const o of labOrders) events.push({ id: `coleta:${o.id}`, date: o.createdAt, kind: "COLETA", title: `${o.examRequest?.examName || o.examModel?.name || "Exame"} · ${o.status}`, detail: null, href: "/saude/laboratorio" });

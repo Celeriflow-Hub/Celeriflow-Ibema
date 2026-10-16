@@ -15,7 +15,7 @@ export type SupplierListItem = {
   status: string;
   person: {
     fullName: string;
-    cpf: string;
+    cpf: string | null;
     documents: SupplierEvidence[];
   } | null;
   company: {

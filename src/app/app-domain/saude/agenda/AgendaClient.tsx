@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { AlertCircle, CalendarPlus, Search, X } from "lucide-react";
 import { createHealthAppointmentAction, transitionHealthAppointmentAction } from "./actions";
 import { ErpListFrame } from "@/components/app-ui/erp/ErpListFrame";
@@ -16,7 +17,7 @@ type Appointment = {
   specialtyRef: { name: string } | null;
   priority: string;
   status: string;
-  patient: { person: { fullName: string } };
+  patient: { id: string; person: { fullName: string } };
   unit: { name: string };
   professional: { employee: { name: string } } | null;
 };
@@ -185,6 +186,7 @@ export default function AgendaClient({
                    <td className="hidden truncate p-2 text-slate-700 lg:table-cell">{appointment.specialtyRef?.name || appointment.specialty || "-"}</td>
                   <td className="p-2"><span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700">{appointment.status}</span></td>
                   {canUpdate && <td className="p-2 text-right"><div className="flex justify-end gap-1">
+                     {["Aguardando", "Em Atendimento", "Atendido"].includes(appointment.status) && <Link href={`/saude/vacinacao/carteira/${encodeURIComponent(appointment.patient.id)}?appointmentId=${encodeURIComponent(appointment.id)}`} className="rounded border border-emerald-300 px-2 py-1 text-xs font-medium text-emerald-800">Vacinação</Link>}
                      {appointment.status === "Agendado" && <><button type="button" disabled={pending} onClick={() => changeStatus(appointment.id, "Confirmado")} className="rounded border border-blue-300 px-2 py-1 text-xs font-medium text-blue-800 hover:bg-blue-50 disabled:opacity-50">Confirmar</button><button type="button" disabled={pending} onClick={() => changeStatus(appointment.id, "Aguardando")} className="rounded border border-slate-300 px-2 py-1 text-xs font-medium hover:bg-slate-50 disabled:opacity-50">Chegou</button></>}
                      {appointment.status === "Confirmado" && <button type="button" disabled={pending} onClick={() => changeStatus(appointment.id, "Aguardando")} className="rounded border border-slate-300 px-2 py-1 text-xs font-medium hover:bg-slate-50 disabled:opacity-50">Chegou</button>}
                      {["Agendado", "Confirmado", "Aguardando"].includes(appointment.status) && <button type="button" disabled={pending} onClick={() => changeStatus(appointment.id, "Faltou")} className="rounded border border-amber-300 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50">Faltou</button>}

@@ -13,6 +13,8 @@ type Person = {
   fullName: string;
   cpf: string | null;
   birthDate: Date | null;
+  gender: string | null; raceColor: string | null; motherName: string | null; fatherName: string | null;
+  phonePrimary: string | null; whatsapp: string | null; email: string | null; profession: string | null;
 };
 
 type HealthUnit = {
@@ -39,6 +41,9 @@ type Patient = {
 };
 
 type PatientFormData = {
+  registrationStage: "PRE" | "COMPLETE";
+  motherUnknown: boolean;
+  fatherUnknown: boolean;
   personId: string;
   cns: string;
   bloodType: string;
@@ -48,7 +53,12 @@ type PatientFormData = {
   fullName: string;
   cpf: string;
   birthDate: string;
+  gender: string; raceColor: string; motherName: string; fatherName: string;
+  phonePrimary: string; whatsapp: string; email: string; profession: string;
 };
+
+const personalFields = [["gender", "Sexo"], ["raceColor", "Raça/cor"], ["motherName", "Nome da mãe"], ["fatherName", "Nome do pai"], ["phonePrimary", "Telefone"], ["whatsapp", "Celular"], ["email", "E-mail"], ["profession", "Ocupação"]] as const;
+function personalValues(person?: Person) { return { gender: person?.gender || "", raceColor: person?.raceColor || "", motherName: person?.motherName || "", fatherName: person?.fatherName || "", phonePrimary: person?.phonePrimary || "", whatsapp: person?.whatsapp || "", email: person?.email || "", profession: person?.profession || "" }; }
 
 function formatCPF(cpf: string | null | undefined) {
   if (!cpf) return '-';
@@ -82,21 +92,23 @@ export default function PacientesClient({
   teams: HealthTeam[] 
 }) {
   const [searchTerm, setSearchTerm] = useState("");
+  const [birthFilter, setBirthFilter] = useState("");
+  const [genderFilter, setGenderFilter] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isNewPerson, setIsNewPerson] = useState(false);
   const [formData, setFormData] = useState<PatientFormData>({
-    personId: "", cns: "", bloodType: "", bloodDonor: null, referenceUnitId: "", teamId: "", fullName: "", cpf: "", birthDate: ""
+    registrationStage: "PRE", motherUnknown: false, fatherUnknown: false, personId: "", cns: "", bloodType: "", bloodDonor: null, referenceUnitId: "", teamId: "", fullName: "", cpf: "", birthDate: "", ...personalValues()
   });
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [page, setPage] = useState(1);
 
-  const filteredPatients = patients.filter(p => 
+  const filteredPatients = patients.filter(p => (!birthFilter || p.person.birthDate?.toISOString().slice(0, 10) === birthFilter) && (!genderFilter || p.person.gender === genderFilter) && (
     p.person?.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
     (p.person?.cpf && p.person.cpf.includes(searchTerm)) ||
     (p.cns && p.cns.includes(searchTerm))
-  );
+  ));
   const activePage = Math.min(page, Math.max(1, Math.ceil(filteredPatients.length / PAGE_SIZE)));
   const visiblePatients = filteredPatients.slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE);
 
@@ -111,6 +123,7 @@ export default function PacientesClient({
     setEditingId(null);
     setIsNewPerson(false);
     setFormData({
+      registrationStage: "PRE", motherUnknown: false, fatherUnknown: false,
       personId: availablePeople[0]?.id || "",
       cns: "",
       bloodType: "",
@@ -119,28 +132,14 @@ export default function PacientesClient({
       teamId: "",
       fullName: "",
       cpf: "",
-      birthDate: ""
+      birthDate: "", ...personalValues()
     });
     setErrorMsg("");
     setIsModalOpen(true);
   };
 
   const openEditModal = (patient: Patient) => {
-    setEditingId(patient.id);
-    setIsNewPerson(false);
-    setFormData({
-      personId: patient.personId, // Na edição, não vamos mudar a pessoa
-      cns: patient.cns || "",
-      bloodType: patient.bloodType || "",
-      bloodDonor: patient.bloodDonor,
-      referenceUnitId: patient.referenceUnitId || "",
-      teamId: patient.teamId || "",
-      fullName: "",
-      cpf: "",
-      birthDate: ""
-    });
-    setErrorMsg("");
-    setIsModalOpen(true);
+    window.location.assign(`/saude/pacientes/${encodeURIComponent(patient.id)}`);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -205,6 +204,8 @@ export default function PacientesClient({
           Novo Paciente
         </button>
       </div>
+
+      <div className="flex shrink-0 flex-wrap gap-2 text-xs"><label className="flex items-center gap-2">Nascimento<input aria-label="Filtrar pacientes por nascimento" type="date" value={birthFilter} onChange={event => { setBirthFilter(event.target.value); setPage(1); }} className="h-8 rounded border bg-white px-2" /></label><label className="flex items-center gap-2">Sexo<select aria-label="Filtrar pacientes por sexo" value={genderFilter} onChange={event => { setGenderFilter(event.target.value); setPage(1); }} className="h-8 rounded border bg-white px-2"><option value="">Todos</option>{[...new Set(patients.flatMap(patient => patient.person.gender ? [patient.person.gender] : []))].sort().map(gender => <option key={gender}>{gender}</option>)}</select></label></div>
 
       {/* Tabela */}
       <ErpListFrame pagination={<ErpPagination page={activePage} total={filteredPatients.length} pageSize={PAGE_SIZE} previousHref="#" nextHref="#" label="pacientes" onPageChange={setPage} />}>
@@ -288,6 +289,7 @@ export default function PacientesClient({
               )}
 
               <div className="space-y-4">
+                <label className="grid gap-1 text-sm">Etapa cadastral<select value={formData.registrationStage} onChange={event => setFormData({ ...formData, registrationStage: event.target.value as "PRE" | "COMPLETE" })} className="h-9 rounded border bg-white px-3"><option value="PRE">Pré-cadastro</option><option value="COMPLETE">Cadastro completo</option></select></label>
                 {/* Seleção de Pessoa (Somente na criação) */}
                 {!editingId && (
                   <div className="space-y-4">
@@ -362,6 +364,9 @@ export default function PacientesClient({
                 )}
 
                 <div className="grid gap-3 sm:grid-cols-2">
+                  {editingId && <fieldset className="grid gap-3 rounded border p-3 sm:col-span-2"><legend className="text-sm font-semibold">Dados do cadastro único</legend><label className="grid gap-1 text-sm">Nome completo<input required value={formData.fullName} onChange={event => setFormData({ ...formData, fullName: event.target.value })} className="h-9 rounded border px-3" /></label><div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1 text-sm">CPF<input required value={formData.cpf} onChange={event => setFormData({ ...formData, cpf: event.target.value })} className="h-9 rounded border px-3" /></label><label className="grid gap-1 text-sm">Nascimento<input type="date" value={formData.birthDate} onChange={event => setFormData({ ...formData, birthDate: event.target.value })} className="h-9 rounded border px-3" /></label></div></fieldset>}
+                  {(editingId || isNewPerson) && personalFields.map(([field, label]) => <label key={field} className="grid gap-1 text-sm font-medium">{label}<input type={field === "email" ? "email" : field === "phonePrimary" || field === "whatsapp" ? "tel" : "text"} value={formData[field]} onChange={event => setFormData({ ...formData, [field]: event.target.value })} className="h-9 rounded border px-3 font-normal" /></label>)}
+                  {isNewPerson && <><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={formData.motherUnknown} onChange={event => setFormData({ ...formData, motherUnknown: event.target.checked })} /> Filiação materna desconhecida</label><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={formData.fatherUnknown} onChange={event => setFormData({ ...formData, fatherUnknown: event.target.checked })} /> Filiação paterna desconhecida</label></>}
                   <div>
                     <label className="block text-sm font-medium text-gray-700">CNS (Cartão SUS)</label>
                     <input

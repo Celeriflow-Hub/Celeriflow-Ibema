@@ -14,6 +14,7 @@ const navigation: ModuleNavGroup[] = [
     title: "Áreas estratégicas",
     items: [
       { title: "Atenção Primária", href: "/saude/territorio", icon: "mapPin" },
+      { title: "Famílias e acompanhamentos", href: "/saude/territorio/atencao-primaria", icon: "users" },
       { title: "Assistência Farmacêutica", href: "/saude/farmacia", icon: "pill" },
       { title: "Central de Regulação", href: "/saude/regulacao", icon: "clipboardList" },
     ],
@@ -22,9 +23,11 @@ const navigation: ModuleNavGroup[] = [
     title: "Atendimento",
     items: [
       { title: "Agenda", href: "/saude/agenda", icon: "calendar" },
+      { title: "Agendas e esperas", href: "/saude/agenda/gestao", icon: "clipboardList" },
       { title: "Acolhimento", href: "/saude/acolhimento", icon: "heartPulse" },
       { title: "Pronto Atendimento", href: "/saude/pronto-atendimento", icon: "siren" },
       { title: "Atendimentos", href: "/saude/atendimentos", icon: "clipboardList" },
+      { title: "Linhas de cuidado", href: "/saude/linhas-cuidado", icon: "heartPulse" },
       { title: "Pacientes", href: "/saude/pacientes", icon: "users" },
     ],
   },
@@ -60,6 +63,7 @@ const navigation: ModuleNavGroup[] = [
       { title: "Profissionais", href: "/saude/profissionais", icon: "stethoscope" },
       { title: "Equipes ESF", href: "/saude/equipes", icon: "users" },
       { title: "Administração", href: "/saude/administracao", icon: "settings2" },
+      { title: "Rede e coberturas", href: "/saude/administracao/rede", icon: "building2" },
     ],
   },
 ];

@@ -3,18 +3,43 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { assertHealthUnitAccess, getTenantContextForModuleOperation } from "@/lib/platform/tenant-context";
-import { dispatchHealthStockTransfer, dispensePrescriptionItem, postHealthStockReceipt, receiveHealthStockTransfer, writeOffHealthStock } from "@/lib/saude/health-stock-service";
+import { approveHealthStockReceipt, configureHealthReceiptApproval, dispatchHealthStockTransfer, dispensePrescriptionItem, HealthStockError, postHealthStockReceipt, receiveHealthStockTransfer, writeOffHealthStock } from "@/lib/saude/health-stock-service";
+import { z } from "zod";
+import { createPharmacyStockRequest } from "@/lib/saude/pharmacy-request-service";
 import { executeConfiguredHealthHttp } from "@/lib/integrations/runtime";
 import type { IntegrationOperation } from "@/lib/integrations/registry";
 
 const text = (data: FormData, name: string) => String(data.get(name) || "").trim();
 const number = (data: FormData, name: string) => Number(data.get(name));
 
+export async function saveHealthReceiptAction(input: unknown) {
+  try {
+    const context = await getTenantContextForModuleOperation("SAUDE", "create");
+    const result = await postHealthStockReceipt(context, input);
+    revalidatePath("/saude/farmacia"); revalidatePath("/patrimonio/materiais");
+    return result;
+  } catch (error) {
+    return { error: error instanceof z.ZodError ? error.issues[0]?.message || "Revise os dados da entrada." : error instanceof HealthStockError ? error.message : "Não foi possível registrar a entrada." };
+  }
+}
+
+export async function configureReceiptApprovalAction(data: FormData): Promise<void> {
+  const context = await getTenantContextForModuleOperation("SAUDE", "update");
+  await configureHealthReceiptApproval(context, text(data, "warehouseId"), text(data, "approvalRequired") === "true");
+  revalidatePath("/saude/farmacia");
+}
+
+export async function approveHealthReceiptAction(data: FormData): Promise<void> {
+  const context = await getTenantContextForModuleOperation("SAUDE", "update");
+  await approveHealthStockReceipt(context, text(data, "receiptId"));
+  revalidatePath("/saude/farmacia"); revalidatePath("/patrimonio/materiais");
+}
+
 export async function createHealthProductAction(data: FormData): Promise<void> {
   const context = await getTenantContextForModuleOperation("SAUDE", "create");
   const kind = text(data, "productKind");
   const name = text(data, "name");
-  if (!name || !["MEDICINE", "CONTROLLED", "MANIPULATED", "CORRELATE", "IMMUNOBIOLOGICAL", "SPECIALIZED"].includes(kind)) throw new Error("Informe nome e tipo válidos.");
+  if (!name || !["MEDICINE", "CONTROLLED", "MANIPULATED", "CORRELATE", "IMMUNOBIOLOGICAL", "SPECIALIZED", "DILUENT"].includes(kind)) throw new Error("Informe nome e tipo válidos.");
   await context.prisma.$transaction(async tx => {
     const material = await tx.material.create({ data: { code: text(data, "code"), name, categoryId: text(data, "categoryId"), unitOfMeasure: text(data, "unitOfMeasure") || "UN", isPerishable: true }, select: { id: true } });
     await tx.healthMaterialProfile.create({ data: { materialId: material.id, productKind: kind, subgroup: text(data, "subgroup") || null, packaging: text(data, "packaging") || null, dcbCode: text(data, "dcbCode") || null, classification: text(data, "classification") || null, barcode: text(data, "barcode") || null } });
@@ -73,10 +98,7 @@ export async function saveDosageTemplateAction(data: FormData): Promise<void> {
 
 export async function createPharmacyRequestAction(data: FormData): Promise<void> {
   const context = await getTenantContextForModuleOperation("SAUDE", "create");
-  const warehouse = await context.prisma.warehouse.findUnique({ where: { id: text(data, "destinationWarehouseId") }, select: { healthUnitId: true } });
-  if (!warehouse?.healthUnitId) throw new Error("Estoque assistencial inválido.");
-  assertHealthUnitAccess(context.user, warehouse.healthUnitId);
-  await context.prisma.pharmacyRequest.create({ data: { patientId: text(data, "patientId") || null, destinationWarehouseId: text(data, "destinationWarehouseId"), createdByUsuarioId: context.user.id, notes: text(data, "notes") || null, items: { create: { materialId: text(data, "materialId"), requestedQuantity: number(data, "quantity") } } } });
+  await createPharmacyStockRequest(context, { idempotencyKey: text(data, "idempotencyKey") || randomUUID(), patientId: text(data, "patientId") || null, destinationWarehouseId: text(data, "destinationWarehouseId"), originWarehouseId: text(data, "originWarehouseId") || null, notes: text(data, "notes") || null, items: [{ materialId: text(data, "materialId"), quantity: number(data, "quantity") }] });
   revalidatePath("/saude/farmacia");
 }
 

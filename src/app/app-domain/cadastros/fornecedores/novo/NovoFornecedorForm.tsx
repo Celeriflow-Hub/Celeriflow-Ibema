@@ -7,7 +7,7 @@ import Link from "next/link";
 type PersonOption = {
   id: string;
   fullName: string;
-  cpf: string;
+  cpf: string | null;
 };
 
 type CompanyOption = {

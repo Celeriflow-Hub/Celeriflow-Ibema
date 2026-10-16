@@ -7,6 +7,7 @@ import { reclassifyRestoredTaxReceivable } from "./accrual-accounting";
 import { reversePaidItbiInTransaction } from "./itbi-ownership";
 import { getBankResourceSourceSpendableBalance } from "../financeiro/bank-resource-sources";
 import { reverseConditionalPaymentDiscount } from "./conditional-discounts";
+import { reverseSettledItbiExcess, restoreResidualSettledItbiExcess } from "./itbi-settled-excess";
 
 /** Reverses a collection and its unused excess without erasing any origin record. */
 export async function reverseTaxPayment(db: PrismaClient, actor: TaxActor, input: {
@@ -29,6 +30,7 @@ export async function reverseTaxPayment(db: PrismaClient, actor: TaxActor, input
     }
     if (payment.status !== "Confirmado" || !payment.revenueIntegration || !payment.bankAccountId || !payment.amountPaidDecimal) throw new TaxError("Pagamento não está confirmado ou sua origem financeira está incompleta.");
     if (input.date < payment.paymentDate) throw new TaxError("O estorno não pode anteceder o pagamento.");
+    const revisedExcess = await reverseSettledItbiExcess(tx, actor, { settlementId: payment.id, date: input.date, reason: input.reason.trim(), key });
     const credits = payment.idempotencyKey ? await tx.taxRegistryEntry.findMany({ where: { category: "TAX_CREDIT", source: "RETORNO_BANCARIO", data: { path: ["originEventKey"], equals: payment.idempotencyKey } }, orderBy: { id: "asc" } }) : [];
     let excess = new Prisma.Decimal(0);
     for (const credit of credits) {
@@ -67,6 +69,7 @@ export async function reverseTaxPayment(db: PrismaClient, actor: TaxActor, input
       await tx.taxRegistryEntry.update({ where: { id: credit.id }, data: { status: "ESTORNADO", data: { ...data, available: "0.00", reversalTransactionId: transaction.id, reversalMovementId: movement.id, reversedAt: input.date.toISOString() } } });
     }
     await tx.taxPayment.update({ where: { id: payment.id }, data: { status: "Estornado" } });
+    if (revisedExcess) await restoreResidualSettledItbiExcess(tx, actor, { ...revisedExcess, date: input.date, key: `${key}:RESIDUAL`, reason: input.reason.trim() });
     await reverseConditionalPaymentDiscount(tx, actor, { assessmentId: payment.guide.assessmentId, paymentKey: payment.idempotencyKey, date: input.date, reason: input.reason });
     await reversePaidItbiInTransaction(tx, actor, payment.id, input.date);
     const paid = await tx.taxPayment.findMany({ where: { guide: { assessmentId: payment.guide.assessmentId }, status: "Confirmado" }, select: { guideId: true, amountPaidDecimal: true } });

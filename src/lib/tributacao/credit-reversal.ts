@@ -3,6 +3,7 @@ import { assertAccountingPeriodOpen, postAccountingTransactionInTransaction } fr
 import { TaxError, type TaxActor } from "./index";
 import { assertTaxCreditScope } from "./credit-finance";
 import { reclassifyRestoredTaxReceivable } from "./accrual-accounting";
+import { reverseSettledItbiExcess, restoreResidualSettledItbiExcess } from "./itbi-settled-excess";
 import { resolveTaxAssessmentScope, resolveTaxFinancialYear, synchronizeAssessmentDebt, taxScopeSnapshot, taxAssessmentCompensatedValue } from "./scope";
 
 export async function reverseTaxCreditMovement(db: PrismaClient, actor: TaxActor, input: {
@@ -62,6 +63,7 @@ export async function reverseTaxCreditMovement(db: PrismaClient, actor: TaxActor
       treasuryMovementId = incoming.id;
     }
     if (data.operation === "COMPENSAR") {
+      const revisedExcess = await reverseSettledItbiExcess(tx, actor, { settlementId: movement.id, date: input.date, reason: input.reason.trim(), key });
       if (typeof data.accountingTransactionId !== "string" || movement.entityType !== "TAX_ASSESSMENT") throw new TaxError("Compensação sem partida ou débito conciliado.");
       await tx.$queryRaw`SELECT id FROM "TaxAssessment" WHERE id = ${movement.entityId} FOR UPDATE`;
       const assessment = await tx.taxAssessment.findUniqueOrThrow({ where: { id: movement.entityId } });
@@ -77,6 +79,7 @@ export async function reverseTaxCreditMovement(db: PrismaClient, actor: TaxActor
       transactionId = transaction.id;
       await reclassifyRestoredTaxReceivable(tx, actor, { assessmentId: assessment.id, originalTransactionId: original.id, amount, date: input.date, idempotencyKey: `${key}:DA_RESTORATION`, reason: `Recomposição do direito em dívida ativa após estorno da compensação ${movement.id}` });
       await tx.taxRegistryEntry.update({ where: { id: movement.id }, data: { status: "ESTORNADO" } });
+      if (revisedExcess) await restoreResidualSettledItbiExcess(tx, actor, { ...revisedExcess, date: input.date, key: `${key}:RESIDUAL`, reason: input.reason.trim() });
       const payments = await tx.taxPayment.findMany({ where: { guide: { assessmentId: assessment.id }, status: "Confirmado" }, select: { amountPaidDecimal: true } });
       const extinguished = payments.reduce((sum, payment) => { if (!payment.amountPaidDecimal) throw new TaxError("Pagamento sem Decimal conciliado."); return sum.plus(payment.amountPaidDecimal); }, await taxAssessmentCompensatedValue(tx, assessment.id));
       const assessmentTotal = assessment.finalValueDecimal ?? assessment.originalValueDecimal;

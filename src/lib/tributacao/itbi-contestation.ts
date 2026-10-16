@@ -34,12 +34,11 @@ export async function requestItbiContestationInTransaction(tx:Prisma.Transaction
     const declaration=await lockDeclaration(tx,input.declarationId);const scope=await authorize(tx,actor,declaration.calculationSnapshot);
     if(declaration.updatedAt.toISOString()!==input.expectedUpdatedAt) throw new Error("Declaração alterada. Recarregue antes de impugnar.");
     if(!["RASCUNHO","PROTOCOLADA","EM_ANALISE","APROVADA","DAM_EMITIDO","DOCUMENTO_EMITIDO"].includes(declaration.status) || declaration.cadastralUpdatedAt) throw new Error("Declaração indisponível para impugnação.");
-    if(declaration.assessmentId && await tx.taxPayment.count({where:{guide:{assessmentId:declaration.assessmentId},status:"Confirmado"}})) throw new Error("ITBI com pagamento exige revisão fiscal específica após conciliação do crédito.");
     if(await tx.document.count({where:{id:{in:input.documentIds},status:"Válido"}})!==new Set(input.documentIds).size) throw new Error("Anexo GED inválido.");
     await linkItbiPropertyAttachments(tx, actor, declaration.id, input.documentIds);
     const entry=await tx.taxRegistryEntry.create({data:{entityType:"ITBI_DECLARATION",entityId:declaration.id,category:"ITBI_CONTESTATION",title:"Impugnação da avaliação",actorUsuarioId:actor.usuarioId,processId:declaration.processId,data:{...scope,reason:input.reason,documentIds:input.documentIds,proposedPropertyValue:input.proposedPropertyValue,previousStatus:declaration.status,previousSnapshot:declaration.calculationSnapshot,previousPropertyValue:declaration.declaredPropertyValue.toString(),previousBase:declaration.taxableBase.toString(),previousTaxAmount:declaration.taxAmount.toString()}}});
     if(declaration.assessmentId) {
-      const guides=await tx.taxGuide.findMany({where:{assessmentId:declaration.assessmentId,status:{not:"Cancelada"}}});
+      const guides=await tx.taxGuide.findMany({where:{assessmentId:declaration.assessmentId,status:{notIn:["Cancelada","Paga"]}}});
       for(const guide of guides) await tx.taxGuide.update({where:{id:guide.id},data:{status:"Cancelada"}});
     }
     await tx.itbiDeclaration.update({where:{id:declaration.id},data:{status:"IMPUGNADA",guideId:null,events:{create:{eventType:"IMPUGNACAO_SOLICITADA",description:input.reason,actorUsuarioId:actor.usuarioId,payload:{entryId:entry.id,documentIds:input.documentIds}}}}});
@@ -58,7 +57,10 @@ export async function decideItbiContestation(db:PrismaClient,actor:TaxActor,raw:
     const newValue=input.approved ? new Prisma.Decimal(input.propertyValue) : declaration.declaredPropertyValue;
     const base=input.approved ? newValue.mul(declaration.transmittedFraction).div(100).toDecimalPlaces(2) : declaration.taxableBase;
     const tax=base.mul(declaration.appliedRate).div(100).toDecimalPlaces(2);
-    if(input.approved && declaration.assessmentId) await reviseTaxAssessmentInTransaction(tx,actor,{assessmentId:declaration.assessmentId,taxableBase:base.toFixed(2),imposedValue:tax.toFixed(2),reason:input.reason,processId:declaration.processId ?? undefined,idempotencyKey:`ITBI_CONTESTATION:${contestation.id}`});
+    if(input.approved && declaration.assessmentId) {
+      const documents = Array.isArray(prior.documentIds) ? prior.documentIds.filter((id): id is string => typeof id === "string") : [];
+      await reviseTaxAssessmentInTransaction(tx,actor,{assessmentId:declaration.assessmentId,taxableBase:base.toFixed(2),imposedValue:tax.toFixed(2),reason:input.reason,processId:declaration.processId ?? undefined,idempotencyKey:`ITBI_CONTESTATION:${contestation.id}`}, documents[0] ? { declarationId: declaration.id, documentId: documents[0] } : undefined);
+    }
     const status=declaration.assessmentId ? "APROVADA" : typeof prior.previousStatus==="string" ? prior.previousStatus : "EM_ANALISE";
     if(declaration.documentId) await tx.document.update({where:{id:declaration.documentId},data:{status:"Revogado"}});
     const updated=await tx.itbiDeclaration.update({where:{id:declaration.id},data:{status,taxableBase:base,taxAmount:tax,documentId:null,calculationSnapshot:{...taxScopeSnapshot(declaration.calculationSnapshot),contestationDecisionId:contestation.id,originalDeclaredPropertyValue:prior.previousPropertyValue as string,revisedPropertyValue:input.approved ? newValue.toFixed(2) : taxScopeSnapshot(declaration.calculationSnapshot).revisedPropertyValue ?? null,taxableBase:base.toFixed(2),taxAmount:tax.toFixed(2)} as Prisma.InputJsonObject,events:{create:{eventType:input.approved ? "IMPUGNACAO_DEFERIDA" : "IMPUGNACAO_INDEFERIDA",description:input.reason,actorUsuarioId:actor.usuarioId,payload:{contestationId:contestation.id,previousBase:declaration.taxableBase.toString(),newBase:base.toString()}}}}});

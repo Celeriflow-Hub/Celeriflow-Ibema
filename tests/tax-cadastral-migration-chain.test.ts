@@ -13,6 +13,7 @@ import { requestItbiContestation, decideItbiContestation } from "../src/lib/trib
 import { rectifyTransferredItbi } from "../src/lib/tributacao/itbi-rectification";
 import { configureItbiCorrespondence } from "../src/lib/tributacao/itbi-correspondence";
 import { publishFiscalCatalog } from "../src/lib/tributacao/configurable-cadastres";
+import { configureTaxAccountingProfile } from "../src/lib/tributacao/accounting-profile";
 
 test("Tributação: quatorze migrations coexistem com cadastro, perfil, alvará e transferência/estorno ITBI",async()=>{
   const f=await createPlanningExecutionFixture();
@@ -31,6 +32,12 @@ test("Tributação: quatorze migrations coexistem com cadastro, perfil, alvará 
     const licensePolicy=await publishLicensePolicy(f.db,f.actor,{expectedVersion:0,governmentEntityId:"ente",budgetUnitId:"ug",year:new Date().getUTCFullYear(),code:"FUNC",name:"Funcionamento",active:true,validityDays:30,requireDebtClearance:false,includePartnerDebts:false,requireFeePayment:false,feeTaxId:null,allowExempt:false,paymentGraceUntil:null,layoutTitle:"Licença",layoutText:"Condições municipais",legalBasis:"Regulamento municipal"});
     const licenses=await issueConfiguredLicenses(f.db,f.actor,[{policyId:licensePolicy.entityId,expectedPolicyVersion:1,registrationId:registration.id,expectedRegistrationUpdatedAt:current.updatedAt.toISOString(),processId:"process",feeAssessmentId:null,exempt:false,exemptionReason:"",reason:"Emissão conciliada"}]);assert.equal(licenses.length,1);
     await f.db.tax.create({data:{id:"ITBI",name:"ITBI",taxType:"Imposto"}});await configureTaxFinancialMapping(f.db,f.actor,{taxId:"ITBI",revenueNatureId:"receita",resourceSourceId:"livre",defaultBankAccountId:"banco"});
+    const accounts = [["right", "Ativo"], ["vpa", "VPA"], ["deduction", "VPA"], ["loss", "VPD"], ["liability", "Passivo"]];
+    for (const [id, type] of accounts) await f.db.accountingPlan.create({ data: { id, code: id, name: id, type } });
+    await f.db.planningCatalogVersion.create({ data: { id: "itbi-catalog", year: 2026, label: "Contas da regressão ITBI", sourceHash: "itbi-chain", normativeReference: "Matriz isolada", status: "DRAFT", createdById: "ana", entries: { create: accounts.map(([id]) => ({ kind: "ACCOUNT", degree: 7, code: id, name: id, canonicalId: id, attributes: { operational: true, pocOnly: false, postingAllowed: true, informationNature: "P", effectiveFrom: "2026-01-01", effectiveUntil: "2026-12-31", balanceNature: ["vpa", "liability"].includes(id) ? "C" : "D" } })) } } });
+    await f.db.planningCatalogVersion.update({ where: { id: "itbi-catalog" }, data: { status: "PUBLISHED" } });
+    await configureTaxAccountingProfile(f.db, f.actor, { taxId: "ITBI", budgetUnitId: "ug", catalogVersionId: "itbi-catalog", receivableAccountId: "right", revenueAccountId: "vpa", deductionAccountId: "deduction", lossAccountId: "loss", effectiveFrom: new Date("2026-01-01"), effectiveUntil: new Date("2026-12-31T23:59:59.999Z"), reason: "Contas da transmissão conciliadas", idempotencyKey: "chain-profile" });
+    await f.db.accountingPostingRule.updateMany({ where: { event: { code: "TAX_COLLECTION_EXCESS" } }, data: { creditAccountId: "liability" } });
     const type=await saveItbiTransactionType(f.db,f.actor,{code:"VENDA",name:"Compra e venda",rate:"2",requiresDebtClearance:false,legalBasis:"Lei municipal",expectedUpdatedAt:null});
      const form=await publishFiscalCatalog(f.db,f.actor,{governmentEntityId:"ente",budgetUnitId:"ug",expectedVersion:0,kind:"FORMULARIO_ITBI",code:"MATRICULA",name:"Matrícula",active:true,fields:[{key:"number",label:"Número",type:"TEXT",required:true,options:[]}],neighborhoodId:null,streetId:null,landUnitValue:null,legalBasis:"Configuração municipal"});
      const declaration=await createItbiDeclaration(f.db,f.actor,{transactionTypeId:type.id,realEstateId:property.id,processId:"process",registryOffice:"Tabelionato",transmittedFractionPercent:100,declaredPropertyValue:1000,sellerTaxpayerId:"seller",buyers:[{taxpayerId:"buyer",sharePercent:100}],cadastralUpdateMode:"AUTO_ON_PAYMENT",forms:[{catalogId:form.entityId,values:{number:"MAT-1"},documentIds:[]}]});
@@ -48,7 +55,7 @@ test("Tributação: quatorze migrations coexistem com cadastro, perfil, alvará 
     assert.equal(await f.db.taxRegistryEntry.count({where:{entityId:property.id,category:"FISCAL_OWNERSHIP",status:"ATIVO"}}),1);
     const transferred=await f.db.itbiDeclaration.findUniqueOrThrow({where:{id:declaration.id}});
     const rectification={declarationId:declaration.id,expectedUpdatedAt:transferred.updatedAt.toISOString(),declaredValue:"1200",assessedPropertyValue:"1500",registryOffice:"Tabelionato",dueDate:"2026-12-31",reason:"Correção documentada da avaliação",legalBasis:"Decisão fiscal municipal",documentIds:["chain-evidence"]};
-    await assert.rejects(rectifyTransferredItbi(f.db,f.actor,{...rectification,assessedPropertyValue:"500"}),/inferior aos pagamentos/);
+    await assert.rejects(rectifyTransferredItbi(f.db,{...f.actor,allowedBudgetUnitIds:[]},{...rectification,assessedPropertyValue:"500"}),/autorizada/);
     const rectified=await rectifyTransferredItbi(f.db,f.actor,rectification);
     assert.notEqual(rectified.declarationId,declaration.id);
     assert.equal((await f.db.itbiDeclaration.findUniqueOrThrow({where:{id:declaration.id}})).status,"RETIFICADA");
@@ -57,10 +64,18 @@ test("Tributação: quatorze migrations coexistem com cadastro, perfil, alvará 
     assert.equal((inherited.data as {values:{number:string}}).values.number,"MAT-1");
     const correspondence=await f.db.taxRegistryEntry.findFirstOrThrow({where:{entityId:rectified.declarationId,category:"ITBI_CORRESPONDENCE"}});
     assert.equal((correspondence.data as {address:{number:string}}).address.number,"99");
+    const beforeReduction = await f.db.itbiDeclaration.findUniqueOrThrow({ where: { id: rectified.declarationId } });
+    const reduced = await rectifyTransferredItbi(f.db, f.actor, { ...rectification, declarationId: beforeReduction.id, expectedUpdatedAt: beforeReduction.updatedAt.toISOString(), assessedPropertyValue: "500", reason: "Redução posterior fundamentada abaixo do recebido" });
+    assert.equal(reduced.guideId, null);
+    const excess = await f.db.taxRegistryEntry.findFirstOrThrow({ where: { source: "ITBI_SETTLED_REVISION", status: "DISPONIVEL" } });
+    assert.equal((excess.data as { amount: string }).amount, "10.00");
+    assert.equal((await f.db.realEstate.findUniqueOrThrow({ where: { id: property.id } })).taxpayerId, "buyer");
     const paid=await f.db.taxPayment.findUniqueOrThrow({where:{idempotencyKey:"CHAIN:PAYMENT"}});
     await reverseTaxPayment(f.db,f.actor,{paymentId:paid.id,date:new Date(),reason:"Estorno integral conciliado",idempotencyKey:"CHAIN:REVERSE"});
     assert.equal((await f.db.realEstate.findUniqueOrThrow({where:{id:property.id}})).taxpayerId,"seller");
-    assert.equal((await f.db.itbiDeclaration.findUniqueOrThrow({where:{id:rectified.declarationId}})).cadastralUpdatedAt,null);
+    assert.deepEqual((await f.db.itbiDeclaration.findUniqueOrThrow({where:{id:rectified.declarationId}})).cadastralUpdatedAt,beforeReduction.cadastralUpdatedAt);
+    assert.equal((await f.db.itbiDeclaration.findUniqueOrThrow({ where: { id: reduced.declarationId } })).cadastralUpdatedAt, null);
+    assert.equal((await f.db.taxRegistryEntry.findUniqueOrThrow({ where: { id: excess.id } })).status, "ESTORNADO");
     const restoredProfile=await f.db.taxRegistryEntry.findFirstOrThrow({where:{entityId:property.id,category:"PROPERTY_PROFILE"},orderBy:{version:"desc"}});
     assert.equal((restoredProfile.data as {correspondenceAddress:{number:string}}).correspondenceAddress.number,"1");
     const fieldHistory = await f.db.taxRegistryEntry.findMany({ where: { entityId: declaration.id, category: "ITBI_FIELD_HISTORY" }, orderBy: { version: "asc" } });

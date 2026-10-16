@@ -100,6 +100,7 @@ export async function executeTaxRefund(db: PrismaClient, actor: TaxActor, input:
       financialYearId: year.id, ...scope, date: input.date, value: amount, eventCode: "TAX_CREDIT_REFUNDED",
       history: `Restituição tributária ${request.id}`, sourceModule: "TRIBUTACAO", sourceType: "TAX_REFUND",
       sourceId: request.id, idempotencyKey: `${key}:ACCOUNTING`, creditAccountId: account.accountingPlanId,
+      debitAccountId: typeof origin.liabilityAccountId === "string" ? origin.liabilityAccountId : undefined,
     });
     const movement = await tx.treasuryMovement.create({ data: {
       date: input.date, type: "ExtraBudgetRefund", direction: "Saída", valueDecimal: amount,

@@ -37,11 +37,10 @@ export async function rectifyTransferredItbi(db: PrismaClient, actor: TaxActor, 
     if (payments.some(row => !row.amountPaidDecimal) || !assessment.finalValueDecimal) throw new Error("Concilie os valores Decimal antes da retificação.");
     const paid = payments.reduce((sum, row) => sum.plus(row.amountPaidDecimal!), new Prisma.Decimal(0));
     const compensated = await taxAssessmentCompensatedValue(tx, assessment.id);
-    if (calculation.taxAmount.lt(paid.plus(compensated))) throw new Error("O valor retificado é inferior aos pagamentos/compensações. Formalize a restituição ou revisão do crédito com a destinação do excesso antes de retificar.");
     const openGuides = await tx.taxGuide.findMany({ where: { assessmentId: assessment.id, status: { notIn: ["Cancelada", "Paga"] } }, include: { payments: { where: { status: "Confirmado" } } } });
     if (openGuides.some(row => row.payments.length)) throw new Error("Concilie as guias parcialmente pagas antes da retificação.");
     for (const guide of openGuides) await tx.taxGuide.update({ where: { id: guide.id }, data: { status: "Cancelada" } });
-    const revision = await reviseTaxAssessmentInTransaction(tx, actor, { assessmentId: assessment.id, taxableBase: calculation.taxableBase.toFixed(2), imposedValue: calculation.taxAmount.toFixed(2), reason: `${input.reason}\nFundamento legal: ${input.legalBasis}`, processId: declaration.processId ?? undefined, documentId: input.documentIds[0], idempotencyKey: `ITBI_RECTIFICATION:${declaration.id}` });
+    const revision = await reviseTaxAssessmentInTransaction(tx, actor, { assessmentId: assessment.id, taxableBase: calculation.taxableBase.toFixed(2), imposedValue: calculation.taxAmount.toFixed(2), reason: `${input.reason}\nFundamento legal: ${input.legalBasis}`, processId: declaration.processId ?? undefined, documentId: input.documentIds[0], idempotencyKey: `ITBI_RECTIFICATION:${declaration.id}` }, { declarationId: declaration.id, documentId: input.documentIds[0] });
     const id = randomUUID(); const year = new Date().getUTCFullYear();
     const sequence = await tx.taxDocumentSequence.upsert({ where: { year_documentType: { year, documentType: "ITBI_DECLARATION" } }, create: { year, documentType: "ITBI_DECLARATION", currentValue: 1 }, update: { currentValue: { increment: 1 } } });
     const snapshot = taxScopeSnapshot(declaration.calculationSnapshot);
